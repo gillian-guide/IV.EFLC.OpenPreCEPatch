@@ -391,9 +391,10 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                // SkipIntroShowScreens selects the FusionFix-style 300 ms body;
-                // the default keeps the original skip-outright body.
-                const char* body = ctx.Option("SkipIntroShowScreens", "0")
+                // The 300 ms FusionFix-style body is part of SkipIntro now; the
+                // OPCEP_IMPROVEMENTS test switch can still select the original
+                // skip-outright body without an INI key.
+                const char* body = zpatch_opt_skip_intro_screens != 0u
                                        ? "abi_skip_intro_screens"
                                        : "abi_skip_intro_body";
                 injector::MakeJMP(match - 6, reinterpret_cast<void*>(Abi(body)), true); //jmp

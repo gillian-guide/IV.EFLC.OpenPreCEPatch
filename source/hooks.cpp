@@ -1174,8 +1174,8 @@ extern "C" int32_t abi_new_saves_p3_hook() noexcept
 }
 
 // The converter's chunk scan, split out so the native tests can drive it
-// without a game image. `guarded` enables NewSavesGuards' checks; `seek` enables
-// NewSavesSeekPayloads' fseek-over-payload path. With both 0 this is the
+// without a game image. `guarded` enables the folded NewSavesCompatibility
+// checks; `seek` enables the fseek-over-payload path. With both 0 this is the
 // original loop: every fread result is ignored and the underflow/malloc are
 // unchecked.
 extern "C" bool zpatch_new_saves_scan(void* handle, int guarded, int seek,
@@ -3857,10 +3857,10 @@ __declspec(naked) void abi_skip_intro_body()
     }
 }
 
-// Opt-in SkipIntroShowScreens (borrowed from FusionFix's skipintro.ixx): the
-// same site and resume, but below the 0x1F40 threshold the screens play for
-// 300 ms instead of being skipped outright. Not @exact; the original body above
-// stays installed when the key is 0.
+// SkipIntro's 300 ms body (borrowed from FusionFix's skipintro.ixx): the same
+// site and resume, but below the 0x1F40 threshold the screens play for 300 ms
+// instead of being skipped outright. The original body above stays available
+// through the test-only OPCEP_IMPROVEMENTS switch; it is not a separate INI key.
 __declspec(naked) void abi_skip_intro_screens()
 {
     __asm {

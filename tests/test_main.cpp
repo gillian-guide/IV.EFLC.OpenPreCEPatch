@@ -11,6 +11,7 @@
 #include "fusionfix_compat.hxx"
 #include "game.hxx"
 #include "hooks.h"
+#include "improvements.hxx"
 #include "ini_import.hxx"
 #include "menu.hxx"
 #include "vehicle_lights.hxx"
@@ -162,6 +163,41 @@ namespace
         CHECK(opp::ComposeGameVersion(1, 0, 8, 0, compact) && compact == 1080);
         CHECK(opp::BuildIs(opp::GameBuild::v1080,
                            {opp::GameBuild::v1070, opp::GameBuild::v1080}));
+    }
+
+    void TestImprovements()
+    {
+        constexpr uint32_t all = opp::Improve(opp::Improvement::all);
+        constexpr uint32_t newsaves = opp::Improve(opp::Improvement::new_saves);
+        constexpr uint32_t ooc = opp::Improve(opp::Improvement::ooc);
+        constexpr uint32_t trace = opp::Improve(opp::Improvement::trace);
+        constexpr uint32_t skipintro = opp::Improve(opp::Improvement::skip_intro);
+
+        CHECK(opp::ParseImprovements(nullptr) == all);
+        CHECK(opp::ParseImprovements("") == all);
+        CHECK(opp::ParseImprovements("all") == all);
+        CHECK(opp::ParseImprovements("ON") == all);
+        CHECK(opp::ParseImprovements("none") == 0);
+        CHECK(opp::ParseImprovements("off") == 0);
+        CHECK(opp::ParseImprovements("only:newsaves,ooc") == (newsaves | ooc));
+        CHECK(opp::ParseImprovements("except:trace") == (all & ~trace));
+        CHECK(opp::ParseImprovements("SkipIntro") == skipintro);
+        CHECK(opp::ParseImprovements(" only: newsaves ; ooc ") == (newsaves | ooc));
+        CHECK(opp::ParseImprovements("only:") == 0);
+        CHECK(opp::ParseImprovements("except:") == all);
+
+#if defined(OPCEP_PARITY_BASELINE)
+        CHECK(opp::EnabledImprovements() == 0);
+#else
+        SetEnvironmentVariableA("OPCEP_IMPROVEMENTS", "none");
+        CHECK(opp::EnabledImprovements() == 0);
+        SetEnvironmentVariableA("OPCEP_IMPROVEMENTS", "skipintro");
+        CHECK(opp::EnabledImprovements() == skipintro);
+        SetEnvironmentVariableA("OPCEP_IMPROVEMENTS", "except:trace");
+        CHECK(opp::EnabledImprovements() == (all & ~trace));
+        SetEnvironmentVariableA("OPCEP_IMPROVEMENTS", nullptr);
+        CHECK(opp::EnabledImprovements() == all);
+#endif
     }
 
     void TestCatalogue()
@@ -354,6 +390,7 @@ int main()
     TestIniImport();
     TestFusionFixGate();
     TestGame();
+    TestImprovements();
     TestCatalogue();
     TestNewSavesScan();
     TestVehicleLights();

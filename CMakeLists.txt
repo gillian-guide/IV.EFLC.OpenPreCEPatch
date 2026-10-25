@@ -9,6 +9,10 @@ if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
+# Build the folded improvements' original branches instead. Used by the parity
+# matrix to compare an improved dump/ASI against the baseline without an INI.
+option(OPCEP_PARITY_BASELINE "Force every improvement group off (legacy path)" OFF)
+
 set(OPCEP_SOURCES
     source/catalogue.cpp
     source/common.ixx
@@ -19,6 +23,7 @@ set(OPCEP_SOURCES
     source/game.cpp
     source/helpers.cpp
     source/hooks.cpp
+    source/improvements.cpp
     source/ini_import.cpp
     source/log.cpp
     source/menu.cpp
@@ -53,6 +58,9 @@ target_include_directories(opcep_core PUBLIC
     external/inireader
 )
 target_compile_definitions(opcep_core PUBLIC UNICODE _UNICODE)
+if(OPCEP_PARITY_BASELINE)
+    target_compile_definitions(opcep_core PUBLIC OPCEP_PARITY_BASELINE)
+endif()
 
 add_library(OpenPreCEPatch SHARED source/dllmain.cpp)
 target_link_libraries(OpenPreCEPatch PRIVATE opcep_core version user32 shlwapi)
@@ -85,6 +93,7 @@ add_executable(opcep_parity_dump
     source/fusionfix_compat.cpp
     source/game.cpp
     source/helpers.cpp
+    source/improvements.cpp
     source/ini_import.cpp
     source/log.cpp
     source/patches.cpp
@@ -116,6 +125,9 @@ target_include_directories(opcep_parity_dump PRIVATE
 )
 set_target_properties(opcep_parity_dump PROPERTIES CXX_SCAN_FOR_MODULES ON)
 target_compile_definitions(opcep_parity_dump PRIVATE OPCEP_DUMP_TOOL UNICODE _UNICODE)
+if(OPCEP_PARITY_BASELINE)
+    target_compile_definitions(opcep_parity_dump PRIVATE OPCEP_PARITY_BASELINE)
+endif()
 target_link_libraries(opcep_parity_dump PRIVATE version user32 shlwapi)
 endif()
 

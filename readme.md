@@ -39,22 +39,19 @@ Around a hundred and ten independent options. The highlights:
 Every option is documented in [docs/features.md](docs/features.md), and the full
 key table lives in [docs/ini.md](docs/ini.md).
 
-## Opt-in improvements
+## Improvements and test switches
 
-The parity baseline still keeps the original behaviour. Safer and faster
-variants are opt-in keys whose default is `0`, so an existing INI behaves
-exactly as before:
+Safety and performance improvements are folded into the original options; there
+are no per-fix INI keys. `NewSavesCompatibility` uses the validated converter,
+`OutOfCommissionFix` caches the archive, the moving-parts options guard their
+vehicle walk, and `SkipIntro` shows the FusionFix-style 300 ms intro.
 
-- stability: `NewSavesGuards`, `OutOfCommissionSafeInit`,
-  `VehicleComponentGuards`, `ModelLookupGuards`, `TraceInstallArms`;
-- performance: `NewSavesSeekPayloads`, `OutOfCommissionCache`,
-  `SteerLookupCache`, `PopupLookupCache`, `ModelNameIndex`;
-- compatibility: `SkipIntroShowScreens` (FusionFix-style 300 ms intro).
-
-The original code path stays compiled and selected. The exact write-set effect
-of every key is recorded in [docs/improvements-log.md](docs/improvements-log.md)
-and checked by `tools/opcep_matrix.py` against the committed
-`tests/parity/matrix.json`.
+The original path stays compiled. For tests and A/B runs only, set
+`OPCEP_IMPROVEMENTS` (for example `none`, `only:newsaves,ooc`,
+`except:skipintro`) or build with `-DOPCEP_PARITY_BASELINE=ON`. A normal install
+does not need either. The exact write-set effect is recorded in
+[docs/improvements-log.md](docs/improvements-log.md) and checked by
+`tools/opcep_matrix.py` against the committed `tests/parity/matrix.json`.
 
 ## Compatibility and the INI
 

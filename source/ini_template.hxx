@@ -41,11 +41,6 @@ SpeedupBugFix = 1                                    // fixes the game being per
 SuperLODFix = 1                                      // fix crash if superlod is spawned, disable this for GTAC as it's already fixed there [1070,1080]
 TryToSkipAllErrors = 0                               // attempt to completely ignore any and all error messages that would ever pop up this will likely still eventually crash your game but at least it'll be an actual crash instead of an in most cases useless error [all]
 WantedLevelCrashFix = 1                              // fix rare crash when getting a wanted level [all]
-NewSavesGuards = 0                                   // validate the new-saves converter's header/chunk reads, chunk size and allocation; a malformed save is skipped instead of faulting [all]
-OutOfCommissionSafeInit = 0                          // skip the OutOfCommission archive setup cleanly when an allocation or the embedded decode fails, instead of faulting or mounting garbage [all]
-VehicleComponentGuards = 0                           // null-check the vehicle-component registry walk (ped -> +8 -> +0xB4 -> +0xC) and the script-resolver result used by the moving-parts features [all]
-ModelLookupGuards = 0                                // null-check the shared model lookup, its parameter and its result in the popup-headlight and headlight-shadow checkers [all]
-TraceInstallArms = 0                                 // write every installer arm to the log before it runs, so a crash during the install pass names the last arm [all]
 
 [PERFORMANCE]                                      // loading, streaming and memory
 FastLoading = 1                                      // cut loading times in half or more (can be combined with ColAccel to get even faster loading) [all; FF]
@@ -59,11 +54,6 @@ NoLoadingSleep = 1                                   // makes the game get to th
 NoPhysicsSleep = 1                                   // reduces the threshold velocity below which physics objects can "go to sleep" at, this means vehicles stop in a more realistic way but it might be a performance hit [all]
 RemoveUselessChecks = 0                              // might be a small performance boost but highly incompatible with other mods [1040,1070,1080]
 StartupTimeFix = 1                                   // fixes the 15+ second startup times before the game window even pops up [all]
-NewSavesSeekPayloads = 0                             // seek past discarded save chunk payloads instead of reading them; only the 9-byte chunk headers are needed [all]
-OutOfCommissionCache = 0                             // run the OutOfCommission archive setup once and reuse the mounted archive instead of re-decoding and leaking it on every call [all]
-SteerLookupCache = 0                                 // cache the wheelangle model resolution used by the steering wheel, engine block and plane part consumers [all]
-PopupLookupCache = 0                                 // cache popup-headlight and headlight-shadow model-hash resolution [all]
-ModelNameIndex = 0                                   // build a one-time hash index for the 38,455-entry model-name catalogue used by the MP diagnostics instead of a linear scan per lookup [all]
 
 [GRAPHICS]                                      // shadows, lights, LODs and reflections
 BuildingAlphaFix = 1                                 // fix missing fadein for LODs in patch 6+, disable this on patch 5 and below [all]
@@ -104,8 +94,7 @@ TBoGTHeliHeightLimit = 0                             // unlocks the height limit
 [INPUT]                                      // camera, mouse, window and frame pacing
 BorderlessWindowed = 1                               // borderless windowed, needs -windowed commandline [all; FF]
 DoNotPauseOnMinimize = 0                             // don't pause when unfocused in window/borderless mode [all; FF]
-)OPCEP"
-R"OPCEP(DrivebyFOVFix = 1                                    // fix for driveby shots not landing in the center of the crosshair if you're too high above ground level [all]
+DrivebyFOVFix = 1                                    // fix for driveby shots not landing in the center of the crosshair if you're too high above ground level [all]
 MouseFix = 1                                         // fixes the mouse deadzone and removes mouse acceleration from snipers [all; FF]
 VSyncFix = 1                                         // fix VSync locking below 60FPS in patch 7 [1004,1060,1061,1070,1100,1110,1120,12043; FF]
 
@@ -118,7 +107,8 @@ RemoveAllWeaponsProtection = 1                       // make other players no lo
 TeleportProtection = 1                               // make other players no longer able to use malicious trainers to teleport you [all]
 
 [LOADING]                                      // files, saves, DLC and launcher hooks
-LoadDLCs = 1                                         // load TBoGT and TLAD in the same folder structure EFLC does it (root folder -> episode's folder) and any more addon episodes in the same format (extra DLC folders should be named Episode3, Episode4, etc. and their ids in setup2.xml be the episode id multiplied by 2) [1060,1070,1080]
+)OPCEP"
+R"OPCEP(LoadDLCs = 1                                         // load TBoGT and TLAD in the same folder structure EFLC does it (root folder -> episode's folder) and any more addon episodes in the same format (extra DLC folders should be named Episode3, Episode4, etc. and their ids in setup2.xml be the episode id multiplied by 2) [1060,1070,1080]
 LocalSettingsPath = 0                                // moves your savegames and settings to a saves folder inside the game folder [all; FF]
 NewFilesCompatibility = 1                            // adds some extra code that allows script.img and radiohud from newer versions to work (script.img is still 1060+ only, radiohud works on all versions) [all]
 NewSavesCompatibility = 1                            // makes newer savefiles load properly without needing them to be downgraded first (1060+ only) [all]
@@ -137,7 +127,6 @@ SavegameFix = 1                                      // remove GFWL savegame CRC
 SkipLauncher = 1                                     // from XLivelessAddon but with some additional improvements, ability to launch game directly from .exe and/or skip the patch 4 launcher by using any other launch/playgtaiv exe [all]
 SkipIntro = 1                                        // skip intro screens [all; FF]
 SkipMenu = 0                                         // skip main menu, launching straight into the last savegame regardless of what episode that's from (IV if no savegame is found) [all; FF]
-SkipIntroShowScreens = 0                             // show intro screens for 300 ms instead of skipping them outright (FusionFix-style); requires SkipIntro to stay on [all; FF]
 VRAMFix = 1                                          // workaround for VRAM above 2GB [all; FF]
 
 [XLIVELESS]                                      // the XLivelessAddon feature set, one key per fix

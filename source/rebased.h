@@ -385,18 +385,17 @@ extern "C" uint32_t zpatch_nms_object;        // dword_10159CD8
 uint32_t& DlcRegisterRva() noexcept;
 uint32_t& DlcApplyRva() noexcept;
 
-// OpenPreCEPatch-only opt-in switches. None of these exist in the original ASI;
-// every default is 0, and the bodies keep the original branch first, so an INI
-// without these keys is byte- and behaviour-identical to the parity baseline.
-// PatchGame copies the INI values here once, before any arm runs.
-extern "C" uint8_t zpatch_opt_new_saves_guards;    // NewSavesGuards
-extern "C" uint8_t zpatch_opt_new_saves_seek;      // NewSavesSeekPayloads
-extern "C" uint8_t zpatch_opt_ooc_safe;            // OutOfCommissionSafeInit
-extern "C" uint8_t zpatch_opt_ooc_cache;           // OutOfCommissionCache
-extern "C" uint8_t zpatch_opt_component_guards;    // VehicleComponentGuards
-extern "C" uint8_t zpatch_opt_model_lookup_guards; // ModelLookupGuards
-extern "C" uint8_t zpatch_opt_steer_cache;         // SteerLookupCache
-extern "C" uint8_t zpatch_opt_popup_cache;         // PopupLookupCache
-extern "C" uint8_t zpatch_opt_model_index;         // ModelNameIndex
-extern "C" uint8_t zpatch_opt_skip_intro_screens;  // SkipIntroShowScreens
-extern "C" uint8_t zpatch_opt_trace_arms;          // TraceInstallArms
+// OpenPreCEPatch-only improvement switches. They are not original ASI state:
+// PatchGame resolves them from the original INI options plus the test-only
+// OPCEP_IMPROVEMENTS environment variable / OPCEP_PARITY_BASELINE build.
+extern "C" uint8_t zpatch_opt_new_saves_guards;    // NewSavesCompatibility
+extern "C" uint8_t zpatch_opt_new_saves_seek;      // NewSavesCompatibility
+extern "C" uint8_t zpatch_opt_ooc_safe;            // OutOfCommissionFix
+extern "C" uint8_t zpatch_opt_ooc_cache;           // OutOfCommissionFix
+extern "C" uint8_t zpatch_opt_component_guards;    // moving-parts trio
+extern "C" uint8_t zpatch_opt_model_lookup_guards; // PopupHeadlightsFlag / FCHS
+extern "C" uint8_t zpatch_opt_steer_cache;         // moving-parts trio
+extern "C" uint8_t zpatch_opt_popup_cache;         // PopupHeadlightsFlag / FCHS
+extern "C" uint8_t zpatch_opt_model_index;         // BPM / DebugPrintSpawns
+extern "C" uint8_t zpatch_opt_skip_intro_screens;  // SkipIntro
+extern "C" uint8_t zpatch_opt_trace_arms;          // trace group (test switch)

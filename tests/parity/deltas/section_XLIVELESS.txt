@@ -3,6 +3,6 @@
 00090628 EB InstallRemoveDataIntegrityChecks
 0045C509 EB InstallSkipFirstTimePlayAsk
 0045C50A 0D InstallSkipFirstTimePlayAsk
+004972B0 C3 InstallSkipHealthCheck
 00498437 90 InstallSkipInternetConnectionCheck
 00498438 90 InstallSkipInternetConnectionCheck
-004972B0 C3 InstallSkipHealthCheck

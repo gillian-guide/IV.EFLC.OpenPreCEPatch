@@ -10,6 +10,11 @@ newoption {
     description = "Current version",
 }
 
+newoption {
+    trigger = "parity-baseline",
+    description = "Force every folded improvement group off (legacy path)",
+}
+
 local envkeys = nil
 function envdir(key)
     if not envkeys then
@@ -52,6 +57,9 @@ workspace "OpenPreCEPatch"
     defines { "rsc_UpdateUrl=\"https://github.com/OpenZDecomp/OpenPreCEPatch\"" }
     defines { "rsc_OriginalFilename=\"%{cfg.buildtarget.name}\"" }
     defines { "_CRT_SECURE_NO_WARNINGS" }
+    if _OPTIONS["parity-baseline"] then
+        defines { "OPCEP_PARITY_BASELINE" }
+    end
 
     local major = os.date("%d")
     local minor = os.date("%m")

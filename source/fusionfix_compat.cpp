@@ -54,7 +54,6 @@ namespace opp
             {"SCOSignatureFix", "FusionFix episodiccontent.ixx (RemoveSCOSignatureCheck)"},
             {"SpeedupBugFix", "FusionFix frameratevigilante.ixx (time scale)"},
             {"SkipIntro", "FusionFix skipintro.ixx (PREF_SKIP_INTRO)"},
-            {"SkipIntroShowScreens", "FusionFix skipintro.ixx (PREF_SKIP_INTRO duration)"},
             {"SkipMenu", "FusionFix skipintro.ixx (PREF_SKIP_MENU)"},
             {"TBoGTHeliHeightLimit", "FusionFix episodiccontent.ixx NOPs the same height check"},
             {"VRAMFix", "FusionFix memory.ixx (VRAM detection)"},

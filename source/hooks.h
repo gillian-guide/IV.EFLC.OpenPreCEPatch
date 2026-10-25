@@ -36,7 +36,7 @@ extern "C" void zpatch_local_settings_capture_cwd() noexcept;
 extern "C" bool zpatch_ooc_selftest() noexcept;
 
 // NewSavesCompatibility chunk scan, split out for the native tests. `handle` is
-// a std::FILE*; guarded selects NewSavesGuards, seek selects NewSavesSeekPayloads.
+// a std::FILE*; guarded enables the folded guard checks, seek the seek path.
 extern "C" bool zpatch_new_saves_scan(void* handle, int guarded, int seek,
                                       uint32_t* flag9, uint32_t* flag16,
                                       uint32_t* flag13) noexcept;

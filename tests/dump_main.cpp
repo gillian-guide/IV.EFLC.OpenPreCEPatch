@@ -148,9 +148,6 @@ namespace
     void CanonicaliseModulePointers(Attribution& state, const std::vector<uint8_t>& pristine,
                                     uintptr_t gameBase, size_t gameSize)
     {
-        if (state.records.empty())
-            return;
-
         std::unordered_set<uint32_t> modulePointers;
         for (const uint32_t value : opp::DumpPointers())
         {
@@ -158,56 +155,69 @@ namespace
                 continue;
             modulePointers.insert(value);
         }
-        if (modulePointers.empty())
-            return;
 
-        std::unordered_map<size_t, size_t> byRva;
-        for (size_t i = 0; i < state.records.size(); ++i)
-            byRva.emplace(state.records[i].rva, i);
-
-        const size_t originalCount = state.records.size();
-        for (size_t i = 0; i < originalCount; ++i)
+        if (!state.records.empty() && !modulePointers.empty())
         {
-            const size_t rva = state.records[i].rva;
-            const char* arm = state.records[i].arm;
-            for (size_t back = 0; back <= 3 && back <= rva; ++back)
-            {
-                const size_t start = rva - back;
-                if (start + 4 > state.size)
-                    continue;
-                uint32_t value = 0;
-                std::memcpy(&value, state.image + start, sizeof(value));
-                if (modulePointers.find(value) == modulePointers.end())
-                    continue;
+            std::unordered_map<size_t, size_t> byRva;
+            for (size_t i = 0; i < state.records.size(); ++i)
+                byRva.emplace(state.records[i].rva, i);
 
-                // Site-derived, so the marker does not depend on how many
-                // pointers the pass recorded or in which order.
-                const uint32_t replacement =
-                    0x0A000000u | (static_cast<uint32_t>(start) & 0x00FFFFFFu);
-                const uint8_t bytes[4] = {
-                    static_cast<uint8_t>(replacement),
-                    static_cast<uint8_t>(replacement >> 8),
-                    static_cast<uint8_t>(replacement >> 16),
-                    static_cast<uint8_t>(replacement >> 24),
-                };
-                for (size_t k = 0; k < 4; ++k)
+            const size_t originalCount = state.records.size();
+            for (size_t i = 0; i < originalCount; ++i)
+            {
+                const size_t rva = state.records[i].rva;
+                const char* arm = state.records[i].arm;
+                for (size_t back = 0; back <= 3 && back <= rva; ++back)
                 {
-                    const size_t target = start + k;
-                    const auto existing = byRva.find(target);
-                    if (existing == byRva.end())
+                    const size_t start = rva - back;
+                    if (start + 4 > state.size)
+                        continue;
+                    uint32_t value = 0;
+                    std::memcpy(&value, state.image + start, sizeof(value));
+                    if (modulePointers.find(value) == modulePointers.end())
+                        continue;
+
+                    // Site-derived, so the marker does not depend on how many
+                    // pointers the pass recorded or in which order.
+                    const uint32_t replacement =
+                        0x0A000000u | (static_cast<uint32_t>(start) & 0x00FFFFFFu);
+                    const uint8_t bytes[4] = {
+                        static_cast<uint8_t>(replacement),
+                        static_cast<uint8_t>(replacement >> 8),
+                        static_cast<uint8_t>(replacement >> 16),
+                        static_cast<uint8_t>(replacement >> 24),
+                    };
+                    for (size_t k = 0; k < 4; ++k)
                     {
-                        state.records.push_back(
-                            {target, pristine[target], bytes[k], arm});
-                        byRva.emplace(target, state.records.size() - 1);
+                        const size_t target = start + k;
+                        const auto existing = byRva.find(target);
+                        if (existing == byRva.end())
+                        {
+                            state.records.push_back(
+                                {target, pristine[target], bytes[k], arm});
+                            byRva.emplace(target, state.records.size() - 1);
+                        }
+                        else
+                        {
+                            state.records[existing->second].newValue = bytes[k];
+                        }
+                        state.image[target] = bytes[k];
                     }
-                    else
-                    {
-                        state.records[existing->second].newValue = bytes[k];
-                    }
-                    state.image[target] = bytes[k];
                 }
             }
         }
+
+        // Several arms can touch the same site (e.g. RemoveUselessChecks then
+        // RestoreDeathMusic). The final image has one byte per RVA, so keep the
+        // last write for each and emit a unique, order-independent set.
+        std::unordered_map<size_t, WriteRecord> latest;
+        latest.reserve(state.records.size());
+        for (const WriteRecord& record : state.records)
+            latest[record.rva] = record;
+        state.records.clear();
+        state.records.reserve(latest.size());
+        for (const auto& entry : latest)
+            state.records.push_back(entry.second);
 
         std::sort(state.records.begin(), state.records.end(),
                   [](const WriteRecord& left, const WriteRecord& right) {

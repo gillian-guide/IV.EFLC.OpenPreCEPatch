@@ -8,6 +8,7 @@
 
 #include "feature_registry.hxx"
 #include "helpers.hxx"
+#include "improvements.hxx"
 #include "rebased.h"
 
 import common;
@@ -36,22 +37,47 @@ namespace opp
     {
         PatchContext ctx{image, reinterpret_cast<uintptr_t>(image.base), build, config};
 
-        // Opt-in improvements: publish the INI switches once, before any body can
-        // run. The defaults keep every original branch selected.
-        const auto flag = [&config](const char* key) -> uint8_t {
-            return config.Option(key, "0") ? 1u : 0u;
+        // The improvements are folded into the original options. This block
+        // publishes the resolved runtime switches once, before any arm runs:
+        // an original option selects its improvement, and the test-only
+        // OPCEP_IMPROVEMENTS environment variable / OPCEP_PARITY_BASELINE build
+        // can turn groups back off without touching the INI.
+        const uint32_t improvements = EnabledImprovements();
+        const auto has = [improvements](Improvement group) {
+            return (improvements & Improve(group)) != 0u;
         };
-        zpatch_opt_new_saves_guards = flag("NewSavesGuards");
-        zpatch_opt_new_saves_seek = flag("NewSavesSeekPayloads");
-        zpatch_opt_ooc_safe = flag("OutOfCommissionSafeInit");
-        zpatch_opt_ooc_cache = flag("OutOfCommissionCache");
-        zpatch_opt_component_guards = flag("VehicleComponentGuards");
-        zpatch_opt_model_lookup_guards = flag("ModelLookupGuards");
-        zpatch_opt_steer_cache = flag("SteerLookupCache");
-        zpatch_opt_popup_cache = flag("PopupLookupCache");
-        zpatch_opt_model_index = flag("ModelNameIndex");
-        zpatch_opt_skip_intro_screens = flag("SkipIntroShowScreens");
-        zpatch_opt_trace_arms = flag("TraceInstallArms");
+        const bool moving_parts =
+            config.Option("MovingSteeringWheelSupport", "1") ||
+            config.Option("ShakingEngineBlock", "1") ||
+            config.Option("MovingPlaneParts", "1");
+        const bool model_lookup =
+            config.Option("PopupHeadlightsFlag", "1") ||
+            config.Option("ForceCarHeadlightShadows", "0");
+
+        zpatch_opt_new_saves_guards =
+            has(Improvement::new_saves) &&
+                    config.Option("NewSavesCompatibility", "1")
+                ? 1u
+                : 0u;
+        zpatch_opt_new_saves_seek = zpatch_opt_new_saves_guards;
+        zpatch_opt_ooc_safe =
+            has(Improvement::ooc) && config.Option("OutOfCommissionFix", "1") ? 1u : 0u;
+        zpatch_opt_ooc_cache = zpatch_opt_ooc_safe;
+        zpatch_opt_component_guards =
+            has(Improvement::vehicle) && moving_parts ? 1u : 0u;
+        zpatch_opt_steer_cache = zpatch_opt_component_guards;
+        zpatch_opt_model_lookup_guards =
+            has(Improvement::popup) && model_lookup ? 1u : 0u;
+        zpatch_opt_popup_cache = zpatch_opt_model_lookup_guards;
+        zpatch_opt_model_index =
+            has(Improvement::model_index) &&
+                    (config.Option("BadPlayerModelCrashFix", "1") ||
+                     config.Option("DebugPrintSpawns", "0"))
+                ? 1u
+                : 0u;
+        zpatch_opt_skip_intro_screens =
+            has(Improvement::skip_intro) && config.Option("SkipIntro", "1") ? 1u : 0u;
+        zpatch_opt_trace_arms = has(Improvement::trace) ? 1u : 0u;
 
         for (const Feature& feature : RegisteredFeatures())
         {

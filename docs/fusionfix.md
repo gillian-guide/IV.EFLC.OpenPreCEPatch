@@ -46,7 +46,6 @@ mods writing one subsystem is not a combination this project can test.
 | RestoreDeathMusic | `deathmusic.ixx` (`DeathMusic`) |
 | SCOSignatureFix | `episodiccontent.ixx` (`RemoveSCOSignatureCheck`) |
 | SkipIntro | `skipintro.ixx` (`PREF_SKIP_INTRO`) |
-| SkipIntroShowScreens | `skipintro.ixx` (`PREF_SKIP_INTRO` duration) |
 | SkipMenu | `skipintro.ixx` (`PREF_SKIP_MENU`) |
 | SpeedupBugFix | `frameratevigilante.ixx` time scale |
 | TBoGTHeliHeightLimit | `episodiccontent.ixx` |
@@ -55,11 +54,9 @@ mods writing one subsystem is not a combination this project can test.
 
 Options not in this table patch sites FusionFix does not touch (for example the
 path-node, plane, projectile, MP-sync, save and file-compatibility fixes), so
-they stay active alongside FusionFix. The opt-in stability/performance keys
-(`NewSavesGuards`, `OutOfCommissionSafeInit`, `VehicleComponentGuards`,
-`ModelLookupGuards`, `TraceInstallArms`, `NewSavesSeekPayloads`,
-`OutOfCommissionCache`, `SteerLookupCache`, `PopupLookupCache`,
-`ModelNameIndex`) do not overlap a FusionFix subsystem and are not gated.
+they stay active alongside FusionFix. The folded improvements ride on their
+original options and are gated with them (for example `SkipIntro`'s 300 ms body
+is not installed when FusionFix supplies the intro path).
 
 Detection checks the module directory for any `*.asi` whose name contains
 `FusionFix`, and also checks whether `GTAIV.EFLC.FusionFix.asi` /

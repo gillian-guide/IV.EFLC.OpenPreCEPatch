@@ -8,7 +8,7 @@
     },
     "all-on": {
       "arms": {
-        "ApplyUselessChecksArm": 11632,
+        "ApplyUselessChecksArm": 11630,
         "InstallAimProjectileCrashFix": 5,
         "InstallAllowHashesForIDE": 5,
         "InstallBadPlayerModelCrashFix": 5,
@@ -81,7 +81,7 @@
         "InstallRemoveStaticCarShadows": 1,
         "InstallRemoveStaticCutsceneCarShadows": 1,
         "InstallRemoveUselessChecks": 184,
-        "InstallRestoreDeathMusic": 18,
+        "InstallRestoreDeathMusic": 10,
         "InstallReversingLightFix": 1,
         "InstallSCOSignatureFix": 1,
         "InstallSMPA60Fix": 11,
@@ -101,23 +101,8 @@
         "apply:SkipLauncher": 61
       },
       "file": "writesets/all-on.txt",
-      "sha256": "671a0e55b30bdc1871face598a306b8df03b1bb633b85f8fe9503dcdb11b9fa0",
-      "writes": 12802
-    },
-    "combo:SkipIntroShowScreens": {
-      "arms": {
-        "InstallSkipIntro": 5
-      },
-      "delta_arms": {
-        "InstallSkipIntro": 4
-      },
-      "delta_base": "option:SkipIntro",
-      "delta_file": "deltas/combo_SkipIntroShowScreens.txt",
-      "delta_sha256": "218ff6b3cc48905d6b7c7b7fa6449fc5a35c77eeaeaf9ba078f0d5939a5ebfc3",
-      "delta_writes": 4,
-      "file": "writesets/combo_SkipIntroShowScreens.txt",
-      "sha256": "f40ccbca27ffab886a4c656848a170cf46711c58d53475765752e27a51f890ff",
-      "writes": 5
+      "sha256": "03ed4f28762270922d4bf69e2c3ac48daed12f6f216432f25733c8056d9d68bb",
+      "writes": 12792
     },
     "defaults": {
       "arms": {
@@ -195,7 +180,7 @@
         "apply:SkipLauncher": 61
       },
       "file": "writesets/defaults.txt",
-      "sha256": "fc4a8b2ea9eae480e36ea14c803c9d82de4d5dd3a063a2d4907d4a16d881295b",
+      "sha256": "102094927c78cc7be97dcb527c8ec282293cd2cae6132860c00f540a3ffba4e8",
       "writes": 909
     },
     "legacy": {
@@ -273,7 +258,7 @@
         "apply:SkipLauncher": 61
       },
       "file": "writesets/legacy.txt",
-      "sha256": "a51d47838ae17a73827580ca381bed20eea0a12f392fc42974be7638a1c6edcb",
+      "sha256": "dd47003d7441773786758b565ba714ac2aacf9a0abe428b8c968ffa9d9943565",
       "writes": 900
     },
     "option:AddOptionsInMenu": {
@@ -984,28 +969,6 @@
       "sha256": "c434e40eb84b82e11cd6edd1080e9f1256aa2c965bffe26eeef8c4005475aafc",
       "writes": 1
     },
-    "option:ModelLookupGuards": {
-      "arms": {},
-      "delta_arms": {},
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_ModelLookupGuards.txt",
-      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "delta_writes": 0,
-      "file": "writesets/option_ModelLookupGuards.txt",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "writes": 0
-    },
-    "option:ModelNameIndex": {
-      "arms": {},
-      "delta_arms": {},
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_ModelNameIndex.txt",
-      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "delta_writes": 0,
-      "file": "writesets/option_ModelNameIndex.txt",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "writes": 0
-    },
     "option:MouseFix": {
       "arms": {
         "InstallMouseFix": 53
@@ -1096,28 +1059,6 @@
       "sha256": "43fb7cceff01b97409bacc2a7cd4343bc9eab1639e5ebe411142fa97d8acd8f3",
       "writes": 5
     },
-    "option:NewSavesGuards": {
-      "arms": {},
-      "delta_arms": {},
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_NewSavesGuards.txt",
-      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "delta_writes": 0,
-      "file": "writesets/option_NewSavesGuards.txt",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "writes": 0
-    },
-    "option:NewSavesSeekPayloads": {
-      "arms": {},
-      "delta_arms": {},
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_NewSavesSeekPayloads.txt",
-      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "delta_writes": 0,
-      "file": "writesets/option_NewSavesSeekPayloads.txt",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "writes": 0
-    },
     "option:NoImpostorHeightCutoff": {
       "arms": {
         "InstallNoImpostorHeightCutoff": 4
@@ -1193,17 +1134,6 @@
       "sha256": "488d3d30c62131652fcfb860f4d721b9d54ffd0e22674825e6a2e02a38cac939",
       "writes": 4
     },
-    "option:OutOfCommissionCache": {
-      "arms": {},
-      "delta_arms": {},
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_OutOfCommissionCache.txt",
-      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "delta_writes": 0,
-      "file": "writesets/option_OutOfCommissionCache.txt",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "writes": 0
-    },
     "option:OutOfCommissionFix": {
       "arms": {
         "InstallOutOfCommissionFix": 9
@@ -1218,17 +1148,6 @@
       "file": "writesets/option_OutOfCommissionFix.txt",
       "sha256": "afd6a0418e60e6fefa8c9fc14e29870333ed2c2e84c073681bdbafc7166b42dd",
       "writes": 9
-    },
-    "option:OutOfCommissionSafeInit": {
-      "arms": {},
-      "delta_arms": {},
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_OutOfCommissionSafeInit.txt",
-      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "delta_writes": 0,
-      "file": "writesets/option_OutOfCommissionSafeInit.txt",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "writes": 0
     },
     "option:OverrideGTADatPath": {
       "arms": {
@@ -1376,17 +1295,6 @@
       "sha256": "8226abb8bfc9cf5f23575becc3cc6c82231ead665b5b7ca9009cb74344bbdb12",
       "writes": 15
     },
-    "option:PopupLookupCache": {
-      "arms": {},
-      "delta_arms": {},
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_PopupLookupCache.txt",
-      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "delta_writes": 0,
-      "file": "writesets/option_PopupLookupCache.txt",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "writes": 0
-    },
     "option:RemoveAllWeaponsProtection": {
       "arms": {
         "InstallRemoveAllWeaponsProtection": 12
@@ -1503,10 +1411,10 @@
       },
       "delta_base": "all-off",
       "delta_file": "deltas/option_RemoveUselessChecks.txt",
-      "delta_sha256": "2f7e6b3bf52e498c6c144c7b2ca9b6a94e0393343b0c2755bc394120b7abfbac",
+      "delta_sha256": "f40a397d7586ad95ae7f42e2b62376798be50631e8faa977dcaae67fd9a2d846",
       "delta_writes": 11824,
       "file": "writesets/option_RemoveUselessChecks.txt",
-      "sha256": "b469af9fb4c02ba1c9deb81c42c3d8bdb267f23641fe31a4ecd67bd67e264c25",
+      "sha256": "77a3086ac35fd9964f3b37f3d6268df1d7222406ffa6efd6e8e27e2c3917dd2f",
       "writes": 11824
     },
     "option:RestoreDeathMusic": {
@@ -1653,22 +1561,11 @@
       },
       "delta_base": "all-off",
       "delta_file": "deltas/option_SkipIntro.txt",
-      "delta_sha256": "8b59aa7edf008543ea1c4eae74f9fc0a69aef17413fd66d8506a9aaf7d1db829",
+      "delta_sha256": "54dfd428d6453dded680b6e9df872f6267dcb7c2735914954e1884b6f8fa58bc",
       "delta_writes": 5,
       "file": "writesets/option_SkipIntro.txt",
-      "sha256": "29daa2fa2f593256e7b64074b7eb4d237ba202048ff55346f6b91ad7af773551",
+      "sha256": "f40ccbca27ffab886a4c656848a170cf46711c58d53475765752e27a51f890ff",
       "writes": 5
-    },
-    "option:SkipIntroShowScreens": {
-      "arms": {},
-      "delta_arms": {},
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_SkipIntroShowScreens.txt",
-      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "delta_writes": 0,
-      "file": "writesets/option_SkipIntroShowScreens.txt",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "writes": 0
     },
     "option:SkipLauncher": {
       "arms": {
@@ -1741,17 +1638,6 @@
       "sha256": "1fd4b26e1b8c6c83131fd00cd3872ee0d5e6a46ec341eb542caec434af63f60a",
       "writes": 12
     },
-    "option:SteerLookupCache": {
-      "arms": {},
-      "delta_arms": {},
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_SteerLookupCache.txt",
-      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "delta_writes": 0,
-      "file": "writesets/option_SteerLookupCache.txt",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "writes": 0
-    },
     "option:SuperLODFix": {
       "arms": {
         "InstallSuperLODFix": 5
@@ -1797,17 +1683,6 @@
       "sha256": "a6c5e90ffa266825d7da65160952089ac93d4657077f04219f3fe00952286f8f",
       "writes": 3
     },
-    "option:TraceInstallArms": {
-      "arms": {},
-      "delta_arms": {},
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_TraceInstallArms.txt",
-      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "delta_writes": 0,
-      "file": "writesets/option_TraceInstallArms.txt",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "writes": 0
-    },
     "option:TryToSkipAllErrors": {
       "arms": {
         "InstallTryToSkipAllErrors": 1
@@ -1842,17 +1717,6 @@
       "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "delta_writes": 0,
       "file": "writesets/option_VSyncFix.txt",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "writes": 0
-    },
-    "option:VehicleComponentGuards": {
-      "arms": {},
-      "delta_arms": {},
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_VehicleComponentGuards.txt",
-      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "delta_writes": 0,
-      "file": "writesets/option_VehicleComponentGuards.txt",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "writes": 0
     },
@@ -1892,10 +1756,10 @@
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_COMPATIBILITY.txt",
-      "delta_sha256": "5ac37746049ee171704b9dd07987fdd3818ebd5198c1114df366a7f6de386509",
+      "delta_sha256": "3ef64b2a539e001cc2c8073efd359a9c57302e9bbbd22c0a359d8c412297abfa",
       "delta_writes": 127,
       "file": "writesets/section_COMPATIBILITY.txt",
-      "sha256": "fafac442721f3785e231b2f7e0a3e3ebc6da45386343ad23f287b55b8ae99c2f",
+      "sha256": "4d057b8e7ab7da2f2d02ce58701901fe10bd10f89c07d8a58a02164295084e34",
       "writes": 127
     },
     "section:GRAPHICS": {
@@ -1966,10 +1830,10 @@
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_INPUT.txt",
-      "delta_sha256": "4b6dfcd2017469281ad1b93b73983022c08fa15f82268b337e94b29e8af53103",
+      "delta_sha256": "770ac05d806b4ad1953066380a71615578be65aa3c5c7c476014d23cc089a9f0",
       "delta_writes": 73,
       "file": "writesets/section_INPUT.txt",
-      "sha256": "ff2fa670c7435eab5b9fb70d31cff3d10475d40b711e5d7ee7eb9aea64d54292",
+      "sha256": "0c77849b6c4356ba024aeb7d3b45839c6149a4696553c85f194b268c3ebf92f7",
       "writes": 73
     },
     "section:INTERFACE": {
@@ -2031,10 +1895,10 @@
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_MULTIPLAYER.txt",
-      "delta_sha256": "c35344a8ff404b0c6c4ae3bc5fc2f8b3aaba1b9619c84f9106753d651aaf8e78",
+      "delta_sha256": "ed00feb2b7c02949fb442d8bd0a2499c8ddf229a60a75abc2f880f579d7f35fc",
       "delta_writes": 89,
       "file": "writesets/section_MULTIPLAYER.txt",
-      "sha256": "3e5c2c46385988f166925e382a67d9e0e6ee4093cc6cc85ed0bbb1dad3b1c543",
+      "sha256": "ea0c6e41abcff5b99322d7e07df756af707d73f093b3c65e5a84ba93c4443e69",
       "writes": 89
     },
     "section:PERFORMANCE": {
@@ -2121,10 +1985,10 @@
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_STABILITY.txt",
-      "delta_sha256": "c5a4d66869cfe36b0dfcb313c2e666f5cad6b1b74983d1b229cfe8bd161d097c",
+      "delta_sha256": "2710109d555908ca3b6a22dfb071b266e89acdc68a41a8afa289a4f5c0c641fe",
       "delta_writes": 123,
       "file": "writesets/section_STABILITY.txt",
-      "sha256": "b7634bdf2f7b1fc430add779f3498cff22d0791a9c1bc68628d8b19d13602892",
+      "sha256": "fc88b8ffcf5f00ec0594c66cb2006315effb09e7cbca280162644d263cc30c7b",
       "writes": 123
     },
     "section:VEHICLES": {
@@ -2177,10 +2041,10 @@
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_XLIVELESS.txt",
-      "delta_sha256": "f91bb503c529da421451b0d9ce72d6d283ab5f92db4abfe9f17a78c3be1682b2",
+      "delta_sha256": "032e647187fe52699127edfef11275761c53f02921eda70c3d9492c6287e3d92",
       "delta_writes": 8,
       "file": "writesets/section_XLIVELESS.txt",
-      "sha256": "6ec0082c85cd4b679f8a8886e74504f87670abd3948367e8690b7ea8bee06f6b",
+      "sha256": "d50724ebffdcadc834c3b8c5827ba52838de0ccbb4ef9a6159311ce457f22a59",
       "writes": 8
     }
   },
@@ -2191,5 +2055,5 @@
   },
   "generated_by": "tools/opcep_matrix.py",
   "schema": 1,
-  "template_sha256": "250052439b2d1d8b7c8e45295eb71f55cbb2ee46801309a712ebb5542c639505"
+  "template_sha256": "442852b794a9257a6cc0f519c8b14d1451aaaf2ad9dc07ea74f97f6156eb8a69"
 }

@@ -35,7 +35,8 @@ DllMain / InitializeASI
 | `source/pattern.*` | signature normalisation and scans |
 | `source/rebased.*` | the globals the hook bodies address, plus the original-name tables |
 | `source/hooks.cpp` | machine-level bodies and the reference-VA registry |
-| `source/patches.*` | the ordered option pass, the opt-in flag publish and the optional dump observer |
+| `source/patches.*` | the ordered option pass, the folded-improvement publish and the optional dump observer |
+| `source/improvements.*` | the `OPCEP_IMPROVEMENTS` / `OPCEP_PARITY_BASELINE` test switches |
 | `source/preamble.cpp` | the seven unconditional pointer scans and salt fallback |
 | `source/stability.ixx` | crash/freeze arms |
 | `source/performance.ixx` | loading, streaming, limits, memory |
@@ -70,9 +71,13 @@ no external converter. `tools/gen_ini_template.py` regenerates
 `source/ini_template.hxx`; the raw string is emitted as adjacent literals because
 MSVC truncates a single literal above 16,380 bytes.
 
-`PatchGame` also publishes the opt-in improvement switches into the
-`zpatch_opt_*` globals once, before any arm runs. Their default is `0`, which
-selects the original branch in every body; see `docs/improvements-log.md`.
+`PatchGame` also publishes the folded improvement switches into the
+`zpatch_opt_*` globals once, before any arm runs. They are resolved from the
+original options (`NewSavesCompatibility`, `OutOfCommissionFix`, the moving-parts
+trio, `PopupHeadlightsFlag`/FCHS, `BadPlayerModelCrashFix`/`DebugPrintSpawns`,
+`SkipIntro`) plus the test-only `OPCEP_IMPROVEMENTS` environment variable or the
+`OPCEP_PARITY_BASELINE` build definition. There are no per-fix INI keys; see
+`docs/improvements.md` and `docs/testing.md`.
 
 ## FusionFix gating
 

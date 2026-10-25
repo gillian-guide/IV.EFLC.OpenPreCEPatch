@@ -202,14 +202,20 @@ def arm_counts(rows: list[list]) -> dict[str, int]:
 
 
 def run_dump(
-    exe: Path, game: Path, ini: Path, out: Path, attr: Path | None, cwd: Path
+    exe: Path, game: Path, ini: Path, out: Path, attr: Path | None, cwd: Path,
+    env_overrides: dict[str, str] | None = None,
 ) -> None:
     command = [str(exe), str(game), str(ini), str(out)]
     if attr is not None:
         command += ["--attribution", str(attr)]
+    env = None
+    if env_overrides:
+        env = os.environ.copy()
+        env.update(env_overrides)
     result = subprocess.run(
         command,
         cwd=str(cwd),
+        env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
@@ -228,6 +234,7 @@ def build_cell(
     game: Path,
     work: Path,
     legacy_import: Path,
+    env_overrides: dict[str, str],
 ) -> dict:
     ini = work / f"{safe_name(name)}.ini"
     out = work / f"{safe_name(name)}.writes.txt"
@@ -238,7 +245,7 @@ def build_cell(
     else:
         ini.write_text(render(template, overrides), encoding="utf-8")
 
-    run_dump(exe, game, ini, out, attr, ROOT)
+    run_dump(exe, game, ini, out, attr, ROOT, env_overrides)
     writes = parse_writes(out)
     arms = parse_arms(attr)
     attributed = [
@@ -331,8 +338,18 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--legacy", type=Path, default=DEFAULT_LEGACY)
     parser.add_argument("--jobs", type=int, default=max(1, min(8, os.cpu_count() or 1)))
     parser.add_argument("--cells", help="only run cells whose name matches this regex")
+    parser.add_argument("--env", action="append", default=[], metavar="NAME=VALUE",
+                        help="set an environment variable for every dump run "
+                             "(e.g. --env OPCEP_IMPROVEMENTS=none)")
     parser.add_argument("--keep", action="store_true", help="keep temporary INIs under .scratch")
     args = parser.parse_args(argv)
+
+    env_overrides: dict[str, str] = {}
+    for item in args.env:
+        if "=" not in item:
+            parser.error(f"--env expects NAME=VALUE, got {item!r}")
+        name, value = item.split("=", 1)
+        env_overrides[name] = value
 
     if not args.exe.exists():
         parser.error(f"dump executable not found: {args.exe}")
@@ -381,6 +398,7 @@ def main(argv: list[str]) -> int:
                 args.game,
                 work,
                 legacy_import,
+                env_overrides,
             ): name
             for name, overrides, _base in cells
         }

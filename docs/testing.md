@@ -45,6 +45,34 @@ pure refactor that only moves globals still produces a zero diff. See
 `tests/parity/README.md` for the cell list and the zero-diff policy. `--check`
 fails on any change, including an unattributed byte or a changed game image.
 
+## Testing the folded improvements on/off
+
+The improvements are part of the original INI options, so there is no per-fix
+INI key. Use one of these switches:
+
+```bat
+:: one process / one live run, no INI edit
+set OPCEP_IMPROVEMENTS=none
+set OPCEP_IMPROVEMENTS=only:newsaves,ooc
+set OPCEP_IMPROVEMENTS=except:skipintro
+set OPCEP_IMPROVEMENTS=except:trace
+```
+
+`all`/unset enables every group; `none` disables every group; a bare list is an
+`only:` list. The groups are `new_saves`, `ooc`, `vehicle`, `popup`,
+`model_index`, `skip_intro` and `trace`.
+
+```bat
+:: separate legacy dump/ASI, for automated A/B
+cmake -S . -B build-parity -A x64 -DOPCEP_PARITY_BASELINE=ON
+cmake --build build-parity --config Release --target opcep_parity_dump
+python tools\opcep_matrix.py --exe build-parity\Release\opcep_parity_dump.exe --report parity.json
+```
+
+The normal and parity dumps are byte-identical on every cell except
+`SkipIntro` (4-byte body rel32). `tools/opcep_matrix.py --env` applies the
+environment switch per cell without changing any file.
+
 ## Write-set dump
 
 `opcep_parity_dump` maps a copy of a PE32 executable and prints every byte the

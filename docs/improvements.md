@@ -1,32 +1,36 @@
-# Improvement backlog
+# Improvement model and backlog
 
-The parity baseline keeps the original behaviour, including its rough edges.
-Everything below is either **shipped opt-in** (default `0`, original path still
-compiled and selected) or a documented candidate. The key list and the exact
-write-set effect of every shipped key live in `docs/improvements-log.md`.
+The improvements are **folded into the original INI options**: there are no
+per-fix keys. `NewSavesCompatibility=1` means the guarded/faster converter,
+`OutOfCommissionFix=1` means the cached/safe archive setup, `SkipIntro=1` means
+the 300 ms intro body, and so on. An INI from the parity era still enables the
+improved path for the options it already has.
 
-## Shipped opt-in improvements
+The original code path is still compiled. It is selected by the test-only
+switches in `docs/testing.md`:
 
-Each key defaults to `0`; an INI without it behaves exactly like the parity
-baseline. The original body/path stays reachable and is what the default selects.
+- `OPCEP_IMPROVEMENTS` environment variable (per process / live A/B);
+- `OPCEP_PARITY_BASELINE` CMake build option (a separate legacy ASI or dump);
+- the parity matrix and per-arm attribution (`tests/parity/`).
 
-| key | section | what it does |
-| --- | --- | --- |
-| `NewSavesGuards` | STABILITY | validates the save converter's header/chunk reads, `size < 9` and `malloc`; a malformed save is skipped instead of faulting or under-allocating |
-| `OutOfCommissionSafeInit` | STABILITY | skips the archive setup cleanly when the embedded decode or either allocation fails |
-| `VehicleComponentGuards` | STABILITY | null-checks the component registry walk (`ped -> +8 -> +0xB4 -> +0xC`), the bone-matrix chain and the script-resolver result in the moving-parts consumer |
-| `ModelLookupGuards` | STABILITY | null-checks the shared model lookup, its FCHS parameter and popup results |
-| `TraceInstallArms` | STABILITY | logs each installer arm before it runs, so the last arm in a crash log is known |
-| `NewSavesSeekPayloads` | PERFORMANCE | seeks over discarded chunk payloads instead of reading them |
-| `OutOfCommissionCache` | PERFORMANCE | runs the OOC decode/RPF build/mount once and reuses the archive instead of re-decoding and leaking per call |
-| `SteerLookupCache` | PERFORMANCE | caches the `wheelangle` model resolution for the steering-wheel/engine/plane consumers |
-| `PopupLookupCache` | PERFORMANCE | caches popup-headlight and FCHS model-hash resolution |
-| `ModelNameIndex` | PERFORMANCE | builds a one-time sorted hash index for the 38,455-name catalogue used by MP diagnostics |
-| `SkipIntroShowScreens` | COMPATIBILITY | FusionFix-style 300 ms intro screens instead of skipping them outright; requires `SkipIntro=1` |
+Neither switch is an INI key; a normal user never has to toggle a fix
+individually.
 
-`OutOfCommissionSafeInit` and `OutOfCommissionCache` are independent: safe init
-decides what happens on failure, cache decides whether the init runs again.
-`NewSavesGuards` and `NewSavesSeekPayloads` are independent for the same reason.
+## Folded mapping
+
+| original option | improvements folded into it |
+| --- | --- |
+| `NewSavesCompatibility` | validated header/chunk reads, `size < 9`, `malloc`, payload reads; `fseek` over discarded payloads |
+| `OutOfCommissionFix` | fail-closed decode/allocation; one-time archive cache instead of per-call decode/leak |
+| `MovingSteeringWheelSupport`, `ShakingEngineBlock`, `MovingPlaneParts` | component-registry/bone-chain null guards; script-resolver guard; wheelangle model→tilt cache |
+| `PopupHeadlightsFlag`, `ForceCarHeadlightShadows` | model-lookup/parameter guards; hash→index cache |
+| `BadPlayerModelCrashFix`, `DebugPrintSpawns` | one-time model-name hash index |
+| `SkipIntro` | FusionFix-style 300 ms intro body instead of skipping outright (original body still available via the test switches) |
+| installer pass | arm logging is part of the normal trace (`OPCEP_IMPROVEMENTS=except:trace` silences it) |
+
+Every improved body keeps the original branch first when its switch is off. The
+only write-set-visible difference with improvements on is the `SkipIntro`
+rel32: 4 bytes at the same site.
 
 ## Compatibility
 
@@ -42,19 +46,18 @@ decides what happens on failure, cache decides whether the init runs again.
 
 ## Performance
 
-The four hot caches are shipped behind keys (table above). Remaining candidates:
+The hot caches are now part of the options in the table above. Remaining
+candidates:
 
 | site | cost today | candidate |
 | --- | --- | --- |
-| `ForceCarHeadlightShadows` | full table walk per call | covered by `PopupLookupCache` for the hash resolution; the walk itself is already bounded |
 | plane script resolver | re-resolves the script-pointer chain per float read | resolve once per frame / cache the last `(script, index)` pair |
-| `OutOfCommissionFix` wrapper | decode + RPF build + mount per call | shipped as `OutOfCommissionCache`; archive is intentionally retained |
-| `NewSavesCompatibility` converter | reads and discards every chunk payload | shipped as `NewSavesSeekPayloads` |
+| `OutOfCommissionFix` wrapper | decode + RPF build + mount per call | folded cache shipped; archive is intentionally retained |
 
 ## Stability and safety
 
-- **Shipped opt-in:** NewSaves guards, OOC safe init, component guards, model
-  lookup guards, install-arm tracing (table above).
+- **Folded:** NewSaves guards, OOC safe init/cache, component guards, model
+  lookup guards, model-name index (table above).
 - **Still candidates:**
   - the popup model object itself (not just the lookup result) is dereferenced
     to read the bone/position without a class check;
@@ -75,14 +78,16 @@ The four hot caches are shipped behind keys (table above). Remaining candidates:
   `LocalSettingsPath`; not shipped.
 - `NewMemorySystem` replaces the game's allocator wholesale and fills
   allocations with `0xCD`. Keep the original behaviour; a guarded variant is a
-  later opt-in.
+  separate decision.
 
 ## Tooling
 
-- `tools/opcep_matrix.py` now produces the per-cell write set, per-arm
-  attribution and a committed golden (`tests/parity/`).
+- `tools/opcep_matrix.py` produces the per-cell write set, per-arm attribution
+  and a committed golden (`tests/parity/`), with `--env` and `--exe` for
+  improved-vs-baseline runs.
 - `tools/gen_ini_template.py` regenerates the embedded template; the raw string
-  is split because MSVC truncates literals above 16,380 bytes.
+  is split because MSVC truncates literals above 16,380 bytes. CI runs its
+  `--check` mode.
 - Derive the hard-coded test counts from the tables instead of repeating them.
 - Compare hook bodies against the true function end (map/PDB), not the first
   `RET`.

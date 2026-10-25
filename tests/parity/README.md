@@ -22,7 +22,6 @@ Cells are:
 | `all-on` | every boolean key explicitly `1` |
 | `option:<key>` | `all-off` plus that one key |
 | `section:<name>` | `all-off` plus every key in that section |
-| `combo:<name>` | a dependent combination; its delta is measured against `delta_base` (e.g. `SkipIntroShowScreens` against `option:SkipIntro`) |
 | `legacy` | the frozen `fixtures/ZolikaPatch.legacy.ini` run through the real first-run importer |
 
 ## Running
@@ -31,7 +30,17 @@ Cells are:
 python tools\opcep_matrix.py --check      :: compare with the committed matrix
 python tools\opcep_matrix.py --update     :: record a new known-good baseline
 python tools\opcep_matrix.py --cells "option:NewSaves" --report out.json
+python tools\opcep_matrix.py --env OPCEP_IMPROVEMENTS=none --report off.json
 ```
+
+The folded improvements are part of the original options, so there are no
+per-fix cells. To compare improved and legacy paths without editing the INI:
+
+- set `OPCEP_IMPROVEMENTS=none` (or `only:...` / `except:...`) and pass it with
+  `--env`; or
+- build the legacy dump with
+  `cmake -S . -B build-parity -A x64 -DOPCEP_PARITY_BASELINE=ON` and compare its
+  output with the normal dump.
 
 The tool needs `build64\Release\opcep_parity_dump.exe` and a game executable
 (default `..\game_refs\GTAIV.exe`); no game files are committed. The game image
@@ -41,10 +50,13 @@ mismatch instead of silently changing the numbers.
 ## Policy
 
 - A pure refactor must produce **zero** diff in `--check`.
-- A new opt-in option must only add its own cell, and that cell's `delta_arms`
-  must name the expected installer arm(s). A key that only flips a runtime
-  branch (no new code bytes) legitimately has a zero-write cell; say so in
+- The improvements are folded into the original options, so there are no
+  per-fix cells. A folded improvement must either produce **zero** write-set
+  change (runtime branch) or change only the cell that owns the original option
+  (the `SkipIntro` rel32 is the known example). Say which in
   `docs/improvements-log.md`.
+- Use `--env OPCEP_IMPROVEMENTS=none` or a `-DOPCEP_PARITY_BASELINE=ON` build
+  for the improved-vs-legacy comparison; do not add an INI key for a test.
 - Never update the golden to hide an unexplained delta. Use the attribution
   files to trace the byte to an arm first.
 
