@@ -9,7 +9,7 @@
 00653A67 5F InstallPopupHeadlightsFlag
 00653A68 0F InstallPopupHeadlightsFlag
 00653A6E EB InstallPopupHeadlightsFlag
-00653AB6 3C InstallPopupHeadlightsFlag
-00653AB7 31 InstallPopupHeadlightsFlag
-00653AB8 C1 InstallPopupHeadlightsFlag
-00653AB9 2E InstallPopupHeadlightsFlag
+00653AB6 B6 InstallPopupHeadlightsFlag
+00653AB7 3A InstallPopupHeadlightsFlag
+00653AB8 65 InstallPopupHeadlightsFlag
+00653AB9 0A InstallPopupHeadlightsFlag

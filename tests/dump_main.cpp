@@ -9,13 +9,36 @@
 #include "ini_import.hxx"
 #include "skip_launcher.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
+
+namespace opp
+{
+    namespace
+    {
+        std::vector<uint32_t>& DumpPointers()
+        {
+            static std::vector<uint32_t> pointers;
+            return pointers;
+        }
+    } // namespace
+
+    // Recorded by AddressOf / FindGlobalValue / FindGlobalSymbol under
+    // OPCEP_DUMP_TOOL. The dump canonicalises these operands after the pass:
+    // their numeric value depends on this tool's module layout, not behaviour.
+    void RecordDumpPointer(uint32_t value)
+    {
+        DumpPointers().push_back(value);
+    }
+} // namespace opp
 
 namespace
 {
@@ -83,33 +106,113 @@ namespace
         return true;
     }
 
-    // Per-arm attribution. `before` always mirrors the live image, so each arm's
-    // callback prints only the bytes that arm left changed (the net write set of
-    // that arm, not every transient store).
+    // Per-arm attribution. `before` always mirrors the live image, so each arm
+    // records only the bytes that arm left changed (the net write set of that
+    // arm, not every transient store). Records are kept in memory so the
+    // module-address canonicalisation below can rewrite both outputs.
+    struct WriteRecord
+    {
+        size_t rva;
+        uint8_t oldValue;
+        uint8_t newValue;
+        const char* arm;
+    };
+
     struct Attribution
     {
         uint8_t* image{};
         size_t size{};
         std::vector<uint8_t> before;
-        std::FILE* out{};
-        size_t bytes{};
+        std::vector<WriteRecord> records;
     };
 
     void AttributionEnd(void* user, const char* arm)
     {
         auto* state = static_cast<Attribution*>(user);
-        if (state->out == nullptr)
-            return;
         for (size_t i = 0; i < state->size; ++i)
         {
             const uint8_t now = state->image[i];
             const uint8_t old = state->before[i];
             if (now == old)
                 continue;
-            std::fprintf(state->out, "%08zX %02X %02X %s\n", i, old, now, arm);
+            state->records.push_back({i, old, now, arm});
             state->before[i] = now;
-            ++state->bytes;
         }
+    }
+
+    // Module-relative operands (AddressOf(&global), FindGlobalValue, ...) move
+    // whenever unrelated code or data is added. Replace every 4-byte window that
+    // holds one of the recorded addresses with a stable synthetic address, so a
+    // pure refactor keeps the write set byte-identical. Game-image addresses are
+    // left alone: the installers write those deliberately and they are stable.
+    void CanonicaliseModulePointers(Attribution& state, const std::vector<uint8_t>& pristine,
+                                    uintptr_t gameBase, size_t gameSize)
+    {
+        if (state.records.empty())
+            return;
+
+        std::unordered_set<uint32_t> modulePointers;
+        for (const uint32_t value : opp::DumpPointers())
+        {
+            if (value >= gameBase && value < gameBase + gameSize)
+                continue;
+            modulePointers.insert(value);
+        }
+        if (modulePointers.empty())
+            return;
+
+        std::unordered_map<size_t, size_t> byRva;
+        for (size_t i = 0; i < state.records.size(); ++i)
+            byRva.emplace(state.records[i].rva, i);
+
+        const size_t originalCount = state.records.size();
+        for (size_t i = 0; i < originalCount; ++i)
+        {
+            const size_t rva = state.records[i].rva;
+            const char* arm = state.records[i].arm;
+            for (size_t back = 0; back <= 3 && back <= rva; ++back)
+            {
+                const size_t start = rva - back;
+                if (start + 4 > state.size)
+                    continue;
+                uint32_t value = 0;
+                std::memcpy(&value, state.image + start, sizeof(value));
+                if (modulePointers.find(value) == modulePointers.end())
+                    continue;
+
+                // Site-derived, so the marker does not depend on how many
+                // pointers the pass recorded or in which order.
+                const uint32_t replacement =
+                    0x0A000000u | (static_cast<uint32_t>(start) & 0x00FFFFFFu);
+                const uint8_t bytes[4] = {
+                    static_cast<uint8_t>(replacement),
+                    static_cast<uint8_t>(replacement >> 8),
+                    static_cast<uint8_t>(replacement >> 16),
+                    static_cast<uint8_t>(replacement >> 24),
+                };
+                for (size_t k = 0; k < 4; ++k)
+                {
+                    const size_t target = start + k;
+                    const auto existing = byRva.find(target);
+                    if (existing == byRva.end())
+                    {
+                        state.records.push_back(
+                            {target, pristine[target], bytes[k], arm});
+                        byRva.emplace(target, state.records.size() - 1);
+                    }
+                    else
+                    {
+                        state.records[existing->second].newValue = bytes[k];
+                    }
+                    state.image[target] = bytes[k];
+                }
+            }
+        }
+
+        std::sort(state.records.begin(), state.records.end(),
+                  [](const WriteRecord& left, const WriteRecord& right) {
+                      return left.rva < right.rva;
+                  });
     }
 
     // Exercise the real first-run importer without touching the source fixture:
@@ -216,21 +319,12 @@ int main(int argc, char** argv)
     std::vector<uint8_t> pristine(image, image + size);
 
     Attribution attribution;
+    attribution.image = image;
+    attribution.size = size;
+    attribution.before = pristine;
     opp::PatchObserver observer;
-    if (attributionPath != nullptr)
-    {
-        attribution.image = image;
-        attribution.size = size;
-        attribution.before = pristine;
-        attribution.out = std::fopen(attributionPath, "wb");
-        if (attribution.out == nullptr)
-        {
-            std::fprintf(stderr, "opcep_dump: cannot write %s\n", attributionPath);
-            return 5;
-        }
-        observer.user = &attribution;
-        observer.end = &AttributionEnd;
-    }
+    observer.user = &attribution;
+    observer.end = &AttributionEnd;
 
     // The loader's launcher stage runs before the option pass, exactly as it
     // does in the ASI. Hook destinations are null here; the signature writes are
@@ -242,30 +336,34 @@ int main(int argc, char** argv)
                                 SkipLauncherStage::all);
         // The launcher stage runs outside PatchGame; attribute its net writes to
         // a pseudo-arm so a SkipLauncher-only cell is still explainable.
-        if (observer.end != nullptr)
-            observer.end(observer.user, "apply:SkipLauncher");
+        observer.end(observer.user, "apply:SkipLauncher");
     }
 
     opp::PatchGame(opp::GameBuild::v1080, opp::GameImage{image, size}, config, observer);
 
-    if (attribution.out != nullptr)
-    {
-        std::fclose(attribution.out);
-        std::fprintf(stderr, "opcep_dump: %zu attributed bytes\n", attribution.bytes);
-    }
+    CanonicaliseModulePointers(attribution, pristine,
+                               reinterpret_cast<uintptr_t>(image), size);
 
     std::FILE* out = std::fopen(argv[3], "wb");
     if (!out)
         return 5;
-    size_t changed = 0;
-    for (size_t i = 0; i < size; ++i)
-    {
-        if (image[i] == pristine[i])
-            continue;
-        std::fprintf(out, "%08zX %02X\n", i, image[i]);
-        ++changed;
-    }
+    for (const WriteRecord& record : attribution.records)
+        std::fprintf(out, "%08zX %02X\n", record.rva, record.newValue);
     std::fclose(out);
-    std::fprintf(stderr, "opcep_dump: %zu bytes changed\n", changed);
+
+    if (attributionPath != nullptr)
+    {
+        std::FILE* arms = std::fopen(attributionPath, "wb");
+        if (arms == nullptr)
+            return 5;
+        for (const WriteRecord& record : attribution.records)
+            std::fprintf(arms, "%08zX %02X %02X %s\n", record.rva, record.oldValue,
+                         record.newValue, record.arm);
+        std::fclose(arms);
+        std::fprintf(stderr, "opcep_dump: %zu attributed bytes\n",
+                     attribution.records.size());
+    }
+
+    std::fprintf(stderr, "opcep_dump: %zu bytes changed\n", attribution.records.size());
     return 0;
 }

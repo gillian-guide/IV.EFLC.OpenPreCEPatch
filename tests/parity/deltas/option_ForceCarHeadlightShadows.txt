@@ -8,8 +8,8 @@
 004F7CBB 78 InstallForceCarHeadlightShadows
 004F7CBC 01 InstallForceCarHeadlightShadows
 004F7CBD 00 InstallForceCarHeadlightShadows
-004F7D2E 40 InstallForceCarHeadlightShadows
-004F7D2F 31 InstallForceCarHeadlightShadows
-004F7D30 C1 InstallForceCarHeadlightShadows
-004F7D31 2E InstallForceCarHeadlightShadows
+004F7D2E 2E InstallForceCarHeadlightShadows
+004F7D2F 7D InstallForceCarHeadlightShadows
+004F7D30 4F InstallForceCarHeadlightShadows
+004F7D31 0A InstallForceCarHeadlightShadows
 004F7DD6 EB InstallForceCarHeadlightShadows

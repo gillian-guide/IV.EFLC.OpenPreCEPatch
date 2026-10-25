@@ -391,7 +391,12 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match - 6, reinterpret_cast<void*>(Abi("abi_skip_intro_body")), true); //jmp
+                // SkipIntroShowScreens selects the FusionFix-style 300 ms body;
+                // the default keeps the original skip-outright body.
+                const char* body = ctx.Option("SkipIntroShowScreens", "0")
+                                       ? "abi_skip_intro_screens"
+                                       : "abi_skip_intro_body";
+                injector::MakeJMP(match - 6, reinterpret_cast<void*>(Abi(body)), true); //jmp
             }
         }
 

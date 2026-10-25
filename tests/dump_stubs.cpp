@@ -20,6 +20,14 @@ namespace
     constexpr DumpAbi kDumpAbi[] = {
 #include "dump_abi.inc"
     };
+
+    // Bodies that exist only behind an opt-in key have no original destination
+    // VA. Give them a fixed out-of-image address so the dump records a real
+    // rel32 install (and the matrix can attribute its 4 bytes) instead of a
+    // null target.
+    constexpr DumpAbi kDumpOnlyAbi[] = {
+        {"abi_skip_intro_screens", 0x0F000000u},
+    };
 } // namespace
 
 extern "C" void* AbiByName(const char* name) noexcept
@@ -27,6 +35,11 @@ extern "C" void* AbiByName(const char* name) noexcept
     if (name == nullptr)
         return nullptr;
     for (const DumpAbi& row : kDumpAbi)
+    {
+        if (std::strcmp(row.name, name) == 0)
+            return reinterpret_cast<void*>(row.va);
+    }
+    for (const DumpAbi& row : kDumpOnlyAbi)
     {
         if (std::strcmp(row.name, name) == 0)
             return reinterpret_cast<void*>(row.va);

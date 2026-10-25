@@ -113,8 +113,30 @@ void abi_popup_check() noexcept
         static_cast<uintptr_t>(zpatch_model_lookup));
     zpatch_popup_angle = 0x3FC90FDBu;  // dword_101580CC: pi/2 float bits
     zpatch_popup_flag = 0;             // dword_1015BE24
-    int32_t out = -1;
-    lookup(0xEB9F21D3u, &out);  // sub_10044310's call is unguarded
+    if (zpatch_opt_model_lookup_guards != 0u && lookup == nullptr)
+        return;  // opt-in: a preamble miss is a clean skip
+    // PopupLookupCache: the hash -> model-index mapping is static, so remember
+    // the last resolution per hash. Direct-mapped, collision just re-resolves.
+    static uint32_t cache_hash[512] = {};
+    static int32_t cache_index[512] = {};
+    static uint8_t cache_valid[512] = {};
+    const auto resolve = [&](uint32_t hash) -> int32_t
+    {
+        const size_t slot = (hash * 2654435761u) >> 23;
+        if (zpatch_opt_popup_cache != 0u && cache_valid[slot] != 0u &&
+            cache_hash[slot] == hash)
+            return cache_index[slot];
+        int32_t resolved = -1;
+        lookup(hash, &resolved);  // sub_10044310's call is unguarded by default
+        if (zpatch_opt_popup_cache != 0u)
+        {
+            cache_hash[slot] = hash;
+            cache_index[slot] = resolved;
+            cache_valid[slot] = 1;
+        }
+        return resolved;
+    };
+    int32_t out = resolve(0xEB9F21D3u);
     zpatch_popup_index = static_cast<uint32_t>(out);  // dword_1015BE1C
     if (out == static_cast<int32_t>(zpatch_popup_model))
     {
@@ -125,8 +147,7 @@ void abi_popup_check() noexcept
     {
         const uint32_t hash = zpatch_popuplights_models[i];
         if (hash == 0) return;
-        out = -1;
-        lookup(hash, &out);
+        out = resolve(hash);
         if (out != static_cast<int32_t>(zpatch_popup_model)) continue;
         zpatch_popup_flag = 1;
         for (uint32_t k = 0; k < 512; ++k)
@@ -159,10 +180,30 @@ void abi_fchs_check() noexcept
     // are unguarded in the original.
     const auto* base = reinterpret_cast<const uint8_t*>(
         static_cast<uintptr_t>(zpatch_fchs_param));
+    if (zpatch_opt_model_lookup_guards != 0u && (lookup == nullptr || base == nullptr))
+        return;  // opt-in: a preamble/parameter miss is a clean skip
+    static uint32_t cache_hash[512] = {};
+    static int32_t cache_index[512] = {};
+    static uint8_t cache_valid[512] = {};
+    const auto resolve = [&](uint32_t value) -> int32_t
+    {
+        const size_t slot = (value * 2654435761u) >> 23;
+        if (zpatch_opt_popup_cache != 0u && cache_valid[slot] != 0u &&
+            cache_hash[slot] == value)
+            return cache_index[slot];
+        int32_t resolved = -1;
+        lookup(value, &resolved);
+        if (zpatch_opt_popup_cache != 0u)
+        {
+            cache_hash[slot] = value;
+            cache_index[slot] = resolved;
+            cache_valid[slot] = 1;
+        }
+        return resolved;
+    };
     for (uint32_t i = 0;;)
     {
-        int32_t index = -1;
-        lookup(hash, &index);
+        const int32_t index = resolve(hash);
         if (static_cast<int32_t>(
                 *reinterpret_cast<const int16_t*>(base + kModelIndexOffset)) == index)
         {
@@ -803,13 +844,17 @@ extern "C" const void* abi_vehicle_component(const void* registry,
                                              const char* name) noexcept
 {
     // sub_10003F40 dereferences the registry and each candidate name unguarded.
+    const bool guarded = zpatch_opt_component_guards != 0u;
+    if (guarded && registry == nullptr) return nullptr;
     const auto* entries = *reinterpret_cast<const uint8_t* const*>(registry);
+    if (guarded && entries == nullptr) return nullptr;
     const auto count = *reinterpret_cast<const uint16_t*>(
         static_cast<const uint8_t*>(registry) + 0x14);
     for (uint16_t i = 0; i < count; ++i)
     {
         const auto* entry = entries + static_cast<size_t>(i) * 0xE0u;
         const char* candidate = *reinterpret_cast<const char* const*>(entry);
+        if (guarded && candidate == nullptr) continue;
         if (_stricmp(candidate, name) == 0) return entry;
     }
     return nullptr;
@@ -825,6 +870,8 @@ extern "C" uint32_t abi_steer_body() noexcept
 {
     auto* const vehicle = reinterpret_cast<uint8_t*>(
         static_cast<uintptr_t>(zpatch_steer_vehicle));
+    const bool guarded = zpatch_opt_component_guards != 0u;
+    if (guarded && vehicle == nullptr) return 0;
 
     using BoneFn = uint32_t*(__thiscall*)(void*, uint32_t);
     using SetFn = void(__thiscall*)(uint32_t*, float);
@@ -844,6 +891,7 @@ extern "C" uint32_t abi_steer_body() noexcept
     const auto script_float = [&]() -> float
     {
         const uint32_t ctx = zpatch_script_resolve(zpatch_salt_3c);
+        if (guarded && ctx == 0) return 0.0f;
         const uint32_t offset =
             *reinterpret_cast<const uint32_t*>(
                 static_cast<uintptr_t>(ctx) + kScriptOffsetField);
@@ -871,14 +919,19 @@ extern "C" uint32_t abi_steer_body() noexcept
     const auto bone_matrix = [&](int16_t model, const char* name) -> uint32_t*
     {
         const auto base = static_cast<uintptr_t>(zpatch_pre_ped_array);
+        if (guarded && (base == 0u || model < 0)) return nullptr;
         const uint32_t ped = *reinterpret_cast<const uint32_t*>(
             base + 4u * static_cast<uint32_t>(model));
+        if (guarded && ped == 0u) return nullptr;
         const uint32_t p1 = *reinterpret_cast<const uint32_t*>(
             static_cast<uintptr_t>(ped) + 8);
+        if (guarded && p1 == 0u) return nullptr;
         const uint32_t p2 = *reinterpret_cast<const uint32_t*>(
             static_cast<uintptr_t>(p1) + 0xB4);
+        if (guarded && p2 == 0u) return nullptr;
         const uint32_t registry = *reinterpret_cast<const uint32_t*>(
             static_cast<uintptr_t>(p2) + 0xC);
+        if (guarded && registry == 0u) return nullptr;
         const auto* entry = static_cast<const uint8_t*>(abi_vehicle_component(
             reinterpret_cast<const void*>(static_cast<uintptr_t>(registry)), name));
         if (entry == nullptr) return nullptr;  // the original's own `if (v6)` check
@@ -900,18 +953,43 @@ extern "C" uint32_t abi_steer_body() noexcept
         const float turn = static_cast<float>(static_cast<double>(steering / lock) *
                                               -3.141592653589793);
         float tilt = 0.0f;
-        for (int i = 0; i < 512; ++i)
+        // SteerLookupCache: the wheelangle table is static after startup, so a
+        // model's tilt is stable. Direct-mapped by model; a collision re-walks.
+        struct SteerTiltCache final
         {
-            const uint32_t hash = zpatch_wheelangle_models[i];
-            if (hash == 0u) break;
-            int32_t resolved = -1;
-            lookup(hash, &resolved);  // sub_10004C70 0x10004CE7: unconditional
-            if (resolved == model)
+            int16_t model;
+            float tilt;
+            uint8_t valid;
+        };
+        static SteerTiltCache tilt_cache[64] = {};
+        const size_t tilt_slot = static_cast<uint16_t>(model) & 63u;
+        if (zpatch_opt_steer_cache != 0u && tilt_cache[tilt_slot].valid != 0u &&
+            tilt_cache[tilt_slot].model == model)
+        {
+            tilt = tilt_cache[tilt_slot].tilt;
+        }
+        else
+        {
+            for (int i = 0; i < 512; ++i)
             {
-                tilt = static_cast<float>(
-                    static_cast<double>(zpatch_wheelangle_angles[i]) *
-                    3.141592653589793 / 180.0);
-                break;
+                const uint32_t hash = zpatch_wheelangle_models[i];
+                if (hash == 0u) break;
+                int32_t resolved = -1;
+                if (guarded && lookup == nullptr) break;
+                lookup(hash, &resolved);  // sub_10004C70 0x10004CE7: unconditional
+                if (resolved == model)
+                {
+                    tilt = static_cast<float>(
+                        static_cast<double>(zpatch_wheelangle_angles[i]) *
+                        3.141592653589793 / 180.0);
+                    break;
+                }
+            }
+            if (zpatch_opt_steer_cache != 0u)
+            {
+                tilt_cache[tilt_slot].model = model;
+                tilt_cache[tilt_slot].tilt = tilt;
+                tilt_cache[tilt_slot].valid = 1;
             }
         }
         if (model != -1)
@@ -984,6 +1062,11 @@ extern "C" uint32_t abi_steer_body() noexcept
     }
     // Unconditional tail: snapshot the last script timestep and return its slot.
     const uint32_t ctx = zpatch_script_resolve(zpatch_salt_3c);
+    if (guarded && ctx == 0u)
+    {
+        zpatch_engine_last_timestep = 0.0f;
+        return 0;
+    }
     const uint32_t offset = *reinterpret_cast<const uint32_t*>(
         static_cast<uintptr_t>(ctx) + kScriptOffsetField);
     const uint32_t value_ptr = *reinterpret_cast<const uint32_t*>(
@@ -1090,35 +1173,95 @@ extern "C" int32_t abi_new_saves_p3_hook() noexcept
     return result;
 }
 
+// The converter's chunk scan, split out so the native tests can drive it
+// without a game image. `guarded` enables NewSavesGuards' checks; `seek` enables
+// NewSavesSeekPayloads' fseek-over-payload path. With both 0 this is the
+// original loop: every fread result is ignored and the underflow/malloc are
+// unchecked.
+extern "C" bool zpatch_new_saves_scan(void* handle, int guarded, int seek,
+                                      uint32_t* flag9, uint32_t* flag16,
+                                      uint32_t* flag13) noexcept
+{
+    auto* file = static_cast<std::FILE*>(handle);
+    if (file == nullptr) return false;
+    uint8_t header[0x110];
+    if (guarded != 0)
+    {
+        // Opt-in guard: a short header cannot carry a magic/chunk table.
+        if (std::fread(header, 0x110, 1, file) != 1)
+            return false;
+    }
+    else
+    {
+        std::fread(header, 0x110, 1, file);  // return ignored, like the original
+    }
+    uint32_t magic = 0;
+    std::memcpy(&magic, header + 0x0C, 4);
+    if (magic != 0x45564153u)  // "SAVE"
+        return false;
+
+    uint32_t local9 = 0;
+    uint32_t local16 = 0;
+    uint32_t local13 = 0;
+    for (int i = 0; i < 18; ++i)
+    {
+        uint8_t chunk[9];
+        const size_t chunk_read = std::fread(chunk, 9, 1, file);
+        if (guarded != 0 && chunk_read != 1)
+            return false;
+        uint32_t size = 0;
+        std::memcpy(&size, chunk + 5, 4);
+        if (guarded != 0 && size < 9u)
+        {
+            // The original underflows the allocation count here.
+            return false;
+        }
+        zpatch_new_saves_chunk_len = size;                  // dword_1015AD90
+        zpatch_new_saves_element_count = size - 9u;         // dword_1015ADA0
+        bool skipped = false;
+        if (seek != 0 && size >= 9u && zpatch_new_saves_element_count <= 0x7FFFFFFFu)
+        {
+            // Only the 9-byte chunk headers are needed; seek over the payload.
+            skipped = std::fseek(file,
+                                 static_cast<long>(zpatch_new_saves_element_count),
+                                 SEEK_CUR) == 0;
+        }
+        if (!skipped)
+        {
+            void* payload = std::malloc(zpatch_new_saves_element_count);
+            if (guarded != 0 && payload == nullptr)
+                return false;
+            const size_t payload_read =
+                std::fread(payload, 1, zpatch_new_saves_element_count, file);
+            std::free(payload);
+            if (guarded != 0 && payload_read != zpatch_new_saves_element_count)
+                return false;
+        }
+        if (i == 9) local9 = size == 19525u ? 1u : 0u;
+        if (i == 16) local16 = size == 3703u ? 1u : 0u;
+        if (i == 13) local13 = size == 5953u ? 1u : 0u;
+    }
+    if (flag9 != nullptr) *flag9 = local9;
+    if (flag16 != nullptr) *flag16 = local16;
+    if (flag13 != nullptr) *flag13 = local13;
+    return true;
+}
+
 extern "C" void abi_new_saves_convert(const char* path) noexcept
 {
     std::FILE* file = std::fopen(path, "rb");
     if (!file) return;
-    uint8_t header[0x110];
-    std::fread(header, 0x110, 1, file);  // return ignored, like the original
-    uint32_t magic = 0;
-    std::memcpy(&magic, header + 0x0C, 4);
-    if (magic != 0x45564153u)  // "SAVE"
-    {
-        std::fclose(file);
-        return;
-    }
-    for (int i = 0; i < 18; ++i)
-    {
-        uint8_t chunk[9];
-        std::fread(chunk, 9, 1, file);
-        uint32_t size = 0;
-        std::memcpy(&size, chunk + 5, 4);
-        zpatch_new_saves_chunk_len = size;                  // dword_1015AD90
-        zpatch_new_saves_element_count = size - 9u;         // dword_1015ADA0
-        void* payload = std::malloc(zpatch_new_saves_element_count);
-        std::fread(payload, 1, zpatch_new_saves_element_count, file);
-        std::free(payload);
-        if (i == 9) zpatch_new_saves_flag9 = size == 19525u ? 1u : 0u;
-        if (i == 16) zpatch_new_saves_flag16 = size == 3703u ? 1u : 0u;
-        if (i == 13) zpatch_new_saves_flag13 = size == 5953u ? 1u : 0u;
-    }
+    uint32_t flag9 = 0;
+    uint32_t flag16 = 0;
+    uint32_t flag13 = 0;
+    const bool parsed = zpatch_new_saves_scan(
+        file, zpatch_opt_new_saves_guards, zpatch_opt_new_saves_seek,
+        &flag9, &flag16, &flag13);
     std::fclose(file);
+    if (!parsed) return;  // including the original wrong-magic early return
+    zpatch_new_saves_flag9 = flag9;
+    zpatch_new_saves_flag16 = flag16;
+    zpatch_new_saves_flag13 = flag13;
 
     // P1 (game 0x872185): force the 0x3C-byte read path for new saves.
     static const uint8_t* p1 = nullptr;
@@ -3704,6 +3847,22 @@ __declspec(naked) void abi_skip_intro_body()
     }
 }
 
+// Opt-in SkipIntroShowScreens (borrowed from FusionFix's skipintro.ixx): the
+// same site and resume, but below the 0x1F40 threshold the screens play for
+// 300 ms instead of being skipped outright. Not @exact; the original body above
+// stays installed when the key is 0.
+__declspec(naked) void abi_skip_intro_screens()
+{
+    __asm {
+        imul ecx, ecx, 0x190
+        cmp edx, 0x1f40
+        jge ok
+        mov edx, 0x12c
+    ok:
+        jmp DWORD PTR [zpatch_skip_intro_match]
+    }
+}
+
 // @exact 0x10046610 SkipMenu body: entered via E8 from the patched site; the
 // first call with a zero argument switches the menu id to 6 unconditionally (the
 // one-shot flag is the original's byte_101A8450), then resumes by jumping to the
@@ -4467,9 +4626,15 @@ unsigned char* zpatch_ooc_build_archive(unsigned char* table,
     const uint32_t remainder = size & (kOocPageSize - 1u);
     const uint32_t pages = size / kOocPageSize + (remainder != 0u ? 1u : 0u);
     const uint32_t total = pages * kOocPageSize + kOocPageSize;
-    // No null check, like the original's archive build: the memset below faults
-    // on a failed allocation.
+    // No null check by default, like the original's archive build: the memset
+    // below faults on a failed allocation. OutOfCommissionSafeInit returns 0
+    // instead and the caller skips the mount.
     auto* archive = static_cast<unsigned char*>(std::malloc(total));
+    if (archive == nullptr && zpatch_opt_ooc_safe != 0u)
+    {
+        std::free(table);
+        return nullptr;
+    }
     std::memset(archive, 0, total);
     uint32_t offset = 0;
     const auto append = [&](const void* source, uint32_t bytes) noexcept
@@ -4523,16 +4688,40 @@ unsigned char* zpatch_ooc_build_archive(unsigned char* table,
 // original.
 uint32_t zpatch_ooc_lookup() noexcept
 {
+    // OutOfCommissionCache: the original's guard dword_10159C00 has no writer,
+    // so it re-decodes and leaks on every call. Run the init once and reuse the
+    // mounted archive; the original path stays selected when the key is off.
+    static uint32_t cached_archive = 0;
+    static uint32_t cached_state = 0;
+    if (zpatch_opt_ooc_cache != 0u && cached_archive != 0u)
+    {
+        zpatch_ooc_store(&zpatch_ooc_state, cached_state);
+        return cached_archive;
+    }
+
     auto* table = static_cast<unsigned char*>(std::malloc(kOocTableSize));
-    static_cast<void>(zpatch_ooc_decode(table));  // the original discards the result
+    if (table == nullptr && zpatch_opt_ooc_safe != 0u) return 0;
+    const bool decoded = zpatch_ooc_decode(table);
+    if (!decoded && zpatch_opt_ooc_safe != 0u)
+    {
+        std::free(table);
+        return 0;
+    }
     zpatch_ooc_store(&zpatch_ooc_table_size,
                      static_cast<uint32_t>(kOocTableSize));
     zpatch_ooc_register_entry(table);
     uint32_t final_offset = 0;
     unsigned char* archive = zpatch_ooc_build_archive(table, final_offset);
+    if (archive == nullptr && zpatch_opt_ooc_safe != 0u) return 0;
     zpatch_ooc_store(&zpatch_ooc_vector_end,
                      zpatch_ooc_vector_begin);
     zpatch_ooc_store(&zpatch_ooc_state, final_offset);
+    if (zpatch_opt_ooc_cache != 0u)
+    {
+        cached_archive = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(archive));
+        cached_state = final_offset;
+    }
     return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(archive));
 }
 
@@ -5447,6 +5636,7 @@ extern "C" void* AbiByName(const char* name) noexcept
     {"abi_shader_stream_filter_hpe", reinterpret_cast<void(*)()>(&abi_shader_stream_filter_hpe)},
     {"abi_shader_stream_filter_v", reinterpret_cast<void(*)()>(&abi_shader_stream_filter_v)},
     {"abi_skip_intro_body", reinterpret_cast<void(*)()>(&abi_skip_intro_body)},
+    {"abi_skip_intro_screens", reinterpret_cast<void(*)()>(&abi_skip_intro_screens)},
     {"abi_skip_menu_body", reinterpret_cast<void(*)()>(&abi_skip_menu_body)},
     {"abi_smpa60_shim", reinterpret_cast<void(*)()>(&abi_smpa60_shim)},
     {"abi_smpa60_tail_shim", reinterpret_cast<void(*)()>(&abi_smpa60_tail_shim)},

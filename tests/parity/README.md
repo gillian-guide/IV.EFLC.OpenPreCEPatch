@@ -22,6 +22,7 @@ Cells are:
 | `all-on` | every boolean key explicitly `1` |
 | `option:<key>` | `all-off` plus that one key |
 | `section:<name>` | `all-off` plus every key in that section |
+| `combo:<name>` | a dependent combination; its delta is measured against `delta_base` (e.g. `SkipIntroShowScreens` against `option:SkipIntro`) |
 | `legacy` | the frozen `fixtures/ZolikaPatch.legacy.ini` run through the real first-run importer |
 
 ## Running

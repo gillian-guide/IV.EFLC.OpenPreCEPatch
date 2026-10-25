@@ -67,9 +67,20 @@ namespace opp
             *pattern.get(0).get<uint32_t>(offset)));
     }
 
+#if defined(OPCEP_DUMP_TOOL)
+    // The dump records every module-relative address an installer emits, so the
+    // write-set baseline can canonicalise those operands. Module layout shifts
+    // when unrelated code is added; the pointer target does not change meaning.
+    void RecordDumpPointer(uint32_t value);
+#endif
+
     inline uint32_t AddressOf(const void* pointer)
     {
-        return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(pointer));
+        const auto value = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(pointer));
+#if defined(OPCEP_DUMP_TOOL)
+        RecordDumpPointer(value);
+#endif
+        return value;
     }
 
     // Where the branch at `siteOffset` goes: the original re-points these.

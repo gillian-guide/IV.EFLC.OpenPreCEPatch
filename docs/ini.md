@@ -32,6 +32,11 @@ crash, freeze and game-logic fixes
 | `SuperLODFix` | `1` | fix crash if superlod is spawned, disable this for GTAC as it's already fixed there [1070,1080] |
 | `TryToSkipAllErrors` | `0` | attempt to completely ignore any and all error messages that would ever pop up this will likely still eventually crash your game but at least it'll be an actual crash instead of an in most cases useless error [all] |
 | `WantedLevelCrashFix` | `1` | fix rare crash when getting a wanted level [all] |
+| `NewSavesGuards` | `0` | validate the new-saves converter's header/chunk reads, chunk size and allocation; a malformed save is skipped instead of faulting [all] |
+| `OutOfCommissionSafeInit` | `0` | skip the OutOfCommission archive setup cleanly when an allocation or the embedded decode fails, instead of faulting or mounting garbage [all] |
+| `VehicleComponentGuards` | `0` | null-check the vehicle-component registry walk (ped -> +8 -> +0xB4 -> +0xC) and the script-resolver result used by the moving-parts features [all] |
+| `ModelLookupGuards` | `0` | null-check the shared model lookup, its parameter and its result in the popup-headlight and headlight-shadow checkers [all] |
+| `TraceInstallArms` | `0` | write every installer arm to the log before it runs, so a crash during the install pass names the last arm [all] |
 
 ## PERFORMANCE
 
@@ -50,6 +55,11 @@ loading, streaming and memory
 | `NoPhysicsSleep` | `1` | reduces the threshold velocity below which physics objects can "go to sleep" at, this means vehicles stop in a more realistic way but it might be a performance hit [all] |
 | `RemoveUselessChecks` | `0` | might be a small performance boost but highly incompatible with other mods [1040,1070,1080] |
 | `StartupTimeFix` | `1` | fixes the 15+ second startup times before the game window even pops up [all] |
+| `NewSavesSeekPayloads` | `0` | seek past discarded save chunk payloads instead of reading them; only the 9-byte chunk headers are needed [all] |
+| `OutOfCommissionCache` | `0` | run the OutOfCommission archive setup once and reuse the mounted archive instead of re-decoding and leaking it on every call [all] |
+| `SteerLookupCache` | `0` | cache the wheelangle model resolution used by the steering wheel, engine block and plane part consumers [all] |
+| `PopupLookupCache` | `0` | cache popup-headlight and headlight-shadow model-hash resolution [all] |
+| `ModelNameIndex` | `0` | build a one-time hash index for the 38,455-entry model-name catalogue used by the MP diagnostics instead of a linear scan per lookup [all] |
 
 ## GRAPHICS
 
@@ -152,6 +162,7 @@ other mods, game builds and packaging
 | `SkipLauncher` | `1` | from XLivelessAddon but with some additional improvements, ability to launch game directly from .exe and/or skip the patch 4 launcher by using any other launch/playgtaiv exe [all] |
 | `SkipIntro` | `1` | skip intro screens [all; FF] |
 | `SkipMenu` | `0` | skip main menu, launching straight into the last savegame regardless of what episode that's from (IV if no savegame is found) [all; FF] |
+| `SkipIntroShowScreens` | `0` | show intro screens for 300 ms instead of skipping them outright (FusionFix-style); requires SkipIntro to stay on [all; FF] |
 | `VRAMFix` | `1` | workaround for VRAM above 2GB [all; FF] |
 
 ## XLIVELESS

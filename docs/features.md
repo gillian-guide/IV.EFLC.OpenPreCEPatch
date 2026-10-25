@@ -133,6 +133,36 @@ fix rare crash when getting a wanted level [all]
 
 - **Default:** `1`
 
+### NewSavesGuards
+
+validate the new-saves converter's header/chunk reads, chunk size and allocation; a malformed save is skipped instead of faulting [all]
+
+- **Default:** `0`
+
+### OutOfCommissionSafeInit
+
+skip the OutOfCommission archive setup cleanly when an allocation or the embedded decode fails, instead of faulting or mounting garbage [all]
+
+- **Default:** `0`
+
+### VehicleComponentGuards
+
+null-check the vehicle-component registry walk (ped -> +8 -> +0xB4 -> +0xC) and the script-resolver result used by the moving-parts features [all]
+
+- **Default:** `0`
+
+### ModelLookupGuards
+
+null-check the shared model lookup, its parameter and its result in the popup-headlight and headlight-shadow checkers [all]
+
+- **Default:** `0`
+
+### TraceInstallArms
+
+write every installer arm to the log before it runs, so a crash during the install pass names the last arm [all]
+
+- **Default:** `0`
+
 ## PERFORMANCE
 
 loading, streaming and memory
@@ -202,6 +232,36 @@ might be a small performance boost but highly incompatible with other mods [1040
 fixes the 15+ second startup times before the game window even pops up [all]
 
 - **Default:** `1`
+
+### NewSavesSeekPayloads
+
+seek past discarded save chunk payloads instead of reading them; only the 9-byte chunk headers are needed [all]
+
+- **Default:** `0`
+
+### OutOfCommissionCache
+
+run the OutOfCommission archive setup once and reuse the mounted archive instead of re-decoding and leaking it on every call [all]
+
+- **Default:** `0`
+
+### SteerLookupCache
+
+cache the wheelangle model resolution used by the steering wheel, engine block and plane part consumers [all]
+
+- **Default:** `0`
+
+### PopupLookupCache
+
+cache popup-headlight and headlight-shadow model-hash resolution [all]
+
+- **Default:** `0`
+
+### ModelNameIndex
+
+build a one-time hash index for the 38,455-entry model-name catalogue used by the MP diagnostics instead of a linear scan per lookup [all]
+
+- **Default:** `0`
 
 ## GRAPHICS
 
@@ -584,6 +644,12 @@ skip intro screens [all; FF]
 ### SkipMenu
 
 skip main menu, launching straight into the last savegame regardless of what episode that's from (IV if no savegame is found) [all; FF]
+
+- **Default:** `0`
+
+### SkipIntroShowScreens
+
+show intro screens for 300 ms instead of skipping them outright (FusionFix-style); requires SkipIntro to stay on [all; FF]
 
 - **Default:** `0`
 

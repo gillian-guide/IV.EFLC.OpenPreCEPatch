@@ -169,6 +169,18 @@ extern "C"
     uint8_t zpatch_flag_gfwl_popup = 0u;       // byte_10159B87
     uint8_t zpatch_flag_debug_spawns = 0u;     // byte_10159C15
     uint8_t zpatch_flag_donotpause = 0u;       // byte_1015AD43
+    // OpenPreCEPatch opt-in switches. 0 selects the original branch everywhere.
+    uint8_t zpatch_opt_new_saves_guards = 0u;
+    uint8_t zpatch_opt_new_saves_seek = 0u;
+    uint8_t zpatch_opt_ooc_safe = 0u;
+    uint8_t zpatch_opt_ooc_cache = 0u;
+    uint8_t zpatch_opt_component_guards = 0u;
+    uint8_t zpatch_opt_model_lookup_guards = 0u;
+    uint8_t zpatch_opt_steer_cache = 0u;
+    uint8_t zpatch_opt_popup_cache = 0u;
+    uint8_t zpatch_opt_model_index = 0u;
+    uint8_t zpatch_opt_skip_intro_screens = 0u;
+    uint8_t zpatch_opt_trace_arms = 0u;
     // RestoreDeathMusic's lazily resolved site.
     uint32_t zpatch_death_music_site = 0;
     // NewSavesCompatibility's element counter.
@@ -358,23 +370,42 @@ uint32_t& DlcApplyRva() noexcept
 }
 
 // Rebases a value that addresses the original module, keyed by INI option.
+#if defined(OPCEP_DUMP_TOOL)
+namespace opp
+{
+    void RecordDumpPointer(uint32_t value);
+}
+#endif
+
+namespace
+{
+    uintptr_t DumpTrack(uintptr_t value) noexcept
+    {
+#if defined(OPCEP_DUMP_TOOL)
+        if (value != 0)
+            opp::RecordDumpPointer(static_cast<uint32_t>(value));
+#endif
+        return value;
+    }
+} // namespace
+
 uintptr_t FindGlobalValue(std::string_view option) noexcept
 {
     if (option == "StartupTimeFix")
-        return reinterpret_cast<uintptr_t>(&g_startup_time);
+        return DumpTrack(reinterpret_cast<uintptr_t>(&g_startup_time));
     if (option == "VSyncFix")
-        return reinterpret_cast<uintptr_t>(&g_vsync_flag);
+        return DumpTrack(reinterpret_cast<uintptr_t>(&g_vsync_flag));
     if (option == "OverrideGTADatPath")
-        return reinterpret_cast<uintptr_t>(zpatch_override_gta_dat_path);
+        return DumpTrack(reinterpret_cast<uintptr_t>(zpatch_override_gta_dat_path));
     // PopupHeadlightsFlag: the `fld` operand at +82 now loads our pi/2 float.
     if (option == "PopupHeadlightsFlag")
-        return reinterpret_cast<uintptr_t>(&zpatch_popup_angle);
+        return DumpTrack(reinterpret_cast<uintptr_t>(&zpatch_popup_angle));
     // ForceCarHeadlightShadows: the operand at +211 now loads our 2.0f dword.
     if (option == "ForceCarHeadlightShadows")
-        return reinterpret_cast<uintptr_t>(&zpatch_fchs_offset);
+        return DumpTrack(reinterpret_cast<uintptr_t>(&zpatch_fchs_offset));
     // LocalSettingsPath: the path-helper call goes through our 4-byte slot.
     if (option == "LocalSettingsPath")
-        return reinterpret_cast<uintptr_t>(&zpatch_local_saves_slot);
+        return DumpTrack(reinterpret_cast<uintptr_t>(&zpatch_local_saves_slot));
     return 0;
 }
 
@@ -383,9 +414,9 @@ uintptr_t FindGlobalValue(std::string_view option) noexcept
 uintptr_t FindGlobalSymbol(std::string_view symbol) noexcept
 {
     if (symbol == "zpatch_local_iv_suffix")
-        return reinterpret_cast<uintptr_t>(zpatch_local_iv_suffix);
+        return DumpTrack(reinterpret_cast<uintptr_t>(zpatch_local_iv_suffix));
     if (symbol == "zpatch_episode_flag")
-        return reinterpret_cast<uintptr_t>(&zpatch_episode_flag);
+        return DumpTrack(reinterpret_cast<uintptr_t>(&zpatch_episode_flag));
     return 0;
 }
 

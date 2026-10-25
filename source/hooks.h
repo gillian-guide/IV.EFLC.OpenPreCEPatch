@@ -35,6 +35,12 @@ extern "C" void zpatch_local_settings_capture_cwd() noexcept;
 // checks its Adler-32 trailer and verifies the golden archive (native tests only).
 extern "C" bool zpatch_ooc_selftest() noexcept;
 
+// NewSavesCompatibility chunk scan, split out for the native tests. `handle` is
+// a std::FILE*; guarded selects NewSavesGuards, seek selects NewSavesSeekPayloads.
+extern "C" bool zpatch_new_saves_scan(void* handle, int guarded, int seek,
+                                      uint32_t* flag9, uint32_t* flag16,
+                                      uint32_t* flag13) noexcept;
+
 // NewMemorySystem: the reimplemented CRageAllocator methods (vtable[2]/[3]/[18]
 // of the original 0x100B5038) and the vtable the E8 body writes into the game's
 // allocator singleton. The other entries are machine-code-transcribed stubs.

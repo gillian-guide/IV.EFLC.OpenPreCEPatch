@@ -3,9 +3,12 @@
 #include "helpers.hxx"
 
 #include "game.hxx"
+#include "log.hxx"
 #include "data/useless_checks.h"
 
 #include <cstdio>
+
+extern "C" uint8_t zpatch_opt_trace_arms;
 
 namespace opp
 {
@@ -45,6 +48,10 @@ namespace opp
 
     void TraceArm(const char* name)
     {
+        // Runtime opt-in (TraceInstallArms): the log names the arm before it
+        // runs, so a crash during the install pass leaves the last arm visible.
+        if (zpatch_opt_trace_arms != 0u)
+            Log("arm %s", name);
 #if defined(OPCEP_TRACE_INSTALLS)
         static std::FILE* log = std::fopen("IV.EFLC.OpenPreCEPatch.trace.log", "a");
         if (log)

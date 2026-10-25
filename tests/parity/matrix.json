@@ -8,7 +8,7 @@
     },
     "all-on": {
       "arms": {
-        "ApplyUselessChecksArm": 11630,
+        "ApplyUselessChecksArm": 11632,
         "InstallAimProjectileCrashFix": 5,
         "InstallAllowHashesForIDE": 5,
         "InstallBadPlayerModelCrashFix": 5,
@@ -81,7 +81,7 @@
         "InstallRemoveStaticCarShadows": 1,
         "InstallRemoveStaticCutsceneCarShadows": 1,
         "InstallRemoveUselessChecks": 184,
-        "InstallRestoreDeathMusic": 8,
+        "InstallRestoreDeathMusic": 18,
         "InstallReversingLightFix": 1,
         "InstallSCOSignatureFix": 1,
         "InstallSMPA60Fix": 11,
@@ -92,7 +92,7 @@
         "InstallSkipIntro": 5,
         "InstallSkipMenu": 4,
         "InstallSpeedupBugFix": 4,
-        "InstallStartupTimeFix": 11,
+        "InstallStartupTimeFix": 12,
         "InstallSuperLODFix": 5,
         "InstallTBoGTHeliHeightLimit": 2,
         "InstallTeleportProtection": 3,
@@ -101,8 +101,23 @@
         "apply:SkipLauncher": 61
       },
       "file": "writesets/all-on.txt",
-      "sha256": "6f1973bcacaacf9ec498eaa3873ef7e2abec0a2e072ac884c962912eed480bb4",
-      "writes": 12789
+      "sha256": "671a0e55b30bdc1871face598a306b8df03b1bb633b85f8fe9503dcdb11b9fa0",
+      "writes": 12802
+    },
+    "combo:SkipIntroShowScreens": {
+      "arms": {
+        "InstallSkipIntro": 5
+      },
+      "delta_arms": {
+        "InstallSkipIntro": 4
+      },
+      "delta_base": "option:SkipIntro",
+      "delta_file": "deltas/combo_SkipIntroShowScreens.txt",
+      "delta_sha256": "218ff6b3cc48905d6b7c7b7fa6449fc5a35c77eeaeaf9ba078f0d5939a5ebfc3",
+      "delta_writes": 4,
+      "file": "writesets/combo_SkipIntroShowScreens.txt",
+      "sha256": "f40ccbca27ffab886a4c656848a170cf46711c58d53475765752e27a51f890ff",
+      "writes": 5
     },
     "defaults": {
       "arms": {
@@ -173,15 +188,15 @@
         "InstallSkipInternetConnectionCheck": 2,
         "InstallSkipIntro": 5,
         "InstallSpeedupBugFix": 4,
-        "InstallStartupTimeFix": 11,
+        "InstallStartupTimeFix": 12,
         "InstallSuperLODFix": 5,
         "InstallTeleportProtection": 3,
         "InstallWantedLevelCrashFix": 5,
         "apply:SkipLauncher": 61
       },
       "file": "writesets/defaults.txt",
-      "sha256": "284cf10426ed319b9d988a1cbca5c25b6b7c5adf54dc8e43b62c82ef1e4b1cf8",
-      "writes": 908
+      "sha256": "fc4a8b2ea9eae480e36ea14c803c9d82de4d5dd3a063a2d4907d4a16d881295b",
+      "writes": 909
     },
     "legacy": {
       "arms": {
@@ -250,7 +265,7 @@
         "InstallSkipInternetConnectionCheck": 2,
         "InstallSkipIntro": 5,
         "InstallSpeedupBugFix": 4,
-        "InstallStartupTimeFix": 11,
+        "InstallStartupTimeFix": 12,
         "InstallSuperLODFix": 5,
         "InstallTeleportProtection": 3,
         "InstallTryToSkipAllErrors": 1,
@@ -258,12 +273,13 @@
         "apply:SkipLauncher": 61
       },
       "file": "writesets/legacy.txt",
-      "sha256": "c466b109786fe6cd13ae18d75aadcd1179dcb24e107359dcff585f7d9e074229",
-      "writes": 899
+      "sha256": "a51d47838ae17a73827580ca381bed20eea0a12f392fc42974be7638a1c6edcb",
+      "writes": 900
     },
     "option:AddOptionsInMenu": {
       "arms": {},
       "delta_arms": {},
+      "delta_base": "all-off",
       "delta_file": "deltas/option_AddOptionsInMenu.txt",
       "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "delta_writes": 0,
@@ -278,6 +294,7 @@
       "delta_arms": {
         "InstallAimProjectileCrashFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_AimProjectileCrashFix.txt",
       "delta_sha256": "fe829953f25c7fb7205f717502a8db6c9987e99a87599dbb70b2607c7604a6c7",
       "delta_writes": 5,
@@ -292,6 +309,7 @@
       "delta_arms": {
         "InstallAllowHashesForIDE": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_AllowHashesForIDE.txt",
       "delta_sha256": "7ebe40bb85ce95313208a93e4fe29c1d169c9daa560b2b0c6d6ea3ed2ebc2ca4",
       "delta_writes": 5,
@@ -306,6 +324,7 @@
       "delta_arms": {
         "InstallBadPlayerModelCrashFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_BadPlayerModelCrashFix.txt",
       "delta_sha256": "8596e7f2942eb40e2d6fe874438dd3024a8b6b03cb976bee1b732a435c7e12bb",
       "delta_writes": 5,
@@ -316,6 +335,7 @@
     "option:BenchmarkFix": {
       "arms": {},
       "delta_arms": {},
+      "delta_base": "all-off",
       "delta_file": "deltas/option_BenchmarkFix.txt",
       "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "delta_writes": 0,
@@ -330,6 +350,7 @@
       "delta_arms": {
         "InstallBetterMPSync": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_BetterMPSync.txt",
       "delta_sha256": "63113dbc53058a5c6d7d21d36487a038069f80eebaaddb0a797f7589a6d59016",
       "delta_writes": 5,
@@ -344,6 +365,7 @@
       "delta_arms": {
         "InstallBikeFeetFix": 12
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_BikeFeetFix.txt",
       "delta_sha256": "944361326370139fb23eaff81a5388e07e4939636dcf26f24492b84348d8852d",
       "delta_writes": 12,
@@ -358,6 +380,7 @@
       "delta_arms": {
         "InstallBikePhoneAnimsFix": 6
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_BikePhoneAnimsFix.txt",
       "delta_sha256": "37a89baf2827ae13bc7e552d6fa661754fd33fb0d67bc1b83032542ae5f8563a",
       "delta_writes": 6,
@@ -372,6 +395,7 @@
       "delta_arms": {
         "InstallBlackscreenFix": 4
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_BlackscreenFix.txt",
       "delta_sha256": "ac90e2644c94b286644345120a3ba4977616df3d0af42ebb6a0fb675311f6b99",
       "delta_writes": 4,
@@ -386,6 +410,7 @@
       "delta_arms": {
         "InstallBorderlessWindowed": 12
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_BorderlessWindowed.txt",
       "delta_sha256": "a12b36e40c8c6977872e5706b7df33c4f25bbb6dc8f0b11b21cf0f2d23ed917b",
       "delta_writes": 12,
@@ -400,6 +425,7 @@
       "delta_arms": {
         "InstallBuildingAlphaFix": 17
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_BuildingAlphaFix.txt",
       "delta_sha256": "34439757bb830ae8fc7477d7f527a6dbba304e74f4087582f209291f2385dc43",
       "delta_writes": 17,
@@ -414,6 +440,7 @@
       "delta_arms": {
         "InstallBuildingDynamicShadows": 6
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_BuildingDynamicShadows.txt",
       "delta_sha256": "fc384edd7b959fff43d34e9c16d738ea9a0c8f748009b3731cdb8d6f27988675",
       "delta_writes": 6,
@@ -428,6 +455,7 @@
       "delta_arms": {
         "InstallCarDecalsFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_CarDecalsFix.txt",
       "delta_sha256": "9b8c795a2c40e969a2f6b76951e3e287b28e4eb009eda9f6283e7568e202632f",
       "delta_writes": 5,
@@ -444,6 +472,7 @@
         "InstallCarDynamicShadowFix": 12,
         "InstallCarPartsShadowFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_CarDynamicShadowFix.txt",
       "delta_sha256": "bfa77abac195974e88acb904d27f27bacb8c29bd777175c0f90b7e7dce346328",
       "delta_writes": 17,
@@ -460,6 +489,7 @@
         "InstallCarPartsShadowFix": 5,
         "InstallCarPartsShadowFixStandalone": 1
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_CarPartsShadowFix.txt",
       "delta_sha256": "93ff351e22a7eb98199d5266f880142da6534daba369452b143fa582da32694f",
       "delta_writes": 6,
@@ -474,6 +504,7 @@
       "delta_arms": {
         "InstallCollisionDeadlockFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_CollisionDeadlockFix.txt",
       "delta_sha256": "c3c755ca807961679a43fa3146d41a4746fbec6f6431d03c6967c144cd577471",
       "delta_writes": 5,
@@ -488,6 +519,7 @@
       "delta_arms": {
         "InstallCombinedRadioFreezeFix": 4
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_CombinedRadioFreezeFix.txt",
       "delta_sha256": "d2f3024a690a6ce5761db07840dc2df9cc6d7644d1f9d2fbe0bed29af425b0ec",
       "delta_writes": 4,
@@ -502,6 +534,7 @@
       "delta_arms": {
         "InstallCopSirensFlag": 15
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_CopSirensFlag.txt",
       "delta_sha256": "70feef7d4bd77a2334cd84737f72477d3910421a6df846be63820e46563c0cb3",
       "delta_writes": 15,
@@ -516,6 +549,7 @@
       "delta_arms": {
         "InstallCrashMsgFix": 4
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_CrashMsgFix.txt",
       "delta_sha256": "d8cdd3640fa43eacec83397c1f0be583fda7ba6fca02d532df366e5f60ac13c1",
       "delta_writes": 4,
@@ -530,6 +564,7 @@
       "delta_arms": {
         "InstallCutsceneFixes": 9
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_CutsceneFixes.txt",
       "delta_sha256": "222e032597306e2671adf4103a9c3dd641acf0a30563dc639581cb8a4a61ce1e",
       "delta_writes": 9,
@@ -540,6 +575,7 @@
     "option:DebugPrintSpawns": {
       "arms": {},
       "delta_arms": {},
+      "delta_base": "all-off",
       "delta_file": "deltas/option_DebugPrintSpawns.txt",
       "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "delta_writes": 0,
@@ -554,6 +590,7 @@
       "delta_arms": {
         "InstallDoNotPauseOnMinimize": 3
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_DoNotPauseOnMinimize.txt",
       "delta_sha256": "4076d63ecf7490dbe77702b33c7368d8fb9ec56b7f11a7840966376fcb458c27",
       "delta_writes": 3,
@@ -568,6 +605,7 @@
       "delta_arms": {
         "InstallDrivebyFOVFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_DrivebyFOVFix.txt",
       "delta_sha256": "069f254ff46135fe9e13a5705b90435ba0680998cbb360f7cd98731edf8ef059",
       "delta_writes": 5,
@@ -582,6 +620,7 @@
       "delta_arms": {
         "InstallDualVehicleHeadlightsOld": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_DualVehicleHeadlights.txt",
       "delta_sha256": "78c26e66629e0fe6af17dfaf1d12996bbf208d278634ed98330b7ef06f784a27",
       "delta_writes": 5,
@@ -596,6 +635,7 @@
       "delta_arms": {
         "InstallEmissiveLerpFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_EmissiveLerpFix.txt",
       "delta_sha256": "f919d8b25090701119668fd764891619f7cd140f98c09516ea2e2f1d5cb02e46",
       "delta_writes": 5,
@@ -610,6 +650,7 @@
       "delta_arms": {
         "InstallEpisodeSwitchFreezeFix": 25
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_EpisodeSwitchFreezeFix.txt",
       "delta_sha256": "56454698699419c0a43819d862e7634fe08c5a2579f6bef622635f5ee4236e4a",
       "delta_writes": 25,
@@ -624,11 +665,12 @@
       "delta_arms": {
         "InstallEpisodicVehicleSupport": 194
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_EpisodicVehicleSupport.txt",
-      "delta_sha256": "21e7bf78dcb5e551ab3336b21a8340e00813ec65f7217d6501d2f4e04ce20381",
+      "delta_sha256": "09f4ce18ecf6cdac1fe729c74f4e221934fc6a662fc3044396ca97e59eda9494",
       "delta_writes": 194,
       "file": "writesets/option_EpisodicVehicleSupport.txt",
-      "sha256": "fea31c869891abef4722dedf457ad9ddf15c8891c119f9dd37d5bcb36306a630",
+      "sha256": "1cf6026ddaca5c5c7c35201956fbcf9f116319d1b424dd3374558a13fca2e528",
       "writes": 194
     },
     "option:EpisodicWeaponSupport": {
@@ -638,6 +680,7 @@
       "delta_arms": {
         "InstallEpisodicWeaponSupport": 31
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_EpisodicWeaponSupport.txt",
       "delta_sha256": "1353ffc85ce08eb5b7b1173da9e62bcfda13e007b80489f3a3c90215fee178d2",
       "delta_writes": 31,
@@ -652,6 +695,7 @@
       "delta_arms": {
         "InstallFastLoading": 1
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_FastLoading.txt",
       "delta_sha256": "b5c832a2e39a23c42b1fd2f80f48cfca7d551172769eecea3eb319e9505a14e6",
       "delta_writes": 1,
@@ -666,11 +710,12 @@
       "delta_arms": {
         "InstallForceCarHeadlightShadows": 15
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_ForceCarHeadlightShadows.txt",
-      "delta_sha256": "c96b11aa045cae859bda1e72fb4a33fd3073d3127953409213497c43b0a7b7a2",
+      "delta_sha256": "73bae6a4147e0d994b5c4f3a757ef4d54e2dcec0215f91f0718c2d868489e263",
       "delta_writes": 15,
       "file": "writesets/option_ForceCarHeadlightShadows.txt",
-      "sha256": "06d191c65048cc44fa6d2b2cd90d38ffc81fda01c5305d66b4e517542ded6fa4",
+      "sha256": "63a566ab80156d5aa88c87b7b0d1a47136c6e4e3c2326d6f5788924196129686",
       "writes": 15
     },
     "option:ForceDynamicShadowsEverywhere": {
@@ -680,6 +725,7 @@
       "delta_arms": {
         "InstallForceDynamicShadowsEverywhere": 2
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_ForceDynamicShadowsEverywhere.txt",
       "delta_sha256": "aff7fac5c7f125581aab050534a91ffa70ff84a3f356bfeac1aaf84a4fc32685",
       "delta_writes": 2,
@@ -694,6 +740,7 @@
       "delta_arms": {
         "InstallForceShadowsOnObjects": 1
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_ForceShadowsOnObjects.txt",
       "delta_sha256": "c03082e16f687977fdfc0906342e29ed867f6b4035c84c0a352426c57077ee99",
       "delta_writes": 1,
@@ -708,6 +755,7 @@
       "delta_arms": {
         "InstallFreezeCarFix": 64
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_FreezeCarFix.txt",
       "delta_sha256": "704bc6a151959fd29ee45187fe4ad61ffb4b920f290fc046302b899a12e3ecc2",
       "delta_writes": 64,
@@ -722,6 +770,7 @@
       "delta_arms": {
         "InstallFreezeGunFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_FreezeGunFix.txt",
       "delta_sha256": "1f94a85539a55d43c1f782fe7e528c3ed294efccdaba199637b5e8dc195d25f7",
       "delta_writes": 5,
@@ -736,6 +785,7 @@
       "delta_arms": {
         "InstallGarageModelFix": 10
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_GarageModelFix.txt",
       "delta_sha256": "4bba095d5cc575a5daee12a5f0b44aa2b0edbf033210d4d52605693533a27f53",
       "delta_writes": 10,
@@ -750,6 +800,7 @@
       "delta_arms": {
         "InstallGroupHackFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_GroupHackFix.txt",
       "delta_sha256": "7e1f014ef80f29ad594f1aab03a5a8836ac2f0e859c41c734b5245d2ff24d7de",
       "delta_writes": 5,
@@ -764,6 +815,7 @@
       "delta_arms": {
         "InstallHighFPSBikePhysicsFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_HighFPSBikePhysicsFix.txt",
       "delta_sha256": "bdeb8d504f13acd9ee176224d7b84a974dd602579a8a55ffb450be25731e7ae2",
       "delta_writes": 5,
@@ -778,6 +830,7 @@
       "delta_arms": {
         "InstallHighFPSSpeedupFix": 17
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_HighFPSSpeedupFix.txt",
       "delta_sha256": "7a7e81e32300aca37fbddc68c07121791d1e8a08094f2fd1637a610a9fbdd586",
       "delta_writes": 17,
@@ -792,6 +845,7 @@
       "delta_arms": {
         "InstallHighQualityReflections": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_HighQualityReflections.txt",
       "delta_sha256": "bc0e48f4c2bf309b435cbef780ee4e9988ed7428fe8ffad12ed058a040148fe3",
       "delta_writes": 5,
@@ -806,6 +860,7 @@
       "delta_arms": {
         "InstallImprovedShaderStreaming": 18
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_ImprovedShaderStreaming.txt",
       "delta_sha256": "57ea1fde7b334a363e03b4a704296b76074ecdb18a09200c3d9b7b00b0bb944d",
       "delta_writes": 18,
@@ -820,6 +875,7 @@
       "delta_arms": {
         "InstallIncreasePtrNodes": 7
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_IncreasePtrNodes.txt",
       "delta_sha256": "0ca6a167bd2dc51388b09e8242dfc720436becda218595ff17e6e793131f7bae",
       "delta_writes": 7,
@@ -834,6 +890,7 @@
       "delta_arms": {
         "InstallIncreaseVehicleModelLimit": 2
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_IncreaseVehicleModelLimit.txt",
       "delta_sha256": "ebf7855bd3f785fbc433fd60c4d100a9c8d2508525d236f1f5cbf8c89ee45cac",
       "delta_writes": 2,
@@ -848,6 +905,7 @@
       "delta_arms": {
         "InstallIncreaseVehicleStructLimit": 1
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_IncreaseVehicleStructLimit.txt",
       "delta_sha256": "4398475cb28e9cabf01aa00f9a7545b881420ddf88cf5b35f6c62778c75e2284",
       "delta_writes": 1,
@@ -862,6 +920,7 @@
       "delta_arms": {
         "InstallInfiniteCarBottomDistance": 2
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_InfiniteCarBottomDistance.txt",
       "delta_sha256": "1db06bec4cdc7a31188e069d38975188f11e2673100d7ca59e4ff1b56046df7c",
       "delta_writes": 2,
@@ -872,6 +931,7 @@
     "option:LaunchWithPlayGTAIV": {
       "arms": {},
       "delta_arms": {},
+      "delta_base": "all-off",
       "delta_file": "deltas/option_LaunchWithPlayGTAIV.txt",
       "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "delta_writes": 0,
@@ -886,6 +946,7 @@
       "delta_arms": {
         "InstallLoadDLCs": 33
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_LoadDLCs.txt",
       "delta_sha256": "e9d3f09573805799df901f6545fbaacc055ed53bf9ea034486bd3c1aa02e04d3",
       "delta_writes": 33,
@@ -900,11 +961,12 @@
       "delta_arms": {
         "InstallLocalSettingsPath": 13
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_LocalSettingsPath.txt",
-      "delta_sha256": "afd644e62d2d77835c7707494c49a0357c6e08419d4151c0e530ee4d7c404eea",
+      "delta_sha256": "35034505d02ab4744082f5e482fd3442dee04613d288b99b46c9ef2f2995f8b5",
       "delta_writes": 13,
       "file": "writesets/option_LocalSettingsPath.txt",
-      "sha256": "d76ff1b71d639ac98f71632b0c09604698e83134edab2e163c8846cff63b3a99",
+      "sha256": "bcb999817460111dde03c70735ca2897dd3c3d8e7898b2b02b677d194a2bd450",
       "writes": 13
     },
     "option:MPNikoCrashFix": {
@@ -914,12 +976,35 @@
       "delta_arms": {
         "InstallMPNikoCrashFix": 1
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_MPNikoCrashFix.txt",
       "delta_sha256": "d65349c063d8c62fc9dfdbc52e9dd23735e2c4502971c2ae783a0eefc2dfd375",
       "delta_writes": 1,
       "file": "writesets/option_MPNikoCrashFix.txt",
       "sha256": "c434e40eb84b82e11cd6edd1080e9f1256aa2c965bffe26eeef8c4005475aafc",
       "writes": 1
+    },
+    "option:ModelLookupGuards": {
+      "arms": {},
+      "delta_arms": {},
+      "delta_base": "all-off",
+      "delta_file": "deltas/option_ModelLookupGuards.txt",
+      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "delta_writes": 0,
+      "file": "writesets/option_ModelLookupGuards.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "writes": 0
+    },
+    "option:ModelNameIndex": {
+      "arms": {},
+      "delta_arms": {},
+      "delta_base": "all-off",
+      "delta_file": "deltas/option_ModelNameIndex.txt",
+      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "delta_writes": 0,
+      "file": "writesets/option_ModelNameIndex.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "writes": 0
     },
     "option:MouseFix": {
       "arms": {
@@ -928,6 +1013,7 @@
       "delta_arms": {
         "InstallMouseFix": 53
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_MouseFix.txt",
       "delta_sha256": "928cfb918d2b67194df2081811d6ed6ec4fcffaca11cbd4f6e7f5548bc342456",
       "delta_writes": 53,
@@ -942,6 +1028,7 @@
       "delta_arms": {
         "InstallMovingPlaneParts": 10
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_MovingPlaneParts.txt",
       "delta_sha256": "c299f3c709fe9fbd01f9df6727b0c98c198f2d9c63bd662e19ea98e6e44d7654",
       "delta_writes": 10,
@@ -956,6 +1043,7 @@
       "delta_arms": {
         "InstallMovingSteeringWheelSupport": 10
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_MovingSteeringWheelSupport.txt",
       "delta_sha256": "8e06a81f0a2c297cc9cd955ea27ebe35202243b0048db52debc9e5832d12ff14",
       "delta_writes": 10,
@@ -970,6 +1058,7 @@
       "delta_arms": {
         "InstallNewFilesCompatibility": 13
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_NewFilesCompatibility.txt",
       "delta_sha256": "5f719dfa598a9fa20b9a165d9ea1a0840e2c0f77bf55eb4b564d3c63bfa9d1e3",
       "delta_writes": 13,
@@ -984,6 +1073,7 @@
       "delta_arms": {
         "InstallNewMemorySystem": 8
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_NewMemorySystem.txt",
       "delta_sha256": "f8dd6c6626420c66822881f120dc63605d5cf3bc40c35ca95458d197bfb6b9e2",
       "delta_writes": 8,
@@ -998,12 +1088,35 @@
       "delta_arms": {
         "InstallNewSavesCompatibility": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_NewSavesCompatibility.txt",
       "delta_sha256": "76b36adfe475fd78342124726a5e51a7563bd93f818c9109853652c2ddd6c959",
       "delta_writes": 5,
       "file": "writesets/option_NewSavesCompatibility.txt",
       "sha256": "43fb7cceff01b97409bacc2a7cd4343bc9eab1639e5ebe411142fa97d8acd8f3",
       "writes": 5
+    },
+    "option:NewSavesGuards": {
+      "arms": {},
+      "delta_arms": {},
+      "delta_base": "all-off",
+      "delta_file": "deltas/option_NewSavesGuards.txt",
+      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "delta_writes": 0,
+      "file": "writesets/option_NewSavesGuards.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "writes": 0
+    },
+    "option:NewSavesSeekPayloads": {
+      "arms": {},
+      "delta_arms": {},
+      "delta_base": "all-off",
+      "delta_file": "deltas/option_NewSavesSeekPayloads.txt",
+      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "delta_writes": 0,
+      "file": "writesets/option_NewSavesSeekPayloads.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "writes": 0
     },
     "option:NoImpostorHeightCutoff": {
       "arms": {
@@ -1012,6 +1125,7 @@
       "delta_arms": {
         "InstallNoImpostorHeightCutoff": 4
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_NoImpostorHeightCutoff.txt",
       "delta_sha256": "e0d7cc0c5f77c23f4f724841e5af22d5a54718dce17d0038c67a1e277defd0de",
       "delta_writes": 4,
@@ -1026,6 +1140,7 @@
       "delta_arms": {
         "InstallNoLODLightHeightCutoff": 2
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_NoLODLightHeightCutoff.txt",
       "delta_sha256": "fada8e356f25925fc7f2b68f1c38543296e8e266b4677aa3847162e91e206c65",
       "delta_writes": 2,
@@ -1040,6 +1155,7 @@
       "delta_arms": {
         "InstallNoLiveryLimit": 20
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_NoLiveryLimit.txt",
       "delta_sha256": "eb94ffa60ef60be90e5aafc59e10630cc1978a29900648523a1491987480aa32",
       "delta_writes": 20,
@@ -1054,6 +1170,7 @@
       "delta_arms": {
         "InstallNoLoadingSleep": 2
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_NoLoadingSleep.txt",
       "delta_sha256": "0545dc58ea660c97723449515ee177c3ece40371ccc15c37c77c2a085f8ad111",
       "delta_writes": 2,
@@ -1068,12 +1185,24 @@
       "delta_arms": {
         "InstallNoPhysicsSleep": 4
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_NoPhysicsSleep.txt",
       "delta_sha256": "b4fdc3ece0bf0c6bdcd9c5b8c56c389ff732a0f4bc783a8df98f316a2a3d33f8",
       "delta_writes": 4,
       "file": "writesets/option_NoPhysicsSleep.txt",
       "sha256": "488d3d30c62131652fcfb860f4d721b9d54ffd0e22674825e6a2e02a38cac939",
       "writes": 4
+    },
+    "option:OutOfCommissionCache": {
+      "arms": {},
+      "delta_arms": {},
+      "delta_base": "all-off",
+      "delta_file": "deltas/option_OutOfCommissionCache.txt",
+      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "delta_writes": 0,
+      "file": "writesets/option_OutOfCommissionCache.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "writes": 0
     },
     "option:OutOfCommissionFix": {
       "arms": {
@@ -1082,12 +1211,24 @@
       "delta_arms": {
         "InstallOutOfCommissionFix": 9
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_OutOfCommissionFix.txt",
       "delta_sha256": "2c5daa79a69bf71e8ab74b44cdb2a6a862cbf48c696566c4568d9f67c9bc4147",
       "delta_writes": 9,
       "file": "writesets/option_OutOfCommissionFix.txt",
       "sha256": "afd6a0418e60e6fefa8c9fc14e29870333ed2c2e84c073681bdbafc7166b42dd",
       "writes": 9
+    },
+    "option:OutOfCommissionSafeInit": {
+      "arms": {},
+      "delta_arms": {},
+      "delta_base": "all-off",
+      "delta_file": "deltas/option_OutOfCommissionSafeInit.txt",
+      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "delta_writes": 0,
+      "file": "writesets/option_OutOfCommissionSafeInit.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "writes": 0
     },
     "option:OverrideGTADatPath": {
       "arms": {
@@ -1096,11 +1237,12 @@
       "delta_arms": {
         "InstallOverrideGTADatPath": 4
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_OverrideGTADatPath.txt",
-      "delta_sha256": "544457cf3dc5f4eff762004dbd847d17855f7aab628a884146a1011b9a6d0e60",
+      "delta_sha256": "f5202e093341126d27021ac6ba8410329cc68389afd4e8b62ac83e0abd65f268",
       "delta_writes": 4,
       "file": "writesets/option_OverrideGTADatPath.txt",
-      "sha256": "e0c88f75405d3f07f5d3bd91cf5820b1c3f494c45b55687e607befa61c206f6a",
+      "sha256": "ed6d3264bdaee67a49a3a29385776fe414c68964dfc9a86e0135c6ed7249e41b",
       "writes": 4
     },
     "option:Patch4RemoveModChecks": {
@@ -1110,6 +1252,7 @@
       "delta_arms": {
         "InstallPatch4RemoveModChecks": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_Patch4RemoveModChecks.txt",
       "delta_sha256": "1792add63c098ce215241e15e1451ec80fe4388c1b26227456658870b4276195",
       "delta_writes": 5,
@@ -1120,6 +1263,7 @@
     "option:Patch6and7RemoveModChecks": {
       "arms": {},
       "delta_arms": {},
+      "delta_base": "all-off",
       "delta_file": "deltas/option_Patch6and7RemoveModChecks.txt",
       "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "delta_writes": 0,
@@ -1134,6 +1278,7 @@
       "delta_arms": {
         "InstallPathNodeCrashFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_PathNodeCrashFix.txt",
       "delta_sha256": "0fb51e648384ec3b0f7cd0ac48f62a2642af1f7a72759854db666ae2b6d3a6e9",
       "delta_writes": 5,
@@ -1148,6 +1293,7 @@
       "delta_arms": {
         "InstallPedModelsInCutscenesFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_PedModelsInCutscenesFix.txt",
       "delta_sha256": "6b60ca74e6a9cbbff2d8bb7a4a4fb23e0fd8a0e8d03b3cbb1b9c6ffa5c97a85a",
       "delta_writes": 5,
@@ -1162,6 +1308,7 @@
       "delta_arms": {
         "InstallPipeBombDropIconSupport": 9
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_PipeBombDropIconSupport.txt",
       "delta_sha256": "ca4c504824d90e9b5d6e7aa98ede537e3b5a1c6218899336e89e032c1ca8d153",
       "delta_writes": 9,
@@ -1176,6 +1323,7 @@
       "delta_arms": {
         "InstallPlaneCrashFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_PlaneCrashFix.txt",
       "delta_sha256": "5ff5920b28247e99ddffd037f84a2e77a27e93c7a9620c9d64ba837235a0deac",
       "delta_writes": 5,
@@ -1190,6 +1338,7 @@
       "delta_arms": {
         "InstallPlayerAsPedComponentsFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_PlayerAsPedComponentsFix.txt",
       "delta_sha256": "4d19563abc2f5d8c4ded73d16850ac18a4d5f6153cf7dbfab80cdd2b4c73212c",
       "delta_writes": 5,
@@ -1204,6 +1353,7 @@
       "delta_arms": {
         "InstallPoliceEpisodicWeaponSupport": 2
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_PoliceEpisodicWeaponSupport.txt",
       "delta_sha256": "dc6e5d0b48a5be65fe5c2695bb2109041c2f01cfaccd9458e71ab0b3dea09e2b",
       "delta_writes": 2,
@@ -1218,12 +1368,24 @@
       "delta_arms": {
         "InstallPopupHeadlightsFlag": 15
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_PopupHeadlightsFlag.txt",
-      "delta_sha256": "8b8ea1ba713baaea09f9138b2b07b85783aeafabdd892b35db4bfed44a4465f0",
+      "delta_sha256": "161b9e5ba36f1a0940745715d872164fcf0928ac65b3dec997a2edcf2fd11d8d",
       "delta_writes": 15,
       "file": "writesets/option_PopupHeadlightsFlag.txt",
-      "sha256": "ca3620064d29c8733676ff56862be429476c91f2765e18e3ef343a957528104f",
+      "sha256": "8226abb8bfc9cf5f23575becc3cc6c82231ead665b5b7ca9009cb74344bbdb12",
       "writes": 15
+    },
+    "option:PopupLookupCache": {
+      "arms": {},
+      "delta_arms": {},
+      "delta_base": "all-off",
+      "delta_file": "deltas/option_PopupLookupCache.txt",
+      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "delta_writes": 0,
+      "file": "writesets/option_PopupLookupCache.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "writes": 0
     },
     "option:RemoveAllWeaponsProtection": {
       "arms": {
@@ -1232,6 +1394,7 @@
       "delta_arms": {
         "InstallRemoveAllWeaponsProtection": 12
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_RemoveAllWeaponsProtection.txt",
       "delta_sha256": "0fe8f6aa56172d6ae6c642d65cf12672124f499bbab15014cd5d97a79e3b5186",
       "delta_writes": 12,
@@ -1246,6 +1409,7 @@
       "delta_arms": {
         "InstallRemoveBoundingBoxCulling": 4
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_RemoveBoundingBoxCulling.txt",
       "delta_sha256": "a714105263471dfdef83bb443183584d9b829398c4236a5ccae51b66fede6dd8",
       "delta_writes": 4,
@@ -1260,6 +1424,7 @@
       "delta_arms": {
         "InstallRemoveDataIntegrityChecks": 3
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_RemoveDataIntegrityChecks.txt",
       "delta_sha256": "625da9d481bbf6e203c27cf96b5d204f6572d826d05e86ad1759f9dc922e50d0",
       "delta_writes": 3,
@@ -1274,6 +1439,7 @@
       "delta_arms": {
         "InstallRemoveGFWLUpdatePopup": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_RemoveGFWLUpdatePopup.txt",
       "delta_sha256": "887970a57fd057df428caca879098722a5882e6867d1ee2d615a7128a1ec3537",
       "delta_writes": 5,
@@ -1288,6 +1454,7 @@
       "delta_arms": {
         "InstallRemoveRGSCLoginRequirement": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_RemoveRGSCLoginRequirement.txt",
       "delta_sha256": "5042704f34ce383241cb1c9006b5412f6c4c30a279a7e91c935c558ce0ce1c67",
       "delta_writes": 5,
@@ -1302,6 +1469,7 @@
       "delta_arms": {
         "InstallRemoveStaticCarShadows": 1
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_RemoveStaticCarShadows.txt",
       "delta_sha256": "3b28ddffa6cbac7439e7fc596138b7cf9f8350dc7f2a3b085baef10cc19e0308",
       "delta_writes": 1,
@@ -1316,6 +1484,7 @@
       "delta_arms": {
         "InstallRemoveStaticCutsceneCarShadows": 1
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_RemoveStaticCutsceneCarShadows.txt",
       "delta_sha256": "f63d89f0033fcabe2c9f4596c3b7fc6faa0ad79ce75b0f7c3f3a86d9d2085539",
       "delta_writes": 1,
@@ -1332,11 +1501,12 @@
         "ApplyUselessChecksArm": 11640,
         "InstallRemoveUselessChecks": 184
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_RemoveUselessChecks.txt",
-      "delta_sha256": "f40a397d7586ad95ae7f42e2b62376798be50631e8faa977dcaae67fd9a2d846",
+      "delta_sha256": "2f7e6b3bf52e498c6c144c7b2ca9b6a94e0393343b0c2755bc394120b7abfbac",
       "delta_writes": 11824,
       "file": "writesets/option_RemoveUselessChecks.txt",
-      "sha256": "77a3086ac35fd9964f3b37f3d6268df1d7222406ffa6efd6e8e27e2c3917dd2f",
+      "sha256": "b469af9fb4c02ba1c9deb81c42c3d8bdb267f23641fe31a4ecd67bd67e264c25",
       "writes": 11824
     },
     "option:RestoreDeathMusic": {
@@ -1346,6 +1516,7 @@
       "delta_arms": {
         "InstallRestoreDeathMusic": 12
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_RestoreDeathMusic.txt",
       "delta_sha256": "cb289054f120e5070d986dd4f6ae6faba7194da111dea3afbaa64e463a5c1b6a",
       "delta_writes": 12,
@@ -1360,6 +1531,7 @@
       "delta_arms": {
         "InstallReversingLightFix": 1
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_ReversingLightFix.txt",
       "delta_sha256": "be3500797424586af2e6126c135113f9edadcad389d4334a7779e2a993afa2ea",
       "delta_writes": 1,
@@ -1374,6 +1546,7 @@
       "delta_arms": {
         "InstallSCOSignatureFix": 1
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_SCOSignatureFix.txt",
       "delta_sha256": "dc25259db697071a996f9b04bbe5de7a4435a91f0f2dad750118af904ec71332",
       "delta_writes": 1,
@@ -1388,6 +1561,7 @@
       "delta_arms": {
         "InstallSMPA60Fix": 11
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_SMPA60Fix.txt",
       "delta_sha256": "8e9fde08874024f5c757d366fa787c756f1233778540ed26c0b751f2a87e1db2",
       "delta_writes": 11,
@@ -1402,6 +1576,7 @@
       "delta_arms": {
         "InstallSavegameFix": 42
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_SavegameFix.txt",
       "delta_sha256": "eb7a203b2325a2bf4de56bf26c9bfa3d6724bea498bd9a6ecc09f434a9b5a01e",
       "delta_writes": 42,
@@ -1416,6 +1591,7 @@
       "delta_arms": {
         "InstallShakingEngineBlock": 10
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_ShakingEngineBlock.txt",
       "delta_sha256": "4af85684cdfffb4e942d0f772f71d4f0c41524af20c96a14895d48198a3b1253",
       "delta_writes": 10,
@@ -1430,6 +1606,7 @@
       "delta_arms": {
         "InstallSkipFirstTimePlayAsk": 2
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_SkipFirstTimePlayAsk.txt",
       "delta_sha256": "d37b8332fe9f3b9ef89309d4cc417e3d0e9eb94ae9d4ce05204eb2160b58691d",
       "delta_writes": 2,
@@ -1444,6 +1621,7 @@
       "delta_arms": {
         "InstallSkipHealthCheck": 1
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_SkipHealthCheck.txt",
       "delta_sha256": "6a52bfa6069cb453b881d013ff596c5137faf86181ec829574b275360c9fdd84",
       "delta_writes": 1,
@@ -1458,6 +1636,7 @@
       "delta_arms": {
         "InstallSkipInternetConnectionCheck": 2
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_SkipInternetConnectionCheck.txt",
       "delta_sha256": "7f785520e2cb1f8371aa0583309b684d896a441c2fdc52b90e0f2635424ef882",
       "delta_writes": 2,
@@ -1472,12 +1651,24 @@
       "delta_arms": {
         "InstallSkipIntro": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_SkipIntro.txt",
       "delta_sha256": "8b59aa7edf008543ea1c4eae74f9fc0a69aef17413fd66d8506a9aaf7d1db829",
       "delta_writes": 5,
       "file": "writesets/option_SkipIntro.txt",
       "sha256": "29daa2fa2f593256e7b64074b7eb4d237ba202048ff55346f6b91ad7af773551",
       "writes": 5
+    },
+    "option:SkipIntroShowScreens": {
+      "arms": {},
+      "delta_arms": {},
+      "delta_base": "all-off",
+      "delta_file": "deltas/option_SkipIntroShowScreens.txt",
+      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "delta_writes": 0,
+      "file": "writesets/option_SkipIntroShowScreens.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "writes": 0
     },
     "option:SkipLauncher": {
       "arms": {
@@ -1486,6 +1677,7 @@
       "delta_arms": {
         "apply:SkipLauncher": 61
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_SkipLauncher.txt",
       "delta_sha256": "2ce0156ea7b6e6df380ae5e09805e87cabffee9836808192c36e1869cfb3451e",
       "delta_writes": 61,
@@ -1500,6 +1692,7 @@
       "delta_arms": {
         "InstallSkipMenu": 4
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_SkipMenu.txt",
       "delta_sha256": "4592e992ddc68d17e47a1f8c0b8789bd4cfbfe7fa3f0e6b595a2d80c32e543a6",
       "delta_writes": 4,
@@ -1510,6 +1703,7 @@
     "option:SkipTokenActivation": {
       "arms": {},
       "delta_arms": {},
+      "delta_base": "all-off",
       "delta_file": "deltas/option_SkipTokenActivation.txt",
       "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "delta_writes": 0,
@@ -1524,6 +1718,7 @@
       "delta_arms": {
         "InstallSpeedupBugFix": 4
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_SpeedupBugFix.txt",
       "delta_sha256": "553a381e37e4d9a914f0d77c9d2f81a8c3c951ecb41cf9d0a79dd79e8e7ea14a",
       "delta_writes": 4,
@@ -1533,17 +1728,29 @@
     },
     "option:StartupTimeFix": {
       "arms": {
-        "InstallStartupTimeFix": 11
+        "InstallStartupTimeFix": 12
       },
       "delta_arms": {
-        "InstallStartupTimeFix": 11
+        "InstallStartupTimeFix": 12
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_StartupTimeFix.txt",
-      "delta_sha256": "bd3efaf90cca6f55b248a4d48d3eb2d76f96e9b0a63608e0be7ff2faad843551",
-      "delta_writes": 11,
+      "delta_sha256": "d502174c8fd22832b82a7a513ef1c7e89b275754b97a8d77d3f3e341b5224418",
+      "delta_writes": 12,
       "file": "writesets/option_StartupTimeFix.txt",
-      "sha256": "108272ee621d58e302c9122e0b78ee9b105b51aa0b5ffb9f85ddf3cad3a6e171",
-      "writes": 11
+      "sha256": "1fd4b26e1b8c6c83131fd00cd3872ee0d5e6a46ec341eb542caec434af63f60a",
+      "writes": 12
+    },
+    "option:SteerLookupCache": {
+      "arms": {},
+      "delta_arms": {},
+      "delta_base": "all-off",
+      "delta_file": "deltas/option_SteerLookupCache.txt",
+      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "delta_writes": 0,
+      "file": "writesets/option_SteerLookupCache.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "writes": 0
     },
     "option:SuperLODFix": {
       "arms": {
@@ -1552,6 +1759,7 @@
       "delta_arms": {
         "InstallSuperLODFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_SuperLODFix.txt",
       "delta_sha256": "212a06acad9716a60c1a8dc5b777fb3bf1a57fb3d5337e4cca04df0d4f20daf5",
       "delta_writes": 5,
@@ -1566,6 +1774,7 @@
       "delta_arms": {
         "InstallTBoGTHeliHeightLimit": 2
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_TBoGTHeliHeightLimit.txt",
       "delta_sha256": "e67932a0f37d39d677854d81bd89665aa252e69c4459882bb92f1c67b55336e6",
       "delta_writes": 2,
@@ -1580,12 +1789,24 @@
       "delta_arms": {
         "InstallTeleportProtection": 3
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_TeleportProtection.txt",
       "delta_sha256": "5bdf65bff18bbf9d7877706f8c9afecec9059952e963d740dd280a51b4632d60",
       "delta_writes": 3,
       "file": "writesets/option_TeleportProtection.txt",
       "sha256": "a6c5e90ffa266825d7da65160952089ac93d4657077f04219f3fe00952286f8f",
       "writes": 3
+    },
+    "option:TraceInstallArms": {
+      "arms": {},
+      "delta_arms": {},
+      "delta_base": "all-off",
+      "delta_file": "deltas/option_TraceInstallArms.txt",
+      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "delta_writes": 0,
+      "file": "writesets/option_TraceInstallArms.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "writes": 0
     },
     "option:TryToSkipAllErrors": {
       "arms": {
@@ -1594,6 +1815,7 @@
       "delta_arms": {
         "InstallTryToSkipAllErrors": 1
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_TryToSkipAllErrors.txt",
       "delta_sha256": "145b0e025650df6f49ee486d9916a9930096c1a0f7045d27bd44f6c2c989ea60",
       "delta_writes": 1,
@@ -1604,6 +1826,7 @@
     "option:VRAMFix": {
       "arms": {},
       "delta_arms": {},
+      "delta_base": "all-off",
       "delta_file": "deltas/option_VRAMFix.txt",
       "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "delta_writes": 0,
@@ -1614,10 +1837,22 @@
     "option:VSyncFix": {
       "arms": {},
       "delta_arms": {},
+      "delta_base": "all-off",
       "delta_file": "deltas/option_VSyncFix.txt",
       "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "delta_writes": 0,
       "file": "writesets/option_VSyncFix.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "writes": 0
+    },
+    "option:VehicleComponentGuards": {
+      "arms": {},
+      "delta_arms": {},
+      "delta_base": "all-off",
+      "delta_file": "deltas/option_VehicleComponentGuards.txt",
+      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "delta_writes": 0,
+      "file": "writesets/option_VehicleComponentGuards.txt",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "writes": 0
     },
@@ -1628,6 +1863,7 @@
       "delta_arms": {
         "InstallWantedLevelCrashFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/option_WantedLevelCrashFix.txt",
       "delta_sha256": "6e67fd1cc6bac82fec3a3be87be558301a99174b19f1733fc25a8052afbd4799",
       "delta_writes": 5,
@@ -1654,11 +1890,12 @@
         "InstallSkipMenu": 4,
         "apply:SkipLauncher": 61
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/section_COMPATIBILITY.txt",
-      "delta_sha256": "055df3a3b29cf57dedf7d69491753767dc2e6b58fb6f36b0b1f0a6e16fd1ce18",
+      "delta_sha256": "5ac37746049ee171704b9dd07987fdd3818ebd5198c1114df366a7f6de386509",
       "delta_writes": 127,
       "file": "writesets/section_COMPATIBILITY.txt",
-      "sha256": "4b15ad09e22db91a3d5a571b8546a5386cb5ee40b933e9e379a13f93b8a6fe9d",
+      "sha256": "fafac442721f3785e231b2f7e0a3e3ebc6da45386343ad23f287b55b8ae99c2f",
       "writes": 127
     },
     "section:GRAPHICS": {
@@ -1706,11 +1943,12 @@
         "InstallRemoveStaticCutsceneCarShadows": 1,
         "InstallReversingLightFix": 1
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/section_GRAPHICS.txt",
-      "delta_sha256": "559f731d08f4817624190884dd6798c0c06e627736923cebdb1b074de21b8e97",
+      "delta_sha256": "6d858a3e2b39c04bc6e3b611adb148d619f9cd5c271b6c1ff157a8a21e0f7cf7",
       "delta_writes": 97,
       "file": "writesets/section_GRAPHICS.txt",
-      "sha256": "03955a7598243e849c9813f15b05747a7fc55dbafb138a55f392c8dfe585624c",
+      "sha256": "c9fe65159068bd93abb0c7b1361f6ea0ae0960e2c9f114ac6ff9bf3fb36b1924",
       "writes": 97
     },
     "section:INPUT": {
@@ -1726,11 +1964,12 @@
         "InstallDrivebyFOVFix": 5,
         "InstallMouseFix": 53
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/section_INPUT.txt",
-      "delta_sha256": "770ac05d806b4ad1953066380a71615578be65aa3c5c7c476014d23cc089a9f0",
+      "delta_sha256": "4b6dfcd2017469281ad1b93b73983022c08fa15f82268b337e94b29e8af53103",
       "delta_writes": 73,
       "file": "writesets/section_INPUT.txt",
-      "sha256": "0c77849b6c4356ba024aeb7d3b45839c6149a4696553c85f194b268c3ebf92f7",
+      "sha256": "ff2fa670c7435eab5b9fb70d31cff3d10475d40b711e5d7ee7eb9aea64d54292",
       "writes": 73
     },
     "section:INTERFACE": {
@@ -1742,6 +1981,7 @@
         "InstallPipeBombDropIconSupport": 9,
         "InstallRestoreDeathMusic": 12
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/section_INTERFACE.txt",
       "delta_sha256": "4486bbeb3e22728f996a377dfb264dd39a502d41781b0ce379150e2246f54abe",
       "delta_writes": 21,
@@ -1766,11 +2006,12 @@
         "InstallOverrideGTADatPath": 4,
         "InstallSCOSignatureFix": 1
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/section_LOADING.txt",
-      "delta_sha256": "896127e7098c9d5473bd90c56b78c9d6bfff887c65fa9799e2ed5e22e8dfffc8",
+      "delta_sha256": "aed332e37186080fd1ac346f4a01e8d81f74c03d5097b2d542a2add008d8121e",
       "delta_writes": 69,
       "file": "writesets/section_LOADING.txt",
-      "sha256": "5a7d84d037a8b0aa05828437901ea0d2619d1445b1f3d9af0185ec788d3eca85",
+      "sha256": "66badd93c2667fceb78e1f7c43a417813041f797b03d2a77ddf151d83522f75d",
       "writes": 69
     },
     "section:MULTIPLAYER": {
@@ -1788,11 +2029,12 @@
         "InstallRemoveAllWeaponsProtection": 12,
         "InstallTeleportProtection": 3
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/section_MULTIPLAYER.txt",
-      "delta_sha256": "ed00feb2b7c02949fb442d8bd0a2499c8ddf229a60a75abc2f880f579d7f35fc",
+      "delta_sha256": "c35344a8ff404b0c6c4ae3bc5fc2f8b3aaba1b9619c84f9106753d651aaf8e78",
       "delta_writes": 89,
       "file": "writesets/section_MULTIPLAYER.txt",
-      "sha256": "ea0c6e41abcff5b99322d7e07df756af707d73f093b3c65e5a84ba93c4443e69",
+      "sha256": "3e5c2c46385988f166925e382a67d9e0e6ee4093cc6cc85ed0bbb1dad3b1c543",
       "writes": 89
     },
     "section:PERFORMANCE": {
@@ -1808,7 +2050,7 @@
         "InstallNoLoadingSleep": 2,
         "InstallNoPhysicsSleep": 4,
         "InstallRemoveUselessChecks": 184,
-        "InstallStartupTimeFix": 11
+        "InstallStartupTimeFix": 12
       },
       "delta_arms": {
         "ApplyUselessChecksArm": 11640,
@@ -1822,14 +2064,15 @@
         "InstallNoLoadingSleep": 2,
         "InstallNoPhysicsSleep": 4,
         "InstallRemoveUselessChecks": 184,
-        "InstallStartupTimeFix": 11
+        "InstallStartupTimeFix": 12
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/section_PERFORMANCE.txt",
-      "delta_sha256": "3ee8af772ffafc0fafea7ce40b5ab7ebfb7cf3667692ae6f1d7e915da36cdcee",
-      "delta_writes": 11895,
+      "delta_sha256": "39a0e506d98ccfd9b8ac63f0700fa725d6e9e12567a6b3e90405b2b335c8e49b",
+      "delta_writes": 11896,
       "file": "writesets/section_PERFORMANCE.txt",
-      "sha256": "fc4710ac7ec6c18a7fcb59752869da4f05b076a65dbb1cc63bf3dc63c5bb12b8",
-      "writes": 11895
+      "sha256": "a87f3499e01c5993fb3829904f1b19fb3c6ea21aea5983bea1ecf577dd108739",
+      "writes": 11896
     },
     "section:STABILITY": {
       "arms": {
@@ -1876,11 +2119,12 @@
         "InstallTryToSkipAllErrors": 1,
         "InstallWantedLevelCrashFix": 5
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/section_STABILITY.txt",
-      "delta_sha256": "2710109d555908ca3b6a22dfb071b266e89acdc68a41a8afa289a4f5c0c641fe",
+      "delta_sha256": "c5a4d66869cfe36b0dfcb313c2e666f5cad6b1b74983d1b229cfe8bd161d097c",
       "delta_writes": 123,
       "file": "writesets/section_STABILITY.txt",
-      "sha256": "fc88b8ffcf5f00ec0594c66cb2006315effb09e7cbca280162644d263cc30c7b",
+      "sha256": "b7634bdf2f7b1fc430add779f3498cff22d0791a9c1bc68628d8b19d13602892",
       "writes": 123
     },
     "section:VEHICLES": {
@@ -1910,11 +2154,12 @@
         "InstallPopupHeadlightsFlag": 10,
         "InstallTBoGTHeliHeightLimit": 2
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/section_VEHICLES.txt",
-      "delta_sha256": "0206519cfc531a81333ebbf36bb0256878f9d7ff928600dcae22a1c640e4de7d",
+      "delta_sha256": "6229920130235b5e3cafedca9ff6c9e1d6708884f649989476a266f2c8625d1f",
       "delta_writes": 302,
       "file": "writesets/section_VEHICLES.txt",
-      "sha256": "0471d1e36ae086cd0fe06d83525fd6812f818c8010f74666ed6985697bfb0e29",
+      "sha256": "96a52ea1f127e9373bebd0bb5751baf7039436d09f457a47c3598cda32bedef4",
       "writes": 302
     },
     "section:XLIVELESS": {
@@ -1930,11 +2175,12 @@
         "InstallSkipHealthCheck": 1,
         "InstallSkipInternetConnectionCheck": 2
       },
+      "delta_base": "all-off",
       "delta_file": "deltas/section_XLIVELESS.txt",
-      "delta_sha256": "032e647187fe52699127edfef11275761c53f02921eda70c3d9492c6287e3d92",
+      "delta_sha256": "f91bb503c529da421451b0d9ce72d6d283ab5f92db4abfe9f17a78c3be1682b2",
       "delta_writes": 8,
       "file": "writesets/section_XLIVELESS.txt",
-      "sha256": "d50724ebffdcadc834c3b8c5827ba52838de0ccbb4ef9a6159311ce457f22a59",
+      "sha256": "6ec0082c85cd4b679f8a8886e74504f87670abd3948367e8690b7ea8bee06f6b",
       "writes": 8
     }
   },
@@ -1945,5 +2191,5 @@
   },
   "generated_by": "tools/opcep_matrix.py",
   "schema": 1,
-  "template_sha256": "442852b794a9257a6cc0f519c8b14d1451aaaf2ad9dc07ea74f97f6156eb8a69"
+  "template_sha256": "250052439b2d1d8b7c8e45295eb71f55cbb2ee46801309a712ebb5542c639505"
 }

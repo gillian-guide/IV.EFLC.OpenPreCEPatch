@@ -21,6 +21,8 @@
 #include <filesystem>
 #include <string>
 
+extern "C" uint8_t zpatch_opt_model_index;
+
 namespace
 {
     int failures = 0;
@@ -170,6 +172,96 @@ namespace
         CHECK(opp::ModelCatalogName(38455) == "**UNKNOWN**");
         CHECK(opp::ModelNameFromHash(opp::GameHash("police")) == "police");
         CHECK(opp::ModelNameFromHash(0) == "**UNKNOWN**");
+
+        // ModelNameIndex: the one-time hash index must answer identically.
+        zpatch_opt_model_index = 1;
+        CHECK(opp::ModelNameFromHash(opp::GameHash("police")) == "police");
+        CHECK(opp::ModelNameFromHash(opp::GameHash("INFERNUS")) == "infernus");
+        CHECK(opp::ModelNameFromHash(opp::GameHash("01_wires_mh1")) == "01_wires_mh1");
+        CHECK(opp::ModelNameFromHash(0x1234567u) == "**UNKNOWN**");
+        zpatch_opt_model_index = 0;
+    }
+
+    void WriteNewSaveChunk(std::FILE* file, uint32_t size)
+    {
+        uint8_t header[9] = {};
+        std::memcpy(header + 5, &size, 4);
+        std::fwrite(header, 1, sizeof(header), file);
+        for (uint32_t i = 9; i < size; ++i)
+            std::fputc(static_cast<int>(i & 0xFFu), file);
+    }
+
+    void WriteNewSaveFile(const std::filesystem::path& path, bool truncate, bool badSize)
+    {
+        std::FILE* file = std::fopen(path.string().c_str(), "wb");
+        CHECK(file != nullptr);
+        if (!file)
+            return;
+        uint8_t header[0x110] = {};
+        std::memcpy(header + 0x0C, "SAVE", 4);
+        std::fwrite(header, 1, sizeof(header), file);
+        for (int i = 0; i < 18; ++i)
+        {
+            if (truncate && i == 6)
+                break;
+            uint32_t size = 50;
+            if (badSize && i == 3)
+                size = 4;
+            else if (i == 9)
+                size = 19525;
+            else if (i == 13)
+                size = 5953;
+            else if (i == 16)
+                size = 3703;
+            WriteNewSaveChunk(file, size);
+        }
+        std::fclose(file);
+    }
+
+    void TestNewSavesScan()
+    {
+        const std::filesystem::path path = "opcep_new_saves_test.bin";
+        uint32_t flag9 = 0;
+        uint32_t flag16 = 0;
+        uint32_t flag13 = 0;
+
+        WriteNewSaveFile(path, false, false);
+        for (int guarded = 0; guarded <= 1; ++guarded)
+        {
+            for (int seek = 0; seek <= 1; ++seek)
+            {
+                std::FILE* file = std::fopen(path.string().c_str(), "rb");
+                CHECK(file != nullptr);
+                if (!file)
+                    continue;
+                const bool ok = zpatch_new_saves_scan(file, guarded, seek, &flag9,
+                                                      &flag16, &flag13);
+                std::fclose(file);
+                CHECK(ok);
+                CHECK(flag9 == 1);
+                CHECK(flag16 == 1);
+                CHECK(flag13 == 1);
+            }
+        }
+
+        WriteNewSaveFile(path, true, false);
+        std::FILE* file = std::fopen(path.string().c_str(), "rb");
+        CHECK(file != nullptr);
+        if (file)
+        {
+            CHECK(!zpatch_new_saves_scan(file, 1, 0, &flag9, &flag16, &flag13));
+            std::fclose(file);
+        }
+
+        WriteNewSaveFile(path, false, true);
+        file = std::fopen(path.string().c_str(), "rb");
+        CHECK(file != nullptr);
+        if (file)
+        {
+            CHECK(!zpatch_new_saves_scan(file, 1, 0, &flag9, &flag16, &flag13));
+            std::fclose(file);
+        }
+        std::filesystem::remove(path);
     }
 
     void TestVehicleLights()
@@ -235,6 +327,7 @@ int main()
     TestFusionFixGate();
     TestGame();
     TestCatalogue();
+    TestNewSavesScan();
     TestVehicleLights();
     TestMenu();
     TestFeatureOrder();

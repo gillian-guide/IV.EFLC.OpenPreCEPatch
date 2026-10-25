@@ -8,6 +8,7 @@
 
 #include "feature_registry.hxx"
 #include "helpers.hxx"
+#include "rebased.h"
 
 import common;
 import settings;
@@ -34,6 +35,23 @@ namespace opp
                    const PatchObserver& observer)
     {
         PatchContext ctx{image, reinterpret_cast<uintptr_t>(image.base), build, config};
+
+        // Opt-in improvements: publish the INI switches once, before any body can
+        // run. The defaults keep every original branch selected.
+        const auto flag = [&config](const char* key) -> uint8_t {
+            return config.Option(key, "0") ? 1u : 0u;
+        };
+        zpatch_opt_new_saves_guards = flag("NewSavesGuards");
+        zpatch_opt_new_saves_seek = flag("NewSavesSeekPayloads");
+        zpatch_opt_ooc_safe = flag("OutOfCommissionSafeInit");
+        zpatch_opt_ooc_cache = flag("OutOfCommissionCache");
+        zpatch_opt_component_guards = flag("VehicleComponentGuards");
+        zpatch_opt_model_lookup_guards = flag("ModelLookupGuards");
+        zpatch_opt_steer_cache = flag("SteerLookupCache");
+        zpatch_opt_popup_cache = flag("PopupLookupCache");
+        zpatch_opt_model_index = flag("ModelNameIndex");
+        zpatch_opt_skip_intro_screens = flag("SkipIntroShowScreens");
+        zpatch_opt_trace_arms = flag("TraceInstallArms");
 
         for (const Feature& feature : RegisteredFeatures())
         {

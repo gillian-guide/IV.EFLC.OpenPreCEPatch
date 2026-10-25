@@ -125,18 +125,18 @@ def render(template: Template, overrides: dict[str, str]) -> str:
     return "\n".join(out) + "\n"
 
 
-def cell_cells(template: Template) -> list[tuple[str, dict[str, str]]]:
+def cell_cells(template: Template) -> list[tuple[str, dict[str, str], str]]:
     bool_keys = [key for key, option in template.options.items() if option.is_bool]
     all_off = {key: "0" for key in bool_keys}
-    cells: list[tuple[str, dict[str, str]]] = [
-        ("defaults", {}),
-        ("all-off", dict(all_off)),
-        ("all-on", {key: "1" for key in bool_keys}),
+    cells: list[tuple[str, dict[str, str], str]] = [
+        ("defaults", {}, "all-off"),
+        ("all-off", dict(all_off), "all-off"),
+        ("all-on", {key: "1" for key in bool_keys}, "all-off"),
     ]
     for key in bool_keys:
         overrides = dict(all_off)
         overrides[key] = "1"
-        cells.append((f"option:{key}", overrides))
+        cells.append((f"option:{key}", overrides, "all-off"))
     for section in template.sections:
         keys = [
             key
@@ -148,8 +148,14 @@ def cell_cells(template: Template) -> list[tuple[str, dict[str, str]]]:
         overrides = dict(all_off)
         for key in keys:
             overrides[key] = "1"
-        cells.append((f"section:{section}", overrides))
-    cells.append(("legacy", {}))
+        cells.append((f"section:{section}", overrides, "all-off"))
+    # Dependent keys: measure against the option they modify, not all-off.
+    if "SkipIntro" in all_off and "SkipIntroShowScreens" in all_off:
+        combo = dict(all_off)
+        combo["SkipIntro"] = "1"
+        combo["SkipIntroShowScreens"] = "1"
+        cells.append(("combo:SkipIntroShowScreens", combo, "option:SkipIntro"))
+    cells.append(("legacy", {}, "all-off"))
     return cells
 
 
@@ -293,6 +299,12 @@ def compare(expected: dict, actual: dict) -> list[str]:
         if old.get("arms") != new.get("arms"):
             problems.append(f"{name}: arm attribution changed {old.get('arms')} -> {new.get('arms')}")
             continue
+        if old.get("delta_base") != new.get("delta_base"):
+            problems.append(
+                f"{name}: delta base changed {old.get('delta_base')} -> "
+                f"{new.get('delta_base')}"
+            )
+            continue
         if old.get("delta_sha256") != new.get("delta_sha256") or old.get(
             "delta_writes"
         ) != new.get("delta_writes"):
@@ -334,6 +346,7 @@ def main(argv: list[str]) -> int:
     if args.cells:
         pattern = re.compile(args.cells)
         cells = [cell for cell in cells if pattern.search(cell[0])]
+    cell_bases = {name: base for name, _overrides, base in cells}
 
     work = ROOT / ".scratch" / "matrix"
     if work.exists():
@@ -369,7 +382,7 @@ def main(argv: list[str]) -> int:
                 work,
                 legacy_import,
             ): name
-            for name, overrides in cells
+            for name, overrides, _base in cells
         }
         for done, future in enumerate(concurrent.futures.as_completed(futures), 1):
             name = futures[future]
@@ -381,14 +394,18 @@ def main(argv: list[str]) -> int:
     # every cell keeps its full write set in tests/parity/writesets and every
     # delta its per-byte attribution in tests/parity/deltas.
     all_off_rows = computed.get("all-off", {}).get("arms", [])
+    raw_rows = {name: cell.pop("arms") for name, cell in computed.items()}
     for name, cell in computed.items():
-        rows = cell.pop("arms")
+        rows = raw_rows[name]
         cell.pop("ini", None)
         cell["arms"] = arm_counts(rows)
         cell["file"] = f"writesets/{safe_name(name)}.txt"
         cell["_rows"] = rows
-        if name.startswith(("option:", "section:")):
-            delta = delta_against(all_off_rows, rows)
+        if name.startswith(("option:", "section:", "combo:")):
+            base = cell_bases.get(name, "all-off")
+            base_rows = raw_rows.get(base, all_off_rows)
+            delta = delta_against(base_rows, rows)
+            cell["delta_base"] = base
             cell["delta_writes"] = len(delta)
             cell["delta_sha256"] = hashlib.sha256(canonical_delta(delta)).hexdigest()
             cell["delta_arms"] = arm_counts(delta)
