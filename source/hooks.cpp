@@ -1228,10 +1228,12 @@ extern "C" bool zpatch_new_saves_scan(void* handle, int guarded, int seek,
         }
         if (!skipped)
         {
-            if (zpatch_new_saves_element_count == 0u)
+            if (zpatch_new_saves_element_count == 0u &&
+                (guarded != 0 || seek != 0))
             {
                 // A header-only chunk is valid; do not treat malloc(0) == null
-                // as an allocation failure.
+                // as an allocation failure. With both keys off this branch is
+                // skipped so the original malloc/fread/free still runs.
             }
             else
             {
