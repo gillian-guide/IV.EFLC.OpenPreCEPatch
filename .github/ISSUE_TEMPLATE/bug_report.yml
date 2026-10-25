@@ -1,0 +1,36 @@
+name: Bug report
+description: Report a crash, a regression or a wrong option
+labels: [bug]
+body:
+  - type: input
+    id: game
+    attributes:
+      label: Game and version
+      description: GTA IV or EFLC, and the exact executable version.
+      placeholder: GTA IV 1.0.8.0
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened
+      description: The symptom, and the option that makes it appear or disappear.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: Attach IV.EFLC.OpenPreCEPatch.log from next to the ASI.
+      render: text
+  - type: input
+    id: identity
+    attributes:
+      label: Identity
+      description: The [MAIN] Identity value and the ASI file name.
+      placeholder: XLivelessAddon / IV.EFLC.OpenPreCEPatch.asi
+  - type: textarea
+    id: mods
+    attributes:
+      label: Other mods
+      description: FusionFix, XLivelessAddon, trainers, ASI loader, etc.

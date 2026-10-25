@@ -1,0 +1,41 @@
+# NOTICE
+
+OpenPreCEPatch is licensed under the GNU General Public License, version 3 or
+later (see `license`). It is a derivative of the following work.
+
+## GTAIV.EFLC.FusionFix
+
+The repository layout, the module/event conventions, the build files, the
+submodule choices and parts of the compatibility approach follow
+GTAIV.EFLC.FusionFix, Copyright (C) ThirteenAG and contributors, licensed under
+GPL-3.0. Any code later borrowed from FusionFix stays under GPL-3.0 and is
+attributed in the file header.
+
+## ZolikaPatch
+
+The feature set, INI keys, defaults, signatures and machine-level behaviour are
+those of ZolikaPatch by Zolika1351. ZolikaPatch was distributed as a compiled
+ASI without source. This repository contains a clean-room reconstruction and a
+readable rewrite of that binary, not the original source.
+
+## XLivelessAddon
+
+The launcher/SecuROM bypass and the xliveless file layer descend from
+XLivelessAddon by the GTAmodding community (public domain). The reimplemented
+code is attributed in `source/skip_launcher.*`.
+
+## Vendored libraries (git submodules)
+
+- `external/injector` — LINK/2012 and ThirteenAG, zlib license.
+- `external/hooking` — CitizenFX and ThirteenAG, MIT license.
+- `external/inireader` — ThirteenAG, MIT license.
+
+Their license texts are kept in their own submodule trees.
+
+## Game assets
+
+GTA IV and Episodes from Liberty City are property of Rockstar Games and
+Take-Two Interactive. This repository ships no game executables, archives,
+textures or other game data. The OutOfCommission script payload and the model
+name catalogue are derived data extracted from the user's own game files by the
+documented tools; see `docs/origins.md`.

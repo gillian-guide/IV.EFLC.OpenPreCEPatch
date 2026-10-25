@@ -1,0 +1,378 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// loading
+//
+// One function per INI arm, in the original loader order. The bodies are the
+// readable reconstruction's verified arms; only the wrapper and the arm trace
+// are ours.
+
+module;
+
+#include "common.hxx"
+#include "game.hxx"
+#include "hooks.h"
+#include "patches.hxx"
+#include "rebased.h"
+#include "feature_registry.hxx"
+#include "helpers.hxx"
+
+export module loading;
+
+import common;
+import settings;
+
+namespace opp::features
+{
+
+    // publish LoadDLCs
+
+    void PublishLoadDLCs(PatchContext& ctx)
+    {
+
+        TraceArm("publish LoadDLCs");
+
+        // LoadDLCs: 9 rvas
+        if (ctx.Option("LoadDLCs", "1"))
+        {
+            if (ctx.build == GameBuild::v1060)
+            {
+                zpatch_dlc_load_callback = static_cast<uint32_t>(ctx.gameBase + 0x414560);
+                DlcRegisterRva() = 0x004136E0u;
+                DlcApplyRva() = 0x00414080u;
+            }
+
+            if (ctx.build == GameBuild::v1070)
+            {
+                zpatch_dlc_load_callback = static_cast<uint32_t>(ctx.gameBase + 0x414300);
+                DlcRegisterRva() = 0x00413480u;
+                DlcApplyRva() = 0x00413E20u;
+            }
+
+            if (ctx.build == GameBuild::v1080)
+            {
+                zpatch_dlc_load_callback = static_cast<uint32_t>(ctx.gameBase + 0x490460);
+                DlcApplyRva() = 0x0048FE00u;
+                DlcRegisterRva() = 0x0048F440u;
+            }
+        }
+
+    }
+
+
+    // LoadDLCs
+
+    void InstallLoadDLCs(PatchContext& ctx)
+    {
+
+        TraceArm("LoadDLCs");
+
+        // LoadDLCs: 18 rvas, 6 rvajumps
+        if (ctx.Option("LoadDLCs", "1"))
+        {
+            const GameImage& image = ctx.image;
+
+            if (ctx.build == GameBuild::v1060)
+            {
+                injector::MakeCALL(image.base + 0x4137CD,
+                    reinterpret_cast<void*>(Abi("abi_load_dlcs_dummy")), true); //call
+                injector::MakeJMP(image.base + 0x41445C,
+                    reinterpret_cast<void*>(ctx.gameBase + 0x4144B8), true); //jmp
+                injector::MakeJMP(image.base + 0x4144D4,
+                    reinterpret_cast<void*>(Abi("abi_load_dlcs_struct_fixup")), true); //jmp
+                injector::MakeJMP(image.base + 0x41450E,
+                    reinterpret_cast<void*>(ctx.gameBase + 0x41452C), true); //jmp
+                injector::MakeCALL(image.base + 0x41453A,
+                    reinterpret_cast<void*>(ctx.gameBase + 0x413E30), true); //call
+                injector::MakeNOP(image.base + 0x41453F, 12, true); //nop
+                injector::MakeCALL(image.base + 0x4137CD,
+                    reinterpret_cast<void*>(Abi("abi_load_dlcs_dummy")), true); //call
+                injector::MakeJMP(image.base + 0x4144D4,
+                    reinterpret_cast<void*>(Abi("abi_load_dlcs_struct_fixup")), true); //jmp
+            }
+
+            if (ctx.build == GameBuild::v1070)
+            {
+                injector::MakeCALL(image.base + 0x41356D,
+                    reinterpret_cast<void*>(Abi("abi_load_dlcs_dummy")), true); //call
+                injector::MakeJMP(image.base + 0x4141FC,
+                    reinterpret_cast<void*>(ctx.gameBase + 0x414258), true); //jmp
+                injector::MakeJMP(image.base + 0x414274,
+                    reinterpret_cast<void*>(Abi("abi_load_dlcs_struct_fixup")), true); //jmp
+                injector::MakeJMP(image.base + 0x4142AE,
+                    reinterpret_cast<void*>(ctx.gameBase + 0x4142CC), true); //jmp
+                injector::MakeCALL(image.base + 0x4142DA,
+                    reinterpret_cast<void*>(ctx.gameBase + 0x413BD0), true); //call
+                injector::MakeNOP(image.base + 0x4142DF, 12, true); //nop
+                injector::MakeCALL(image.base + 0x41356D,
+                    reinterpret_cast<void*>(Abi("abi_load_dlcs_dummy")), true); //call
+                injector::MakeJMP(image.base + 0x414274,
+                    reinterpret_cast<void*>(Abi("abi_load_dlcs_struct_fixup")), true); //jmp
+            }
+
+            if (ctx.build == GameBuild::v1080)
+            {
+                injector::MakeCALL(image.base + 0x48F558,
+                    reinterpret_cast<void*>(Abi("abi_load_dlcs_dummy")), true); //call
+                injector::MakeJMP(image.base + 0x49035C,
+                    reinterpret_cast<void*>(ctx.gameBase + 0x4903B8), true); //jmp
+                injector::MakeJMP(image.base + 0x4903D4,
+                    reinterpret_cast<void*>(Abi("abi_load_dlcs_struct_fixup")), true); //jmp
+                injector::MakeJMP(image.base + 0x49040E,
+                    reinterpret_cast<void*>(ctx.gameBase + 0x49042C), true); //jmp
+                injector::MakeCALL(image.base + 0x49043A,
+                    reinterpret_cast<void*>(ctx.gameBase + 0x48FBB0), true); //call
+                injector::MakeNOP(image.base + 0x49043F, 12, true); //nop
+                injector::MakeCALL(image.base + 0x48F558,
+                    reinterpret_cast<void*>(Abi("abi_load_dlcs_dummy")), true); //call
+                injector::MakeJMP(image.base + 0x4903D4,
+                    reinterpret_cast<void*>(Abi("abi_load_dlcs_struct_fixup")), true); //jmp
+            }
+        }
+
+    }
+
+
+    // publish LocalSettingsPath
+
+    void PublishLocalSettingsPath(PatchContext& ctx)
+    {
+
+        TraceArm("publish LocalSettingsPath");
+
+        // LocalSettingsPath: 7 slots
+        if (ctx.Option("LocalSettingsPath", "0"))
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, "7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D6 5F 5E 5B C3"); pattern.size() > 0)
+            {
+                zpatch_local_path_1c = *pattern.get(0).get<uint32_t>(-178);
+                zpatch_local_path_10 = *pattern.get(0).get<uint32_t>(-190);
+                zpatch_local_episode_ptr = *pattern.get(0).get<uint32_t>(-151);
+                zpatch_local_path_18 = *pattern.get(0).get<uint32_t>(-444);
+                zpatch_local_path_08 = *pattern.get(0).get<uint32_t>(-432);
+            }
+
+            if (auto pattern = Pattern(image, "7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D7 5F C3"); pattern.size() > 0)
+            {
+                zpatch_local_path_18 = *pattern.get(0).get<uint32_t>(-160);
+                zpatch_local_path_1c = *pattern.get(0).get<uint32_t>(-55);
+            }
+        }
+
+    }
+
+
+    // LocalSettingsPath
+
+    void InstallLocalSettingsPath(PatchContext& ctx)
+    {
+
+        TraceArm("LocalSettingsPath");
+
+        // LocalSettingsPath: 3 siginstalls
+        if (ctx.Option("LocalSettingsPath", "0"))
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, "53 8B 5C 24 08 56 6A 00 6A 00"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                injector::WriteMemory<uint32_t>(match + 16, AddressOf(&zpatch_local_saves_slot), true); //patch
+                injector::WriteMemory<uint32_t>(match + 32, AddressOf(&zpatch_local_iv_suffix), true); //patch
+            }
+
+            if (auto pattern = Pattern(image, "7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D6 5F 5E 5B C3"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                injector::MakeJMP(match + 14, reinterpret_cast<void*>(Abi("abi_local_settings_detour")), true); //jmp
+            }
+
+            if (auto pattern = Pattern(image, "7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D7 5F C3"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                injector::MakeJMP(match - 13, reinterpret_cast<void*>(Abi("abi_local_settings_fallback_detour")), true); //jmp
+            }
+        }
+
+    }
+
+
+    // publish NewFilesCompatibility
+
+    void PublishNewFilesCompatibility(PatchContext& ctx)
+    {
+
+        TraceArm("publish NewFilesCompatibility");
+
+        // NewFilesCompatibility: 1 slot
+        if (ctx.Option("NewFilesCompatibility", "1") && !NewFilesConflictModulesPresent())
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, "68 64 28 C8 67 E8"); pattern.size() > 0)
+            {
+                zpatch_newfiles_register_slot = MatchTarget(pattern, 6, 10);
+            }
+        }
+
+    }
+
+
+    // NewFilesCompatibility
+
+    void InstallNewFilesCompatibility(PatchContext& ctx)
+    {
+
+        TraceArm("NewFilesCompatibility");
+
+        // NewFilesCompatibility: 2 siginstalls, 1 sigjump
+        if (ctx.Option("NewFilesCompatibility", "1") && !NewFilesConflictModulesPresent())
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, "E8 ? ? ? ? 8B 36 85 F6 75 ED E8 ? ? ? ? 8B 3F 03 EB 85 FF 0F 85 7B FF FF FF"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                injector::MakeCALL(match, reinterpret_cast<void*>(Abi("abi_newfiles_update_a")), true); //call
+            }
+
+            if (auto pattern = Pattern(image, "E8 ? ? ? ? 8B 36 85 F6 75 ED E8 ? ? ? ? 8B 3F 03 EB 85 FF 0F 85 6C FF FF FF"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                injector::MakeCALL(match, reinterpret_cast<void*>(Abi("abi_newfiles_update_b")), true); //call
+            }
+
+            if (auto pattern = Pattern(image, "68 64 28 C8 67 E8"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                injector::MakeJMP(match + 28, reinterpret_cast<void*>(Abi("abi_newfiles_register_body")), true); //jmp
+            }
+        }
+
+    }
+
+
+    // publish NewSavesCompatibility
+
+    void PublishNewSavesCompatibility(PatchContext& ctx)
+    {
+
+        TraceArm("publish NewSavesCompatibility");
+
+        // NewSavesCompatibility: 3 slots
+        if (ctx.Option("NewSavesCompatibility", "1") && Pattern(ctx.image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08").size() > 0)
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08"); pattern.size() > 0)
+            {
+                zpatch_new_saves_src = *pattern.get(0).get<uint32_t>(1);
+            }
+
+            if (auto pattern = Pattern(image, "89 84 24 E0 01 00 00 8B 45 08 53 33 DB"); pattern.size() > 0)
+            {
+                zpatch_new_saves_resume = MatchAddress(pattern, 13);
+            }
+        }
+
+    }
+
+
+    // NewSavesCompatibility
+
+    void InstallNewSavesCompatibility(PatchContext& ctx)
+    {
+
+        TraceArm("NewSavesCompatibility");
+
+        // NewSavesCompatibility: 1 siginstall, 1 sigjump
+        if (ctx.Option("NewSavesCompatibility", "1") && Pattern(ctx.image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08").size() > 0)
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, "89 84 24 E0 01 00 00 8B 45 08 53 33 DB"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_new_saves_compat")), true); //jmp
+            }
+        }
+
+    }
+
+
+    // OverrideGTADatPath
+
+    void InstallOverrideGTADatPath(PatchContext& ctx)
+    {
+
+        TraceArm("OverrideGTADatPath");
+
+        // OverrideGTADatPath: 1 literalstore
+        if (ctx.Option("OverrideGTADatPath", "0"))
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, "68 ? ? ? ? E8 ? ? ? ? 83 C4 04 E8 ? ? ? ? E8 ? ? ? ? E8"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                injector::WriteMemory<uint32_t>(
+                    match + 1, static_cast<uint32_t>(FindGlobalValue("OverrideGTADatPath")), true); //patch
+            }
+        }
+
+    }
+
+
+    // SCOSignatureFix
+
+    void InstallSCOSignatureFix(PatchContext& ctx)
+    {
+
+        TraceArm("SCOSignatureFix");
+
+        // SCOSignatureFix: 1 literal
+        if (ctx.Option("SCOSignatureFix", "1"))
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, "8B 6C 24 1C 66 89 6E 14 64 8B 0D 2C 00 00 00 8B"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                injector::WriteMemory<uint8_t>(match - 32, 0xEBu, true); //jmp
+            }
+        }
+
+    }
+
+namespace
+{
+    class LoadingFeatures
+    {
+    public:
+        LoadingFeatures()
+        {
+            RegisterFeature(12, "PublishLoadDLCs", &PublishLoadDLCs);
+            RegisterFeature(13, "PublishLocalSettingsPath", &PublishLocalSettingsPath);
+            RegisterFeature(14, "PublishNewFilesCompatibility", &PublishNewFilesCompatibility);
+            RegisterFeature(16, "PublishNewSavesCompatibility", &PublishNewSavesCompatibility);
+            RegisterFeature(71, "InstallLoadDLCs", &InstallLoadDLCs);
+            RegisterFeature(72, "InstallLocalSettingsPath", &InstallLocalSettingsPath);
+            RegisterFeature(79, "InstallNewFilesCompatibility", &InstallNewFilesCompatibility);
+            RegisterFeature(81, "InstallNewSavesCompatibility", &InstallNewSavesCompatibility);
+            RegisterFeature(98, "InstallSCOSignatureFix", &InstallSCOSignatureFix);
+            RegisterFeature(146, "InstallOverrideGTADatPath", &InstallOverrideGTADatPath);
+        }
+    } loadingFeatures;
+} // namespace
+
+} // namespace opp::features

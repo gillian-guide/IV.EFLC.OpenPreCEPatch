@@ -1,0 +1,43 @@
+name: Build
+
+on:
+  push:
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.txt"
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.txt"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Add MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Configure
+      run: cmake -S . -B build -A Win32
+
+    - name: Build
+      run: cmake --build build --config Release -- /m
+
+    - name: Test
+      run: ctest --test-dir build -C Release --output-on-failure
+
+    - name: Upload ASI
+      uses: actions/upload-artifact@v4
+      with:
+        name: IV.EFLC.OpenPreCEPatch
+        path: |
+          build/Release/IV.EFLC.OpenPreCEPatch.asi
+          build/Release/XLivelessAddon.asi
+          build/Release/IV.EFLC.OpenPreCEPatch.map

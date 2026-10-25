@@ -1,0 +1,35 @@
+# Build output
+build/
+build64/
+bin/
+release/
+obj/
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.map
+*.asi
+*.dll
+
+# IDE
+.vs/
+*.user
+*.suo
+*.sln
+*.vcxproj
+*.vcxproj.filters
+
+# Logs and local config
+*.log
+.env
+data/plugins/IV.EFLC.OpenPreCEPatch.local.ini
+
+# Python
+__pycache__/
+*.pyc
+
+# Session scratch
+.scratch/
+
