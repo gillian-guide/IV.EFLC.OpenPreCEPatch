@@ -78,6 +78,7 @@ namespace opp
         zpatch_opt_skip_intro_screens =
             has(Improvement::skip_intro) && config.Option("SkipIntro", "1") ? 1u : 0u;
         zpatch_opt_trace_arms = has(Improvement::trace) ? 1u : 0u;
+        zpatch_opt_windowed = has(Improvement::windowed) ? 1u : 0u;
 
         for (const Feature& feature : RegisteredFeatures())
         {

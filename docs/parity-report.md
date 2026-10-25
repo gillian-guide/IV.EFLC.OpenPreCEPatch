@@ -5,7 +5,7 @@ Baseline: `baseline-openprece-20261025` (commit `175cb56`). Harness checkpoint:
 
 ## Method
 
-`tools/opcep_matrix.py` runs `opcep_parity_dump` for 114 cells against the same
+`tools/opcep_matrix.py` runs `opcep_parity_dump` for 116 cells against the same
 `game_refs/GTAIV.exe` image (hash pinned in `tests/parity/matrix.json`):
 
 - shipped defaults, all-off, all-on;
@@ -26,7 +26,7 @@ uses the test-only switches documented in `docs/testing.md`, not an INI key.
 
 | check | result |
 | --- | --- |
-| `python tools/opcep_matrix.py --check` | **PASS** — 114 cells, 40,257 writes |
+| `python tools/opcep_matrix.py --check` | **PASS** — 116 cells, 40,257 writes |
 | defaults | 909 writes, hash in `matrix.json` |
 | all-off | 0 writes |
 | all-on | 12,792 writes |

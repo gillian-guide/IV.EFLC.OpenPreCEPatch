@@ -40,6 +40,9 @@ namespace opp
             {"trace", Improvement::trace},
             {"arms", Improvement::trace},
             {"logging", Improvement::trace},
+            {"windowed", Improvement::windowed},
+            {"borderless", Improvement::windowed},
+            {"dontpause", Improvement::windowed},
         };
 
         bool EqualsIgnoreCase(std::string_view left, std::string_view right) noexcept
@@ -145,6 +148,7 @@ namespace opp
         case Improvement::model_index: return "model_index";
         case Improvement::skip_intro: return "skip_intro";
         case Improvement::trace: return "trace";
+        case Improvement::windowed: return "windowed";
         case Improvement::none: return "none";
         case Improvement::all: return "all";
         }

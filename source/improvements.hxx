@@ -21,7 +21,8 @@ namespace opp
         model_index = 1u << 4,
         skip_intro = 1u << 5,
         trace = 1u << 6,
-        all = (1u << 7) - 1u,
+        windowed = 1u << 7,
+        all = (1u << 8) - 1u,
     };
 
     constexpr uint32_t Improve(Improvement value) noexcept

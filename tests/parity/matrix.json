@@ -763,6 +763,17 @@
       "sha256": "09102b195955e12a55ffd236b4c830c80299624e67877bc027f1478d76466202",
       "writes": 5
     },
+    "option:GFWLProtectionDisabler": {
+      "arms": {},
+      "delta_arms": {},
+      "delta_base": "all-off",
+      "delta_file": "deltas/option_GFWLProtectionDisabler.txt",
+      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "delta_writes": 0,
+      "file": "writesets/option_GFWLProtectionDisabler.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "writes": 0
+    },
     "option:GarageModelFix": {
       "arms": {
         "InstallGarageModelFix": 10
@@ -1638,6 +1649,17 @@
       "sha256": "1fd4b26e1b8c6c83131fd00cd3872ee0d5e6a46ec341eb542caec434af63f60a",
       "writes": 12
     },
+    "option:SteamAchievements": {
+      "arms": {},
+      "delta_arms": {},
+      "delta_base": "all-off",
+      "delta_file": "deltas/option_SteamAchievements.txt",
+      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "delta_writes": 0,
+      "file": "writesets/option_SteamAchievements.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "writes": 0
+    },
     "option:SuperLODFix": {
       "arms": {
         "InstallSuperLODFix": 5
@@ -2055,5 +2077,5 @@
   },
   "generated_by": "tools/opcep_matrix.py",
   "schema": 1,
-  "template_sha256": "442852b794a9257a6cc0f519c8b14d1451aaaf2ad9dc07ea74f97f6156eb8a69"
+  "template_sha256": "66ab7faa7e7f93fc2906cc9728ed104467e4853318ac23357de8e369d6fbf852"
 }

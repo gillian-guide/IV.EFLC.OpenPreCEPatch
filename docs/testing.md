@@ -60,7 +60,7 @@ set OPCEP_IMPROVEMENTS=except:trace
 
 `all`/unset enables every group; `none` disables every group; a bare list is an
 `only:` list. The groups are `new_saves`, `ooc`, `vehicle`, `popup`,
-`model_index`, `skip_intro` and `trace`.
+`model_index`, `skip_intro`, `trace` and `windowed`.
 
 ```bat
 :: separate legacy dump/ASI, for automated A/B

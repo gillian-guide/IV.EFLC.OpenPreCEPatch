@@ -181,6 +181,7 @@ extern "C"
     uint8_t zpatch_opt_model_index = 0u;
     uint8_t zpatch_opt_skip_intro_screens = 0u;
     uint8_t zpatch_opt_trace_arms = 0u;
+    uint8_t zpatch_opt_windowed = 0u;
     // RestoreDeathMusic's lazily resolved site.
     uint32_t zpatch_death_music_site = 0;
     // NewSavesCompatibility's element counter.

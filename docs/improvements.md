@@ -26,6 +26,8 @@ individually.
 | `PopupHeadlightsFlag`, `ForceCarHeadlightShadows` | model-lookup/parameter guards; hash→index cache |
 | `BadPlayerModelCrashFix`, `DebugPrintSpawns` | one-time model-name hash index |
 | `SkipIntro` | FusionFix-style 300 ms intro body instead of skipping outright (original body still available via the test switches) |
+| `BorderlessWindowed`, `DoNotPauseOnMinimize` | FusionFix-style IAT window manager (style sync, centering, resize) and focus-loss input suppression on top of the original patches |
+| `SteamAchievements` | GFWL achievement writes mirrored to Steam at the `XUserWriteAchievements` boundary; the original GFWL call still runs |
 | installer pass | arm logging is part of the normal trace (`OPCEP_IMPROVEMENTS=except:trace` silences it) |
 
 Every improved body keeps the original branch first when its switch is off. The

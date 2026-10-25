@@ -15,6 +15,7 @@ module;
 #include "rebased.h"
 #include "feature_registry.hxx"
 #include "helpers.hxx"
+#include "windowed.hxx"
 
 export module input;
 
@@ -54,6 +55,13 @@ namespace opp::features
             }
         }
 
+        // FusionFix-style IAT window manager: keeps the style in sync when the
+        // window is created/resized and centres it. Additive to the original
+        // DefWindowProc shims above, so the parity write set is unchanged.
+        if (zpatch_opt_windowed != 0u && ctx.Option("BorderlessWindowed", "1") &&
+            !FusionFixGateClosed())
+            InstallBorderlessHooks(ctx.image);
+
     }
 
 
@@ -83,6 +91,11 @@ namespace opp::features
                 }
             }
         }
+
+        // FusionFix-style focus-loss input suppression, additive to the two
+        // original byte patches.
+        if (zpatch_opt_windowed != 0u && ctx.Option("DoNotPauseOnMinimize", "0"))
+            InstallFocusLossInputHook(ctx.image);
 
     }
 

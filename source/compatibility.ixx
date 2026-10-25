@@ -15,6 +15,7 @@ module;
 #include "rebased.h"
 #include "feature_registry.hxx"
 #include "helpers.hxx"
+#include "steam_achievements.hxx"
 
 export module compatibility;
 
@@ -472,6 +473,44 @@ namespace opp::features
     }
 
 
+    // GFWLProtectionDisabler (standalone GFWLProtectionDisabler2019.asi)
+
+    void InstallGFWLProtectionDisabler(PatchContext& ctx)
+    {
+
+        TraceArm("GFWLProtectionDisabler");
+
+        if (ctx.Option("GFWLProtectionDisabler", "1"))
+        {
+            HMODULE xlive = GetModuleHandleA("xlive.dll");
+            if (xlive != nullptr)
+            {
+                // The standalone ASI flips xlive.dll+0xF1605 from 0x74/0xEB to
+                // 0xEB. Keep the same pre-image check so a different xlive build
+                // is left untouched.
+                auto* site = reinterpret_cast<uint8_t*>(xlive) + 988677;
+                const uint8_t current = *site;
+                if (current == 0x74 || current == 0xEB)
+                    injector::WriteMemory<uint8_t>(site, 0xEBu, true);
+            }
+        }
+
+    }
+
+
+    // SteamAchievements (XUserWriteAchievements -> ISteamUserStats mirror)
+
+    void InstallSteamAchievements(PatchContext& ctx)
+    {
+
+        TraceArm("SteamAchievements");
+
+        if (ctx.Option("SteamAchievements", "1"))
+            (void)InstallSteamAchievementsBridge(ctx.image);
+
+    }
+
+
     // VRAMFix
 
     void InstallVRAMFix(PatchContext& ctx)
@@ -516,6 +555,8 @@ namespace
             RegisterFeature(110, "InstallPatch7RemoveModChecks", &InstallPatch7RemoveModChecks);
             RegisterFeature(117, "InstallPatch4RemoveModChecks", &InstallPatch4RemoveModChecks);
             RegisterFeature(128, "InstallRemoveGFWLUpdatePopup", &InstallRemoveGFWLUpdatePopup);
+            RegisterFeature(148, "InstallGFWLProtectionDisabler", &InstallGFWLProtectionDisabler);
+            RegisterFeature(149, "InstallSteamAchievements", &InstallSteamAchievements);
         }
     } compatibilityFeatures;
 } // namespace

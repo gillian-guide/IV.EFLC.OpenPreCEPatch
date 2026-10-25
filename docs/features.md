@@ -557,6 +557,18 @@ remove "update or sign out of LIVE" popup for GFWL when running patch 5 and belo
 
 - **Default:** `1`
 
+### GFWLProtectionDisabler
+
+disable the GFWL xlive.dll protection check (same one-byte patch as GFWLProtectionDisabler2019) [all]
+
+- **Default:** `1`
+
+### SteamAchievements
+
+mirror GFWL achievement writes to Steam; the original GFWL call still runs, so GFWL achievements stay active [all]
+
+- **Default:** `1`
+
 ### RemoveRGSCLoginRequirement
 
 remove Social Club login requirement so you can play MP even if you skip login on patch 4 and below, or use Play Offline on patch 7 [all]

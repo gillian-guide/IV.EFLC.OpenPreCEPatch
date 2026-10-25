@@ -10,8 +10,9 @@ reconstruction and the readable rewrite made a maintained continuation possible.
   xliveless file layer the original loader descends from.
 - **ThirteenAG and the FusionFix contributors** — the project layout, build and
   hook conventions this repository follows, the reference for compatibility
-  work, and the 300 ms intro delay folded into `SkipIntro` (`skipintro.ixx`,
-  GPL-3.0).
+  work, and the intro/windowed logic folded into `SkipIntro`,
+  `BorderlessWindowed` and `DoNotPauseOnMinimize` (`skipintro.ixx`,
+  `windowed.ixx`, GPL-3.0).
 - **LINK/2012** — the `injector` memory-write library.
 - **CitizenFX and ThirteenAG** — `Hooking.Patterns`.
 - **ThirteenAG** — `IniReader`, the injector fork and the packaging conventions.

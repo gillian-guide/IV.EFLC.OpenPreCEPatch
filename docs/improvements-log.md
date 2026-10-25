@@ -77,3 +77,53 @@ any installed site.
 - No live game test in this pass; the INI defaults now select the folded
   improvements, so a live run should use `OPCEP_IMPROVEMENTS=none` for the
   parity A/B if needed.
+
+## 2026-10-26 — live-fix pass: windowed port, GFWL disabler, Steam bridge
+
+Triggered by the user's FusionFix install: the real `XLivelessAddon.asi` boots,
+the inert shim does not. The shim therefore must not replace a functional
+XLivelessAddon; the features it stood in for are being folded into this mod.
+
+### New features
+
+- `BorderlessWindowed` / `DoNotPauseOnMinimize`: ported FusionFix `windowed.ixx`
+  logic (GPL-3.0, ThirteenAG). IAT hooks for `CreateWindowExA/W`, `MoveWindow`,
+  `AdjustWindowRect`, `SetWindowPos`, `SetWindowLongA`, `SetRect`; style sync,
+  centring, resize handling; focus-loss input suppression via the game's
+  per-frame input call. The original ZolikaPatch byte patches still run, so the
+  parity write set is unchanged.
+- `GFWLProtectionDisabler`: same one-byte patch as
+  `GFWLProtectionDisabler2019.asi` (`xlive.dll+0xF1605`: 0x74/0xEB -> 0xEB),
+  guarded by the module and pre-image.
+- `SteamAchievements`: XUserWriteAchievements (xlive ordinal 5278) IAT hook.
+  Calls the original first (GFWL achievements stay active), then
+  `ISteamUserStats_v012` `SetAchievement`/`StoreStats` for the 1..40 and 51..65
+  id table used by the standalone SteamAchievements.asi.
+
+### Why this is independent of TryToSkipAllErrors / VSyncFix
+
+The standalone SteamAchievements.asi detours a game-code function
+(`GTAIV.exe+0x2CC2D0` on 1080) and depends on the surrounding code. Any other
+patch that changes that region/fingerprint can disturb it. The bridge here sits
+at the `xlive.dll!XUserWriteAchievements` import boundary instead: the game's
+achievement ids arrive through the documented API, so `TryToSkipAllErrors`
+(`lmsgboxExit` first-byte `ret`) and `VSyncFix` (presentation-call operands)
+cannot move or overwrite the mirror site. No option gating is needed.
+
+### Diagnostics from the user's log
+
+- The modal "Addresses could not be determined" dialog is from
+  `LibertyCityPlates.asi` (ASCII string at its RVA 0x453C0, followed by
+  "Make sure you are using the latest version of GTA IV: Complete Edition").
+  It is not emitted by OpenPreCEPatch.
+- The log's install pass completes; the failure happens afterwards/outside this
+  mod. The shim vs real XLivelessAddon difference is being treated as a
+  compatibility bug: do not deploy the shim next to a functional
+  XLivelessAddon.
+
+### Tests / deltas
+
+- `ctest` PASS (feature-count assertion updated for the two new arms).
+- `opcep_matrix --check` PASS, 116 cells / 40,257 writes; the two new options
+  have zero-write cells (external module / IAT only).
+- No live test yet; the Steam bridge needs the Steam build and `steam_api.dll`.
