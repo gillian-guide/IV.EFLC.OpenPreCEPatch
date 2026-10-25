@@ -27,10 +27,8 @@ mods writing one subsystem is not a combination this project can test.
 | ForceCarHeadlightShadows | `nightshadows.ixx` |
 | ForceDynamicShadowsEverywhere | `shadows.ixx` |
 | ForceShadowsOnObjects | `shadows.ixx` |
-| HighFPSBikePhysicsFix | 
-rameratevigilante.ixx vehicle physics |
-| HighFPSSpeedupFix | 
-rameratevigilante.ixx time scale |
+| HighFPSBikePhysicsFix | `frameratevigilante.ixx` vehicle physics |
+| HighFPSSpeedupFix | `frameratevigilante.ixx` time scale |
 | HighQualityReflections | `experimental.ixx`, `reflectionmsaa.ixx` |
 | ImprovedShaderStreaming | `shaders.ixx` |
 | IncreasePtrNodes | `limits.ixx` (`PtrNode Double` pool) |
@@ -44,21 +42,24 @@ rameratevigilante.ixx time scale |
 | NoLoadingSleep | `loadingdelays.ixx` Sleep hook |
 | PipeBombDropIconSupport | `episodiccontent.ixx` |
 | PoliceEpisodicWeaponSupport | `episodiccontent.ixx` (`TBoGTPoliceWeapons`) |
-ixes.ixx / global code patches |
 | ReversingLightFix | `fixes.ixx` reversing-light bone |
 | RestoreDeathMusic | `deathmusic.ixx` (`DeathMusic`) |
 | SCOSignatureFix | `episodiccontent.ixx` (`RemoveSCOSignatureCheck`) |
-| SpeedupBugFix | 
-rameratevigilante.ixx time scale |
 | SkipIntro | `skipintro.ixx` (`PREF_SKIP_INTRO`) |
+| SkipIntroShowScreens | `skipintro.ixx` (`PREF_SKIP_INTRO` duration) |
 | SkipMenu | `skipintro.ixx` (`PREF_SKIP_MENU`) |
+| SpeedupBugFix | `frameratevigilante.ixx` time scale |
 | TBoGTHeliHeightLimit | `episodiccontent.ixx` |
-| VRAMFix | memory.ixx VRAM detection |
+| VRAMFix | `memory.ixx` VRAM detection |
 | VSyncFix | `framelimit.ixx`, `windowed.ixx` |
 
 Options not in this table patch sites FusionFix does not touch (for example the
-path-node, plane, projectile, MP-sync and file-compatibility fixes), so they stay
-active alongside FusionFix.
+path-node, plane, projectile, MP-sync, save and file-compatibility fixes), so
+they stay active alongside FusionFix. The opt-in stability/performance keys
+(`NewSavesGuards`, `OutOfCommissionSafeInit`, `VehicleComponentGuards`,
+`ModelLookupGuards`, `TraceInstallArms`, `NewSavesSeekPayloads`,
+`OutOfCommissionCache`, `SteerLookupCache`, `PopupLookupCache`,
+`ModelNameIndex`) do not overlap a FusionFix subsystem and are not gated.
 
 Detection checks the module directory for any `*.asi` whose name contains
 `FusionFix`, and also checks whether `GTAIV.EFLC.FusionFix.asi` /

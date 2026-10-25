@@ -39,9 +39,11 @@ python tools\opcep_matrix.py --update
 
 The committed baseline is `tests/parity/matrix.json` with per-cell files under
 `tests/parity/writesets/` and per-option attribution under
-`tests/parity/deltas/`. See `tests/parity/README.md` for the cell list and the
-zero-diff policy. `--check` fails on any change, including an unattributed byte
-or a changed game image.
+`tests/parity/deltas/`. The dump canonicalises module-relative operands
+(`AddressOf`/`FindGlobalValue`/`FindGlobalSymbol`) to site-derived markers, so a
+pure refactor that only moves globals still produces a zero diff. See
+`tests/parity/README.md` for the cell list and the zero-diff policy. `--check`
+fails on any change, including an unattributed byte or a changed game image.
 
 ## Write-set dump
 

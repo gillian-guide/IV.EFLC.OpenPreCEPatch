@@ -10,7 +10,9 @@ and the proven reconstruction are the specification.
 The installer arms and hook bodies here were ported from the **readable
 reconstruction** of the 7.65 binary, which was itself verified against the
 shipped ASI. The surrounding loader, configuration and build system
-are new work modelled on GTAIV.EFLC.FusionFix.
+are new work modelled on GTAIV.EFLC.FusionFix. The `SkipIntroShowScreens` body
+follows FusionFix's 300 ms intro delay (`skipintro.ixx`, GPL-3.0); the original
+ZolikaPatch body remains the default.
 
 Two config-surface changes are intentional and are not behavioural:
 the INI is grouped by subsystem, and the `MiscFixes` bundle is split into five
@@ -39,8 +41,30 @@ ones:
 - `NewMemorySystem` replaces the game's allocator and fills allocations with
   `0xCD`; the game's own allocator init never runs.
 
-These are documented, not fixed. The improvement backlog lives in
-[improvements.md](improvements.md).
+These are documented, not fixed in the default path. The improvement backlog
+lives in [improvements.md](improvements.md).
+
+## Opt-in improvements
+
+The faulting original body is kept for every improved site. A `0` (the default)
+selects it; a new key selects the safer/faster path and is listed in
+`docs/improvements-log.md`:
+
+- `NewSavesGuards` keeps the unchecked converter loop and adds validated reads
+  alongside it;
+- `OutOfCommissionSafeInit` keeps the unchecked `malloc`/decode path and adds a
+  fail-closed return;
+- `VehicleComponentGuards`, `ModelLookupGuards` and `TraceInstallArms` add
+  null-check/logging branches without removing the unguarded call;
+- `NewSavesSeekPayloads`, `OutOfCommissionCache`, `SteerLookupCache`,
+  `PopupLookupCache` and `ModelNameIndex` add caches/seek paths without changing
+  the original path;
+- `SkipIntroShowScreens` selects a second body at the same site; the original
+  `@exact` body remains registered and is what the default installs.
+
+The shared model-name table and OOC payload are unchanged. `ModelNameIndex`
+only adds a sorted `(hash, table index)` view of the same catalogue; first-match
+order is preserved.
 
 ## The XLivelessAddon split
 

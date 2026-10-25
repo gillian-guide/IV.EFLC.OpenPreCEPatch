@@ -59,6 +59,7 @@ The conflicts are listed in `source/fusionfix_compat.cpp`. The groups are:
 | OpenPreCEPatch options | FusionFix module |
 | --- | --- |
 | SkipIntro, SkipMenu | `skipintro.ixx` |
+| SkipIntroShowScreens | `skipintro.ixx` (intro duration) |
 | BorderlessWindowed, DoNotPauseOnMinimize | `windowed.ixx` |
 | EpisodicVehicleSupport, EpisodicWeaponSupport, PoliceEpisodicWeaponSupport, TBoGTHeliHeightLimit, SCOSignatureFix, PipeBombDropIconSupport | `episodiccontent.ixx` |
 | RestoreDeathMusic | `deathmusic.ixx` |
@@ -77,6 +78,10 @@ The conflicts are listed in `source/fusionfix_compat.cpp`. The groups are:
 | LocalSettingsPath | `userdata.ixx` |
 
 The INI itself marks each of these with `FF`.
+
+The opt-in improvement keys (see `docs/improvements-log.md`) default to `0` and
+do not need to be set for a normal install. They leave the original code path
+selected and can be enabled one at a time when diagnosing a problem.
 
 ## xlive.dll packaging
 

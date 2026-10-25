@@ -15,7 +15,7 @@ pattern libraries as submodules, and `data/plugins/` holds the shipped INI.
 
 ## What it does
 
-Around a hundred independent options. The highlights:
+Around a hundred and ten independent options. The highlights:
 
 - **Stability** — aim-projectile, bad-player-model, benchmark, blackscreen,
   collision-deadlock, combined-radio, cutscene, episode-switch, freeze-car,
@@ -38,6 +38,23 @@ Around a hundred independent options. The highlights:
 
 Every option is documented in [docs/features.md](docs/features.md), and the full
 key table lives in [docs/ini.md](docs/ini.md).
+
+## Opt-in improvements
+
+The parity baseline still keeps the original behaviour. Safer and faster
+variants are opt-in keys whose default is `0`, so an existing INI behaves
+exactly as before:
+
+- stability: `NewSavesGuards`, `OutOfCommissionSafeInit`,
+  `VehicleComponentGuards`, `ModelLookupGuards`, `TraceInstallArms`;
+- performance: `NewSavesSeekPayloads`, `OutOfCommissionCache`,
+  `SteerLookupCache`, `PopupLookupCache`, `ModelNameIndex`;
+- compatibility: `SkipIntroShowScreens` (FusionFix-style 300 ms intro).
+
+The original code path stays compiled and selected. The exact write-set effect
+of every key is recorded in [docs/improvements-log.md](docs/improvements-log.md)
+and checked by `tools/opcep_matrix.py` against the committed
+`tests/parity/matrix.json`.
 
 ## Compatibility and the INI
 

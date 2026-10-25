@@ -34,8 +34,8 @@ DllMain / InitializeASI
 | `source/game.*` | version classification, joaat hash, process probe |
 | `source/pattern.*` | signature normalisation and scans |
 | `source/rebased.*` | the globals the hook bodies address, plus the original-name tables |
-| `source/hooks.*` | machine-level bodies and the reference-VA registry |
-| `source/patches.*` | the ordered option pass |
+| `source/hooks.cpp` | machine-level bodies and the reference-VA registry |
+| `source/patches.*` | the ordered option pass, the opt-in flag publish and the optional dump observer |
 | `source/preamble.cpp` | the seven unconditional pointer scans and salt fallback |
 | `source/stability.ixx` | crash/freeze arms |
 | `source/performance.ixx` | loading, streaming, limits, memory |
@@ -66,7 +66,13 @@ grouped sections.
 `ini_import.cpp` owns the first-run path: it writes the embedded template when
 `IV.EFLC.OpenPreCEPatch.ini` is absent, or builds that file from an old
 `ZolikaPatch.ini` (values, the `MiscFixes` split and the light tables). There is
-no external converter.
+no external converter. `tools/gen_ini_template.py` regenerates
+`source/ini_template.hxx`; the raw string is emitted as adjacent literals because
+MSVC truncates a single literal above 16,380 bytes.
+
+`PatchGame` also publishes the opt-in improvement switches into the
+`zpatch_opt_*` globals once, before any arm runs. Their default is `0`, which
+selects the original branch in every body; see `docs/improvements-log.md`.
 
 ## FusionFix gating
 

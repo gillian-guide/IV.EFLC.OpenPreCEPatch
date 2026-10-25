@@ -8,7 +8,9 @@ later (see `license`). It is a derivative of the following work.
 The repository layout, the module/event conventions, the build files, the
 submodule choices and parts of the compatibility approach follow
 GTAIV.EFLC.FusionFix, Copyright (C) ThirteenAG and contributors, licensed under
-GPL-3.0. Any code later borrowed from FusionFix stays under GPL-3.0 and is
+GPL-3.0. The opt-in `SkipIntroShowScreens` body follows FusionFix's
+`skipintro.ixx` 300 ms intro delay; the original ZolikaPatch body remains the
+default. Any other code later borrowed from FusionFix stays under GPL-3.0 and is
 attributed in the file header.
 
 ## ZolikaPatch
