@@ -46,7 +46,7 @@ converter keeps the same side effects.
 | `OutOfCommissionCache` | decode/RPF build/mount once, reuse archive | none (runtime path) |
 | `SteerLookupCache` | 64-slot direct-mapped model→tilt cache | none (runtime path) |
 | `PopupLookupCache` | 512-slot direct-mapped hash→index cache (popup + FCHS) | none (runtime path) |
-| `ModelNameIndex` | one-time sorted `(hash, first index)` index, binary search | none (runtime path) |
+| `ModelNameIndex` | one-time sorted `(hash, first index)` fixed array, binary search (no CRT/TLS-backed static init) | none (runtime path) |
 
 ### FusionFix-borrowed key (default `0`)
 
