@@ -86,6 +86,10 @@ INI.
 - `python tools/opcep_matrix.py --update` then `--check` — pass, 126 cells,
   40,272 writes.
 - Layout probe: unrelated 4 KB global added → defaults dump byte-identical.
+- `llvm-objdump` on `build/Release/IV.EFLC.OpenPreCEPatch.asi`: the original
+  `SkipIntro` body is still present (`imul ecx,ecx,0x190; cmp edx,0x1F40;
+  jge; xor edx,edx; jmp [slot]`) and the variant is separate
+  (`...; mov edx,0x12C; jmp [slot]`). Both tail-jump the same published slot.
 - No live game test in this pass; the new paths are runtime-branch-only and the
   INI defaults leave every original path selected.
 

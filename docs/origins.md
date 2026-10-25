@@ -18,7 +18,8 @@ Two config-surface changes are intentional and are not behavioural:
 the INI is grouped by subsystem, and the `MiscFixes` bundle is split into five
 keys. An old INI keeps the original bundle semantics and the old flat
 `[Options]` layout is still read; the per-fix keys only take effect when the old
-master key is absent.
+master key is absent. The opt-in improvement keys (all default `0`) are an
+additional, documented config surface; see `docs/improvements-log.md`.
 
 ## Preserved behaviour
 
