@@ -407,18 +407,6 @@ unlocks the height limit for aircraft to the TBoGT level for all episodes [all-1
 
 camera, mouse, window and frame pacing
 
-### BorderlessWindowed
-
-borderless windowed, needs -windowed commandline [all; FF]
-
-- **Default:** `1`
-
-### DoNotPauseOnMinimize
-
-don't pause when unfocused in window/borderless mode [all; FF]
-
-- **Default:** `0`
-
 ### DrivebyFOVFix
 
 fix for driveby shots not landing in the center of the crosshair if you're too high above ground level [all]
@@ -578,64 +566,6 @@ remove Social Club login requirement so you can play MP even if you skip login o
 ### SavegameFix
 
 remove GFWL savegame CRC check [all]
-
-- **Default:** `1`
-
-### SkipLauncher
-
-from XLivelessAddon but with some additional improvements, ability to launch game directly from .exe and/or skip the patch 4 launcher by using any other launch/playgtaiv exe [all]
-
-- **Default:** `1`
-
-### SkipIntro
-
-skip intro screens [all; FF]
-
-- **Default:** `1`
-
-### SkipMenu
-
-skip main menu, launching straight into the last savegame regardless of what episode that's from (IV if no savegame is found) [all; FF]
-
-- **Default:** `0`
-
-### VRAMFix
-
-workaround for VRAM above 2GB [all; FF]
-
-- **Default:** `1`
-
-## XLIVELESS
-
-the XLivelessAddon feature set, one key per fix
-
-### RemoveDataIntegrityChecks
-
-remove GFWL data integrity checks (VDS100/VDS102), from XLivelessAddon [all]
-
-- **Default:** `1`
-
-### SkipTokenActivation
-
-skip GFWL token activation, from XLivelessAddon [all]
-
-- **Default:** `1`
-
-### SkipFirstTimePlayAsk
-
-skip the first-time GFWL play prompt, from XLivelessAddon [all]
-
-- **Default:** `1`
-
-### SkipInternetConnectionCheck
-
-skip the InternetGetConnectedState gate, from XLivelessAddon [all]
-
-- **Default:** `1`
-
-### SkipHealthCheck
-
-skip the GFWL health check, from XLivelessAddon [all]
 
 - **Default:** `1`
 

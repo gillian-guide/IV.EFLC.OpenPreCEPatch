@@ -1,2 +1,0 @@
-00498437 90 InstallSkipInternetConnectionCheck
-00498438 90 InstallSkipInternetConnectionCheck

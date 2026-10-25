@@ -336,18 +336,8 @@ int main(int argc, char** argv)
     observer.user = &attribution;
     observer.end = &AttributionEnd;
 
-    // The loader's launcher stage runs before the option pass, exactly as it
-    // does in the ASI. Hook destinations are null here; the signature writes are
-    // what the write-set comparison needs.
-    if (config.Option("SkipLauncher", "1"))
-    {
-        SkipLauncherReport report;
-        (void)ApplySkipLauncher({image, size}, nullptr, nullptr, report,
-                                SkipLauncherStage::all);
-        // The launcher stage runs outside PatchGame; attribute its net writes to
-        // a pseudo-arm so a SkipLauncher-only cell is still explainable.
-        observer.end(observer.user, "apply:SkipLauncher");
-    }
+    // SkipLauncher belongs to the separate XLivelessAddon successor module; the
+    // OpenPreCEPatch write set starts at the option pass.
 
     opp::PatchGame(opp::GameBuild::v1080, opp::GameImage{image, size}, config, observer);
 

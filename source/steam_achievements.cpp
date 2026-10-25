@@ -6,6 +6,7 @@
 
 #include <windows.h>
 
+#include <cstdio>
 #include <cstring>
 
 namespace opp
@@ -106,6 +107,7 @@ namespace opp
         bool g_mirrored[66] = {};  // ids 1..65
         bool g_installed = false;
         bool g_thread_started = false;
+        bool g_disabled = false;
 
         const char* NameForId(uint32_t id) noexcept
         {
@@ -115,6 +117,22 @@ namespace opp
                     return entry.name;
             }
             return nullptr;
+        }
+
+        // A retail/GFWL-only install has no steam_api.dll. Treat that as "not
+        // applicable" and do not load, initialise or hook anything.
+        bool SteamApiFilePresent() noexcept
+        {
+            char module[MAX_PATH] = {};
+            if (GetModuleFileNameA(nullptr, module, MAX_PATH) == 0)
+                return false;
+            char* slash = std::strrchr(module, '\\');
+            if (slash == nullptr)
+                return false;
+            slash[1] = '\0';
+            char path[MAX_PATH] = {};
+            std::snprintf(path, sizeof(path), "%ssteam_api.dll", module);
+            return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES;
         }
 
         bool ReplaceImportOrdinal(HMODULE module, const char* dll_name,
@@ -207,10 +225,19 @@ namespace opp
     {
         if (g_installed)
             return true;
+        if (g_disabled)
+            return false;
         if (GetModuleHandleW(nullptr) != reinterpret_cast<HMODULE>(image.base))
             return false;
         if (g_thread_started)
             return true;
+        if (!SteamApiFilePresent())
+        {
+            // Retail/GFWL install: simply do not run the Steam path.
+            g_disabled = true;
+            Log("steam: not applicable (no steam_api.dll), skipped");
+            return false;
+        }
 
         // SteamAPI_Init loads libraries and starts threads; doing that under
         // the loader lock (PatchGame runs from DllMain) can deadlock. Let the
@@ -231,11 +258,14 @@ namespace opp
     {
         if (g_installed)
             return true;
+        if (g_disabled)
+            return false;
 
         HMODULE steam = LoadLibraryA("steam_api.dll");
         if (steam == nullptr)
         {
-            Log("steam: steam_api.dll not found, achievements bridge disabled");
+            g_disabled = true;
+            Log("steam: steam_api.dll could not be loaded, skipped");
             return false;
         }
 
@@ -247,14 +277,24 @@ namespace opp
             GetProcAddress(steam, "SteamInternal_FindOrCreateUserInterface"));
         const auto run_callbacks = reinterpret_cast<RunCallbacksFn>(
             GetProcAddress(steam, "SteamAPI_RunCallbacks"));
+        const auto is_running = reinterpret_cast<bool(__cdecl*)()>(
+            GetProcAddress(steam, "SteamAPI_IsSteamRunning"));
         if (init == nullptr || get_user == nullptr || find_interface == nullptr)
         {
-            Log("steam: required exports missing");
+            g_disabled = true;
+            Log("steam: required exports missing, skipped");
+            return false;
+        }
+        if (is_running != nullptr && !is_running())
+        {
+            g_disabled = true;
+            Log("steam: Steam client not running, skipped");
             return false;
         }
         if (!init())
         {
-            Log("steam: SteamAPI_Init failed (not running through Steam?)");
+            g_disabled = true;
+            Log("steam: SteamAPI_Init failed, skipped");
             return false;
         }
 
@@ -262,13 +302,15 @@ namespace opp
             find_interface(get_user(), "STEAMUSERSTATS_INTERFACE_VERSION012");
         if (g_user_stats == nullptr)
         {
-            Log("steam: ISteamUserStats v012 unavailable");
+            g_disabled = true;
+            Log("steam: ISteamUserStats v012 unavailable, skipped");
             return false;
         }
         auto* vtable = *reinterpret_cast<void***>(g_user_stats);
         if (vtable == nullptr)
         {
-            Log("steam: ISteamUserStats vtable unavailable");
+            g_disabled = true;
+            Log("steam: ISteamUserStats vtable unavailable, skipped");
             return false;
         }
         g_set_achievement = reinterpret_cast<SetAchievementFn>(vtable[28 / 4]);
@@ -277,7 +319,8 @@ namespace opp
         if (g_set_achievement == nullptr ||
             g_store_stats == nullptr)
         {
-            Log("steam: unexpected ISteamUserStats layout");
+            g_disabled = true;
+            Log("steam: unexpected ISteamUserStats layout, skipped");
             return false;
         }
 
@@ -286,7 +329,8 @@ namespace opp
                                   reinterpret_cast<void*>(&XUserWriteAchievementsHook),
                                   reinterpret_cast<void**>(&g_write_original)))
         {
-            Log("steam: XUserWriteAchievements import not found");
+            g_disabled = true;
+            Log("steam: XUserWriteAchievements import not found, skipped");
             return false;
         }
         g_installed = true;

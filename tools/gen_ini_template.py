@@ -58,8 +58,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true",
                         help="verify the checked-in template instead of writing it")
+    parser.add_argument("--ini", type=Path, default=INI)
+    parser.add_argument("--out", type=Path, default=OUT)
     args = parser.parse_args()
-    text = INI.read_text(encoding="utf-8")
+    ini = args.ini.resolve()
+    out = args.out.resolve()
+    text = ini.read_text(encoding="utf-8")
     if ")OPCEP\"" in text:
         print("error: INI contains the raw-string terminator", file=sys.stderr)
         return 1
@@ -67,17 +71,20 @@ def main() -> int:
         text += "\n"
     parts = chunks(text)
     body = "\n".join(f'R"OPCEP({part})OPCEP"' for part in parts)
-    generated = HEADER + body + FOOTER
+    header = HEADER.replace(
+        "data/plugins/IV.EFLC.OpenPreCEPatch.ini", ini.relative_to(ROOT).as_posix()
+    )
+    generated = header + body + FOOTER
     if args.check:
-        current = OUT.read_text(encoding="utf-8") if OUT.exists() else ""
+        current = out.read_text(encoding="utf-8") if out.exists() else ""
         if current != generated:
-            print(f"error: {OUT} is stale; run tools/gen_ini_template.py",
+            print(f"error: {out} is stale; run tools/gen_ini_template.py",
                   file=sys.stderr)
             return 1
-        print(f"ok: {OUT} matches the shipped INI")
+        print(f"ok: {out} matches {ini}")
         return 0
-    OUT.write_text(generated, encoding="utf-8")
-    print(f"wrote {OUT} ({len(text)} INI bytes, {len(parts)} chunks)")
+    out.write_text(generated, encoding="utf-8")
+    print(f"wrote {out} ({len(text)} INI bytes, {len(parts)} chunks)")
     return 0
 
 

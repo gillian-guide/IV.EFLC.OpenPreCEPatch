@@ -16,7 +16,6 @@
         "InstallBikeFeetFix": 12,
         "InstallBikePhoneAnimsFix": 6,
         "InstallBlackscreenFix": 4,
-        "InstallBorderlessWindowed": 12,
         "InstallBuildingAlphaFix": 17,
         "InstallBuildingDynamicShadows": 6,
         "InstallCarDecalsFix": 5,
@@ -28,7 +27,6 @@
         "InstallCopSirensFlag": 15,
         "InstallCrashMsgFix": 4,
         "InstallCutsceneFixes": 9,
-        "InstallDoNotPauseOnMinimize": 3,
         "InstallDrivebyFOVFix": 5,
         "InstallDualVehicleHeadlightsOld": 5,
         "InstallEmissiveLerpFix": 5,
@@ -76,7 +74,6 @@
         "InstallPopupHeadlightsFlag": 10,
         "InstallRemoveAllWeaponsProtection": 12,
         "InstallRemoveBoundingBoxCulling": 4,
-        "InstallRemoveDataIntegrityChecks": 2,
         "InstallRemoveRGSCLoginRequirement": 5,
         "InstallRemoveStaticCarShadows": 1,
         "InstallRemoveStaticCutsceneCarShadows": 1,
@@ -86,23 +83,17 @@
         "InstallSCOSignatureFix": 1,
         "InstallSMPA60Fix": 11,
         "InstallSavegameFix": 42,
-        "InstallSkipFirstTimePlayAsk": 2,
-        "InstallSkipHealthCheck": 1,
-        "InstallSkipInternetConnectionCheck": 2,
-        "InstallSkipIntro": 5,
-        "InstallSkipMenu": 4,
         "InstallSpeedupBugFix": 4,
         "InstallStartupTimeFix": 12,
         "InstallSuperLODFix": 5,
         "InstallTBoGTHeliHeightLimit": 2,
         "InstallTeleportProtection": 3,
         "InstallTryToSkipAllErrors": 1,
-        "InstallWantedLevelCrashFix": 5,
-        "apply:SkipLauncher": 61
+        "InstallWantedLevelCrashFix": 5
       },
       "file": "writesets/all-on.txt",
-      "sha256": "03ed4f28762270922d4bf69e2c3ac48daed12f6f216432f25733c8056d9d68bb",
-      "writes": 12792
+      "sha256": "39dde2734f5e0c8b9538507d76fab89a38f80781f7554e922f59c18f13e53cd8",
+      "writes": 12700
     },
     "defaults": {
       "arms": {
@@ -113,7 +104,6 @@
         "InstallBikeFeetFix": 12,
         "InstallBikePhoneAnimsFix": 6,
         "InstallBlackscreenFix": 4,
-        "InstallBorderlessWindowed": 12,
         "InstallBuildingAlphaFix": 17,
         "InstallCarDecalsFix": 5,
         "InstallCarDynamicShadowFix": 12,
@@ -161,27 +151,21 @@
         "InstallPlayerAsPedComponentsFix": 5,
         "InstallPopupHeadlightsFlag": 10,
         "InstallRemoveAllWeaponsProtection": 12,
-        "InstallRemoveDataIntegrityChecks": 3,
         "InstallRemoveRGSCLoginRequirement": 5,
         "InstallRestoreDeathMusic": 12,
         "InstallReversingLightFix": 1,
         "InstallSCOSignatureFix": 1,
         "InstallSMPA60Fix": 11,
         "InstallSavegameFix": 42,
-        "InstallSkipFirstTimePlayAsk": 2,
-        "InstallSkipHealthCheck": 1,
-        "InstallSkipInternetConnectionCheck": 2,
-        "InstallSkipIntro": 5,
         "InstallSpeedupBugFix": 4,
         "InstallStartupTimeFix": 12,
         "InstallSuperLODFix": 5,
         "InstallTeleportProtection": 3,
-        "InstallWantedLevelCrashFix": 5,
-        "apply:SkipLauncher": 61
+        "InstallWantedLevelCrashFix": 5
       },
       "file": "writesets/defaults.txt",
-      "sha256": "102094927c78cc7be97dcb527c8ec282293cd2cae6132860c00f540a3ffba4e8",
-      "writes": 909
+      "sha256": "b83e93873f3d78aa6fcba70c7fd33a46fb74d87ffacdd494242a48e11f2c48ef",
+      "writes": 823
     },
     "legacy": {
       "arms": {
@@ -191,7 +175,6 @@
         "InstallBikeFeetFix": 12,
         "InstallBikePhoneAnimsFix": 6,
         "InstallBlackscreenFix": 4,
-        "InstallBorderlessWindowed": 12,
         "InstallBuildingAlphaFix": 17,
         "InstallCarDecalsFix": 5,
         "InstallCarDynamicShadowFix": 12,
@@ -238,28 +221,22 @@
         "InstallPlayerAsPedComponentsFix": 5,
         "InstallPopupHeadlightsFlag": 10,
         "InstallRemoveAllWeaponsProtection": 12,
-        "InstallRemoveDataIntegrityChecks": 3,
         "InstallRemoveRGSCLoginRequirement": 5,
         "InstallRestoreDeathMusic": 12,
         "InstallReversingLightFix": 1,
         "InstallSCOSignatureFix": 1,
         "InstallSMPA60Fix": 11,
         "InstallSavegameFix": 42,
-        "InstallSkipFirstTimePlayAsk": 2,
-        "InstallSkipHealthCheck": 1,
-        "InstallSkipInternetConnectionCheck": 2,
-        "InstallSkipIntro": 5,
         "InstallSpeedupBugFix": 4,
         "InstallStartupTimeFix": 12,
         "InstallSuperLODFix": 5,
         "InstallTeleportProtection": 3,
         "InstallTryToSkipAllErrors": 1,
-        "InstallWantedLevelCrashFix": 5,
-        "apply:SkipLauncher": 61
+        "InstallWantedLevelCrashFix": 5
       },
       "file": "writesets/legacy.txt",
-      "sha256": "dd47003d7441773786758b565ba714ac2aacf9a0abe428b8c968ffa9d9943565",
-      "writes": 900
+      "sha256": "e07c8fd7f4d76386aafdb95f0abc53d010c6408ba1cc74c646f825fb30454081",
+      "writes": 814
     },
     "option:AddOptionsInMenu": {
       "arms": {},
@@ -387,21 +364,6 @@
       "file": "writesets/option_BlackscreenFix.txt",
       "sha256": "ab237c0b2c83eda5ad7bd76ea63b15c57e1ab1c6bd03839d4d1884525320c0fd",
       "writes": 4
-    },
-    "option:BorderlessWindowed": {
-      "arms": {
-        "InstallBorderlessWindowed": 12
-      },
-      "delta_arms": {
-        "InstallBorderlessWindowed": 12
-      },
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_BorderlessWindowed.txt",
-      "delta_sha256": "a12b36e40c8c6977872e5706b7df33c4f25bbb6dc8f0b11b21cf0f2d23ed917b",
-      "delta_writes": 12,
-      "file": "writesets/option_BorderlessWindowed.txt",
-      "sha256": "5f770acec77c3ee2fbb4005547cd5583549cd38aaf1ac3151081a18716cbe5b6",
-      "writes": 12
     },
     "option:BuildingAlphaFix": {
       "arms": {
@@ -567,21 +529,6 @@
       "file": "writesets/option_DebugPrintSpawns.txt",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "writes": 0
-    },
-    "option:DoNotPauseOnMinimize": {
-      "arms": {
-        "InstallDoNotPauseOnMinimize": 3
-      },
-      "delta_arms": {
-        "InstallDoNotPauseOnMinimize": 3
-      },
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_DoNotPauseOnMinimize.txt",
-      "delta_sha256": "4076d63ecf7490dbe77702b33c7368d8fb9ec56b7f11a7840966376fcb458c27",
-      "delta_writes": 3,
-      "file": "writesets/option_DoNotPauseOnMinimize.txt",
-      "sha256": "3ea4ac8f2e0bd4be4c30c475a84dcb0625443b18507bc32aebb74b4570208f0c",
-      "writes": 3
     },
     "option:DrivebyFOVFix": {
       "arms": {
@@ -1336,21 +1283,6 @@
       "sha256": "186654e0b8aa4e618a35be88b44d95a547c2e93f63db490b88af42dfabf39209",
       "writes": 4
     },
-    "option:RemoveDataIntegrityChecks": {
-      "arms": {
-        "InstallRemoveDataIntegrityChecks": 3
-      },
-      "delta_arms": {
-        "InstallRemoveDataIntegrityChecks": 3
-      },
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_RemoveDataIntegrityChecks.txt",
-      "delta_sha256": "625da9d481bbf6e203c27cf96b5d204f6572d826d05e86ad1759f9dc922e50d0",
-      "delta_writes": 3,
-      "file": "writesets/option_RemoveDataIntegrityChecks.txt",
-      "sha256": "36cc54816b153486c7009e587992c2bbe6d060099b979c62834a17623b573f69",
-      "writes": 3
-    },
     "option:RemoveGFWLUpdatePopup": {
       "arms": {
         "InstallRemoveGFWLUpdatePopup": 5
@@ -1518,107 +1450,6 @@
       "sha256": "67ad35933ae4db562a66bcf38ccc73e35b66c4a7572999a7aa91789f06be89d2",
       "writes": 10
     },
-    "option:SkipFirstTimePlayAsk": {
-      "arms": {
-        "InstallSkipFirstTimePlayAsk": 2
-      },
-      "delta_arms": {
-        "InstallSkipFirstTimePlayAsk": 2
-      },
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_SkipFirstTimePlayAsk.txt",
-      "delta_sha256": "d37b8332fe9f3b9ef89309d4cc417e3d0e9eb94ae9d4ce05204eb2160b58691d",
-      "delta_writes": 2,
-      "file": "writesets/option_SkipFirstTimePlayAsk.txt",
-      "sha256": "1f2ca5ebe81627107ff801b1c0ea0e075f357323c4577b2f93cfd1f719d4fbcb",
-      "writes": 2
-    },
-    "option:SkipHealthCheck": {
-      "arms": {
-        "InstallSkipHealthCheck": 1
-      },
-      "delta_arms": {
-        "InstallSkipHealthCheck": 1
-      },
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_SkipHealthCheck.txt",
-      "delta_sha256": "6a52bfa6069cb453b881d013ff596c5137faf86181ec829574b275360c9fdd84",
-      "delta_writes": 1,
-      "file": "writesets/option_SkipHealthCheck.txt",
-      "sha256": "d2f3bad9f55477a8446e64a33cdecde4a184b4f0e78f55faffb83796ae986c9c",
-      "writes": 1
-    },
-    "option:SkipInternetConnectionCheck": {
-      "arms": {
-        "InstallSkipInternetConnectionCheck": 2
-      },
-      "delta_arms": {
-        "InstallSkipInternetConnectionCheck": 2
-      },
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_SkipInternetConnectionCheck.txt",
-      "delta_sha256": "7f785520e2cb1f8371aa0583309b684d896a441c2fdc52b90e0f2635424ef882",
-      "delta_writes": 2,
-      "file": "writesets/option_SkipInternetConnectionCheck.txt",
-      "sha256": "8d0268690555e4180b447d40b488672899d2d38b84a385eb4d576061e7c8c3f1",
-      "writes": 2
-    },
-    "option:SkipIntro": {
-      "arms": {
-        "InstallSkipIntro": 5
-      },
-      "delta_arms": {
-        "InstallSkipIntro": 5
-      },
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_SkipIntro.txt",
-      "delta_sha256": "54dfd428d6453dded680b6e9df872f6267dcb7c2735914954e1884b6f8fa58bc",
-      "delta_writes": 5,
-      "file": "writesets/option_SkipIntro.txt",
-      "sha256": "f40ccbca27ffab886a4c656848a170cf46711c58d53475765752e27a51f890ff",
-      "writes": 5
-    },
-    "option:SkipLauncher": {
-      "arms": {
-        "apply:SkipLauncher": 61
-      },
-      "delta_arms": {
-        "apply:SkipLauncher": 61
-      },
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_SkipLauncher.txt",
-      "delta_sha256": "2ce0156ea7b6e6df380ae5e09805e87cabffee9836808192c36e1869cfb3451e",
-      "delta_writes": 61,
-      "file": "writesets/option_SkipLauncher.txt",
-      "sha256": "7f8b0c7b5ee4e7d4895bf43a556f5fd20ad643b3c25e022f4ea192846c15a0a9",
-      "writes": 61
-    },
-    "option:SkipMenu": {
-      "arms": {
-        "InstallSkipMenu": 4
-      },
-      "delta_arms": {
-        "InstallSkipMenu": 4
-      },
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_SkipMenu.txt",
-      "delta_sha256": "4592e992ddc68d17e47a1f8c0b8789bd4cfbfe7fa3f0e6b595a2d80c32e543a6",
-      "delta_writes": 4,
-      "file": "writesets/option_SkipMenu.txt",
-      "sha256": "18bbc171018a459c4130c2ae44e5a80cb43d0089eac32621492312c2765c11f0",
-      "writes": 4
-    },
-    "option:SkipTokenActivation": {
-      "arms": {},
-      "delta_arms": {},
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_SkipTokenActivation.txt",
-      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "delta_writes": 0,
-      "file": "writesets/option_SkipTokenActivation.txt",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "writes": 0
-    },
     "option:SpeedupBugFix": {
       "arms": {
         "InstallSpeedupBugFix": 4
@@ -1720,17 +1551,6 @@
       "sha256": "2313f75746a78d7ecf08fa2ba62f822bb3bd82f313fa5b7b8f731ab7caadedb2",
       "writes": 1
     },
-    "option:VRAMFix": {
-      "arms": {},
-      "delta_arms": {},
-      "delta_base": "all-off",
-      "delta_file": "deltas/option_VRAMFix.txt",
-      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "delta_writes": 0,
-      "file": "writesets/option_VRAMFix.txt",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "writes": 0
-    },
     "option:VSyncFix": {
       "arms": {},
       "delta_arms": {},
@@ -1762,27 +1582,21 @@
         "InstallAllowHashesForIDE": 5,
         "InstallPatch4RemoveModChecks": 5,
         "InstallRemoveRGSCLoginRequirement": 5,
-        "InstallSavegameFix": 42,
-        "InstallSkipIntro": 5,
-        "InstallSkipMenu": 4,
-        "apply:SkipLauncher": 61
+        "InstallSavegameFix": 42
       },
       "delta_arms": {
         "InstallAllowHashesForIDE": 5,
         "InstallPatch4RemoveModChecks": 5,
         "InstallRemoveRGSCLoginRequirement": 5,
-        "InstallSavegameFix": 42,
-        "InstallSkipIntro": 5,
-        "InstallSkipMenu": 4,
-        "apply:SkipLauncher": 61
+        "InstallSavegameFix": 42
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_COMPATIBILITY.txt",
-      "delta_sha256": "3ef64b2a539e001cc2c8073efd359a9c57302e9bbbd22c0a359d8c412297abfa",
-      "delta_writes": 127,
+      "delta_sha256": "a0ec8d99ecfa8abe028f61481c22307036c8c24ae60e34d4284299ddad2b9c24",
+      "delta_writes": 57,
       "file": "writesets/section_COMPATIBILITY.txt",
-      "sha256": "4d057b8e7ab7da2f2d02ce58701901fe10bd10f89c07d8a58a02164295084e34",
-      "writes": 127
+      "sha256": "2806fd1eab11894bf3bbd998b9d23a1eed4e489f62cdf9124e35e5c8524cc413",
+      "writes": 57
     },
     "section:GRAPHICS": {
       "arms": {
@@ -1839,24 +1653,20 @@
     },
     "section:INPUT": {
       "arms": {
-        "InstallBorderlessWindowed": 12,
-        "InstallDoNotPauseOnMinimize": 3,
         "InstallDrivebyFOVFix": 5,
         "InstallMouseFix": 53
       },
       "delta_arms": {
-        "InstallBorderlessWindowed": 12,
-        "InstallDoNotPauseOnMinimize": 3,
         "InstallDrivebyFOVFix": 5,
         "InstallMouseFix": 53
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_INPUT.txt",
-      "delta_sha256": "770ac05d806b4ad1953066380a71615578be65aa3c5c7c476014d23cc089a9f0",
-      "delta_writes": 73,
+      "delta_sha256": "6b45b0e1f9dd194c79c46ddc6e79306713f65af6eed2bfb5a203b5960a233995",
+      "delta_writes": 58,
       "file": "writesets/section_INPUT.txt",
-      "sha256": "0c77849b6c4356ba024aeb7d3b45839c6149a4696553c85f194b268c3ebf92f7",
-      "writes": 73
+      "sha256": "e0aeb7cf1c32ef02026dccca69bef7b0699794cd982907436122d76acd23977d",
+      "writes": 58
     },
     "section:INTERFACE": {
       "arms": {
@@ -2047,27 +1857,6 @@
       "file": "writesets/section_VEHICLES.txt",
       "sha256": "96a52ea1f127e9373bebd0bb5751baf7039436d09f457a47c3598cda32bedef4",
       "writes": 302
-    },
-    "section:XLIVELESS": {
-      "arms": {
-        "InstallRemoveDataIntegrityChecks": 3,
-        "InstallSkipFirstTimePlayAsk": 2,
-        "InstallSkipHealthCheck": 1,
-        "InstallSkipInternetConnectionCheck": 2
-      },
-      "delta_arms": {
-        "InstallRemoveDataIntegrityChecks": 3,
-        "InstallSkipFirstTimePlayAsk": 2,
-        "InstallSkipHealthCheck": 1,
-        "InstallSkipInternetConnectionCheck": 2
-      },
-      "delta_base": "all-off",
-      "delta_file": "deltas/section_XLIVELESS.txt",
-      "delta_sha256": "032e647187fe52699127edfef11275761c53f02921eda70c3d9492c6287e3d92",
-      "delta_writes": 8,
-      "file": "writesets/section_XLIVELESS.txt",
-      "sha256": "d50724ebffdcadc834c3b8c5827ba52838de0ccbb4ef9a6159311ce457f22a59",
-      "writes": 8
     }
   },
   "game": {
@@ -2077,5 +1866,5 @@
   },
   "generated_by": "tools/opcep_matrix.py",
   "schema": 1,
-  "template_sha256": "66ab7faa7e7f93fc2906cc9728ed104467e4853318ac23357de8e369d6fbf852"
+  "template_sha256": "b2de9646eb865554d9677f7dd071fbe87f3f3a35edfac194f3ce0e3bc2bc206a"
 }

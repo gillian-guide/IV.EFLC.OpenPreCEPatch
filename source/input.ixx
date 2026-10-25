@@ -315,8 +315,6 @@ namespace
             RegisterFeature(41, "PublishMouseFix", &PublishMouseFix);
             RegisterFeature(112, "InstallDrivebyFOVFix", &InstallDrivebyFOVFix);
             RegisterFeature(124, "InstallMouseFix", &InstallMouseFix);
-            RegisterFeature(134, "InstallBorderlessWindowed", &InstallBorderlessWindowed);
-            RegisterFeature(136, "InstallDoNotPauseOnMinimize", &InstallDoNotPauseOnMinimize);
             RegisterFeature(147, "InstallVSyncFix", &InstallVSyncFix);
         }
     } inputFeatures;

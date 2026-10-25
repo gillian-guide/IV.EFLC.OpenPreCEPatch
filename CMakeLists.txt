@@ -45,7 +45,6 @@ set(OPCEP_SOURCES
     source/loading.ixx
     source/compatibility.ixx
     source/interface.ixx
-    source/xliveless_features.ixx
     source/data/model_catalogue.cpp
     source/data/useless_checks.cpp
     external/hooking/Hooking.Patterns.cpp
@@ -75,6 +74,10 @@ set_target_properties(OpenPreCEPatch PROPERTIES
 target_link_options(OpenPreCEPatch PRIVATE
     /MACHINE:X86 /SUBSYSTEM:WINDOWS /BASE:0x10000000 /INCREMENTAL:NO /MAP
 )
+
+# XLivelessAddon successor lives in its own subproject (xlivelessaddon/) and is
+# not part of the OpenPreCEPatch ASI.
+add_subdirectory(xlivelessaddon)
 
 add_executable(opcep_dump tests/dump_main.cpp)
 target_link_libraries(opcep_dump PRIVATE opcep_core version user32 shlwapi)
@@ -115,7 +118,6 @@ add_executable(opcep_parity_dump
     source/loading.ixx
     source/compatibility.ixx
     source/interface.ixx
-    source/xliveless_features.ixx
     source/data/model_catalogue.cpp
     source/data/useless_checks.cpp
     external/hooking/Hooking.Patterns.cpp
@@ -134,17 +136,6 @@ if(OPCEP_PARITY_BASELINE)
 endif()
 target_link_libraries(opcep_parity_dump PRIVATE version user32 shlwapi)
 endif()
-
-# Inert XLivelessAddon marker: satisfy FusionFix's module-presence check without
-# loading the mod or patching anything. The main module recognises the marker
-# through the OpcepCompatShim export.
-add_library(XLivelessAddon SHARED source/compat/xliveless_proxy.cpp)
-set_target_properties(XLivelessAddon PROPERTIES
-    PREFIX ""
-    OUTPUT_NAME "XLivelessAddon"
-    SUFFIX ".asi"
-)
-target_link_options(XLivelessAddon PRIVATE /MACHINE:X86 /SUBSYSTEM:WINDOWS /INCREMENTAL:NO)
 
 add_executable(opcep_tests tests/test_main.cpp)
 target_link_libraries(opcep_tests PRIVATE opcep_core version user32 shlwapi)

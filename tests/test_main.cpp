@@ -93,7 +93,6 @@ namespace
 
         opp::Config config(created);
         CHECK(!config.Option("MouseFix", "1")); // old value 0
-        CHECK(!config.Option("RemoveDataIntegrityChecks", "1")); // MiscFixes=0
         CHECK(config.Option("AimProjectileCrashFix", "1")); // template default
         CHECK(config.String("LOADING", "OverrideGTADatPathTo", "") ==
               "common:/data/custom.dat");
@@ -107,7 +106,6 @@ namespace
         CHECK(defaultIni == fresh / "IV.EFLC.OpenPreCEPatch.ini");
         opp::Config defaults(defaultIni);
         CHECK(defaults.Option("AimProjectileCrashFix", "0"));
-        CHECK(defaults.Option("RemoveDataIntegrityChecks", "0"));
         std::filesystem::remove_all(fresh);
     }
 
@@ -370,7 +368,7 @@ namespace
     void TestFeatureOrder()
     {
         const auto& features = opp::RegisteredFeatures();
-        CHECK(features.size() == 150);
+        CHECK(features.size() == 137);
         for (size_t i = 1; i < features.size(); ++i)
             CHECK(features[i - 1].order < features[i].order);
     }

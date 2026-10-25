@@ -11,11 +11,8 @@ DllMain / InitializeASI
   create IV.EFLC.OpenPreCEPatch.ini from ZolikaPatch.ini or the template
   read the game's VS_FIXEDFILEINFO -> compact version -> GameBuild
   old-loader warning + unsupported-version guard
-  capture xlive.dll / XLivelessAddon.asi / CitizenIV.exe
-  detect a FusionFix ASI and force its overlapping options off
   read the grouped INI, vehicle-light sections and option globals
   ZMenuIV version guard
-  XLivelessAddon feature set's one-shot DFA pass, then SkipLauncher
   IVMenuAPI registration, LocalSettingsPath capture
   unconditional preamble (game pointers + hash salts)
   PatchGame (all INI-gated installs)
@@ -47,9 +44,7 @@ DllMain / InitializeASI
 | `source/loading.ixx` | files, saves, DLC |
 | `source/compatibility.ixx` | other mods, game builds, packaging |
 | `source/interface.ixx` | menu, HUD and audio toggles |
-| `source/xliveless_features.ixx` | the five XLivelessAddon features |
-| `source/skip_launcher.*` | SkipLauncher/DFA/ROM stages and file-API hooks |
-| `source/compat/xliveless_proxy.cpp` | inert `XLivelessAddon.asi` marker shim |
+| `xlivelessaddon/` | separate XLivelessAddon successor ASI (own source/INI/CMake) |
 | `source/data/` | the 38,455-entry model catalogue and the RemoveUselessChecks NOP list |
 
 The per-subsystem files are C++20 modules (`.ixx`), in the same style as
@@ -59,23 +54,22 @@ FusionFix: a `module;` global fragment includes the shared headers, then
 ## Configuration
 
 Options are grouped into `[STABILITY]`, `[PERFORMANCE]`, `[GRAPHICS]`,
-`[VEHICLES]`, `[INPUT]`, `[MULTIPLAYER]`, `[LOADING]`, `[COMPATIBILITY]`,
-`[XLIVELESS]` and `[INTERFACE]`. Keys are unique across sections, so
+`[VEHICLES]`, `[INPUT]`, `[MULTIPLAYER]`, `[LOADING]`, `[COMPATIBILITY]` and
+`[INTERFACE]`. Keys are unique across sections, so
 `Config::Option` looks in `[Options]` first (old flat files) and then walks the
 grouped sections.
 
 `ini_import.cpp` owns the first-run path: it writes the embedded template when
 `IV.EFLC.OpenPreCEPatch.ini` is absent, or builds that file from an old
-`ZolikaPatch.ini` (values, the `MiscFixes` split and the light tables). There is
-no external converter. `tools/gen_ini_template.py` regenerates
+`ZolikaPatch.ini` (values and the light tables). There is no external converter. `tools/gen_ini_template.py` regenerates
 `source/ini_template.hxx`; the raw string is emitted as adjacent literals because
 MSVC truncates a single literal above 16,380 bytes.
 
 `PatchGame` also publishes the folded improvement switches into the
 `zpatch_opt_*` globals once, before any arm runs. They are resolved from the
 original options (`NewSavesCompatibility`, `OutOfCommissionFix`, the moving-parts
-trio, `PopupHeadlightsFlag`/FCHS, `BadPlayerModelCrashFix`/`DebugPrintSpawns`,
-`SkipIntro`) plus the test-only `OPCEP_IMPROVEMENTS` environment variable or the
+trio, `PopupHeadlightsFlag`/FCHS, `BadPlayerModelCrashFix`/`DebugPrintSpawns`)
+plus the test-only `OPCEP_IMPROVEMENTS` environment variable or the
 `OPCEP_PARITY_BASELINE` build definition. There are no per-fix INI keys; see
 `docs/improvements.md` and `docs/testing.md`.
 
@@ -88,11 +82,10 @@ marks the same options with `FF`.
 
 ## XLivelessAddon
 
-`XLivelessAddon.asi` built here is a marker shim: its `DllMain` and
-`InitializeASI` are empty, and it exports `OpcepCompatShim`. It only satisfies a
-presence check; it does not reproduce the real addon's patches and should not be
-used together with FusionFix. OpenPreCEPatch recognises the export and does not
-treat the shim as an external XLivelessAddon.
+The XLivelessAddon feature set is a **separate subproject** in
+`xlivelessaddon/`. It builds `XLivelessAddon.asi` and reads
+`XLivelessAddon.ini`; it is not linked into the OpenPreCEPatch module. Do not
+load both modules as the owner of the same patches.
 
 ## Install order
 
@@ -102,7 +95,6 @@ registry. This keeps the original loader sequence independent of static-init
 order across translation units. It matters because some arms publish resume
 addresses before another arm overwrites the site that owns them.
 `RemoveUselessChecks` runs first; all slot publishes run before the install arms.
-The five XLivelessAddon arms occupy the position the old `MiscFixes` bundle had.
 
 ## Hooks
 

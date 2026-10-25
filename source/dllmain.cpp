@@ -400,12 +400,8 @@ namespace
                              ? reinterpret_cast<const IMAGE_NT_HEADERS*>(moduleBase + dos->e_lfanew)
                              : nullptr;
 
-        // The XLivelessAddon bundle's loader arm used to call the one-shot DFA
-        // installer before SkipLauncher. Keep that order for legacy INIs.
-        if (nt && nt->Signature == IMAGE_NT_SIGNATURE && XlivelessBundleEnabled(config))
-            ApplyDFA(build, opp::GameImage{moduleBase, nt->OptionalHeader.SizeOfImage});
-
-        (void)ApplySkipLauncherIfEnabled(build, config);
+        // The XLivelessAddon loader/DFA stages belong to the separate
+        // XLivelessAddon successor module; this module does not install them.
 
         if (build == opp::GameBuild::unknown)
         {

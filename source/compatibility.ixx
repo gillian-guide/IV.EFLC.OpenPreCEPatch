@@ -540,18 +540,12 @@ namespace
     public:
         CompatibilityFeatures()
         {
-            RegisterFeature(24, "PublishSkipIntro", &PublishSkipIntro);
-            RegisterFeature(25, "PublishSkipMenu", &PublishSkipMenu);
             RegisterFeature(34, "PublishPatch4RemoveModChecks", &PublishPatch4RemoveModChecks);
             RegisterFeature(45, "PublishRemoveGFWLUpdatePopup", &PublishRemoveGFWLUpdatePopup);
             RegisterFeature(47, "InstallAllowHashesForIDE", &InstallAllowHashesForIDE);
             RegisterFeature(83, "InstallPatch6and7RemoveModChecks", &InstallPatch6and7RemoveModChecks);
             RegisterFeature(93, "InstallRemoveRGSCLoginRequirement", &InstallRemoveRGSCLoginRequirement);
             RegisterFeature(100, "InstallSavegameFix", &InstallSavegameFix);
-            RegisterFeature(101, "InstallSkipIntro", &InstallSkipIntro);
-            RegisterFeature(102, "InstallSkipLauncher", &InstallSkipLauncher);
-            RegisterFeature(103, "InstallSkipMenu", &InstallSkipMenu);
-            RegisterFeature(108, "InstallVRAMFix", &InstallVRAMFix);
             RegisterFeature(110, "InstallPatch7RemoveModChecks", &InstallPatch7RemoveModChecks);
             RegisterFeature(117, "InstallPatch4RemoveModChecks", &InstallPatch4RemoveModChecks);
             RegisterFeature(128, "InstallRemoveGFWLUpdatePopup", &InstallRemoveGFWLUpdatePopup);

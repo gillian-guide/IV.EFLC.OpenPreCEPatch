@@ -103,8 +103,6 @@ camera, mouse, window and frame pacing
 
 | key | default | notes |
 | --- | --- | --- |
-| `BorderlessWindowed` | `1` | borderless windowed, needs -windowed commandline [all; FF] |
-| `DoNotPauseOnMinimize` | `0` | don't pause when unfocused in window/borderless mode [all; FF] |
 | `DrivebyFOVFix` | `1` | fix for driveby shots not landing in the center of the crosshair if you're too high above ground level [all] |
 | `MouseFix` | `1` | fixes the mouse deadzone and removes mouse acceleration from snipers [all; FF] |
 | `VSyncFix` | `1` | fix VSync locking below 60FPS in patch 7 [1004,1060,1061,1070,1100,1110,1120,12043; FF] |
@@ -151,22 +149,6 @@ other mods, game builds and packaging
 | `SteamAchievements` | `1` | mirror GFWL achievement writes to Steam; the original GFWL call still runs, so GFWL achievements stay active [all] |
 | `RemoveRGSCLoginRequirement` | `1` | remove Social Club login requirement so you can play MP even if you skip login on patch 4 and below, or use Play Offline on patch 7 [all] |
 | `SavegameFix` | `1` | remove GFWL savegame CRC check [all] |
-| `SkipLauncher` | `1` | from XLivelessAddon but with some additional improvements, ability to launch game directly from .exe and/or skip the patch 4 launcher by using any other launch/playgtaiv exe [all] |
-| `SkipIntro` | `1` | skip intro screens [all; FF] |
-| `SkipMenu` | `0` | skip main menu, launching straight into the last savegame regardless of what episode that's from (IV if no savegame is found) [all; FF] |
-| `VRAMFix` | `1` | workaround for VRAM above 2GB [all; FF] |
-
-## XLIVELESS
-
-the XLivelessAddon feature set, one key per fix
-
-| key | default | notes |
-| --- | --- | --- |
-| `RemoveDataIntegrityChecks` | `1` | remove GFWL data integrity checks (VDS100/VDS102), from XLivelessAddon [all] |
-| `SkipTokenActivation` | `1` | skip GFWL token activation, from XLivelessAddon [all] |
-| `SkipFirstTimePlayAsk` | `1` | skip the first-time GFWL play prompt, from XLivelessAddon [all] |
-| `SkipInternetConnectionCheck` | `1` | skip the InternetGetConnectedState gate, from XLivelessAddon [all] |
-| `SkipHealthCheck` | `1` | skip the GFWL health check, from XLivelessAddon [all] |
 
 ## INTERFACE
 

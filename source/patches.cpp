@@ -23,7 +23,6 @@ import multiplayer;
 import loading;
 import compatibility;
 import interface;
-import xliveless_features;
 
 namespace opp
 {

@@ -92,8 +92,6 @@ ShakingEngineBlock = 1                               // make the engineblock par
 TBoGTHeliHeightLimit = 0                             // unlocks the height limit for aircraft to the TBoGT level for all episodes [all-1000,1040; FF]
 
 [INPUT]                                      // camera, mouse, window and frame pacing
-BorderlessWindowed = 1                               // borderless windowed, needs -windowed commandline [all; FF]
-DoNotPauseOnMinimize = 0                             // don't pause when unfocused in window/borderless mode [all; FF]
 DrivebyFOVFix = 1                                    // fix for driveby shots not landing in the center of the crosshair if you're too high above ground level [all]
 MouseFix = 1                                         // fixes the mouse deadzone and removes mouse acceleration from snipers [all; FF]
 VSyncFix = 1                                         // fix VSync locking below 60FPS in patch 7 [1004,1060,1061,1070,1100,1110,1120,12043; FF]
@@ -107,10 +105,10 @@ RemoveAllWeaponsProtection = 1                       // make other players no lo
 TeleportProtection = 1                               // make other players no longer able to use malicious trainers to teleport you [all]
 
 [LOADING]                                      // files, saves, DLC and launcher hooks
-)OPCEP"
-R"OPCEP(LoadDLCs = 1                                         // load TBoGT and TLAD in the same folder structure EFLC does it (root folder -> episode's folder) and any more addon episodes in the same format (extra DLC folders should be named Episode3, Episode4, etc. and their ids in setup2.xml be the episode id multiplied by 2) [1060,1070,1080]
+LoadDLCs = 1                                         // load TBoGT and TLAD in the same folder structure EFLC does it (root folder -> episode's folder) and any more addon episodes in the same format (extra DLC folders should be named Episode3, Episode4, etc. and their ids in setup2.xml be the episode id multiplied by 2) [1060,1070,1080]
 LocalSettingsPath = 0                                // moves your savegames and settings to a saves folder inside the game folder [all; FF]
-NewFilesCompatibility = 1                            // adds some extra code that allows script.img and radiohud from newer versions to work (script.img is still 1060+ only, radiohud works on all versions) [all]
+)OPCEP"
+R"OPCEP(NewFilesCompatibility = 1                            // adds some extra code that allows script.img and radiohud from newer versions to work (script.img is still 1060+ only, radiohud works on all versions) [all]
 NewSavesCompatibility = 1                            // makes newer savefiles load properly without needing them to be downgraded first (1060+ only) [all]
 OverrideGTADatPath = 0                               // load gta.dat from another path [all]
 SCOSignatureFix = 1                                  // allow loading of any .sco file regardless of which episode it came from (or which platform it came from, in case of patch 4 and below) this is required for trainer IV parachute support to work [all; FF]
@@ -126,17 +124,6 @@ GFWLProtectionDisabler = 1                           // disable the GFWL xlive.d
 SteamAchievements = 1                                // mirror GFWL achievement writes to Steam; the original GFWL call still runs, so GFWL achievements stay active [all]
 RemoveRGSCLoginRequirement = 1                       // remove Social Club login requirement so you can play MP even if you skip login on patch 4 and below, or use Play Offline on patch 7 [all]
 SavegameFix = 1                                      // remove GFWL savegame CRC check [all]
-SkipLauncher = 1                                     // from XLivelessAddon but with some additional improvements, ability to launch game directly from .exe and/or skip the patch 4 launcher by using any other launch/playgtaiv exe [all]
-SkipIntro = 1                                        // skip intro screens [all; FF]
-SkipMenu = 0                                         // skip main menu, launching straight into the last savegame regardless of what episode that's from (IV if no savegame is found) [all; FF]
-VRAMFix = 1                                          // workaround for VRAM above 2GB [all; FF]
-
-[XLIVELESS]                                      // the XLivelessAddon feature set, one key per fix
-RemoveDataIntegrityChecks = 1                        // remove GFWL data integrity checks (VDS100/VDS102), from XLivelessAddon [all]
-SkipTokenActivation = 1                              // skip GFWL token activation, from XLivelessAddon [all]
-SkipFirstTimePlayAsk = 1                             // skip the first-time GFWL play prompt, from XLivelessAddon [all]
-SkipInternetConnectionCheck = 1                      // skip the InternetGetConnectedState gate, from XLivelessAddon [all]
-SkipHealthCheck = 1                                  // skip the GFWL health check, from XLivelessAddon [all]
 
 [INTERFACE]                                      // menu, HUD and audio toggles
 AddOptionsInMenu = 1                                 // adds some extra menu options if IVMenuAPI is present [all; FF]

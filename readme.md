@@ -15,7 +15,7 @@ pattern libraries as submodules, and `data/plugins/` holds the shipped INI.
 
 ## What it does
 
-Around a hundred and ten independent options. The highlights:
+Around ninety independent options. The highlights:
 
 - **Stability** — aim-projectile, bad-player-model, benchmark, blackscreen,
   collision-deadlock, combined-radio, cutscene, episode-switch, freeze-car,
@@ -32,9 +32,10 @@ Around a hundred and ten independent options. The highlights:
 - **Multiplayer** — better sync, model/weapon support across episodes,
   teleport protection, livery limits, spawn diagnostics and the GFWL CD-key
   kick fix.
-- **Loading / compatibility** — SkipLauncher, SkipIntro, SkipMenu, local
-  settings, DLC loading, new save/file compatibility, ZMenuIV guard and
-  IVMenuAPI registration.
+- **Loading / compatibility** — local settings, DLC loading, new save/file
+  compatibility, ZMenuIV guard and IVMenuAPI registration. XLivelessAddon's
+  launcher/intro/menu/window/VRAM features live in the separate
+  [XLivelessAddon successor](xlivelessaddon/README.md).
 
 Every option is documented in [docs/features.md](docs/features.md), and the full
 key table lives in [docs/ini.md](docs/ini.md).
@@ -43,8 +44,9 @@ key table lives in [docs/ini.md](docs/ini.md).
 
 Safety and performance improvements are folded into the original options; there
 are no per-fix INI keys. `NewSavesCompatibility` uses the validated converter,
-`OutOfCommissionFix` caches the archive, the moving-parts options guard their
-vehicle walk, and `SkipIntro` shows the FusionFix-style 300 ms intro.
+`OutOfCommissionFix` caches the archive, and the moving-parts options guard
+their vehicle walk. Intro/window behaviour now belongs to the separate
+XLivelessAddon successor.
 
 The original path stays compiled. For tests and A/B runs only, set
 `OPCEP_IMPROVEMENTS` (for example `none`, `only:newsaves,ooc`,
@@ -66,19 +68,17 @@ it, the ASI ports its values into the grouped file first; no external converter
 is involved.
 
 Options are grouped into `[STABILITY]`, `[PERFORMANCE]`, `[GRAPHICS]`,
-`[VEHICLES]`, `[INPUT]`, `[MULTIPLAYER]`, `[LOADING]`, `[COMPATIBILITY]`,
-`[XLIVELESS]` and `[INTERFACE]`. Each line ends with a compact build tag
+`[VEHICLES]`, `[INPUT]`, `[MULTIPLAYER]`, `[LOADING]`, `[COMPATIBILITY]`
+and `[INTERFACE]`. Each line ends with a compact build tag
 (`[all]`, `[1060+]`, ...) and, when applicable, `FF`, meaning the option is
 automatically disabled when a FusionFix ASI is present. See
 [docs/fusionfix.md](docs/fusionfix.md) for the full overlap list. If an FF
 option is enabled, a one-time notice lists the options that will not be active.
 
-FusionFix and other plugins sometimes check for a loaded `XLivelessAddon.asi`.
-The `XLivelessAddon.asi` in this repository is an inert marker shim: it does
-nothing on its own, and it does **not** replace the real addon's patches. Use
-the real `XLivelessAddon.asi` when a plugin depends on those patches; do not
-deploy the shim next to FusionFix. The real mod always stays
-`IV.EFLC.OpenPreCEPatch.asi`.
+XLivelessAddon is a **separate module** now. Build it from
+`xlivelessaddon/` (output `XLivelessAddon.asi` plus `XLivelessAddon.ini`) when
+FusionFix or another plugin needs those features. OpenPreCEPatch no longer
+carries an inert shim or any XLivelessAddon-only option.
 
 ## Installation
 
@@ -86,10 +86,9 @@ deploy the shim next to FusionFix. The real mod always stays
 2. Copy `IV.EFLC.OpenPreCEPatch.asi` next to `GTAIV.exe` and `EFLC.exe`.
 3. Copy `IV.EFLC.OpenPreCEPatch.ini` next to it, or let the ASI create it on
    first launch.
-4. Optional: copy `XLivelessAddon.asi` next to it if FusionFix needs to see that
-   module name.
-5. Start the game through `PlayGTAIV.exe`, or enable `SkipLauncher=1` and start
-   `GTAIV.exe` directly.
+4. Optional: copy the separately built `XLivelessAddon.asi` and its
+   `XLivelessAddon.ini` only if you need the XLivelessAddon feature set.
+5. Start the game through `PlayGTAIV.exe`.
 
 If an old `ZolikaPatch.ini` is present and `IV.EFLC.OpenPreCEPatch.ini` is not,
 the ASI imports the old values on first run and writes the grouped file. The old
@@ -126,8 +125,8 @@ premake5 vs2022
 msbuild build\OpenPreCEPatch.sln /p:Configuration=Release /p:Platform=Win32
 ```
 
-The output is `bin/IV.EFLC.OpenPreCEPatch.asi`, the optional
-`bin/XLivelessAddon.asi` shim, and a linker `.map`. CMake is also supported:
+The output is `bin/IV.EFLC.OpenPreCEPatch.asi`, the separate
+`bin/XLivelessAddon.asi` and a linker `.map`. CMake is also supported:
 
 ```bat
 cmake -S . -B build -A Win32
@@ -147,9 +146,8 @@ AimProjectileCrashFix = 1
 [GRAPHICS]
 CarDynamicShadowFix = 1
 
-[XLIVELESS]
-RemoveDataIntegrityChecks = 1
-SkipTokenActivation = 1
+[COMPATIBILITY]
+SteamAchievements = 1
 ```
 
 The old flat `[Options]` layout is still accepted. A key that is absent uses the

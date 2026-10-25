@@ -95,7 +95,7 @@ workspace "OpenPreCEPatch"
 project "IV.EFLC.OpenPreCEPatch"
     targetdir "bin"
     files { "source/**.cpp", "source/**.ixx", "source/**.hxx", "source/**.h" }
-    removefiles { "source/compat/**" }
+    removefiles { "source/compat/**", "source/xliveless_features.ixx" }
     files { "external/hooking/Hooking.Patterns.h", "external/hooking/Hooking.Patterns.cpp" }
     links { "version", "user32", "shlwapi" }
     filter "configurations:Debug"
@@ -111,9 +111,12 @@ project "IV.EFLC.OpenPreCEPatch"
         }
     end
 
+-- XLivelessAddon successor: separate source tree (xlivelessaddon/) and a
+-- separate ASI. Do not mix it into IV.EFLC.OpenPreCEPatch.asi.
 project "XLivelessAddon"
     targetdir "bin"
-    files { "source/compat/xliveless_proxy.cpp" }
+    files { "xlivelessaddon/source/**.cpp", "xlivelessaddon/source/**.h" }
+    files { "external/hooking/Hooking.Patterns.h", "external/hooking/Hooking.Patterns.cpp" }
     links { "user32" }
     filter "configurations:Debug"
         defines { "DEBUG" }
