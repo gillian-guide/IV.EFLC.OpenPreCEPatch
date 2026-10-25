@@ -1,0 +1,4 @@
+0007D258 B4 InstallSkipMenu
+0007D259 93 InstallSkipMenu
+0007D25A BC InstallSkipMenu
+0007D25B 0F InstallSkipMenu

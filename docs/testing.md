@@ -24,6 +24,25 @@ The suite covers:
 - IVMenuAPI probes and the ZMenuIV threshold;
 - the hook registry and the OutOfCommission payload self-test.
 
+## INI write-set matrix
+
+`tools/opcep_matrix.py` is the behaviour safety net. It generates a temporary
+INI for the shipped defaults, all options off, all options on, each option
+alone, each section alone and the frozen legacy `ZolikaPatch.ini`, runs
+`opcep_parity_dump` for each cell and records the write set plus the installer
+arm that produced every byte.
+
+```bat
+python tools\opcep_matrix.py --check
+python tools\opcep_matrix.py --update
+```
+
+The committed baseline is `tests/parity/matrix.json` with per-cell files under
+`tests/parity/writesets/` and per-option attribution under
+`tests/parity/deltas/`. See `tests/parity/README.md` for the cell list and the
+zero-diff policy. `--check` fails on any change, including an unattributed byte
+or a changed game image.
+
 ## Write-set dump
 
 `opcep_parity_dump` maps a copy of a PE32 executable and prints every byte the

@@ -1,0 +1,10 @@
+005659C3 E9 InstallGarageModelFix
+005659C4 D8 InstallGarageModelFix
+005659C5 12 InstallGarageModelFix
+005659C6 6E InstallGarageModelFix
+005659C7 0F InstallGarageModelFix
+00868BB0 E9 InstallGarageModelFix
+00868BB1 CB InstallGarageModelFix
+00868BB2 E0 InstallGarageModelFix
+00868BB3 3D InstallGarageModelFix
+00868BB4 0F InstallGarageModelFix

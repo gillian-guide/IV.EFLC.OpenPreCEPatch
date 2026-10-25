@@ -1,0 +1,12 @@
+002E8627 90 InstallRemoveAllWeaponsProtection
+002E8628 90 InstallRemoveAllWeaponsProtection
+002E8629 90 InstallRemoveAllWeaponsProtection
+002E862A 90 InstallRemoveAllWeaponsProtection
+002E862B 90 InstallRemoveAllWeaponsProtection
+002E862C 90 InstallRemoveAllWeaponsProtection
+002E862D 90 InstallRemoveAllWeaponsProtection
+002E862E 90 InstallRemoveAllWeaponsProtection
+002E862F 90 InstallRemoveAllWeaponsProtection
+002E8630 90 InstallRemoveAllWeaponsProtection
+002E8631 90 InstallRemoveAllWeaponsProtection
+002E8632 90 InstallRemoveAllWeaponsProtection

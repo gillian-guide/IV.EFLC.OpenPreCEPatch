@@ -1,0 +1,5 @@
+004F7CE5 E9 InstallDualVehicleHeadlightsOld
+004F7CE6 46 InstallDualVehicleHeadlightsOld
+004F7CE7 E9 InstallDualVehicleHeadlightsOld
+004F7CE8 70 InstallDualVehicleHeadlightsOld
+004F7CE9 0F InstallDualVehicleHeadlightsOld

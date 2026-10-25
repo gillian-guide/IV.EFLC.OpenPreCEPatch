@@ -1,0 +1,3 @@
+0000338A 90 InstallDoNotPauseOnMinimize
+0000338B 90 InstallDoNotPauseOnMinimize
+001B68A7 06 InstallDoNotPauseOnMinimize

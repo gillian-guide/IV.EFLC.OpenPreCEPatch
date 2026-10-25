@@ -1,0 +1,4 @@
+00C90B18 00 InstallNoPhysicsSleep
+00C90B19 00 InstallNoPhysicsSleep
+00C90B1A 00 InstallNoPhysicsSleep
+00C90B1B 00 InstallNoPhysicsSleep

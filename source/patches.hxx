@@ -15,8 +15,19 @@ namespace opp
     // installs through the menu even with its INI key off, so its arm asks this.
     void SetMenuIntegration(bool available) noexcept;
 
-    // Applies every INI-gated install for `build`.
-    void PatchGame(GameBuild build, GameImage image, const Config& config);
+    // Optional per-arm instrumentation for the offline dump tool. The ASI never
+    // installs an observer, so the release path stays allocation- and call-free.
+    struct PatchObserver
+    {
+        void* user{};
+        void (*begin)(void* user, const char* name){};
+        void (*end)(void* user, const char* name){};
+    };
+
+    // Applies every INI-gated install for `build`. When `observer` is set, its
+    // hooks bracket every registered arm, in install order.
+    void PatchGame(GameBuild build, GameImage image, const Config& config,
+                   const PatchObserver& observer = {});
 
     // The loader's unconditional preamble: seven scans whose results the option
     // bodies read, plus the salt fallback when the build probe misses.

@@ -1,0 +1,5 @@
+0045B093 E9 InstallNewSavesCompatibility
+0045B094 48 InstallNewSavesCompatibility
+0045B095 71 InstallNewSavesCompatibility
+0045B096 7F InstallNewSavesCompatibility
+0045B097 0F InstallNewSavesCompatibility

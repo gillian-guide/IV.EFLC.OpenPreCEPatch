@@ -1,0 +1,4 @@
+000571B0 E9 InstallSpeedupBugFix
+000571B2 93 InstallSpeedupBugFix
+000571B3 BF InstallSpeedupBugFix
+000571B4 0F InstallSpeedupBugFix

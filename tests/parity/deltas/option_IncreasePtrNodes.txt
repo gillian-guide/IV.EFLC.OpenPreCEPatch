@@ -1,0 +1,7 @@
+004DDAE6 00 InstallIncreasePtrNodes
+004DDAE7 E2 InstallIncreasePtrNodes
+004DDAE8 04 InstallIncreasePtrNodes
+004DDB26 00 InstallIncreasePtrNodes
+004DDB27 FA InstallIncreasePtrNodes
+007A47C6 00 InstallIncreasePtrNodes
+007A47C7 FA InstallIncreasePtrNodes

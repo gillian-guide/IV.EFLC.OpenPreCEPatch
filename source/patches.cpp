@@ -30,11 +30,18 @@ namespace opp
         bMenuIntegration = available;
     }
 
-    void PatchGame(GameBuild build, GameImage image, const Config& config)
+    void PatchGame(GameBuild build, GameImage image, const Config& config,
+                   const PatchObserver& observer)
     {
         PatchContext ctx{image, reinterpret_cast<uintptr_t>(image.base), build, config};
 
         for (const Feature& feature : RegisteredFeatures())
+        {
+            if (observer.begin != nullptr)
+                observer.begin(observer.user, feature.name);
             feature.install(ctx);
+            if (observer.end != nullptr)
+                observer.end(observer.user, feature.name);
+        }
     }
 } // namespace opp

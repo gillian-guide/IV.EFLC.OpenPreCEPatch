@@ -1,0 +1,6 @@
+0000C9F9 E9 InstallCarPartsShadowFix
+0000C9FA 82 InstallCarPartsShadowFix
+0000C9FB 9E InstallCarPartsShadowFix
+0000C9FC BF InstallCarPartsShadowFix
+0000C9FD 0F InstallCarPartsShadowFix
+0055A43F EB InstallCarPartsShadowFixStandalone

@@ -1,0 +1,15 @@
+004F7590 E9 InstallForceCarHeadlightShadows
+004F7591 1B InstallForceCarHeadlightShadows
+004F7592 38 InstallForceCarHeadlightShadows
+004F7593 72 InstallForceCarHeadlightShadows
+004F7594 0F InstallForceCarHeadlightShadows
+004F7C61 EB InstallForceCarHeadlightShadows
+004F7CBA E9 InstallForceCarHeadlightShadows
+004F7CBB 78 InstallForceCarHeadlightShadows
+004F7CBC 01 InstallForceCarHeadlightShadows
+004F7CBD 00 InstallForceCarHeadlightShadows
+004F7D2E 40 InstallForceCarHeadlightShadows
+004F7D2F 31 InstallForceCarHeadlightShadows
+004F7D30 C1 InstallForceCarHeadlightShadows
+004F7D31 2E InstallForceCarHeadlightShadows
+004F7DD6 EB InstallForceCarHeadlightShadows

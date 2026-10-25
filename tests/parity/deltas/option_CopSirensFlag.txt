@@ -1,0 +1,15 @@
+004FABE6 E9 InstallCopSirensFlag
+004FABE7 45 InstallCopSirensFlag
+004FABE8 B7 InstallCopSirensFlag
+004FABE9 70 InstallCopSirensFlag
+004FABEA 0F InstallCopSirensFlag
+004FEBD3 E9 InstallCopSirensFlag
+004FEBD4 38 InstallCopSirensFlag
+004FEBD5 77 InstallCopSirensFlag
+004FEBD6 70 InstallCopSirensFlag
+004FEBD7 0F InstallCopSirensFlag
+00646546 E9 InstallCopSirensFlag
+00646547 95 InstallCopSirensFlag
+00646548 DB InstallCopSirensFlag
+00646549 5B InstallCopSirensFlag
+0064654A 0F InstallCopSirensFlag

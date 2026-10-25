@@ -1,0 +1,6 @@
+004F7422 00 InstallBuildingDynamicShadows
+00558955 E9 InstallBuildingDynamicShadows
+00558956 96 InstallBuildingDynamicShadows
+00558957 D1 InstallBuildingDynamicShadows
+00558958 6A InstallBuildingDynamicShadows
+00558959 0F InstallBuildingDynamicShadows

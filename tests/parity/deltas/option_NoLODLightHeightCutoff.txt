@@ -1,0 +1,2 @@
+0089FA70 90 InstallNoLODLightHeightCutoff
+0089FA71 90 InstallNoLODLightHeightCutoff

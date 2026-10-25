@@ -1,0 +1,11 @@
+00077A48 04 InstallStartupTimeFix
+00077A49 92 InstallStartupTimeFix
+00077A4A C1 InstallStartupTimeFix
+00077A4B 2E InstallStartupTimeFix
+004973D9 04 InstallStartupTimeFix
+004973DA 92 InstallStartupTimeFix
+004973DB C1 InstallStartupTimeFix
+004973DC 2E InstallStartupTimeFix
+0049885A 92 InstallStartupTimeFix
+0049885B C1 InstallStartupTimeFix
+0049885C 2E InstallStartupTimeFix

@@ -6,12 +6,15 @@
 
 #include "common.hxx"
 #include "patches.hxx"
+#include "ini_import.hxx"
 #include "skip_launcher.h"
 
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <string>
 #include <vector>
 
 namespace
@@ -79,14 +82,94 @@ namespace
         }
         return true;
     }
+
+    // Per-arm attribution. `before` always mirrors the live image, so each arm's
+    // callback prints only the bytes that arm left changed (the net write set of
+    // that arm, not every transient store).
+    struct Attribution
+    {
+        uint8_t* image{};
+        size_t size{};
+        std::vector<uint8_t> before;
+        std::FILE* out{};
+        size_t bytes{};
+    };
+
+    void AttributionEnd(void* user, const char* arm)
+    {
+        auto* state = static_cast<Attribution*>(user);
+        if (state->out == nullptr)
+            return;
+        for (size_t i = 0; i < state->size; ++i)
+        {
+            const uint8_t now = state->image[i];
+            const uint8_t old = state->before[i];
+            if (now == old)
+                continue;
+            std::fprintf(state->out, "%08zX %02X %02X %s\n", i, old, now, arm);
+            state->before[i] = now;
+            ++state->bytes;
+        }
+    }
+
+    // Exercise the real first-run importer without touching the source fixture:
+    // copy it into a throwaway directory next to `outPath` and keep the result.
+    int ImportLegacy(const char* legacyPath, const char* outPath)
+    {
+        namespace fs = std::filesystem;
+        const fs::path out = fs::absolute(outPath);
+        const fs::path work = out.parent_path() / (out.filename().string() + ".import");
+        std::error_code error;
+        fs::remove_all(work, error);
+        fs::create_directories(work, error);
+        fs::copy_file(legacyPath, work / "ZolikaPatch.ini",
+                      fs::copy_options::overwrite_existing, error);
+        if (error)
+        {
+            std::fprintf(stderr, "opcep_dump: cannot stage %s: %s\n", legacyPath,
+                         error.message().c_str());
+            return 6;
+        }
+
+        const fs::path created = opp::EnsureConfigFile(work);
+        if (created.empty())
+        {
+            std::fprintf(stderr, "opcep_dump: import of %s failed\n", legacyPath);
+            fs::remove_all(work, error);
+            return 6;
+        }
+        fs::copy_file(created, out, fs::copy_options::overwrite_existing, error);
+        fs::remove_all(work, error);
+        if (error)
+        {
+            std::fprintf(stderr, "opcep_dump: cannot write %s: %s\n", outPath,
+                         error.message().c_str());
+            return 6;
+        }
+        std::fprintf(stderr, "opcep_dump: imported %s -> %s\n", legacyPath, outPath);
+        return 0;
+    }
 } // namespace
 
 int main(int argc, char** argv)
 {
+    if (argc == 4 && std::strcmp(argv[1], "--import-legacy") == 0)
+        return ImportLegacy(argv[2], argv[3]);
+
     if (argc < 3)
     {
-        std::fprintf(stderr, "usage: opcep_dump <game.exe> <ini> <out.txt>\n");
+        std::fprintf(stderr,
+                     "usage: opcep_dump <game.exe> <ini> <out.txt> "
+                     "[--attribution <arm.txt>]\n"
+                     "       opcep_dump --import-legacy <legacy.ini> <out.ini>\n");
         return 1;
+    }
+
+    const char* attributionPath = nullptr;
+    for (int i = 4; i + 1 < argc; ++i)
+    {
+        if (std::strcmp(argv[i], "--attribution") == 0)
+            attributionPath = argv[i + 1];
     }
 
     std::vector<uint8_t> file_image;
@@ -132,6 +215,23 @@ int main(int argc, char** argv)
 
     std::vector<uint8_t> pristine(image, image + size);
 
+    Attribution attribution;
+    opp::PatchObserver observer;
+    if (attributionPath != nullptr)
+    {
+        attribution.image = image;
+        attribution.size = size;
+        attribution.before = pristine;
+        attribution.out = std::fopen(attributionPath, "wb");
+        if (attribution.out == nullptr)
+        {
+            std::fprintf(stderr, "opcep_dump: cannot write %s\n", attributionPath);
+            return 5;
+        }
+        observer.user = &attribution;
+        observer.end = &AttributionEnd;
+    }
+
     // The loader's launcher stage runs before the option pass, exactly as it
     // does in the ASI. Hook destinations are null here; the signature writes are
     // what the write-set comparison needs.
@@ -140,9 +240,19 @@ int main(int argc, char** argv)
         SkipLauncherReport report;
         (void)ApplySkipLauncher({image, size}, nullptr, nullptr, report,
                                 SkipLauncherStage::all);
+        // The launcher stage runs outside PatchGame; attribute its net writes to
+        // a pseudo-arm so a SkipLauncher-only cell is still explainable.
+        if (observer.end != nullptr)
+            observer.end(observer.user, "apply:SkipLauncher");
     }
 
-    opp::PatchGame(opp::GameBuild::v1080, opp::GameImage{image, size}, config);
+    opp::PatchGame(opp::GameBuild::v1080, opp::GameImage{image, size}, config, observer);
+
+    if (attribution.out != nullptr)
+    {
+        std::fclose(attribution.out);
+        std::fprintf(stderr, "opcep_dump: %zu attributed bytes\n", attribution.bytes);
+    }
 
     std::FILE* out = std::fopen(argv[3], "wb");
     if (!out)

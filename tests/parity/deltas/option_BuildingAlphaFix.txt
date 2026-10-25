@@ -1,0 +1,17 @@
+005594C4 E9 InstallBuildingAlphaFix
+005594C5 5B InstallBuildingAlphaFix
+005594C6 04 InstallBuildingAlphaFix
+005594C7 00 InstallBuildingAlphaFix
+00559CD3 90 InstallBuildingAlphaFix
+00559CD4 90 InstallBuildingAlphaFix
+00559CD5 90 InstallBuildingAlphaFix
+00559CD6 90 InstallBuildingAlphaFix
+00559CD7 90 InstallBuildingAlphaFix
+00559CD8 90 InstallBuildingAlphaFix
+00559CD9 90 InstallBuildingAlphaFix
+00559CDA 90 InstallBuildingAlphaFix
+00559CDB 90 InstallBuildingAlphaFix
+00559CDC 90 InstallBuildingAlphaFix
+00559CDD 90 InstallBuildingAlphaFix
+00559CDE 90 InstallBuildingAlphaFix
+00559CDF 90 InstallBuildingAlphaFix

@@ -1,0 +1,6 @@
+00767F22 90 InstallBikePhoneAnimsFix
+00767F23 90 InstallBikePhoneAnimsFix
+00767F24 90 InstallBikePhoneAnimsFix
+00767F25 90 InstallBikePhoneAnimsFix
+00767F26 90 InstallBikePhoneAnimsFix
+00767F27 90 InstallBikePhoneAnimsFix

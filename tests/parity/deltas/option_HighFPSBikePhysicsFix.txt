@@ -1,0 +1,5 @@
+0079C05B E9 InstallHighFPSBikePhysicsFix
+0079C05C 00 InstallHighFPSBikePhysicsFix
+0079C05D 2F InstallHighFPSBikePhysicsFix
+0079C05E 48 InstallHighFPSBikePhysicsFix
+0079C05F 0F InstallHighFPSBikePhysicsFix

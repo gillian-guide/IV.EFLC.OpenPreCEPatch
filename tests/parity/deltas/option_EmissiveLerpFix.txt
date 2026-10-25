@@ -1,0 +1,5 @@
+003F8BA1 E9 InstallEmissiveLerpFix
+003F8BA2 BA InstallEmissiveLerpFix
+003F8BA3 23 InstallEmissiveLerpFix
+003F8BA4 82 InstallEmissiveLerpFix
+003F8BA5 0F InstallEmissiveLerpFix

@@ -1,0 +1,5 @@
+003CBF70 E9 InstallRemoveGFWLUpdatePopup
+003CBF71 6B InstallRemoveGFWLUpdatePopup
+003CBF72 95 InstallRemoveGFWLUpdatePopup
+003CBF73 83 InstallRemoveGFWLUpdatePopup
+003CBF74 0F InstallRemoveGFWLUpdatePopup
