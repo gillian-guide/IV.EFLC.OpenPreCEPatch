@@ -5,7 +5,6 @@
 #include "game.hxx"
 
 #include <algorithm>
-#include <vector>
 
 extern const char* const kModelNames[];
 extern const size_t kModelNameCount;
@@ -13,40 +12,51 @@ extern "C" uint8_t zpatch_opt_model_index;
 
 namespace
 {
+    // ModelNameIndex: sorted (hash, first table index) pairs. The original scans
+    // all 38,455 names per diagnostic lookup; the table is static, so build the
+    // index once. A fixed array keeps this free of CRT/TLS-backed static
+    // initialisation, which is unsafe before the ASI's CRT is ready.
+    constexpr size_t kModelIndexCapacity = 40000;
+
     struct ModelHashEntry
     {
         uint32_t hash;
         uint32_t index;
     };
 
-    // ModelNameIndex: sorted (hash, first table index) pairs. The original scans
-    // all 38,455 names per diagnostic lookup; the table is static, so build the
-    // index once. The state machine keeps a second thread from reading a partial
-    // table without relying on CRT thread-safe statics.
-    std::vector<ModelHashEntry>& ModelHashIndex()
+    ModelHashEntry g_modelIndex[kModelIndexCapacity];
+    size_t g_modelIndexCount = 0;
+    volatile LONG g_modelIndexState = 0;  // 0 uninitialised, 1 building, 2 ready
+
+    bool BuildModelHashIndex() noexcept
     {
-        static std::vector<ModelHashEntry> index;
-        static volatile LONG state = 0;  // 0 uninitialised, 1 building, 2 ready
         for (;;)
         {
-            const LONG observed = InterlockedCompareExchange(&state, 1, 0);
+            const LONG observed =
+                InterlockedCompareExchange(&g_modelIndexState, 1, 0);
             if (observed == 2)
-                return index;
+                return g_modelIndexCount != 0;
             if (observed == 1)
             {
                 Sleep(0);
                 continue;
             }
-            index.reserve(kModelNameCount);
+            if (kModelNameCount > kModelIndexCapacity)
+            {
+                InterlockedExchange(&g_modelIndexState, 2);
+                return false;
+            }
             for (size_t i = 0; i < kModelNameCount; ++i)
-                index.push_back({opp::GameHash(kModelNames[i]),
-                                 static_cast<uint32_t>(i)});
-            std::stable_sort(index.begin(), index.end(),
-                             [](const ModelHashEntry& left, const ModelHashEntry& right) {
-                                 return left.hash < right.hash;
-                             });
-            InterlockedExchange(&state, 2);
-            return index;
+                g_modelIndex[i] = {opp::GameHash(kModelNames[i]),
+                                   static_cast<uint32_t>(i)};
+            std::sort(g_modelIndex, g_modelIndex + kModelNameCount,
+                      [](const ModelHashEntry& left, const ModelHashEntry& right) {
+                          if (left.hash != right.hash) return left.hash < right.hash;
+                          return left.index < right.index;
+                      });
+            g_modelIndexCount = kModelNameCount;
+            InterlockedExchange(&g_modelIndexState, 2);
+            return true;
         }
     }
 } // namespace
@@ -75,12 +85,30 @@ namespace opp
             return "**UNKNOWN**";
         }
 
-        const std::vector<ModelHashEntry>& index = ModelHashIndex();
-        const auto found = std::lower_bound(
-            index.begin(), index.end(), hash,
-            [](const ModelHashEntry& entry, uint32_t value) { return entry.hash < value; });
-        if (found != index.end() && found->hash == hash)
-            return kModelNames[found->index];
+        if (BuildModelHashIndex())
+        {
+            size_t low = 0;
+            size_t high = g_modelIndexCount;
+            while (low < high)
+            {
+                const size_t mid = low + (high - low) / 2;
+                if (g_modelIndex[mid].hash < hash)
+                    low = mid + 1;
+                else
+                    high = mid;
+            }
+            if (low < g_modelIndexCount && g_modelIndex[low].hash == hash)
+                return kModelNames[g_modelIndex[low].index];
+            return "**UNKNOWN**";
+        }
+
+        // Index unavailable (catalogue grew past the fixed capacity): keep the
+        // original lookup as the fallback.
+        for (size_t i = 0; i < kModelNameCount; ++i)
+        {
+            if (GameHash(kModelNames[i]) == hash)
+                return kModelNames[i];
+        }
         return "**UNKNOWN**";
     }
 } // namespace opp
