@@ -88,10 +88,11 @@ marks the same options with `FF`.
 
 ## XLivelessAddon
 
-`XLivelessAddon.asi` is a marker shim: its `DllMain` and `InitializeASI` are
-empty, and it exports `OpcepCompatShim`. Its only job is to satisfy a plugin
-that checks whether `XLivelessAddon.asi` is loaded. OpenPreCEPatch recognises the
-export and does not treat the shim as an external XLivelessAddon.
+`XLivelessAddon.asi` built here is a marker shim: its `DllMain` and
+`InitializeASI` are empty, and it exports `OpcepCompatShim`. It only satisfies a
+presence check; it does not reproduce the real addon's patches and should not be
+used together with FusionFix. OpenPreCEPatch recognises the export and does not
+treat the shim as an external XLivelessAddon.
 
 ## Install order
 

@@ -48,10 +48,15 @@ vehicle walk, and `SkipIntro` shows the FusionFix-style 300 ms intro.
 
 The original path stays compiled. For tests and A/B runs only, set
 `OPCEP_IMPROVEMENTS` (for example `none`, `only:newsaves,ooc`,
-`except:skipintro`) or build with `-DOPCEP_PARITY_BASELINE=ON`. A normal install
+`except:windowed`) or build with `-DOPCEP_PARITY_BASELINE=ON`. A normal install
 does not need either. The exact write-set effect is recorded in
 [docs/improvements-log.md](docs/improvements-log.md) and checked by
 `tools/opcep_matrix.py` against the committed `tests/parity/matrix.json`.
+
+The mod also carries the standalone `GFWLProtectionDisabler2019` patch
+(`GFWLProtectionDisabler=1`) and a Steam achievement mirror
+(`SteamAchievements=1`). The mirror hooks `XUserWriteAchievements` and calls the
+original GFWL function first, so GFWL achievements stay intact alongside Steam.
 
 ## Compatibility and the INI
 
@@ -69,9 +74,11 @@ automatically disabled when a FusionFix ASI is present. See
 option is enabled, a one-time notice lists the options that will not be active.
 
 FusionFix and other plugins sometimes check for a loaded `XLivelessAddon.asi`.
-The optional `XLivelessAddon.asi` in this repository is a marker shim: it does
-nothing on its own, it only satisfies that presence check. The real mod always
-stays `IV.EFLC.OpenPreCEPatch.asi`.
+The `XLivelessAddon.asi` in this repository is an inert marker shim: it does
+nothing on its own, and it does **not** replace the real addon's patches. Use
+the real `XLivelessAddon.asi` when a plugin depends on those patches; do not
+deploy the shim next to FusionFix. The real mod always stays
+`IV.EFLC.OpenPreCEPatch.asi`.
 
 ## Installation
 

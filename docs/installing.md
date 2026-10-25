@@ -17,9 +17,11 @@ Copy next to `GTAIV.exe` / `EFLC.exe`:
 
 Optional:
 
-- `XLivelessAddon.asi` — a marker shim for FusionFix and other plugins that
-  check for a loaded XLivelessAddon. It does nothing on its own; install the real
-  `IV.EFLC.OpenPreCEPatch.asi` as well.
+- The real `XLivelessAddon.asi` is only needed if another plugin depends on the
+  patches it applies. The `XLivelessAddon.asi` built by this repository is an
+  inert marker shim and should **not** be used together with FusionFix: the real
+  addon boots, the inert shim does not. If you already have the real addon, keep
+  it; otherwise do not install the shim.
 
 ## Upgrading from ZolikaPatch
 
