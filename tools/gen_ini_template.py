@@ -8,6 +8,7 @@ string, so the first-run template and the documented file cannot drift.
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -54,15 +55,29 @@ def chunks(text: str) -> list[str]:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true",
+                        help="verify the checked-in template instead of writing it")
+    args = parser.parse_args()
     text = INI.read_text(encoding="utf-8")
     if ")OPCEP\"" in text:
         print("error: INI contains the raw-string terminator", file=sys.stderr)
         return 1
     if not text.endswith("\n"):
         text += "\n"
-    body = "\n".join(f'R"OPCEP({part})OPCEP"' for part in chunks(text))
-    OUT.write_text(HEADER + body + FOOTER, encoding="utf-8")
-    print(f"wrote {OUT} ({len(text)} INI bytes, {len(chunks(text))} chunks)")
+    parts = chunks(text)
+    body = "\n".join(f'R"OPCEP({part})OPCEP"' for part in parts)
+    generated = HEADER + body + FOOTER
+    if args.check:
+        current = OUT.read_text(encoding="utf-8") if OUT.exists() else ""
+        if current != generated:
+            print(f"error: {OUT} is stale; run tools/gen_ini_template.py",
+                  file=sys.stderr)
+            return 1
+        print(f"ok: {OUT} matches the shipped INI")
+        return 0
+    OUT.write_text(generated, encoding="utf-8")
+    print(f"wrote {OUT} ({len(text)} INI bytes, {len(parts)} chunks)")
     return 0
 
 

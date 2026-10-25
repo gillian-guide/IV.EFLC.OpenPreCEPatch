@@ -24,6 +24,9 @@ jobs:
     - name: Add MSBuild
       uses: microsoft/setup-msbuild@v2
 
+    - name: Check generated INI template
+      run: python tools/gen_ini_template.py --check
+
     - name: Configure
       run: cmake -S . -B build -A Win32
 
