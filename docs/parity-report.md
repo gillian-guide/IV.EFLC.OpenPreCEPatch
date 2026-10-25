@@ -76,4 +76,5 @@ b95decc fix: accept header-only save chunks and cover them in tests
 f6f5fd1 fix: keep the original malloc path for zero-payload chunks when guards are off
 98a1531 fix: build the model-name index without CRT/TLS-backed statics
 da1ad14 docs: note the fixed-array model index
+9039ba9 refactor: fold improvements into original options and add test-only switches (good-folded-20261025)
 ```
