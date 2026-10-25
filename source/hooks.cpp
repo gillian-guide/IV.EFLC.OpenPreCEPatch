@@ -1228,14 +1228,22 @@ extern "C" bool zpatch_new_saves_scan(void* handle, int guarded, int seek,
         }
         if (!skipped)
         {
-            void* payload = std::malloc(zpatch_new_saves_element_count);
-            if (guarded != 0 && payload == nullptr)
-                return false;
-            const size_t payload_read =
-                std::fread(payload, 1, zpatch_new_saves_element_count, file);
-            std::free(payload);
-            if (guarded != 0 && payload_read != zpatch_new_saves_element_count)
-                return false;
+            if (zpatch_new_saves_element_count == 0u)
+            {
+                // A header-only chunk is valid; do not treat malloc(0) == null
+                // as an allocation failure.
+            }
+            else
+            {
+                void* payload = std::malloc(zpatch_new_saves_element_count);
+                if (guarded != 0 && payload == nullptr)
+                    return false;
+                const size_t payload_read =
+                    std::fread(payload, 1, zpatch_new_saves_element_count, file);
+                std::free(payload);
+                if (guarded != 0 && payload_read != zpatch_new_saves_element_count)
+                    return false;
+            }
         }
         if (i == 9) local9 = size == 19525u ? 1u : 0u;
         if (i == 16) local16 = size == 3703u ? 1u : 0u;

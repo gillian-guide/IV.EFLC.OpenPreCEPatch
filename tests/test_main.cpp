@@ -261,6 +261,34 @@ namespace
             CHECK(!zpatch_new_saves_scan(file, 1, 0, &flag9, &flag16, &flag13));
             std::fclose(file);
         }
+
+        // Header-only chunks (size == 9) are valid and must not be rejected by
+        // the malloc(0) guard.
+        file = std::fopen(path.string().c_str(), "wb");
+        CHECK(file != nullptr);
+        if (file)
+        {
+            uint8_t header[0x110] = {};
+            std::memcpy(header + 0x0C, "SAVE", 4);
+            std::fwrite(header, 1, sizeof(header), file);
+            for (int i = 0; i < 18; ++i)
+                WriteNewSaveChunk(file, 9);
+            std::fclose(file);
+            file = std::fopen(path.string().c_str(), "rb");
+            CHECK(file != nullptr);
+            if (file)
+            {
+                CHECK(zpatch_new_saves_scan(file, 1, 0, &flag9, &flag16, &flag13));
+                std::fclose(file);
+                file = std::fopen(path.string().c_str(), "rb");
+                CHECK(file != nullptr);
+                if (file)
+                {
+                    CHECK(zpatch_new_saves_scan(file, 1, 1, &flag9, &flag16, &flag13));
+                    std::fclose(file);
+                }
+            }
+        }
         std::filesystem::remove(path);
     }
 
