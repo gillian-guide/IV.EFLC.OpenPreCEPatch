@@ -211,3 +211,12 @@ cannot move or overwrite the mirror site. No option gating is needed.
 ## 2026-10-26 - XLivelessAddon split
 
 All XLivelessAddon-only features (SkipLauncher, SkipIntro, SkipMenu, BorderlessWindowed, DoNotPauseOnMinimize, VRAMFix, the five GFWL fixes, custom paths/registry) were removed from the main ASI and now live in the separate xlivelessaddon subproject (XLivelessAddon.asi, XLivelessAddon.ini). The main matrix lost those cells (104 cells / 39,807 writes); all-off is 0 again.
+
+## 2026-10-26 - GFWL disconnect regression guard
+
+The split exposed two code paths that were not in the original XLivelessAddon/OpenPreCEPatch combination and are not yet live-validated against a GFWL session:
+
+- the recovered SkipLauncher main stage (the fork now defaults `SkipLauncher=0`, so the original DFA block is the default again);
+- the `xlive.dll+0xF1605` protection patch (main now defaults `GFWLProtectionDisabler=0`).
+
+Both remain available as explicit opt-ins. Existing installed INIs keep their old values; set both to 0 to return to the pre-split GFWL behaviour.

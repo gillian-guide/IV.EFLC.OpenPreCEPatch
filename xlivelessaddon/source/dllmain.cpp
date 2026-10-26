@@ -284,7 +284,7 @@ LSTATUS WINAPI CustomRegQueryValueExA(HKEY hKey, LPCSTR lpValueName, LPDWORD lpR
 static const char kDefaultIni[] =
     "; XLivelessAddon successor\n"
     "[MAIN]\n"
-    "SkipLauncher = 1\n"
+    "SkipLauncher = 0\n"
     "CustomSavePath = \"\"\n"
     "CustomSettingsPath = \"\"\n"
     "RemoveRegistryPathDependency = 1\n"
@@ -408,7 +408,7 @@ DWORD WINAPI Init(LPVOID)
     bool bDoNotPauseOnMinimize = flag("DoNotPauseOnMinimize", "0");
     bool bBorderlessWindowed = flag("BorderlessWindowed", "0");
     bool bVRAMFix = flag("VRAMFix", "1");
-    bool bSkipLauncher = flag("SkipLauncher", "1");
+    bool bSkipLauncher = flag("SkipLauncher", "0");
 
     // Never stack on FusionFix: it owns the intro/window/VRAM subsystems.
     if (FusionFixPresent())

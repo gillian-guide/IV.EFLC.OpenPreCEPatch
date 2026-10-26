@@ -549,7 +549,7 @@ remove "update or sign out of LIVE" popup for GFWL when running patch 5 and belo
 
 disable the GFWL xlive.dll protection check (same one-byte patch as GFWLProtectionDisabler2019) [all]
 
-- **Default:** `1`
+- **Default:** `0`
 
 ### SteamAchievements
 
