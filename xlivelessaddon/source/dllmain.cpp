@@ -555,9 +555,17 @@ DWORD WINAPI Init(LPVOID)
         // the XLivelessAddon path only ever ran the DFA and ROM stages. Applying
         // the main table after the addon already hooked the launcher is what
         // broke the GFWL session.
-        (void)ApplySkipLauncher(image, &ResolveSkipHook, nullptr, report,
-                                SkipLauncherStage::dfa | SkipLauncherStage::rom);
-        XLog("skipLauncher entries=%zu missing=%zu writes=%zu jump=%d dfa=%zu/%zu rom=%zu/%zu", report.entriesFound, report.entriesMissing, report.writes, report.jumpInstalled ? 1 : 0, report.dfaInstalls, report.dfaMissing, report.romInstalls, report.romMissing);
+        const PatchResult launcher =
+            ApplySkipLauncher(image, &ResolveSkipHook, nullptr, report,
+                              SkipLauncherStage::dfa | SkipLauncherStage::rom);
+        // ApplySkipLauncher publishes the captured CreateFile IAT slot itself
+        // (before the hook can run), so only the diagnostics are left here.
+        XLog("skipLauncher status=%d entries=%zu missing=%zu writes=%zu jump=%d dfa=%zu/%zu rom=%zu/%zu collected=%zu createFileSlot=%08X (%s)",
+             static_cast<int>(launcher.code), report.entriesFound, report.entriesMissing,
+             report.writes, report.jumpInstalled ? 1 : 0, report.dfaInstalls,
+             report.dfaMissing, report.romInstalls, report.romMissing,
+             report.collectedInstalls, report.createFileSlot,
+             report.createFileSlot != 0 ? "forwarding" : "direct");
     }
 
     {

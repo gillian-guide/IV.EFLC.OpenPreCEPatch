@@ -924,6 +924,18 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 
                 capture.get(0).get<uint8_t>() + kDfaCaptureSlotOffset);
 
+
+
+#if defined(_WIN32)
+
+        // Publish (or clear) the captured slot as part of the pass, so the
+
+        // create_file body can never read a stale slot from an earlier image.
+
+        PublishCreateFileSlot(report);
+
+#endif
+
     }
 
 
@@ -1561,6 +1573,18 @@ void SetCreateFileSlot(uint32_t slot_va) noexcept
 {
 
     gCreateFileSlot.store(slot_va);
+
+}
+
+
+
+bool PublishCreateFileSlot(const SkipLauncherReport& report) noexcept
+
+{
+
+    SetCreateFileSlot(report.createFileSlot);
+
+    return report.createFileSlot != 0;
 
 }
 

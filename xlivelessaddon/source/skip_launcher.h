@@ -302,6 +302,20 @@ void SetCreateFileSlot(uint32_t slot_va) noexcept;
 
 
 
+// Publishes the slot ApplySkipLauncher captured into the create_file body, so it
+
+// forwards through the game's IAT slot (and any detour another ASI installed
+
+// there), like the original trampoline at 0x10004820. Returns true when a slot
+
+// was captured. Call it after ApplySkipLauncher, before the game reaches the
+
+// hooked DFA entry point.
+
+bool PublishCreateFileSlot(const SkipLauncherReport& report) noexcept;
+
+
+
 // Resolves a SkipHook to the reimplemented body; 0 for an unknown hook.
 
 uintptr_t ResolveSkipHook(SkipHook hook, void* user) noexcept;
