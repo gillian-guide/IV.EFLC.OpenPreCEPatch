@@ -442,6 +442,16 @@ DWORD WINAPI Init(LPVOID)
     }
     XLog("ini=%s legacy=%s skipLauncher=%d skipIntro=%d skipMenu=%d dontPause=%d borderless=%d vram=%d skipWeb=%d registry=%d fusionfix=%d", iniPath.c_str(), legacyPath.c_str(), bSkipLauncher, bSkipIntro, bSkipMenu, bDoNotPauseOnMinimize, bBorderlessWindowed, bVRAMFix, bSkipWebConnect, bRemoveRegistryPathDependency, FusionFixPresent());
 
+    // The fork has no write-set dump, so the log records which optional installs
+    // actually applied: -1 = option off, 0 = pattern missing, 1 = installed.
+    int borderlessInstalled = -1;
+    int focusInstalled = -1;
+    bool skipIntroSite = false;
+    bool skipMenuSite = false;
+    int vramHooks = 0;
+    size_t registryPatches = 0;
+    bool legacyRom = false;
+
     // Unprotect image - make .text and .rdata section writeable
     // get load address of the exe
     DWORD dwLoadOffset = (DWORD)GetModuleHandle(NULL);
@@ -509,6 +519,7 @@ DWORD WINAPI Init(LPVOID)
     };
 
     auto game_version = gv();
+    XLog("build=%u%s", game_version, game_version == UINT_MAX ? " (unknown)" : "");
     auto gv_not = [&game_version](std::initializer_list<uint32_t> v) -> bool
     {
         if (std::find(std::begin(v), std::end(v), game_version) != std::end(v))
@@ -571,9 +582,10 @@ DWORD WINAPI Init(LPVOID)
     {
         const GameImage image{pImageBase, pNtHeader->OptionalHeader.SizeOfImage};
         if (bBorderlessWindowed)
-            (void)InstallBorderlessHooks(image);
+            borderlessInstalled = InstallBorderlessHooks(image) ? 1 : 0;
         if (bDoNotPauseOnMinimize)
-            (void)InstallFocusLossInputHook(image);
+            focusInstalled = InstallFocusLossInputHook(image) ? 1 : 0;
+        XLog("window: borderless=%d focusLoss=%d", borderlessInstalled, focusInstalled);
     }
 
     // process patches
@@ -875,6 +887,11 @@ DWORD WINAPI Init(LPVOID)
     }
 
     // windows message id [v1000 - v1008]
+    // Note: this legacy ROM service also runs when SkipLauncher=1, i.e. next to
+    // the recovered DFA/ROM stage above. The log records it so a live run can
+    // show the overlap; gating it off is a launcher-path decision that needs a
+    // live GFWL test. The writes stay unguarded like the original addon's.
+    legacyRom = true;
     pattern = hook::pattern("A1 ? ? ? ? 8B 0D ? ? ? ? 68 ? ? ? ? 53 50 51 FF 15");
     injector::WriteMemory(*pattern.get_first<uint32_t>(1), WM_ROM, true);
     injector::WriteMemory(*pattern.get_first<uint32_t>(7), CreateROMWindow(), true); // window handle
@@ -923,6 +940,7 @@ DWORD WINAPI Init(LPVOID)
             pattern = hook::pattern("89 91 ? ? ? ? 8D 44 24 ? 68 ? ? ? ? 50");
             if (pattern.size() > 0)
             {
+                skipIntroSite = true;
                 g_skip_intro_resume = (uint32_t)pattern.get_first(0);
                 injector::MakeJMP(pattern.get_first(-6), SkipIntroBody, true);
             }
@@ -935,6 +953,7 @@ DWORD WINAPI Init(LPVOID)
         if (pattern.size() > 0)
         {
             // [v1002 - v1008]
+            skipMenuSite = true;
             hbsub_7870A0.fun = injector::MakeCALL(pattern.get_first(23), sub_7870A0).get();
         }
         else
@@ -942,13 +961,19 @@ DWORD WINAPI Init(LPVOID)
             // [v1000]
             pattern = hook::pattern("6A 00 E8 ? ? ? ? 83 C4 04 8B 8C 24 ? ? ? ? 5F 5E 5D 5B 33 CC E8 ? ? ? ? 81 C4 ? ? ? ? C3");
             if (pattern.size() > 0)
+            {
+                skipMenuSite = true;
                 hbsub_7870A0.fun = injector::MakeCALL(pattern.get(0).get<uintptr_t>(2), sub_7870A0).get();
+            }
             else
             {
                 // [v1001]
                 pattern = hook::pattern("6A 00 E8 ? ? ? ? 83 C4 04 8B 8C 24 ? ? ? ? 5F 5E 5B 33 CC E8 ? ? ? ? 8B E5 5D C3");
                 if (pattern.size() > 0)
+                {
+                    skipMenuSite = true;
                     hbsub_7870A0.fun = injector::MakeCALL(pattern.get(0).get<uintptr_t>(2), sub_7870A0).get();
+                }
             }
         }
     }
@@ -1023,14 +1048,17 @@ DWORD WINAPI Init(LPVOID)
                 if (ptr == pRegOpenKeyA)
                 {
                     *(size_t*)i = (size_t)CustomRegOpenKeyA;
+                    ++registryPatches;
                 }
                 else if (ptr == pRegQueryValueExA)
                 {
                     *(size_t*)i = (size_t)CustomRegQueryValueExA;
+                    ++registryPatches;
                 }
                 else if (ptr == pRegOpenKeyExA)
                 {
                     *(size_t*)i = (size_t)CustomRegOpenKeyExA;
+                    ++registryPatches;
                 }
 
                 VirtualProtect((size_t*)i, sizeof(size_t), dwProtect[0], &dwProtect[1]);
@@ -1057,18 +1085,29 @@ DWORD WINAPI Init(LPVOID)
         // workaround for vram detection, so settings won't be locked out [v1000 - v1007]
         pattern = hook::pattern("E8 ? ? ? ? D9 E8 85 C0");
         if (pattern.size() > 0)
+        {
             hbGetVidMem.fun = injector::MakeCALL(pattern.get_first(0), GetVidMem).get();
+            ++vramHooks;
+        }
 
         pattern = hook::pattern("E8 ? ? ? ? F3 0F 10 0D ? ? ? ? F3 0F 5C 0D");
         if (pattern.size() > 0)
+        {
             hbGetVidMem.fun = injector::MakeCALL(pattern.get_first(0), GetVidMem).get();
+            ++vramHooks;
+        }
 
         pattern = hook::pattern("E8 ? ? ? ? F3 0F 10 05 ? ? ? ? 89 44 24 08 6A 01 8D 44 24");
         if (pattern.size() > 0)
+        {
             hbGetVidMem.fun = injector::MakeCALL(pattern.get_first(0), GetVidMem).get();
+            ++vramHooks;
+        }
     }
 
-    XLog("init complete");
+    XLog("init complete: skipIntroSite=%d skipMenuSite=%d vramHooks=%d registryIAT=%zu legacyRom=%d (skipLauncher=%d)",
+         skipIntroSite ? 1 : 0, skipMenuSite ? 1 : 0, vramHooks, registryPatches,
+         legacyRom ? 1 : 0, bSkipLauncher ? 1 : 0);
     return 0;
 }
 
