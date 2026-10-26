@@ -29,7 +29,7 @@ DllMain / InitializeASI
 | `source/ini_import.*` | first-run INI creation and ZolikaPatch.ini port |
 | `source/fusionfix_compat.*` | FusionFix detection and the auto-gated option table |
 | `source/game.*` | version classification, joaat hash, process probe |
-| `source/pattern.*` | signature normalisation and scans |
+| `source/pattern.*` | signature normalisation, the executable-section range and the scans |
 | `source/rebased.*` | the globals the hook bodies address, plus the original-name tables |
 | `source/hooks.cpp` | machine-level bodies and the reference-VA registry |
 | `source/patches.*` | the ordered option pass, the folded-improvement publish and the optional dump observer |
@@ -102,3 +102,9 @@ addresses before another arm overwrites the site that owns them.
 destination VA. Installers take a body address through `Abi("name")`, a small
 name table generated from the same definitions. A row whose body is missing is
 skipped, matching the original handler's behaviour.
+
+`helpers.hxx` wraps the installers' scans. `Pattern()` scans the executable
+sections (the range the original `hook::pattern(module)` used) and stops at the
+first match; `PatternAll()` returns every match for the arms that patch match 1
+or loop over their hits. The reduction is pure cost: the write set is identical
+to scanning the whole image and collecting every match.

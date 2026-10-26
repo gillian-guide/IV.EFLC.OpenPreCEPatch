@@ -44,8 +44,10 @@ key table lives in [docs/ini.md](docs/ini.md).
 
 Safety and performance improvements are folded into the original options; there
 are no per-fix INI keys. `NewSavesCompatibility` uses the validated converter,
-`OutOfCommissionFix` caches the archive, and the moving-parts options guard
-their vehicle walk. Intro/window behaviour now belongs to the separate
+`OutOfCommissionFix` caches the archive, the moving-parts options guard their
+vehicle walk, and the installer scans stay inside the executable sections and
+stop at the first match (which is what the original loader did; the startup pass
+is about 3x faster). Intro/window behaviour now belongs to the separate
 XLivelessAddon successor.
 
 The original path stays compiled. For tests and A/B runs only, set

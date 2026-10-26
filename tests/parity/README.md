@@ -50,6 +50,11 @@ mismatch instead of silently changing the numbers.
 ## Policy
 
 - A pure refactor must produce **zero** diff in `--check`.
+- The scanner is limited to the executable sections and stops at the first
+  match, like the original `hook::pattern(module)`; arms that patch more than
+  one match use the explicit multi-match helper. A signature that only matched
+  outside `.text` would change a cell, so `--check` guards that too (none do on
+  the 1080 image: the executable-range change is a zero-diff PASS).
 - The improvements are folded into the original options, so there are no
   per-fix cells. A folded improvement must either produce **zero** write-set
   change (runtime branch) or change only the cell that owns the original option

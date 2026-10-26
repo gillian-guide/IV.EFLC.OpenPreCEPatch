@@ -22,7 +22,16 @@ The suite covers:
 - first-run INI creation from `ZolikaPatch.ini`;
 - FusionFix presence gating;
 - IVMenuAPI probes and the ZMenuIV threshold;
-- the hook registry and the OutOfCommission payload self-test.
+- the hook registry and the OutOfCommission payload self-test;
+- `ExecutableView` and the scan semantics: `Pattern()` returns only the first
+  match inside the executable sections, `PatternAll()` returns every match in
+  that range.
+
+`xla_tests` (also run by `ctest`, 32-bit like the fork) covers the
+XLivelessAddon successor's recovered SkipLauncher path: CreateFile slot capture
+and forwarding, clearing a stale slot, missing signatures installing nothing, and
+invalid input. The fork has no write-set dump; these tests plus the
+`XLivelessAddon.log` counters are its offline check.
 
 ## INI write-set matrix
 
@@ -31,6 +40,11 @@ INI for the shipped defaults, all options off, all options on, each option
 alone, each section alone and the frozen legacy `ZolikaPatch.ini`, runs
 `opcep_parity_dump` for each cell and records the write set plus the installer
 arm that produced every byte.
+
+The dump runs the same installer pass as the ASI, so it also reflects the scan
+semantics: signatures are matched only inside the executable sections and stop
+at the first hit (unless the arm uses the multi-match helper). The matrix is the
+check that those semantics still produce the committed writes.
 
 ```bat
 python tools\opcep_matrix.py --check

@@ -220,3 +220,103 @@ The split exposed two code paths that were not in the original XLivelessAddon/Op
 - the `xlive.dll+0xF1605` protection patch (main now defaults `GFWLProtectionDisabler=0`).
 
 Both remain available as explicit opt-ins. Existing installed INIs keep their old values; set both to 0 to return to the pre-split GFWL behaviour.
+
+## 2026-10-26 - signature scans: executable range, first match
+
+**Baseline:** `41167df` (tag `good-launcher-stage-20261026`). Tags:
+`good-fastscan-20261026` (this checkpoint).
+
+### Finding
+
+`helpers.hxx` handed Hooking.Patterns `base..base + SizeOfImage` and every arm
+calls `pattern.size()`, which scans the whole range and collects every match.
+The original uses `hook::pattern(module)`, i.e. module base to the end of the
+**last executable section**, and the arms read match 0. On 1.0.8.0 that is
+25.9 MB vs 9.9 MB per scan, times 264 scans; measured 5.82 s for the defaults
+installer pass (6.43 s all-on).
+
+### Change
+
+- `pattern::ExecutableView()` returns the PE32 executable range (whole image
+  fallback for a non-PE/synthetic buffer or headers that point outside it).
+- `helpers.hxx`: `Pattern()` uses that range and `count_hint(1)`; new
+  `PatternAll()` keeps every match for the arms that patch match 1 or loop.
+- `PatternAll` call sites: `BuildingDynamicShadows` (hash pair),
+  `NoImpostorHeightCutoff`, `BenchmarkFix`, `EpisodicVehicleSupport` (two
+  NOP pairs) and `StartupTimeFix` (literal loop).
+- `preamble.cpp`, `hooks.cpp` `scan_game`, the death-music and new-files scans,
+  and the CarDecals double-load probe use the executable range too.
+
+The matrix caught the one non-obvious loop consumer before the commit:
+`StartupTimeFix` patched all three matches; with the first-match hint alone it
+patched one (12 -> 4 bytes in `option:StartupTimeFix`). It uses `PatternAll`.
+
+### Deltas / measurements
+
+| comparison | result |
+| --- | --- |
+| `opcep_matrix --check` | **PASS**, 104 cells / 39,807 writes, identical sha256 per cell |
+| defaults installer pass (dump, median) | **5.82 s -> 1.87 s** (3.1x) |
+| all-on installer pass | **6.43 s -> 1.96 s** (3.3x) |
+
+Zero write-set delta: every pattern that the arms use matches inside `.text`,
+and the dropped non-`.text` matches were never part of the original's scan.
+
+### Tests
+
+- `TestPatternScan`: two signature copies in `.text`, one in `.data`;
+  `Pattern()` returns only the first `.text` hit and `PatternAll()` both, never
+  the `.data` copy.
+- `TestExecutableView`: synthetic PE32, non-PE fallback, out-of-image section
+  fallback, no-executable-section fallback.
+- `ctest` PASS (opcep_tests + xla_tests).
+- `python tools/gen_ini_template.py --check` PASS (no INI change).
+
+## 2026-10-26 - XLivelessAddon: CreateFile slot publication
+
+**Tag:** `good-createslot-20261026`.
+
+`ApplySkipLauncher` captured the `FF 15 <slot>` operand into
+`SkipLauncherReport::createFileSlot` and `skip_launcher.h` said the create_file
+body forwards through that slot, but `SetCreateFileSlot` had no caller. The body
+therefore always called `CreateFileA` directly, bypassing whatever the game's
+import slot resolved to (including a detour another ASI installed there); the
+original trampoline at `0x10004820` reads the slot.
+
+`ApplySkipLauncher` now publishes (or clears) the slot as part of the pass,
+before the hook it installs can run. `XLivelessAddon.log` gains
+`createFileSlot=XXXXXXXX (forwarding|direct)`.
+
+`xla_tests` (new, Win32, ctest) covers the forwarding body, the
+clear-on-missing-capture path, missing signatures installing nothing, and an
+empty image as invalid input. A mutation check (removing the publish call) fails
+three assertions. `ctest` PASS.
+
+## 2026-10-26 - moving-parts guards complete
+
+**Tag:** `good-guards-20261026`.
+
+The folded component guards selected by `MovingSteeringWheelSupport`,
+`ShakingEngineBlock` and `MovingPlaneParts` still dereferenced three runtime
+pointers: the script-float slot value (in `script_float()` and in the
+unconditional tail) and the vehicle's lock owner before the steering block. A
+null value faulted exactly like the original, defeating the guard.
+
+All three checks are inside the existing `guarded` path; the unguarded reads run
+unchanged with `OPCEP_IMPROVEMENTS=none` / `OPCEP_PARITY_BASELINE`.
+`opcep_matrix --check` PASS, 104 cells / 39,807 writes (zero delta).
+
+## 2026-10-26 - fork diagnostics and pending ROM-overlap decision
+
+`XLivelessAddon.log` now records the detected build id, the borderless and
+focus-loss install results, whether the SkipIntro/SkipMenu sites were found, the
+VRAM hook count, the ADVAPI32 IAT replacement count, and whether the legacy ROM
+window block ran.
+
+That last flag exposes a split leftover: with the shipped `SkipLauncher=1`, the
+recovered DFA/ROM stage and the legacy `CreateROMWindow`/`WM_ROM` block both run.
+The legacy DFA file hooks are gated by `!bSkipLauncher`; the ROM block is not.
+Gating it changes the launcher path, so it is documented in
+`docs/improvements.md` and left for a live GFWL A/B rather than changed here.
+The fork's unguarded `pattern.get(0)` sites, its busy-wait init loop and the
+custom-save-path length overflow are likewise preserved faults and documented.
