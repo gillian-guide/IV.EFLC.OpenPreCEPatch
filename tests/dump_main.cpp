@@ -7,7 +7,6 @@
 #include "common.hxx"
 #include "patches.hxx"
 #include "ini_import.hxx"
-#include "skip_launcher.h"
 
 #include <algorithm>
 #include <cstdio>

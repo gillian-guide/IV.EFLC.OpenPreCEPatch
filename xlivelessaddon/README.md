@@ -15,7 +15,7 @@ OpenPreCEPatch module no longer carries the XLivelessAddon feature set.
 - VRAM detection fix
 - Data-integrity/token/first-run/health checks from the same code base
 
-The original 2019 source is the baseline. This fork keeps its pattern-based
+The original 2019 source is the baseline. The successor adds the modern config/INI port (reads its own `XLivelessAddon.ini` first, then falls back to `ZolikaPatch.ini` and finally the grouped sections), the FusionFix-style 300 ms intro body, and the same build/runtime conventions as OpenPreCEPatch. This fork keeps its pattern-based
 installs and version gates, while using the same modern submodules as
 OpenPreCEPatch/FusionFix:
 

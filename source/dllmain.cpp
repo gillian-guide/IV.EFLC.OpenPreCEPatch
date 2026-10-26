@@ -15,7 +15,6 @@
 #include "pattern.hxx"
 #include "rebased.h"
 #include "vehicle_lights.hxx"
-#include "skip_launcher.h"
 
 #include <cstdlib>
 #include <filesystem>
@@ -121,86 +120,6 @@ namespace
                 ? 1u
                 : 0u;
         zpatch_citizen_present = GetModuleHandleA("CitizenIV.exe") ? 1u : 0u;
-    }
-
-    bool IsDFAAllowed(opp::GameBuild build)
-    {
-        if (zpatch_xliveless_present)
-            return false;
-        if (GetModuleHandleA("GTAC.dll"))
-            return false;
-
-        switch (build)
-        {
-        case opp::GameBuild::v1100:
-        case opp::GameBuild::v1110:
-        case opp::GameBuild::v1120:
-        case opp::GameBuild::v1130:
-            return false;
-        default:
-            return true;
-        }
-    }
-
-    bool XlivelessBundleEnabled(const opp::Config& config)
-    {
-        // Legacy master switch: an existing ZolikaPatch.ini keeps its behaviour.
-        if (config.Has("Options", "MiscFixes"))
-            return config.Option("MiscFixes", "1");
-
-        return config.Option("RemoveDataIntegrityChecks", "1") ||
-               config.Option("SkipTokenActivation", "1") ||
-               config.Option("SkipFirstTimePlayAsk", "1") ||
-               config.Option("SkipInternetConnectionCheck", "1") ||
-               config.Option("SkipHealthCheck", "1");
-    }
-
-    void ApplyDFA(opp::GameBuild build, const opp::GameImage& image)
-    {
-        if (!IsDFAAllowed(build) || bDFAInstalled)
-            return;
-
-        bDFAInstalled = true;
-        SkipLauncherReport report;
-        (void)ApplySkipLauncher(image, &ResolveSkipHook, nullptr, report,
-                                      SkipLauncherStage::dfa);
-        SetCreateFileSlot(report.createFileSlot);
-    }
-
-    SkipLauncherReport ApplySkipLauncherIfEnabled(opp::GameBuild build,
-                                                        const opp::Config& config)
-    {
-        SkipLauncherReport report;
-        if (!config.Option("SkipLauncher", "1"))
-            return report;
-
-        auto* module = reinterpret_cast<uint8_t*>(GetModuleHandleA(nullptr));
-        if (!module)
-            return report;
-
-        const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(module);
-        if (dos->e_magic != IMAGE_DOS_SIGNATURE)
-            return report;
-
-        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(module + dos->e_lfanew);
-        if (nt->Signature != IMAGE_NT_SIGNATURE)
-            return report;
-
-        SkipLauncherStage stages = SkipLauncherStage::rom;
-        if (!zpatch_xliveless_present)
-            stages = stages | SkipLauncherStage::main;
-        if (IsDFAAllowed(build) && !bDFAInstalled)
-        {
-            stages = stages | SkipLauncherStage::dfa;
-            bDFAInstalled = true;
-        }
-
-        const opp::GameImage image{module, nt->OptionalHeader.SizeOfImage};
-        (void)ApplySkipLauncher(image, &ResolveSkipHook, nullptr, report, stages);
-
-        if (report.createFileSlot)
-            SetCreateFileSlot(report.createFileSlot);
-        return report;
     }
 
     bool IsMenuIntegrationAvailable(const opp::Config& config)

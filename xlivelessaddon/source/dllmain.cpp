@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <stdint.h>
 #include <algorithm>
+#include <fstream>
 #include <initializer_list>
 #include <string>
 #include <string_view>
@@ -25,7 +26,7 @@ __declspec(naked) static void SkipIntroBody()
         imul ecx, ecx, 0x190
         cmp edx, 0x1f40
         jge  skip_intro_ok
-        xor edx, edx
+        mov  edx, 0x12c
     skip_intro_ok:
         jmp dword ptr [g_skip_intro_resume]
     }
@@ -278,6 +279,77 @@ LSTATUS WINAPI CustomRegQueryValueExA(HKEY hKey, LPCSTR lpValueName, LPDWORD lpR
         return ::RegQueryValueExA(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
 }
 
+static const char kDefaultIni[] =
+    "; XLivelessAddon successor\n"
+    "[MAIN]\n"
+    "CustomSavePath = \"\"\n"
+    "CustomSettingsPath = \"\"\n"
+    "RemoveRegistryPathDependency = 1\n"
+    "SkipWebConnect = 0\n"
+    "SkipIntro = 0\n"
+    "SkipMenu = 0\n"
+    "DoNotPauseOnMinimize = 0\n"
+    "BorderlessWindowed = 0\n"
+    "VRAMFix = 1\n";
+
+static std::string ModuleDirectory()
+{
+    char path[MAX_PATH] = {};
+    GetModuleFileNameA(GetModuleHandle(NULL), path, MAX_PATH);
+    char* slash = strrchr(path, '\\');
+    if (slash != nullptr)
+        *(slash + 1) = '\0';
+    return path;
+}
+
+static std::string EnsureIni()
+{
+    const std::string directory = ModuleDirectory();
+    const std::string ini = directory + "XLivelessAddon.ini";
+    if (GetFileAttributesA(ini.c_str()) == INVALID_FILE_ATTRIBUTES)
+    {
+        std::ofstream out(ini, std::ios::binary | std::ios::trunc);
+        if (out)
+            out.write(kDefaultIni, sizeof(kDefaultIni) - 1);
+    }
+    return ini;
+}
+
+static bool IniHas(CIniReader& ini, const char* section, const char* key,
+                   std::string& value)
+{
+    static constexpr const char* kMissing = "\x01xla-missing";
+    value = ini.ReadString(section, key, kMissing);
+    return value != kMissing;
+}
+
+// The 2019 addon only read its own [MAIN]. Accept an old ZolikaPatch.ini too:
+// own INI wins, then the flat legacy [Options], then the grouped legacy sections.
+static std::string ReadOption(CIniReader& own, CIniReader* legacy, const char* key,
+                              const char* defaultValue)
+{
+    static constexpr const char* kSections[] = {
+        "MAIN", "Options", "COMPATIBILITY", "INPUT", "LOADING", "XLIVELESS",
+        "STABILITY", "PERFORMANCE", "GRAPHICS", "VEHICLES", "MULTIPLAYER",
+        "INTERFACE",
+    };
+    std::string value;
+    for (const char* section : kSections)
+    {
+        if (IniHas(own, section, key, value))
+            return value;
+    }
+    if (legacy != nullptr)
+    {
+        for (const char* section : kSections)
+        {
+            if (IniHas(*legacy, section, key, value))
+                return value;
+        }
+    }
+    return defaultValue;
+}
+
 DWORD WINAPI Init(LPVOID)
 {
     if(GetConsoleWindow())
@@ -297,16 +369,30 @@ DWORD WINAPI Init(LPVOID)
             pattern = hook::pattern("B0 04 B2 18 B1 20");
     }
 
-    CIniReader iniReader("");
-    szCustomSavePath = iniReader.ReadString("MAIN", "CustomSavePath", "");
-    szCustomSettingsPath = iniReader.ReadString("MAIN", "CustomSettingsPath", "");
-    bool bRemoveRegistryPathDependency = iniReader.ReadInteger("MAIN", "RemoveRegistryPathDependency", 1) != 0;
-    bool bSkipWebConnect = iniReader.ReadInteger("MAIN", "SkipWebConnect", 0) != 0;
-    bool bSkipIntro = iniReader.ReadInteger("MAIN", "SkipIntro", 0) != 0;
-    bool bSkipMenu = iniReader.ReadInteger("MAIN", "SkipMenu", 0) != 0;
-    bool bDoNotPauseOnMinimize = iniReader.ReadInteger("MAIN", "DoNotPauseOnMinimize", 0) != 0;
-    bool bBorderlessWindowed = iniReader.ReadInteger("MAIN", "BorderlessWindowed", 0) != 0;
-    bool bVRAMFix = iniReader.ReadInteger("MAIN", "VRAMFix", 1) != 0;
+    const std::string iniPath = EnsureIni();
+    CIniReader iniReader(iniPath.c_str());
+    const std::string legacyPath = ModuleDirectory() + "ZolikaPatch.ini";
+    CIniReader legacyReader(legacyPath.c_str());
+    CIniReader* legacy =
+        GetFileAttributesA(legacyPath.c_str()) != INVALID_FILE_ATTRIBUTES
+            ? &legacyReader
+            : nullptr;
+    const auto option = [&](const char* key, const char* defaultValue) {
+        return ReadOption(iniReader, legacy, key, defaultValue);
+    };
+    const auto flag = [&](const char* key, const char* defaultValue) {
+        return atoi(option(key, defaultValue).c_str()) != 0;
+    };
+
+    szCustomSavePath = option("CustomSavePath", "");
+    szCustomSettingsPath = option("CustomSettingsPath", "");
+    bool bRemoveRegistryPathDependency = flag("RemoveRegistryPathDependency", "1");
+    bool bSkipWebConnect = flag("SkipWebConnect", "0");
+    bool bSkipIntro = flag("SkipIntro", "0");
+    bool bSkipMenu = flag("SkipMenu", "0");
+    bool bDoNotPauseOnMinimize = flag("DoNotPauseOnMinimize", "0");
+    bool bBorderlessWindowed = flag("BorderlessWindowed", "0");
+    bool bVRAMFix = flag("VRAMFix", "1");
 
     // Unprotect image - make .text and .rdata section writeable
     // get load address of the exe

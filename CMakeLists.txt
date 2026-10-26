@@ -29,13 +29,10 @@ set(OPCEP_SOURCES
     source/menu.cpp
     source/patches.cpp
     source/pattern.cpp
-    source/skip_launcher.cpp
     source/steam_achievements.cpp
     source/preamble.cpp
     source/rebased.cpp
-    source/skip_launcher.cpp
     source/vehicle_lights.cpp
-    source/windowed.cpp
     source/stability.ixx
     source/performance.ixx
     source/graphics.ixx
@@ -103,12 +100,10 @@ add_executable(opcep_parity_dump
     source/log.cpp
     source/patches.cpp
     source/pattern.cpp
-    source/skip_launcher.cpp
     source/steam_achievements.cpp
     source/preamble.cpp
     source/rebased.cpp
     source/vehicle_lights.cpp
-    source/windowed.cpp
     source/stability.ixx
     source/performance.ixx
     source/graphics.ixx

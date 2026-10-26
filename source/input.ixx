@@ -15,7 +15,6 @@ module;
 #include "rebased.h"
 #include "feature_registry.hxx"
 #include "helpers.hxx"
-#include "windowed.hxx"
 
 export module input;
 
@@ -25,79 +24,8 @@ import settings;
 namespace opp::features
 {
 
-    // BorderlessWindowed
-
-    void InstallBorderlessWindowed(PatchContext& ctx)
-    {
-
-        TraceArm("BorderlessWindowed");
-
-        // BorderlessWindowed: 2 matchjumps, 2 sigwrites
-        if (ctx.Option("BorderlessWindowed", "1") && !FusionFixGateClosed())
-        {
-            const GameImage& image = ctx.image;
-
-            {
-                if (auto pattern = Pattern(image, "FF 15 ? ? ? ? 5F 5E 5D 5B 83 C4 10 C2 10 00"); pattern.size() > 0)
-                {
-                    // The call is installed before the 0x90: offset 5 is the fourth
-                    // byte of the `FF 15 <disp32>` operand, so writing it first would
-                    // make a read of the old destination dereference the corrupted
-                    // operand (0x00D6B460 becomes 0x90D6B460). The original's
-                    // collector writes opcode+rel32 without reading it, so do that.
-                    WriteCallNoRead(pattern.get(0).get<uint8_t>(), reinterpret_cast<void*>(Abi("abi_borderless_w")));
-                    if (pattern.size() > 1)
-                        WriteCallNoRead(pattern.get(1).get<uint8_t>(), reinterpret_cast<void*>(Abi("abi_borderless_a")));
-                    injector::MakeNOP(pattern.get(0).get<uint8_t>(5), 1, true); //nop
-                    if (pattern.size() > 1)
-                        injector::MakeNOP(pattern.get(1).get<uint8_t>(5), 1, true); //nop
-                }
-            }
-        }
-
-        // FusionFix-style IAT window manager: keeps the style in sync when the
-        // window is created/resized and centres it. Additive to the original
-        // DefWindowProc shims above, so the parity write set is unchanged.
-        if (zpatch_opt_windowed != 0u && ctx.Option("BorderlessWindowed", "1") &&
-            !FusionFixGateClosed())
-            InstallBorderlessHooks(ctx.image);
-
-    }
-
-
-    // DoNotPauseOnMinimize
-
-    void InstallDoNotPauseOnMinimize(PatchContext& ctx)
-    {
-
-        TraceArm("DoNotPauseOnMinimize");
-
-        // DoNotPauseOnMinimize: 2 sigwrites
-        if (ctx.Option("DoNotPauseOnMinimize", "0"))
-        {
-            const GameImage& image = ctx.image;
-
-            {
-                if (auto pattern = Pattern(image, "6A 0A 56 50 FF D2 A1"); pattern.size() > 0)
-                {
-                    injector::WriteMemory<uint8_t>(pattern.get(0).get<uint8_t>(1), 0x06u, true); //patch
-                }
-            }
-
-            {
-                if (auto pattern = Pattern(image, "75 ? 8B 0D ? ? ? ? 51 FF 15 ? ? ? ? 85 C0 75 ? 8B 15"); pattern.size() > 0)
-                {
-                    injector::MakeNOP(pattern.get(0).get<uint8_t>(), 2, true); //nop
-                }
-            }
-        }
-
-        // FusionFix-style focus-loss input suppression, additive to the two
-        // original byte patches.
-        if (zpatch_opt_windowed != 0u && ctx.Option("DoNotPauseOnMinimize", "0"))
-            InstallFocusLossInputHook(ctx.image);
-
-    }
+    // BorderlessWindowed / DoNotPauseOnMinimize live in the separate
+    // XLivelessAddon successor module (xlivelessaddon/).
 
 
     // publish DrivebyFOVFix
