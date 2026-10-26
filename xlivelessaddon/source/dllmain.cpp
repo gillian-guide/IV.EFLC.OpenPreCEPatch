@@ -1,6 +1,8 @@
 #include <windows.h>
 #include <stdint.h>
 #include <algorithm>
+#include <cstdarg>
+#include <cstdio>
 #include <fstream>
 #include <initializer_list>
 #include <string>
@@ -295,6 +297,25 @@ static const char kDefaultIni[] =
     "BorderlessWindowed = 0\n"
     "VRAMFix = 1\n";
 
+static void XLog(const char* format, ...)
+{
+    char path[MAX_PATH] = {};
+    GetModuleFileNameA(GetModuleHandle(NULL), path, MAX_PATH);
+    char* slash = strrchr(path, '\\');
+    if (slash != nullptr)
+        *(slash + 1) = '\0';
+    strcat_s(path, "XLivelessAddon.log");
+    std::FILE* file = std::fopen(path, "a");
+    if (file == nullptr)
+        return;
+    va_list args;
+    va_start(args, format);
+    std::vfprintf(file, format, args);
+    va_end(args);
+    std::fputc('\n', file);
+    std::fclose(file);
+}
+
 static std::string ModuleDirectory()
 {
     char path[MAX_PATH] = {};
@@ -419,6 +440,7 @@ DWORD WINAPI Init(LPVOID)
         bBorderlessWindowed = false;
         bVRAMFix = false;
     }
+    XLog("ini=%s legacy=%s skipLauncher=%d skipIntro=%d skipMenu=%d dontPause=%d borderless=%d vram=%d skipWeb=%d registry=%d fusionfix=%d", iniPath.c_str(), legacyPath.c_str(), bSkipLauncher, bSkipIntro, bSkipMenu, bDoNotPauseOnMinimize, bBorderlessWindowed, bVRAMFix, bSkipWebConnect, bRemoveRegistryPathDependency, FusionFixPresent());
 
     // Unprotect image - make .text and .rdata section writeable
     // get load address of the exe
@@ -531,6 +553,7 @@ DWORD WINAPI Init(LPVOID)
                               pNtHeader->OptionalHeader.SizeOfImage};
         (void)ApplySkipLauncher(image, &ResolveSkipHook, nullptr, report,
                                 SkipLauncherStage::all);
+        XLog("skipLauncher entries=%zu missing=%zu writes=%zu jump=%d dfa=%zu/%zu rom=%zu/%zu", report.entriesFound, report.entriesMissing, report.writes, report.jumpInstalled ? 1 : 0, report.dfaInstalls, report.dfaMissing, report.romInstalls, report.romMissing);
     }
 
     {
@@ -1033,6 +1056,7 @@ DWORD WINAPI Init(LPVOID)
             hbGetVidMem.fun = injector::MakeCALL(pattern.get_first(0), GetVidMem).get();
     }
 
+    XLog("init complete");
     return 0;
 }
 
