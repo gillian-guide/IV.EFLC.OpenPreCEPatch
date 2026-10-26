@@ -14,6 +14,7 @@
 #include "improvements.hxx"
 #include "ini_import.hxx"
 #include "menu.hxx"
+#include "pattern.hxx"
 #include "vehicle_lights.hxx"
 
 #include <cmath>
@@ -21,6 +22,7 @@
 #include <cstring>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 extern "C" uint8_t zpatch_opt_model_index;
 
@@ -137,6 +139,60 @@ namespace
         CHECK(opp::FusionFixPresent());
         opp::SetFusionFixPresent(false);
         std::filesystem::remove_all(dir);
+    }
+
+    void TestExecutableView()
+    {
+        // A synthetic PE32 with one executable and one read-only section: the
+        // scanner must stop at the end of the executable section, like the
+        // original hook::pattern(module) call did.
+        std::vector<uint8_t> image(0x4000, 0x00);
+        auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(image.data());
+        dos->e_magic = IMAGE_DOS_SIGNATURE;
+        dos->e_lfanew = 0x40;
+        auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(image.data() + dos->e_lfanew);
+        nt->Signature = IMAGE_NT_SIGNATURE;
+        nt->FileHeader.Machine = IMAGE_FILE_MACHINE_I386;
+        nt->FileHeader.NumberOfSections = 2;
+        nt->FileHeader.SizeOfOptionalHeader = sizeof(IMAGE_OPTIONAL_HEADER32);
+        nt->OptionalHeader.Magic = IMAGE_NT_OPTIONAL_HDR32_MAGIC;
+        nt->OptionalHeader.SizeOfImage = static_cast<DWORD>(image.size());
+        auto* sections = IMAGE_FIRST_SECTION(nt);
+        std::memcpy(sections[0].Name, ".text", 5);
+        sections[0].VirtualAddress = 0x1000;
+        sections[0].Misc.VirtualSize = 0x1000;
+        sections[0].Characteristics = IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ;
+        std::memcpy(sections[1].Name, ".data", 5);
+        sections[1].VirtualAddress = 0x2000;
+        sections[1].Misc.VirtualSize = 0x1000;
+        sections[1].Characteristics = IMAGE_SCN_MEM_READ;
+
+        const opp::GameImage pe{image.data(), image.size()};
+        const opp::ModuleView view = opp::ExecutableView(pe);
+        CHECK(view.base == image.data());
+        CHECK(view.size == 0x2000);
+
+        // A non-PE buffer falls back to the whole view (the scanners are also
+        // used on synthetic buffers in tests and tools).
+        std::vector<uint8_t> raw(64, 0x90);
+        const opp::ModuleView fallback = opp::ExecutableView({raw.data(), raw.size()});
+        CHECK(fallback.base == raw.data());
+        CHECK(fallback.size == raw.size());
+
+        // Header claims a section past the mapped image: keep the whole view
+        // instead of scanning a range that is not mapped.
+        sections[0].VirtualAddress = 0x3000;
+        sections[0].Misc.VirtualSize = 0x4000;
+        const opp::ModuleView invalid = opp::ExecutableView(pe);
+        CHECK(invalid.base == image.data());
+        CHECK(invalid.size == image.size());
+
+        // No executable section at all: same whole-image fallback.
+        sections[0].Characteristics = IMAGE_SCN_MEM_READ;
+        sections[0].VirtualAddress = 0x1000;
+        sections[0].Misc.VirtualSize = 0x1000;
+        const opp::ModuleView no_text = opp::ExecutableView(pe);
+        CHECK(no_text.size == image.size());
     }
 
     void TestGame()
@@ -387,6 +443,7 @@ int main()
     TestConfig();
     TestIniImport();
     TestFusionFixGate();
+    TestExecutableView();
     TestGame();
     TestImprovements();
     TestCatalogue();

@@ -113,6 +113,54 @@ namespace opp
         return Normalize(signature, normalized) ? normalized : std::string{};
     }
 
+    ModuleView ExecutableView(const GameImage& image) noexcept
+    {
+        const ModuleView whole{image.base, image.size};
+        if (!image.base || image.size < sizeof(IMAGE_DOS_HEADER))
+            return whole;
+
+        const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(image.base);
+        if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0)
+            return whole;
+
+        const size_t nt_offset = static_cast<size_t>(dos->e_lfanew);
+        if (nt_offset + sizeof(IMAGE_NT_HEADERS) > image.size)
+            return whole;
+
+        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(image.base + nt_offset);
+        if (nt->Signature != IMAGE_NT_SIGNATURE ||
+            nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC)
+            return whole;
+
+        const size_t section_table = static_cast<size_t>(
+            reinterpret_cast<uintptr_t>(IMAGE_FIRST_SECTION(nt)) -
+            reinterpret_cast<uintptr_t>(image.base));
+        const size_t section_count = nt->FileHeader.NumberOfSections;
+        if (section_count == 0 || section_table < nt_offset ||
+            section_table + section_count * sizeof(IMAGE_SECTION_HEADER) > image.size)
+            return whole;
+
+        const auto* sections =
+            reinterpret_cast<const IMAGE_SECTION_HEADER*>(image.base + section_table);
+        size_t end = 0;
+        for (size_t i = 0; i < section_count; ++i)
+        {
+            const IMAGE_SECTION_HEADER& section = sections[i];
+            if ((section.Characteristics & IMAGE_SCN_MEM_EXECUTE) == 0)
+                continue;
+            const size_t section_end = static_cast<size_t>(section.VirtualAddress) +
+                                       section.Misc.VirtualSize;
+            if (section_end > end)
+                end = section_end;
+        }
+
+        // No executable section, or headers that point outside the mapped image:
+        // keep the old whole-image behaviour rather than silently scanning less.
+        if (end == 0 || end > image.size)
+            return whole;
+        return {image.base, end};
+    }
+
     bool FindPattern(ModuleView module, std::string_view signature, Match& output) noexcept
     {
         output = {};
