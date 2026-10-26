@@ -12,6 +12,7 @@
 #include <injector/utility.hpp>
 #include <Hooking.Patterns.h>
 #include "skip_launcher.h"
+#include "windowed.hxx"
 
 bool bDelay;
 char* pszPath;
@@ -352,6 +353,18 @@ static std::string ReadOption(CIniReader& own, CIniReader* legacy, const char* k
     return defaultValue;
 }
 
+static bool FusionFixPresent()
+{
+    const std::string directory = ModuleDirectory();
+    WIN32_FIND_DATAA data{};
+    const std::string pattern = directory + "*FusionFix*.asi";
+    HANDLE find = FindFirstFileA(pattern.c_str(), &data);
+    if (find == INVALID_HANDLE_VALUE)
+        return false;
+    FindClose(find);
+    return true;
+}
+
 DWORD WINAPI Init(LPVOID)
 {
     if(GetConsoleWindow())
@@ -396,6 +409,16 @@ DWORD WINAPI Init(LPVOID)
     bool bBorderlessWindowed = flag("BorderlessWindowed", "0");
     bool bVRAMFix = flag("VRAMFix", "1");
     bool bSkipLauncher = flag("SkipLauncher", "1");
+
+    // Never stack on FusionFix: it owns the intro/window/VRAM subsystems.
+    if (FusionFixPresent())
+    {
+        bSkipIntro = false;
+        bSkipMenu = false;
+        bDoNotPauseOnMinimize = false;
+        bBorderlessWindowed = false;
+        bVRAMFix = false;
+    }
 
     // Unprotect image - make .text and .rdata section writeable
     // get load address of the exe
@@ -508,6 +531,14 @@ DWORD WINAPI Init(LPVOID)
                               pNtHeader->OptionalHeader.SizeOfImage};
         (void)ApplySkipLauncher(image, &ResolveSkipHook, nullptr, report,
                                 SkipLauncherStage::all);
+    }
+
+    {
+        const GameImage image{pImageBase, pNtHeader->OptionalHeader.SizeOfImage};
+        if (bBorderlessWindowed)
+            (void)InstallBorderlessHooks(image);
+        if (bDoNotPauseOnMinimize)
+            (void)InstallFocusLossInputHook(image);
     }
 
     // process patches
