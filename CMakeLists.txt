@@ -13,6 +13,11 @@ endif()
 # matrix to compare an improved dump/ASI against the baseline without an INI.
 option(OPCEP_PARITY_BASELINE "Force every improvement group off (legacy path)" OFF)
 
+# Both shipped ASIs and their INIs are emitted into one folder. The tests and
+# dump tools stay under the build tree.
+set(OPCEP_DIST_DIR "${CMAKE_SOURCE_DIR}/bin" CACHE PATH
+    "Directory for the combined OpenPreCEPatch + XLivelessAddon output")
+
 set(OPCEP_SOURCES
     source/catalogue.cpp
     source/common.ixx
@@ -67,10 +72,17 @@ set_target_properties(OpenPreCEPatch PROPERTIES
     PREFIX ""
     OUTPUT_NAME "IV.EFLC.OpenPreCEPatch"
     SUFFIX ".asi"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${OPCEP_DIST_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${OPCEP_DIST_DIR}"
 )
 target_link_options(OpenPreCEPatch PRIVATE
     /MACHINE:X86 /SUBSYSTEM:WINDOWS /BASE:0x10000000 /INCREMENTAL:NO /MAP
 )
+add_custom_command(TARGET OpenPreCEPatch POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/data/plugins/IV.EFLC.OpenPreCEPatch.ini"
+            "${OPCEP_DIST_DIR}/IV.EFLC.OpenPreCEPatch.ini"
+    COMMENT "Copying OpenPreCEPatch.ini to the combined output folder")
 
 # XLivelessAddon successor lives in its own subproject (xlivelessaddon/) and is
 # not part of the OpenPreCEPatch ASI.

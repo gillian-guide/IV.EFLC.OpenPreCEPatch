@@ -17,13 +17,17 @@ premake5 vs2022
 msbuild build\OpenPreCEPatch.sln /p:Configuration=Release /p:Platform=Win32
 ```
 
-Outputs:
+Both modules are emitted into `bin/` by one build:
 
 ```
 bin/IV.EFLC.OpenPreCEPatch.asi
-bin/XLivelessAddon.asi            (separate XLivelessAddon successor)
-bin/IV.EFLC.OpenPreCEPatch.map    (development only)
+bin/IV.EFLC.OpenPreCEPatch.ini
+bin/XLivelessAddon.asi
+bin/XLivelessAddon.ini
+bin/*.map                         (development only)
 ```
+
+CMake uses the same folder through `OPCEP_DIST_DIR` (default `bin/`).
 
 `premake5.lua` reads an optional `.env` next to it:
 

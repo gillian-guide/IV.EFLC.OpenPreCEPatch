@@ -94,6 +94,9 @@ workspace "OpenPreCEPatch"
 
 project "IV.EFLC.OpenPreCEPatch"
     targetdir "bin"
+    postbuildcommands {
+        "copy /y \"data\\plugins\\IV.EFLC.OpenPreCEPatch.ini\" \"$(TargetDir)IV.EFLC.OpenPreCEPatch.ini\"",
+    }
     files { "source/**.cpp", "source/**.ixx", "source/**.hxx", "source/**.h" }
     removefiles { "source/compat/**", "source/xliveless_features.ixx" }
     files { "external/hooking/Hooking.Patterns.h", "external/hooking/Hooking.Patterns.cpp" }

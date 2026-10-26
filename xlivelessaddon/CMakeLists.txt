@@ -16,7 +16,7 @@ if(MSVC)
 endif()
 
 set(XLA_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/..)
-set(XLA_OUT ${CMAKE_BINARY_DIR}/Release)
+set(XLA_OUT ${CMAKE_SOURCE_DIR}/bin)
 
 add_library(XLivelessAddon SHARED
     source/dllmain.cpp

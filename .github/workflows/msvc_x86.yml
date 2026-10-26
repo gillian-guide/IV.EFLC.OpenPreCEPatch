@@ -41,6 +41,6 @@ jobs:
       with:
         name: IV.EFLC.OpenPreCEPatch
         path: |
-          build/Release/IV.EFLC.OpenPreCEPatch.asi
-          build/Release/XLivelessAddon.asi
-          build/Release/IV.EFLC.OpenPreCEPatch.map
+          bin/IV.EFLC.OpenPreCEPatch.asi
+          bin/XLivelessAddon.asi
+          bin/IV.EFLC.OpenPreCEPatch.map
