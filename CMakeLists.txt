@@ -153,19 +153,22 @@ add_test(NAME opcep_tests COMMAND opcep_tests)
 
 # XLivelessAddon successor: the recovered SkipLauncher path is 32-bit only, so
 # its native test shares the Win32 build. It links the fork's sources directly
-# instead of the ASI (which would pull in DllMain).
-add_executable(xla_tests
-    xlivelessaddon/tests/test_xla.cpp
-    xlivelessaddon/source/skip_launcher.cpp
-    external/hooking/Hooking.Patterns.cpp
-)
-target_include_directories(xla_tests PRIVATE
-    xlivelessaddon/source
-    external/hooking
-    external/injector/include
-    external/injector/safetyhook/include
-)
-target_compile_definitions(xla_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
-target_link_libraries(xla_tests PRIVATE user32)
-target_link_options(xla_tests PRIVATE /MACHINE:X86 /SUBSYSTEM:CONSOLE)
-add_test(NAME xla_tests COMMAND xla_tests)
+# instead of the ASI (which would pull in DllMain). The x64 parity-dump
+# configure must not try to compile it.
+if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    add_executable(xla_tests
+        xlivelessaddon/tests/test_xla.cpp
+        xlivelessaddon/source/skip_launcher.cpp
+        external/hooking/Hooking.Patterns.cpp
+    )
+    target_include_directories(xla_tests PRIVATE
+        xlivelessaddon/source
+        external/hooking
+        external/injector/include
+        external/injector/safetyhook/include
+    )
+    target_compile_definitions(xla_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_link_libraries(xla_tests PRIVATE user32)
+    target_link_options(xla_tests PRIVATE /MACHINE:X86 /SUBSYSTEM:CONSOLE)
+    add_test(NAME xla_tests COMMAND xla_tests)
+endif()
