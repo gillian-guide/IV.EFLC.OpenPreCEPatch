@@ -30,11 +30,11 @@ options automatically so two mods do not patch the same subsystem. Remove
 FusionFix, or use its equivalent setting, if you want the behaviour. The log
 records how many options were gated.
 
-## FusionFix does not detect the mod as XLivelessAddon
+## FusionFix reports a missing/incompatible XLivelessAddon
 
-Copy `XLivelessAddon.asi` (the inert marker shim) next to
-`IV.EFLC.OpenPreCEPatch.asi`. It only exists to satisfy the module-presence
-check; the real mod is still `IV.EFLC.OpenPreCEPatch.asi`.
+Build and install the separate `xlivelessaddon` successor module
+(`XLivelessAddon.asi` + `XLivelessAddon.ini`). The main ASI no longer carries
+those features or an inert marker shim.
 
 ## The old INI is not being used
 

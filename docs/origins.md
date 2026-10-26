@@ -14,12 +14,11 @@ are new work modelled on GTAIV.EFLC.FusionFix. `SkipIntro`'s 300 ms variant
 follows FusionFix's intro delay (`skipintro.ixx`, GPL-3.0); the original
 ZolikaPatch body remains compiled for the parity test switch.
 
-Two config-surface changes are intentional and are not behavioural:
-the INI is grouped by subsystem, and the `MiscFixes` bundle is split into five
-keys. An old INI keeps the original bundle semantics and the old flat
-`[Options]` layout is still read; the per-fix keys only take effect when the old
-master key is absent. The folded improvements (selected by the original options)
-are an additional documented behaviour surface; see `docs/improvements.md`.
+One config-surface change is intentional and not behavioural: the INI is
+grouped by subsystem, and the old flat `[Options]` layout is still read. The
+folded improvements (selected by the original options) are an additional
+documented behaviour surface; see `docs/improvements.md`. XLivelessAddon's
+features are a separate module (`xlivelessaddon/`), not part of this ASI.
 
 ## Preserved behaviour
 
@@ -65,22 +64,11 @@ The shared model-name table and OOC payload are unchanged. The model index only
 adds a sorted `(hash, table index)` view of the same catalogue; first-match
 order is preserved.
 
-## The XLivelessAddon split
+## XLivelessAddon
 
-The original shipped eleven signature writes under one `MiscFixes` key. This
-project keeps the same writes but gives each logical fix its own key:
-
-| key | rows |
-| --- | --- |
-| `RemoveDataIntegrityChecks` | VDS100/VDS102 rows |
-| `SkipTokenActivation` | token activation rows |
-| `SkipFirstTimePlayAsk` | first-run prompt |
-| `SkipInternetConnectionCheck` | three `InternetGetConnectedState` rows |
-| `SkipHealthCheck` | health-check early return |
-
-An old INI that still has `MiscFixes` keeps the bundle semantics: the master
-value gates all five. An INI without it uses the five keys, all defaulting on.
-An external `XLivelessAddon.asi` still suppresses the set, as in the original.
+The XLivelessAddon feature set is not included here. It has its own successor
+subproject in `xlivelessaddon/` (`XLivelessAddon.asi`). The main module only
+keeps features that belong to ZolikaPatch itself.
 
 ## Extracted data
 

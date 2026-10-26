@@ -17,19 +17,17 @@ Copy next to `GTAIV.exe` / `EFLC.exe`:
 
 Optional:
 
-- The real `XLivelessAddon.asi` is only needed if another plugin depends on the
-  patches it applies. The `XLivelessAddon.asi` built by this repository is an
-  inert marker shim and should **not** be used together with FusionFix: the real
-  addon boots, the inert shim does not. If you already have the real addon, keep
-  it; otherwise do not install the shim.
+- `XLivelessAddon.asi` is a separate successor module built from
+  `xlivelessaddon/`. Install it only when you need the XLivelessAddon feature
+  set; do not install it as a shim for FusionFix.
 
 ## Upgrading from ZolikaPatch
 
 Replace `ZolikaPatch.asi` with `IV.EFLC.OpenPreCEPatch.asi`. Leave
 `ZolikaPatch.ini` in place. On first launch the ASI sees the old file, ports
-every option into `IV.EFLC.OpenPreCEPatch.ini`, splits the old `MiscFixes`
-bundle into the five per-fix keys, carries the per-model light tables over, and
-then reads the new file. The old file is not modified.
+every supported option into `IV.EFLC.OpenPreCEPatch.ini`, carries the per-model
+light tables over, and then reads the new file. The old `MiscFixes` bundle is
+not ported; use the separate XLivelessAddon module for it. The old file is not modified.
 
 If the new INI already exists, it is used as-is; the old file is not merged.
 
@@ -60,7 +58,6 @@ The conflicts are listed in `source/fusionfix_compat.cpp`. The groups are:
 
 | OpenPreCEPatch options | FusionFix module |
 | --- | --- |
-| SkipIntro, SkipMenu | `skipintro.ixx` |
 | BorderlessWindowed, DoNotPauseOnMinimize | `windowed.ixx` |
 | EpisodicVehicleSupport, EpisodicWeaponSupport, PoliceEpisodicWeaponSupport, TBoGTHeliHeightLimit, SCOSignatureFix, PipeBombDropIconSupport | `episodiccontent.ixx` |
 | RestoreDeathMusic | `deathmusic.ixx` |

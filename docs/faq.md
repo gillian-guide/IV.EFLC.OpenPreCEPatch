@@ -14,17 +14,17 @@ ports an old `ZolikaPatch.ini` into the grouped `IV.EFLC.OpenPreCEPatch.ini`;
 no external converter is needed. A flat INI is also still read if you prefer to
 keep one.
 
-## What happened to `MiscFixes`?
+## What happened to `MiscFixes` / `[XLIVELESS]`?
 
-It is split into five keys under `[XLIVELESS]`. An old INI with `MiscFixes`
-keeps the original bundle behaviour during the import; an INI without it uses
-the five keys.
+Those features moved to the separate XLivelessAddon successor module
+(`xlivelessaddon/`, built as `XLivelessAddon.asi`). The main OpenPreCEPatch ASI
+no longer duplicates them.
 
-## Why is there an `XLivelessAddon.asi` next to the mod?
+## Is there an `XLivelessAddon.asi` here?
 
-FusionFix and some other plugins look for that module name before deciding what
-to install. The shim only provides the name; it does not load the mod or patch
-anything. The real module is `IV.EFLC.OpenPreCEPatch.asi`.
+Yes, but as a separate module built from `xlivelessaddon/`. Install either the
+main ASI or the XLivelessAddon ASI for the overlapping features, not both as the
+owner of the same patches.
 
 ## Does it work with FusionFix?
 

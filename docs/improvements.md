@@ -36,8 +36,9 @@ rel32: 4 bytes at the same site.
 
 ## Compatibility
 
-- **FusionFix marker shim.** Keep `XLivelessAddon.asi` inert; it exists only so
-  FusionFix's presence check succeeds.
+- **XLivelessAddon.** Its feature set lives in the separate `xlivelessaddon/`
+  successor module; there is no marker shim and no duplicate option in the main
+  ASI.
 - **FusionFix overlap audit.** The automatic gate list is in
   `source/fusionfix_compat.cpp`; re-check it when FusionFix adds a subsystem that
   collides with a still-active option.

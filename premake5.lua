@@ -118,6 +118,9 @@ project "XLivelessAddon"
     files { "xlivelessaddon/source/**.cpp", "xlivelessaddon/source/**.h" }
     files { "external/hooking/Hooking.Patterns.h", "external/hooking/Hooking.Patterns.cpp" }
     links { "user32" }
+    postbuildcommands {
+        "copy /y \"xlivelessaddon\\data\\XLivelessAddon.ini\" \"$(TargetDir)XLivelessAddon.ini\"",
+    }
     filter "configurations:Debug"
         defines { "DEBUG" }
         symbols "On"

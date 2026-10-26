@@ -21,7 +21,7 @@ Outputs:
 
 ```
 bin/IV.EFLC.OpenPreCEPatch.asi
-bin/XLivelessAddon.asi            (optional marker shim)
+bin/XLivelessAddon.asi            (separate XLivelessAddon successor)
 bin/IV.EFLC.OpenPreCEPatch.map    (development only)
 ```
 
@@ -42,7 +42,7 @@ cmake -S . -B build -A Win32
 cmake --build build --config Release
 ```
 
-Targets: `OpenPreCEPatch` (the ASI), `XLivelessAddon` (the shim),
+Targets: `OpenPreCEPatch` (the main ASI), `XLivelessAddon` (the separate successor),
 `opcep_tests` (native tests) and `opcep_dump` (write-set dump).
 
 ## Link settings that matter
