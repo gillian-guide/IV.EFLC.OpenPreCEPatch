@@ -113,7 +113,7 @@ namespace opp
         return Normalize(signature, normalized) ? normalized : std::string{};
     }
 
-    ModuleView ExecutableView(const GameImage& image) noexcept
+    ModuleView ExecutableView(ModuleView image) noexcept
     {
         const ModuleView whole{image.base, image.size};
         if (!image.base || image.size < sizeof(IMAGE_DOS_HEADER))

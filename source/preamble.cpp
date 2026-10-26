@@ -34,7 +34,7 @@ namespace opp
         if (!image.base || image.size == 0)
             return report;
 
-        const ModuleView view{image.base, image.size};
+        const ModuleView view = ExecutableView({image.base, image.size});
         const auto resolve = [&](std::string_view signature) -> const uint8_t* {
             Match found;
             return FindPattern(view, signature, found) ? found.address : nullptr;

@@ -356,7 +356,7 @@ namespace opp::features
             const GameImage& image = ctx.image;
 
             {
-                if (auto pattern = Pattern(image, "68 00 C2 EC 80 68"); pattern.size() > 0)
+                if (auto pattern = PatternAll(image, "68 00 C2 EC 80 68"); pattern.size() > 0)
                 {
                     for (size_t i = 0; i < pattern.size(); ++i)
                         injector::WriteMemory<uint32_t>(

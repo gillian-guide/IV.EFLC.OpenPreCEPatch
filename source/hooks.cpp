@@ -521,7 +521,7 @@ extern "C" char abi_death_music_install() noexcept
                 if (nt->Signature == IMAGE_NT_SIGNATURE)
                 {
                     Match match;
-                    const ModuleView view{module, nt->OptionalHeader.SizeOfImage};
+                    const ModuleView view = ExecutableView({module, nt->OptionalHeader.SizeOfImage});
                     if (FindPattern(view, "6A 06 68 ? ? ? ? 8D 8C", match))
                         zpatch_death_music_site = static_cast<uint32_t>(
                             reinterpret_cast<uintptr_t>(match.address));
@@ -567,7 +567,7 @@ const uint8_t* scan_game(std::string_view signature) noexcept
     const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(module + dos->e_lfanew);
     if (nt->Signature != IMAGE_NT_SIGNATURE) return nullptr;
     Match match;
-    const ModuleView view{module, nt->OptionalHeader.SizeOfImage};
+    const ModuleView view = ExecutableView({module, nt->OptionalHeader.SizeOfImage});
     if (!FindPattern(view, signature, match)) return nullptr;
     return match.address;
 }
@@ -3190,7 +3190,7 @@ uintptr_t newfiles_find(std::string_view signature)
                          : nullptr;
     if (!nt || nt->Signature != IMAGE_NT_SIGNATURE) return 0;
     Match match;
-    if (!FindPattern({base, nt->OptionalHeader.SizeOfImage}, signature, match)) return 0;
+    if (!FindPattern(ExecutableView({base, nt->OptionalHeader.SizeOfImage}), signature, match)) return 0;
     return reinterpret_cast<uintptr_t>(match.address);
 }
 }  // namespace

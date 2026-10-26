@@ -132,7 +132,7 @@ namespace opp::features
             {
 
                 {
-                    if (auto pattern = Pattern(image, "E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20"); pattern.size() > 0)
+                    if (auto pattern = PatternAll(image, "E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20"); pattern.size() > 0)
                     {
                         injector::MakeJMP(pattern.get(0).get<uint8_t>(8),
                             reinterpret_cast<void*>(Abi("abi_benchmark_a")), true); //jmp

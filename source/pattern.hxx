@@ -23,7 +23,7 @@ namespace opp
     // the whole SizeOfImage, which scans .rdata/.data/.rsrc too (2.6x more bytes on
     // 1.0.8.0) and can match outside code. Falls back to the whole image when the
     // view is not a readable PE32 image, so synthetic test buffers keep working.
-    ModuleView ExecutableView(const GameImage& image) noexcept;
+    ModuleView ExecutableView(ModuleView image) noexcept;
 
     bool FindPattern(ModuleView module, std::string_view signature, Match& output) noexcept;
 

@@ -77,7 +77,7 @@ namespace opp::features
             // match (recovered rows: dword_10159C1C index 0, dword_10159C24 index 1).
             // The two matches hold different pointers (0xD8FA2C / 0xDCF48C on 1080),
             // so publishing both from the first is not the original's state.
-            auto hashes = Pattern(
+            auto hashes = PatternAll(
                 image, "8B 46 28 83 4E 24 05 25 7F FC FF FF 83 C8 40 89 46 28 C7 06");
             if (hashes.size() > 0)
                 zpatch_bds_hash_a = *hashes.get(0).get<uint32_t>(20);
@@ -763,7 +763,7 @@ namespace opp::features
             const GameImage& image = ctx.image;
 
             {
-                if (auto pattern = Pattern(image, "76 0B F3 0F 11 8C 24 88 00 00 00 EB 09"); pattern.size() > 0)
+                if (auto pattern = PatternAll(image, "76 0B F3 0F 11 8C 24 88 00 00 00 EB 09"); pattern.size() > 0)
                 {
                     injector::MakeNOP(pattern.get(0).get<uint8_t>(), kWordLength, true); //nop
                     if (pattern.size() > 1)

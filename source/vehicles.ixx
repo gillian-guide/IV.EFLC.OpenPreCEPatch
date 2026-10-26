@@ -169,7 +169,7 @@ namespace opp::features
             {
 
                 {
-                    if (auto pattern = Pattern(image, "7C 18 0F BF 4E 2E"); pattern.size() > 0)
+                    if (auto pattern = PatternAll(image, "7C 18 0F BF 4E 2E"); pattern.size() > 0)
                     {
                         injector::MakeNOP(pattern.get(0).get<uint8_t>() - 6, 8, true); //nop
                         if (pattern.size() > 1)
@@ -178,7 +178,7 @@ namespace opp::features
                 }
 
                 {
-                    if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 17 F3 0F 10 44 24 08"); pattern.size() > 0)
+                    if (auto pattern = PatternAll(image, "83 3D ? ? ? ? 02 75 17 F3 0F 10 44 24 08"); pattern.size() > 0)
                     {
                         injector::MakeNOP(pattern.get(0).get<uint8_t>(), 9, true); //nop
                         if (pattern.size() > 1)

@@ -23,14 +23,33 @@ namespace opp
     inline constexpr uint8_t kCallOpcode = 0xE8;
     inline constexpr uint32_t kFusionFixProbeRva = 0x20D7u + 4u;
 
-    // The original's hook::pattern, over the image the drivers hand in.
+    // The original's hook::pattern, over the image the drivers hand in. The
+    // original scans module base..end of the last executable section and the arms
+    // only read the first match, so the scan is limited to that range and stops
+    // at the first hit. Arms that also patch match 1 use PatternAll below.
     inline hook::pattern Pattern(const GameImage& image, std::string_view signature)
     {
         const std::string normalized = NormalizeSignature(signature);
         if (normalized.empty())
             return hook::pattern{};
-        const uintptr_t begin = reinterpret_cast<uintptr_t>(image.base);
-        return hook::make_range_pattern(begin, begin + image.size, normalized);
+        const ModuleView view = ExecutableView({image.base, image.size});
+        const uintptr_t begin = reinterpret_cast<uintptr_t>(view.base);
+        return hook::make_range_pattern(begin, begin + view.size, normalized)
+            .count_hint(1);
+    }
+
+    // Every match in the executable range. The original's multi-hit arms
+    // (BuildingDynamicShadows' hash pair, NoImpostorHeightCutoff, BenchmarkFix,
+    // EpisodicVehicleSupport's two-match NOPs and StartupTimeFix's literal loop)
+    // read match 1 or iterate all matches.
+    inline hook::pattern PatternAll(const GameImage& image, std::string_view signature)
+    {
+        const std::string normalized = NormalizeSignature(signature);
+        if (normalized.empty())
+            return hook::pattern{};
+        const ModuleView view = ExecutableView({image.base, image.size});
+        const uintptr_t begin = reinterpret_cast<uintptr_t>(view.base);
+        return hook::make_range_pattern(begin, begin + view.size, normalized);
     }
 
     // The address of a site inside the current match.

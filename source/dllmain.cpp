@@ -349,7 +349,8 @@ namespace
         if (config.Option("CarDecalsFix", "1"))
         {
             opp::Match decals;
-            const opp::ModuleView view{gameImage.base, gameImage.size};
+            const opp::ModuleView view =
+                opp::ExecutableView({gameImage.base, gameImage.size});
             if (!opp::FindPattern(
                     view,
                     "8B 44 24 08 8B 48 28 81 E1 C0 03 00 00 81 F9 80 00 00 00", decals))

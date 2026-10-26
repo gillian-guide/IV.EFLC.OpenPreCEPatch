@@ -10,6 +10,7 @@
 #include "feature_registry.hxx"
 #include "fusionfix_compat.hxx"
 #include "game.hxx"
+#include "helpers.hxx"
 #include "hooks.h"
 #include "improvements.hxx"
 #include "ini_import.hxx"
@@ -141,12 +142,9 @@ namespace
         std::filesystem::remove_all(dir);
     }
 
-    void TestExecutableView()
+    void BuildSyntheticPe(std::vector<uint8_t>& image)
     {
-        // A synthetic PE32 with one executable and one read-only section: the
-        // scanner must stop at the end of the executable section, like the
-        // original hook::pattern(module) call did.
-        std::vector<uint8_t> image(0x4000, 0x00);
+        image.assign(0x4000, 0x90);
         auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(image.data());
         dos->e_magic = IMAGE_DOS_SIGNATURE;
         dos->e_lfanew = 0x40;
@@ -166,8 +164,20 @@ namespace
         sections[1].VirtualAddress = 0x2000;
         sections[1].Misc.VirtualSize = 0x1000;
         sections[1].Characteristics = IMAGE_SCN_MEM_READ;
+    }
 
-        const opp::GameImage pe{image.data(), image.size()};
+    void TestExecutableView()
+    {
+        // A synthetic PE32 with one executable and one read-only section: the
+        // scanner must stop at the end of the executable section, like the
+        // original hook::pattern(module) call did.
+        std::vector<uint8_t> image;
+        BuildSyntheticPe(image);
+        auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
+            image.data() + reinterpret_cast<IMAGE_DOS_HEADER*>(image.data())->e_lfanew);
+        auto* sections = IMAGE_FIRST_SECTION(nt);
+
+        const opp::ModuleView pe{image.data(), image.size()};
         const opp::ModuleView view = opp::ExecutableView(pe);
         CHECK(view.base == image.data());
         CHECK(view.size == 0x2000);
@@ -193,6 +203,33 @@ namespace
         sections[0].Misc.VirtualSize = 0x1000;
         const opp::ModuleView no_text = opp::ExecutableView(pe);
         CHECK(no_text.size == image.size());
+    }
+
+    void TestPatternScan()
+    {
+        // Two copies of the signature in .text and one in .data. Pattern() must
+        // stop at the first .text copy; PatternAll() must return both .text
+        // copies and never the .data one.
+        std::vector<uint8_t> image;
+        BuildSyntheticPe(image);
+        const uint8_t signature[4] = {0xAA, 0xBB, 0xCC, 0xDD};
+        std::memcpy(image.data() + 0x1100, signature, sizeof(signature));
+        std::memcpy(image.data() + 0x1500, signature, sizeof(signature));
+        std::memcpy(image.data() + 0x2100, signature, sizeof(signature));
+
+        const opp::GameImage pe{image.data(), image.size()};
+        auto first = opp::Pattern(pe, "AA BB CC DD");
+        CHECK(first.size() == 1);
+        CHECK(first.get(0).get<uint8_t>() == image.data() + 0x1100);
+
+        auto all = opp::PatternAll(pe, "AA BB CC DD");
+        CHECK(all.size() == 2);
+        CHECK(all.get(0).get<uint8_t>() == image.data() + 0x1100);
+        CHECK(all.get(1).get<uint8_t>() == image.data() + 0x1500);
+
+        // A miss is an empty pattern either way.
+        CHECK(opp::Pattern(pe, "11 22 33 44").size() == 0);
+        CHECK(opp::PatternAll(pe, "11 22 33 44").size() == 0);
     }
 
     void TestGame()
@@ -444,6 +481,7 @@ int main()
     TestIniImport();
     TestFusionFixGate();
     TestExecutableView();
+    TestPatternScan();
     TestGame();
     TestImprovements();
     TestCatalogue();
