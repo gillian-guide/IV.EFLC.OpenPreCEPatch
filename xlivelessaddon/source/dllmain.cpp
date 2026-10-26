@@ -11,6 +11,7 @@
 #include <injector/hooking.hpp>
 #include <injector/utility.hpp>
 #include <Hooking.Patterns.h>
+#include "skip_launcher.h"
 
 bool bDelay;
 char* pszPath;
@@ -282,6 +283,7 @@ LSTATUS WINAPI CustomRegQueryValueExA(HKEY hKey, LPCSTR lpValueName, LPDWORD lpR
 static const char kDefaultIni[] =
     "; XLivelessAddon successor\n"
     "[MAIN]\n"
+    "SkipLauncher = 1\n"
     "CustomSavePath = \"\"\n"
     "CustomSettingsPath = \"\"\n"
     "RemoveRegistryPathDependency = 1\n"
@@ -393,6 +395,7 @@ DWORD WINAPI Init(LPVOID)
     bool bDoNotPauseOnMinimize = flag("DoNotPauseOnMinimize", "0");
     bool bBorderlessWindowed = flag("BorderlessWindowed", "0");
     bool bVRAMFix = flag("VRAMFix", "1");
+    bool bSkipLauncher = flag("SkipLauncher", "1");
 
     // Unprotect image - make .text and .rdata section writeable
     // get load address of the exe
@@ -496,6 +499,15 @@ DWORD WINAPI Init(LPVOID)
     if (!szCustomSettingsPath.empty())
     {
         // TODO: port the SettingsPath inline hook without safetyhook.
+    }
+
+    if (bSkipLauncher)
+    {
+        SkipLauncherReport report;
+        const GameImage image{pImageBase,
+                              pNtHeader->OptionalHeader.SizeOfImage};
+        (void)ApplySkipLauncher(image, &ResolveSkipHook, nullptr, report,
+                                SkipLauncherStage::all);
     }
 
     // process patches
@@ -755,7 +767,7 @@ DWORD WINAPI Init(LPVOID)
         injector::WriteMemory<uint16_t>(pattern.get(0).get<uintptr_t>(0), 0x0DEB, true);
 
     // DFA (EFLC 1100/1110: Unhandled exception at 0x00426440 in EFLC.exe: 0xC0000005: Access violation reading location 0x00000014.)
-    if (gv_not({ 1100, 1110 }))
+    if (!bSkipLauncher && gv_not({ 1100, 1110 }))
     {
         //[v1006 - v1008]
         pattern = hook::pattern("E8 ? ? ? ? 83 C4 0C 83 F8 01 74 11 6A 00 6A 00");

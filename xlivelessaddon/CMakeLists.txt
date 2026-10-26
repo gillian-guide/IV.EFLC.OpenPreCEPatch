@@ -20,6 +20,7 @@ set(XLA_OUT ${CMAKE_BINARY_DIR}/Release)
 
 add_library(XLivelessAddon SHARED
     source/dllmain.cpp
+    source/skip_launcher.cpp
     ${XLA_ROOT}/external/hooking/Hooking.Patterns.cpp
 )
 target_include_directories(XLivelessAddon PRIVATE
