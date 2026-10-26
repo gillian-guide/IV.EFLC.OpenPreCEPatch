@@ -286,7 +286,7 @@ LSTATUS WINAPI CustomRegQueryValueExA(HKEY hKey, LPCSTR lpValueName, LPDWORD lpR
 static const char kDefaultIni[] =
     "; XLivelessAddon successor\n"
     "[MAIN]\n"
-    "SkipLauncher = 0\n"
+    "SkipLauncher = 1\n"
     "CustomSavePath = \"\"\n"
     "CustomSettingsPath = \"\"\n"
     "RemoveRegistryPathDependency = 1\n"
@@ -429,7 +429,7 @@ DWORD WINAPI Init(LPVOID)
     bool bDoNotPauseOnMinimize = flag("DoNotPauseOnMinimize", "0");
     bool bBorderlessWindowed = flag("BorderlessWindowed", "0");
     bool bVRAMFix = flag("VRAMFix", "1");
-    bool bSkipLauncher = flag("SkipLauncher", "0");
+    bool bSkipLauncher = flag("SkipLauncher", "1");
 
     // Never stack on FusionFix: it owns the intro/window/VRAM subsystems.
     if (FusionFixPresent())
@@ -551,8 +551,12 @@ DWORD WINAPI Init(LPVOID)
         SkipLauncherReport report;
         const GameImage image{pImageBase,
                               pNtHeader->OptionalHeader.SizeOfImage};
+        // The recovered "main" table is the ZolikaPatch handler's extra pass;
+        // the XLivelessAddon path only ever ran the DFA and ROM stages. Applying
+        // the main table after the addon already hooked the launcher is what
+        // broke the GFWL session.
         (void)ApplySkipLauncher(image, &ResolveSkipHook, nullptr, report,
-                                SkipLauncherStage::all);
+                                SkipLauncherStage::dfa | SkipLauncherStage::rom);
         XLog("skipLauncher entries=%zu missing=%zu writes=%zu jump=%d dfa=%zu/%zu rom=%zu/%zu", report.entriesFound, report.entriesMissing, report.writes, report.jumpInstalled ? 1 : 0, report.dfaInstalls, report.dfaMissing, report.romInstalls, report.romMissing);
     }
 
