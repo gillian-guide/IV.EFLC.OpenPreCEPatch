@@ -1,5 +1,13 @@
 # Parity report — 2026-10-25
 
+> **Superseded (2026-10-26).** The split moved `SkipIntro`, `SkipMenu`,
+> `BorderlessWindowed`, `DoNotPauseOnMinimize` and `VRAMFix` to
+> XLivelessAddon, so the 4-byte `SkipIntro` delta below no longer exists in this
+> module. Re-measured after the 2026-10-26 audit: the improved and
+> `OPCEP_PARITY_BASELINE=ON` dumps are byte-identical on **all 104 cells**
+> (defaults 823 writes, all-off 0, all-on 12,700, legacy 900). The historical
+> numbers below are kept for the pre-split checkpoint.
+
 Baseline: `baseline-openprece-20261025` (commit `175cb56`). Harness checkpoint:
 `good-matrix-20261025`. Folded-improvement checkpoint: `good-folded-20261025`.
 
@@ -31,9 +39,9 @@ uses the test-only switches documented in `docs/testing.md`, not an INI key.
 | all-off | 0 writes |
 | all-on | 12,700 writes |
 | legacy fixture | 900 writes |
-| defaults, `OPCEP_IMPROVEMENTS=none` | 909 writes; differs only at the `SkipIntro` rel32 (4 bytes) |
-| `OPCEP_PARITY_BASELINE=ON` dump vs env-off dump | byte-identical |
-| every non-SkipIntro option/section, improved vs off | byte-identical |
+| defaults, `OPCEP_IMPROVEMENTS=none` | 823 writes; **byte-identical** (the pre-split `SkipIntro` rel32 delta moved to the fork) |
+| `OPCEP_PARITY_BASELINE=ON` dump vs improved dump | byte-identical, 104/104 cells |
+| every option/section, improved vs off | byte-identical |
 | `ctest --test-dir build -C Release` | **PASS** |
 | x86 CMake Release build | **PASS** |
 | x64 `opcep_parity_dump` build | **PASS** |
@@ -48,8 +56,7 @@ uses the test-only switches documented in `docs/testing.md`, not an INI key.
 | `MovingSteeringWheelSupport` / `ShakingEngineBlock` / `MovingPlaneParts` | component guards + tilt cache | none (runtime branch) |
 | `PopupHeadlightsFlag` / `ForceCarHeadlightShadows` | lookup guards + hash cache | none (runtime branch) |
 | `BadPlayerModelCrashFix` / `DebugPrintSpawns` | model-name index | none (runtime branch) |
-| `SkipIntro` | 300 ms FusionFix-style body | 4 bytes at the same site (rel32 target) |
-| installer pass | arm logging | none (log only) |
+| installer pass | arm logging + executable-range first-match scans | none (log/cost only) |
 
 The guards/caches cannot be proved by a write diff because they do not change
 an installed site. They are covered by the native tests (`NewSavesCompatibility`
@@ -60,7 +67,7 @@ and by targeted live runs with `OPCEP_IMPROVEMENTS`.
 
 No in-game launch was performed in this pass. For the runtime-only groups, use a
 targeted `OPCEP_IMPROVEMENTS` value (`none`, `only:...`, `except:...`) and the
-log; for `SkipIntro`, compare `none` against unset. See `docs/testing.md`.
+log. See `docs/testing.md`.
 
 ## Known-good history
 

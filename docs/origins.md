@@ -10,9 +10,9 @@ and the proven reconstruction are the specification.
 The installer arms and hook bodies here were ported from the **readable
 reconstruction** of the 7.65 binary, which was itself verified against the
 shipped ASI. The surrounding loader, configuration and build system
-are new work modelled on GTAIV.EFLC.FusionFix. `SkipIntro`'s 300 ms variant
-follows FusionFix's intro delay (`skipintro.ixx`, GPL-3.0); the original
-ZolikaPatch body remains compiled for the parity test switch.
+are new work modelled on GTAIV.EFLC.FusionFix. The FusionFix-style intro and
+window bodies now live in the XLivelessAddon successor; the intro bodies remain
+registered in this module only for the pre-split reference.
 
 One config-surface change is intentional and not behavioural: the INI is
 grouped by subsystem, and the old flat `[Options]` layout is still read. The
@@ -54,9 +54,11 @@ selected by the original option itself, so there are no per-fix keys:
 - the moving-parts trio adds component/script guards and the tilt cache;
 - `PopupHeadlightsFlag` / `ForceCarHeadlightShadows` add lookup guards and the
   hash cache;
-- `BadPlayerModelCrashFix` / `DebugPrintSpawns` use the model-name index;
-- `SkipIntro` selects the FusionFix-style 300 ms body; the original `@exact`
-  body remains registered.
+- `BadPlayerModelCrashFix` / `DebugPrintSpawns` use the model-name index.
+
+`SkipIntro`, `SkipMenu`, `BorderlessWindowed`, `DoNotPauseOnMinimize` and
+`VRAMFix` moved to the XLivelessAddon module; their 300 ms intro body and
+FusionFix-style window manager are in `xlivelessaddon/`, not here.
 
 The original branches are compiled and can be selected for tests with
 `OPCEP_IMPROVEMENTS=none` or `-DOPCEP_PARITY_BASELINE=ON`, not with an INI key.

@@ -68,13 +68,15 @@ INI key. Use one of these switches:
 :: one process / one live run, no INI edit
 set OPCEP_IMPROVEMENTS=none
 set OPCEP_IMPROVEMENTS=only:newsaves,ooc
-set OPCEP_IMPROVEMENTS=except:skipintro
+set OPCEP_IMPROVEMENTS=except:ooc
 set OPCEP_IMPROVEMENTS=except:trace
 ```
 
 `all`/unset enables every group; `none` disables every group; a bare list is an
 `only:` list. The groups are `new_saves`, `ooc`, `vehicle`, `popup`,
-`model_index`, `skip_intro`, `trace` and `windowed`.
+`model_index`, `skip_intro`, `trace` and `windowed`. `skip_intro` and `windowed`
+are vestigial in this module now: the `SkipIntro`/window arms moved to
+XLivelessAddon with the options themselves.
 
 ```bat
 :: separate legacy dump/ASI, for automated A/B
@@ -83,8 +85,9 @@ cmake --build build-parity --config Release --target opcep_parity_dump
 python tools\opcep_matrix.py --exe build-parity\Release\opcep_parity_dump.exe --report parity.json
 ```
 
-The normal and parity dumps are byte-identical on every cell except
-`SkipIntro` (4-byte body rel32). `tools/opcep_matrix.py --env` applies the
+The normal and parity dumps are byte-identical on every cell (0 differing
+cells in the last 104-cell run: the formerly visible `SkipIntro` rel32 moved to
+the fork with the option). `tools/opcep_matrix.py --env` applies the
 environment switch per cell without changing any file.
 
 ## Write-set dump
@@ -101,13 +104,14 @@ original destination VA, so the installer's rel32 is comparable with the
 reference build. The 32-bit `opcep_dump` is provided for the same purpose when
 the image can be mapped at its preferred base.
 
-On the emulated-original 1080 cell (the user's 59-option configuration), the
-dump produced 598 changed bytes against the original's 669. Of those, 576 final
-bytes match exactly; 73 are resolver-dependent SkipLauncher/DFA hook installs
-that the dump intentionally does not execute; 20 are rebased global-address
-operands (the original stores its own globals' addresses); and 2 are the known
-lazy `DoNotPauseOnMinimize` site that the emulator never reaches. This is a
-diff of the *final image*, not a count of write rows.
+On the emulated-original 1080 cell (the user's 59-option configuration; a
+pre-split measurement), the dump produced 598 changed bytes against the
+original's 669. Of those, 576 final bytes match exactly; 73 are
+resolver-dependent SkipLauncher/DFA hook installs that the dump intentionally
+does not execute; 20 are rebased global-address operands (the original stores its
+own globals' addresses); and 2 are the known lazy `DoNotPauseOnMinimize` site
+that the emulator never reaches. This is a diff of the *final image*, not a
+count of write rows.
 
 ## Installer parity
 

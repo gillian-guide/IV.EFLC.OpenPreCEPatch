@@ -2,9 +2,11 @@
 
 The improvements are **folded into the original INI options**: there are no
 per-fix keys. `NewSavesCompatibility=1` means the guarded/faster converter,
-`OutOfCommissionFix=1` means the cached/safe archive setup, `SkipIntro=1` means
-the 300 ms intro body, and so on. An INI from the parity era still enables the
-improved path for the options it already has.
+`OutOfCommissionFix=1` means the cached/safe archive setup, and so on. An INI
+from the parity era still enables the improved path for the options it already
+has. Options that moved to the XLivelessAddon module (intro/menu, window,
+launcher, VRAM) are no longer in this module's INI; their improvements live in
+`xlivelessaddon/`.
 
 The original code path is still compiled. It is selected by the test-only
 switches in `docs/testing.md`:
@@ -25,16 +27,19 @@ individually.
 | `MovingSteeringWheelSupport`, `ShakingEngineBlock`, `MovingPlaneParts` | component-registry/bone-chain null guards; script-resolver guard; script-slot and lock-owner guards; wheelangle model→tilt cache |
 | `PopupHeadlightsFlag`, `ForceCarHeadlightShadows` | model-lookup/parameter guards; hash→index cache |
 | `BadPlayerModelCrashFix`, `DebugPrintSpawns` | one-time model-name hash index |
-| `SkipIntro` | FusionFix-style 300 ms intro body instead of skipping outright (original body still available via the test switches) |
-| `BorderlessWindowed`, `DoNotPauseOnMinimize` | FusionFix-style IAT window manager (style sync, centering, resize) and focus-loss input suppression on top of the original patches |
 | `SteamAchievements` | GFWL achievement writes mirrored to Steam at the `XUserWriteAchievements` boundary; the original GFWL call still runs |
 | installer pass | arm logging is part of the normal trace (`OPCEP_IMPROVEMENTS=except:trace` silences it); signature scans stay inside the executable sections and stop at the first match |
 
-Every improved body keeps the original branch first when its switch is off. The
-only write-set-visible difference with improvements on is the `SkipIntro`
-rel32: 4 bytes at the same site. The scan-range/first-match change is a pure
-implementation fix: the original `hook::pattern(module)` never scanned
-`.rdata`/`.data`/`.rsrc`, so the write set is identical (see the log).
+`SkipIntro`, `SkipMenu`, `BorderlessWindowed`, `DoNotPauseOnMinimize` and
+`VRAMFix` are XLivelessAddon features now: their improved bodies live in
+`xlivelessaddon/` and the main module no longer registers those arms.
+
+Every improved body keeps the original branch first when its switch is off.
+There is currently **no** write-set-visible improvement: the improved and the
+parity-baseline dumps are byte-identical on all 104 matrix cells (the formerly
+visible `SkipIntro` rel32 moved to the fork with the option). The scan-range
+change is also a pure implementation fix: the original `hook::pattern(module)`
+never scanned `.rdata`/`.data`/`.rsrc`, so the write set is identical.
 
 ## Compatibility
 

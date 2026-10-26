@@ -36,8 +36,8 @@ If the new INI already exists, it is used as-is; the old file is not merged.
 Each option line ends with a compact tag:
 
 ```ini
-SkipIntro = 1          // skip intro screens [all; FF]
-OutOfCommissionFix = 1 // ... [1060+]
+OutOfCommissionFix = 1 // cached archive, fault-inclusive path still available [1060+]
+AimProjectileCrashFix = 1 // ... [all]
 ```
 
 - `[all]` — applies to every supported build; a missing signature skips it.
@@ -75,7 +75,10 @@ The conflicts are listed in `source/fusionfix_compat.cpp`. The groups are:
 | AddOptionsInMenu | `settings.ixx` |
 | LocalSettingsPath | `userdata.ixx` |
 
-The INI itself marks each of these with `FF`.
+The INI itself marks each of these with `FF`. The `BorderlessWindowed`,
+`DoNotPauseOnMinimize` and `VRAMFix` rows are XLivelessAddon options now: the
+main module keeps the gate entries so a stale key is still reported, but no
+longer installs those features. See `xlivelessaddon/README.md`.
 
 Safety and performance improvements are folded into their original options, so
 there are no extra keys to set. The original paths can be selected for testing
