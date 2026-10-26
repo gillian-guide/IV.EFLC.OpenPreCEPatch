@@ -129,6 +129,12 @@ The output is `bin/IV.EFLC.OpenPreCEPatch.asi`, the separate
 `bin/XLivelessAddon.asi` and a linker `.map`. CMake is also supported:
 
 ```bat
+build.bat
+```
+
+or manually:
+
+```bat
 cmake -S . -B build -A Win32
 cmake --build build --config Release
 ```

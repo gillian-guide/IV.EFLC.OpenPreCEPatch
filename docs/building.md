@@ -9,6 +9,13 @@
 
 No game files are needed to compile. The feature files under source/ are C++20 modules (.ixx); both build paths scan them.
 
+## One-shot build script
+
+```bat
+build.bat          :: configure + build both ASIs into bin\
+build.bat --test   :: also run the native tests
+```
+
 ## Premake (the repository build)
 
 ```bat
