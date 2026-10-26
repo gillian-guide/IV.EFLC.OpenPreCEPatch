@@ -897,6 +897,9 @@ extern "C" uint32_t abi_steer_body() noexcept
                 static_cast<uintptr_t>(ctx) + kScriptOffsetField);
         const uint32_t value = *reinterpret_cast<const uint32_t*>(
             static_cast<uintptr_t>(ctx) + offset + kScriptSlotBase);
+        // The script slot can be empty before the script has run; the original
+        // dereferences it (fault preserved when the folded guard is off).
+        if (guarded && value == 0) return 0.0f;
         return *reinterpret_cast<const float*>(
             static_cast<uintptr_t>(value) + kScriptFloatOffset);
     };
@@ -942,12 +945,17 @@ extern "C" uint32_t abi_steer_body() noexcept
         return get_bone(vehicle, bone);
     };
 
-    if (zpatch_flag_steering)
+    // The steering block dereferences the vehicle's lock owner. The folded guard
+    // skips it while there is no owner (the original faults); the original path
+    // keeps the plain `zpatch_flag_steering` condition.
+    const int16_t steer_model = model_of();
+    const uint32_t steer_lock_owner = *reinterpret_cast<const uint32_t*>(
+        vehicle + kVehicleBoneOffset);
+    if (zpatch_flag_steering && (!guarded || steer_lock_owner != 0u))
     {
-        const int16_t model = model_of();
+        const int16_t model = steer_model;
         const float steering = *reinterpret_cast<const float*>(vehicle + kVehicleSteeringOffset);
-        const uint32_t lock_owner = *reinterpret_cast<const uint32_t*>(
-            vehicle + kVehicleBoneOffset);
+        const uint32_t lock_owner = steer_lock_owner;
         const float lock = *reinterpret_cast<const float*>(
             static_cast<uintptr_t>(lock_owner) + kVehicleLockOwnerOffset);
         const float turn = static_cast<float>(static_cast<double>(steering / lock) *
@@ -1071,6 +1079,11 @@ extern "C" uint32_t abi_steer_body() noexcept
         static_cast<uintptr_t>(ctx) + kScriptOffsetField);
     const uint32_t value_ptr = *reinterpret_cast<const uint32_t*>(
         static_cast<uintptr_t>(ctx) + offset + kScriptSlotBase);
+    if (guarded && value_ptr == 0u)
+    {
+        zpatch_engine_last_timestep = 0.0f;
+        return 0;
+    }
     const float last = *reinterpret_cast<const float*>(
         static_cast<uintptr_t>(value_ptr) + kScriptFloatOffset);
     zpatch_engine_last_timestep = last;
