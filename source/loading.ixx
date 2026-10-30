@@ -79,8 +79,6 @@ namespace opp::features
                 JumpTo(ctx, image.base + 0x41450E, reinterpret_cast<void*>(ctx.gameBase + 0x41452C));
                 CallTo(ctx, image.base + 0x41453A, reinterpret_cast<void*>(ctx.gameBase + 0x413E30));
                 NopAt(ctx, image.base + 0x41453F, 12);
-                CallToBody(ctx, image.base + 0x4137CD, "abi_load_dlcs_dummy");
-                JumpToBody(ctx, image.base + 0x4144D4, "abi_load_dlcs_struct_fixup");
             }
 
             if (ctx.build == GameBuild::v1070)
@@ -91,8 +89,6 @@ namespace opp::features
                 JumpTo(ctx, image.base + 0x4142AE, reinterpret_cast<void*>(ctx.gameBase + 0x4142CC));
                 CallTo(ctx, image.base + 0x4142DA, reinterpret_cast<void*>(ctx.gameBase + 0x413BD0));
                 NopAt(ctx, image.base + 0x4142DF, 12);
-                CallToBody(ctx, image.base + 0x41356D, "abi_load_dlcs_dummy");
-                JumpToBody(ctx, image.base + 0x414274, "abi_load_dlcs_struct_fixup");
             }
 
             if (ctx.build == GameBuild::v1080)
@@ -103,8 +99,6 @@ namespace opp::features
                 JumpTo(ctx, image.base + 0x49040E, reinterpret_cast<void*>(ctx.gameBase + 0x49042C));
                 CallTo(ctx, image.base + 0x49043A, reinterpret_cast<void*>(ctx.gameBase + 0x48FBB0));
                 NopAt(ctx, image.base + 0x49043F, 12);
-                CallToBody(ctx, image.base + 0x48F558, "abi_load_dlcs_dummy");
-                JumpToBody(ctx, image.base + 0x4903D4, "abi_load_dlcs_struct_fixup");
             }
         }
 
