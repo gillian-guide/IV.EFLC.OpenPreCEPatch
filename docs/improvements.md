@@ -29,6 +29,7 @@ individually.
 | `BadPlayerModelCrashFix`, `DebugPrintSpawns` | one-time model-name hash index |
 | `SteamAchievements` | GFWL achievement writes mirrored to Steam at the `XUserWriteAchievements` boundary; the original GFWL call still runs |
 | installer pass | arm logging is part of the normal trace (`OPCEP_IMPROVEMENTS=except:trace` silences it); signature scans stay inside the executable sections and stop at the first match |
+| every option (the `failsafe` group) | every arm write is checked before it lands (site inside the image, destination body resolved) and the runtime bodies skip a missing preamble pointer or game-published lookup instead of dereferencing null |
 
 `SkipIntro`, `SkipMenu`, `BorderlessWindowed`, `DoNotPauseOnMinimize` and
 `VRAMFix` are XLivelessAddon features now: their improved bodies live in
@@ -71,6 +72,36 @@ write set unchanged. Remaining candidates:
 | duplicate scans | publish and install arms scan the same signature twice | a scan cache is unsafe across arms (earlier arms patch bytes a later scan can match); keep the first-match hint only |
 
 ## Stability and safety
+
+### The failsafe layer
+
+Two failures used to be fatal on a build the port only half-recognises, and both
+are now a logged clean skip:
+
+- **Install time (always on).** Every `Install*`/`Publish*` arm writes through
+  `helpers.hxx` (`JumpToBody`, `CallToBody`, `NopAt`, `WriteRaw`,
+  `WriteValue`). Before touching the image the helper checks the site and its
+  bytes are inside the game image, and that the body name resolved to a live
+  body. A withheld body used to install a jump to 0; an RVA row from the wrong
+  build used to write into whatever followed. Both now log one line naming the
+  arm (and the missing signature, for a pattern miss) and leave the image
+  untouched, which is what the original loader does when a signature does not
+  match. On a healthy image every check passes, so the write set is unchanged:
+  the matrix reports the same 3,909 writes over 96 cells.
+- **Run time (`failsafe` group, on by default).** The bodies call their preamble
+  pointers and game-published lookups without checking them, exactly like the
+  original: a missing pointer faults. With the group on, the body continues
+  with the value the game would have had without the fix and logs one line.
+  This covers PlayerAsPedComponentsFix, PedModelsInCutscenesFix, SuperLODFix,
+  BadPlayerModelCrashFix, GarageModelFix, the moving-parts trio, CopSirensFlag,
+  DrivebyFOVFix, RemoveGFWLUpdatePopup and LoadDLCs' path buffer. The guards sit
+  at the top of the body, before any register or stack state the resume
+  consumes. `OPCEP_IMPROVEMENTS=except:failsafe` (or `none`) restores the
+  original fault for a fault-parity run, and the `OPCEP_PARITY_BASELINE` build
+  disables the group with every other one.
+
+The installer pass ends with one `install: N writes applied, M skipped` line,
+so a partially-matching image is visible without reading the whole log.
 
 - **Folded:** NewSaves guards, OOC safe init/cache, component guards, model
   lookup guards, model-name index (table above), and the script-slot/lock-owner

@@ -92,6 +92,19 @@ order across translation units. It matters because some arms publish resume
 addresses before another arm overwrites the site that owns them.
 All slot publishes run before the install arms.
 
+Every arm writes through the checked helpers in `source/helpers.hxx`, which
+refuse a write outside the game image and a branch whose body did not resolve
+(one log line, image untouched). The pass ends with an applied/skipped summary.
+
+## Build applicability
+
+`docs/version-matrix.md` is the per-option, per-build table: which builds the
+original handler's own gate admits (recovered from IDA), which are semantic
+successor builds, and which options are only pattern-gated. It also lists the
+arms whose port gate is narrower than the original, so a coverage gap is
+visible rather than accidental. `tools/gen_version_matrix.py` regenerates and
+checks it; the recovered evidence lives in `docs/version-matrix.json`.
+
 ## Hooks
 
 `source/hooks.cpp` registers every body in `kAbiBodies`, keyed by the original
