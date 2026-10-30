@@ -95,3 +95,29 @@ decode/build with the archive retained by design) and the sorted model-name inde
 read from session 823177f2. The "cleaner entry" arguments are design inferences from that disassembly, not
 runtime-tested; the write-set delta each would cause is not in `tests/parity`. Part B rows are code-level facts
 from the cited lines; the 1.87 s / 264-scan figure comes from `docs/improvements.md:64` and was not re-measured.
+
+## Late findings (second pass, same day)
+
+A narrower second pass over 14 of the options confirmed the rows above and added
+four points:
+
+- **PopupHeadlightsFlag is installed twice.** The port installs the EAX and EDX
+  twins with two independent `if`s, while the original handler is `if`/`else`:
+  the two arms share the resume slots, so on a view where both patterns match the
+  second install can clobber the first resume. This is a correctness risk in the
+  arm, not just an entry-point preference.
+- **SCOSignatureFix's `-32` site is only verified on 1.0.8.0.** The byte is at an
+  instruction boundary there, `patch_operations.json` records the offset as 0,
+  and the `-32` anchor is unverified on the other builds. Extending the signature
+  so it ends at the branch would remove the fixed offset from the arm.
+- **LoadDLCs writes the same sites twice.** `loading.ixx` issues the dummy-call
+  and struct-fixup installs twice per build block (`0x4137CD` / `0x4144D4` on
+  1060, `0x41356D` / `0x414274` on 1070, `0x48F558` / `0x4903D4` on 1080). The
+  second write is idempotent today, so the matrix cannot see it, but it is dead
+  work and a trap for anyone editing the arm.
+- **StartupTimeFix's multi-match loop is load-bearing.** It patches three
+  separately inlined WinINet request builders; narrowing it to one match would
+  silently drop two. Keep `PatternAll` there.
+
+The wider first pass (24 options, including the twelve outside the second pass's
+brief) is what the tables above are built from; nothing from it was dropped.
