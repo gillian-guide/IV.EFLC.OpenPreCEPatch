@@ -2912,42 +2912,6 @@ __declspec(naked) void abi_super_lod_fix_shim()
         jmp DWORD PTR [zpatch_super_lod_ok]
     }
 }
-
-// 0x1004AA80: the VRAM verdict helper, called between pushad/popad by the shim
-// below. It only reads the two argument globals and sets the flag, so ordinary
-// C++ is enough.
-extern "C" void abi_vram_fix_helper() noexcept
-{
-    const auto argB = static_cast<int32_t>(zpatch_vram_arg_b);
-    zpatch_vram_flag = 0;
-    if (argB < 0 || zpatch_vram_arg_a != 0 || argB < 0x3E800000)
-        zpatch_vram_flag = 1;
-}
-// 0x1004aab0 VRAMFix: stashes two of the game function's arguments, calls the
-// verdict helper under pushad/popad, then reproduces the original tail
-// (fldcw [esp]; add esp,0x1c; ret), returning INT_MAX when the verdict is set.
-// The E9 site replaced that tail, so this must be naked.
-// @exact 0x1004AAB0
-__declspec(naked) void abi_vram_fix_shim()
-{
-    __asm {
-        mov eax, DWORD PTR [esp + 0x14]
-        mov DWORD PTR [zpatch_vram_arg_a], eax
-        mov eax, DWORD PTR [esp + 0x10]
-        mov DWORD PTR [zpatch_vram_arg_b], eax
-        pushad
-        call abi_vram_fix_helper
-        popad
-        cmp BYTE PTR [zpatch_vram_flag], 0
-        je vram_skip
-        mov eax, 7FFFFFFFh
-    vram_skip:
-        fldcw WORD PTR [esp]
-        add esp, 1Ch
-        ret
-    }
-}
-
 // One-shot diagnostic for DrivebyFOVFix: scans the resolver's registry table
 // (base+0x150FDD0/count 0x150FDD4, build-9 RVAs) for the key 0x9399528. Naked so
 // the shim can call it without disturbing the live xmm1..xmm7 (xmm0 is scratch).
@@ -3966,62 +3930,6 @@ __declspec(naked) void abi_episode_switch_sum()
         ret
     }
 }
-
-// @exact 0x10045C30 SkipIntro body: entered via E9 from match-6 with the site's
-// ecx and edx; resumes by jumping to the handler-published match address
-// (dword_1015AD74). The original zeroes edx below the 0x1F40 threshold, i.e. the
-// intro screens are skipped outright.
-__declspec(naked) void abi_skip_intro_body()
-{
-    __asm {
-        imul ecx, ecx, 0x190
-        cmp edx, 0x1f40
-        jge ok
-        xor edx, edx
-    ok:
-        jmp DWORD PTR [zpatch_skip_intro_match]
-    }
-}
-
-// SkipIntro's 300 ms body (borrowed from FusionFix's skipintro.ixx): the same
-// site and resume, but below the 0x1F40 threshold the screens play for 300 ms
-// instead of being skipped outright. The original body above stays available
-// through the safe path unconditionally; it is not a separate INI key.
-__declspec(naked) void abi_skip_intro_screens()
-{
-    __asm {
-        imul ecx, ecx, 0x190
-        cmp edx, 0x1f40
-        jge ok
-        mov edx, 0x12c
-    ok:
-        jmp DWORD PTR [zpatch_skip_intro_match]
-    }
-}
-
-// @exact 0x10046610 SkipMenu body: entered via E8 from the patched site; the
-// first call with a zero argument switches the menu id to 6 unconditionally (the
-// one-shot flag is the original's byte_101A8450), then resumes by jumping to the
-// published address (dword_10159348 = *(match+24) + match + 28).
-__declspec(naked) void abi_skip_menu_body()
-{
-    __asm {
-        push ebp
-        mov ebp, esp
-        cmp BYTE PTR [zpatch_skip_menu_flag], 0
-        mov eax, DWORD PTR [ebp + 8]
-        jne skip
-        test eax, eax
-        jne skip
-        mov eax, 6
-        mov BYTE PTR [zpatch_skip_menu_flag], 1
-    skip:
-        mov DWORD PTR [ebp + 8], eax
-        pop ebp
-        jmp DWORD PTR [zpatch_skip_menu_resume]
-    }
-}
-
 // DLC discovery post step (sub_10023150): enumerate \dlc\tlad\content\ / \TLAD\,
 // \dlc\TBoGT\content\ / \TBoGT\ and \EpisodeN\ next to the executable and
 // register each through the two published game RVAs. The original writes the
@@ -5607,7 +5515,6 @@ const AbiBody kAbiBodies[] =
         {0x10050870u, reinterpret_cast<void(*)()>(&abi_ped_models_in_cutscenes_check)},
         {0x10045a30u, reinterpret_cast<void(*)()>(&abi_improved_shader_streaming_find_hpe)},
         {0x10045a80u, reinterpret_cast<void(*)()>(&abi_improved_shader_streaming_find_v)},
-        {0x1004aab0u, reinterpret_cast<void(*)()>(&abi_vram_fix_shim)},
         // 0x100064b0 (DrivebyFOVFix) is registered above: the arm installs
         // unconditionally when its pattern matches, and the pattern exists on 1.0.8.0.
         {0x1003d310u, reinterpret_cast<void(*)()>(&abi_nolivery_a)},
@@ -5630,8 +5537,6 @@ const AbiBody kAbiBodies[] =
         {0x1001b080u, reinterpret_cast<void(*)()>(&abi_episode_switch_sum)},
         {0x10023480u, reinterpret_cast<void(*)()>(&abi_load_dlcs_dummy)},
         {0x10023490u, reinterpret_cast<void(*)()>(&abi_load_dlcs_struct_fixup)},
-        {0x10045C30u, reinterpret_cast<void(*)()>(&abi_skip_intro_body)},
-        {0x10046610u, reinterpret_cast<void(*)()>(&abi_skip_menu_body)},
         {0x10038550u, reinterpret_cast<void(*)()>(&abi_rgsc_login_removed)},
         {0x10038570u, reinterpret_cast<void(*)()>(&abi_savegame_fix_null)},
         // NewMemorySystem's CRageAllocator stubs (the E8 body's vtable); the alloc/
@@ -5822,9 +5727,6 @@ extern "C" void* AbiByName(const char* name) noexcept
     {"abi_savegame_fix_null", reinterpret_cast<void(*)()>(&abi_savegame_fix_null)},
     {"abi_shader_stream_filter_hpe", reinterpret_cast<void(*)()>(&abi_shader_stream_filter_hpe)},
     {"abi_shader_stream_filter_v", reinterpret_cast<void(*)()>(&abi_shader_stream_filter_v)},
-    {"abi_skip_intro_body", reinterpret_cast<void(*)()>(&abi_skip_intro_body)},
-    {"abi_skip_intro_screens", reinterpret_cast<void(*)()>(&abi_skip_intro_screens)},
-    {"abi_skip_menu_body", reinterpret_cast<void(*)()>(&abi_skip_menu_body)},
     {"abi_smpa60_shim", reinterpret_cast<void(*)()>(&abi_smpa60_shim)},
     {"abi_smpa60_tail_shim", reinterpret_cast<void(*)()>(&abi_smpa60_tail_shim)},
     {"abi_spawns_guard", reinterpret_cast<void(*)()>(&abi_spawns_guard)},
@@ -5849,8 +5751,6 @@ extern "C" void* AbiByName(const char* name) noexcept
     {"abi_super_lod_fix_shim", reinterpret_cast<void(*)()>(&abi_super_lod_fix_shim)},
     {"abi_super_lod_helper", reinterpret_cast<void(*)()>(&abi_super_lod_helper)},
     {"abi_vehicle_component", reinterpret_cast<void(*)()>(&abi_vehicle_component)},
-    {"abi_vram_fix_helper", reinterpret_cast<void(*)()>(&abi_vram_fix_helper)},
-    {"abi_vram_fix_shim", reinterpret_cast<void(*)()>(&abi_vram_fix_shim)},
     {"abi_wanted_level_shim", reinterpret_cast<void(*)()>(&abi_wanted_level_shim)},
     };
 

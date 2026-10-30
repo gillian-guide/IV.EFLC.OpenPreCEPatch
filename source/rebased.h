@@ -30,9 +30,6 @@ uintptr_t FindGlobalSlot(std::string_view slot_name) noexcept;
 // LoadDLCs: the published loader callback and the two RVAs the handler stores
 // (dword_101580D0 / dword_1015804C, the register/apply functions).
 extern "C" uint32_t zpatch_dlc_load_callback;
-extern "C" uint32_t zpatch_skip_intro_match;
-extern "C" uint32_t zpatch_skip_menu_resume;
-extern "C" uint8_t zpatch_skip_menu_flag;
 // BlackscreenFix: the published call target (dword_1015AD58) and the pointer to
 // the game value the shim inspects (dword_1015AD5C).
 extern "C" uint32_t zpatch_blackscreen_resume;
@@ -85,9 +82,6 @@ extern "C" uint32_t zpatch_collision_deadlock_should_walk;  // dword_1015BDD4
 extern "C" uint32_t zpatch_collision_deadlock_iterations;   // dword_1015BDD8
 // VRAMFix: saved arguments and the helper's verdict (dword_1015D630/34,
 // byte_1015D638); the shim then decides whether to return INT_MAX.
-extern "C" uint32_t zpatch_vram_arg_a;   // dword_1015D630
-extern "C" uint32_t zpatch_vram_arg_b;   // dword_1015D634
-extern "C" uint8_t zpatch_vram_flag;     // byte_1015D638
 // DrivebyFOVFix: the loader-published resolver (key in ECX, from the d4 salt),
 // the handler resume, and the helper's float/cache/done.
 extern "C" uint32_t zpatch_driveby_resolver;  // dword_1015BDE0

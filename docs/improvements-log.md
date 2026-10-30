@@ -642,3 +642,21 @@ legacy 799 writes.
 `docs/entry-points-audit.md`, `docs/installing.md`, `readme.md` and
 `tests/parity/README.md` were rewritten to describe the code rather than a
 switch. `docs/parity-report.md` keeps its historical numbers with a header note.
+
+## 2026-10-30 — the pre-split XLivelessAddon leftovers are deleted
+
+The XLivelessAddon split (`486b8cd`, 2026-10-26) moved its INI keys, arms and
+bodies to `xlivelessaddon/`, but six arm functions stayed in the main module
+without a `RegisterFeature` row - they could never run, so they were dead code
+rather than a double install: `InstallSkipLauncher`, `PublishSkipIntro`,
+`InstallSkipIntro`, `PublishSkipMenu`, `InstallSkipMenu` and `InstallVRAMFix`
+(VRAMFix's key left the shipped INI in that same split commit, which is why it
+"disappeared" from the main INI then while its body stayed here).
+
+Deleted with them: the `abi_skip_intro_body`, `abi_skip_intro_screens`,
+`abi_skip_menu_body`, `abi_vram_fix_shim` and `abi_vram_fix_helper` bodies, their
+`kAbiBodies`/`AbiByName` rows and dump stub, the `zpatch_skip_intro_match`,
+`zpatch_skip_menu_resume`, `zpatch_skip_menu_flag`, `zpatch_vram_arg_a/arg_b/flag`
+globals and their `FindGlobalSlot` entries. The write set is unchanged (96 cells,
+3,854 writes), which is the proof they were unreachable; `dump_abi.inc` was
+regenerated (103 rows). The fork keeps its own copies in `xlivelessaddon/`.

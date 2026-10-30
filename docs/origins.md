@@ -11,8 +11,9 @@ The installer arms and hook bodies here were ported from the **readable
 reconstruction** of the 7.65 binary, which was itself verified against the
 shipped ASI. The surrounding loader, configuration and build system
 are new work modelled on GTAIV.EFLC.FusionFix. The FusionFix-style intro and
-window bodies now live in the XLivelessAddon successor; the intro bodies remain
-registered in this module only for the pre-split reference.
+window bodies live in the XLivelessAddon successor, and the pre-split copies that
+were left in this module (SkipIntro, SkipMenu, SkipLauncher, VRAMFix) have been
+deleted: they were unregistered, so they could never run.
 
 One config-surface change is intentional and not behavioural: the INI is
 grouped by subsystem, and the old flat `[Options]` layout is still read. The

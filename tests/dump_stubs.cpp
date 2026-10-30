@@ -26,7 +26,6 @@ namespace
     // rel32 install (and the matrix can attribute its 4 bytes) instead of a
     // null target.
     constexpr DumpAbi kDumpOnlyAbi[] = {
-        {"abi_skip_intro_screens", 0x0F000000u},
         // Prologue body (GarageModelFix site A): a new entry point with no
         // original destination VA, so the dump records a real rel32 install.
         {"abi_garage_entry_a", 0x0F000001u},

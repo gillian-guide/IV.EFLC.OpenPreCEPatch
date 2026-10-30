@@ -18,9 +18,6 @@
 extern "C"
 {
     uint32_t zpatch_dlc_load_callback = 0;              // dword_1015BDDC
-    uint32_t zpatch_skip_intro_match = 0;               // dword_1015AD74
-    uint32_t zpatch_skip_menu_resume = 0;               // dword_10159348
-    uint8_t zpatch_skip_menu_flag = 0;                  // byte_101A8450
     uint32_t zpatch_blackscreen_resume = 0;             // dword_1015AD58
     uint32_t zpatch_blackscreen_value_ptr = 0;          // dword_1015AD5C
     uint32_t zpatch_path_node_resume_ok = 0;            // dword_1015BDFC
@@ -55,9 +52,6 @@ extern "C"
     uint32_t zpatch_bike_resume = 0;                    // dword_1015AD84
     uint32_t zpatch_collision_deadlock_should_walk = 0; // dword_1015BDD4
     uint32_t zpatch_collision_deadlock_iterations = 0;  // dword_1015BDD8
-    uint32_t zpatch_vram_arg_a = 0;                     // dword_1015D630
-    uint32_t zpatch_vram_arg_b = 0;                     // dword_1015D634
-    uint8_t zpatch_vram_flag = 0;                       // byte_1015D638
     uint32_t zpatch_driveby_resolver = 0;               // dword_1015BDE0
     uint32_t zpatch_driveby_resume = 0;                 // dword_1015BDF4
     uint32_t zpatch_driveby_fov = 0x42340000u;    // dword_101580C4 (45.0f, original on-disk)
@@ -415,12 +409,6 @@ uintptr_t FindGlobalSlot(std::string_view slot_name) noexcept
         return reinterpret_cast<uintptr_t>(&g_dlc_apply_rva);
     if (slot_name == "dword_1015804C")
         return reinterpret_cast<uintptr_t>(&g_dlc_register_rva);
-    if (slot_name == "dword_1015AD74")
-        return reinterpret_cast<uintptr_t>(&zpatch_skip_intro_match);
-    if (slot_name == "dword_10159348")
-        return reinterpret_cast<uintptr_t>(&zpatch_skip_menu_resume);
-    if (slot_name == "byte_101A8450")
-        return reinterpret_cast<uintptr_t>(&zpatch_skip_menu_flag);
     if (slot_name == "dword_1015AD58")
         return reinterpret_cast<uintptr_t>(&zpatch_blackscreen_resume);
     if (slot_name == "dword_1015AD5C")
