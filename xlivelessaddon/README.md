@@ -78,8 +78,11 @@ Win32 Release configuration.
 ## Install
 
 Copy `XLivelessAddon.asi` and `XLivelessAddon.ini` next to the game executable.
-Do **not** also install `IV.EFLC.OpenPreCEPatch.asi` with the same feature
-options enabled; choose one module as the owner of the XLivelessAddon fixes.
+The INI uses the original flat `[Options]` style (`;` comments, `Key=Value`);
+a missing file is recreated with the same contents, and an old
+`ZolikaPatch.ini` is used as a fallback for keys the file does not set. Do
+**not** also install `IV.EFLC.OpenPreCEPatch.asi` with the same feature options
+enabled; choose one module as the owner of the XLivelessAddon fixes.
 
 ## Modernisation status
 
