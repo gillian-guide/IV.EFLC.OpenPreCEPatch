@@ -50,6 +50,9 @@ extern "C" void __stdcall zpatch_nms_free(void* ptr) noexcept;
 extern "C" uint8_t __stdcall zpatch_nms_contains(uint32_t key) noexcept;
 extern "C" uintptr_t zpatch_nms_vtable[24];
 
+// Offline check for the flat allocation registry (native tests only).
+extern "C" bool zpatch_nms_registry_selftest() noexcept;
+
 #endif  // _WIN32
 
 extern "C" void* AbiByName(const char* name) noexcept;

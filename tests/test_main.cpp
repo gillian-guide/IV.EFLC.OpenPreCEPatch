@@ -543,6 +543,7 @@ namespace
         CHECK(AbiByName("abi_skip_intro_body") != nullptr);
         CHECK(AbiByName("does_not_exist") == nullptr);
         CHECK(zpatch_ooc_selftest());
+        CHECK(zpatch_nms_registry_selftest());
     }
 } // namespace
 

@@ -23,7 +23,6 @@
 #include <intrin.h>
 #include <new>
 #include <string>
-#include <unordered_set>
 #include <xmmintrin.h>
 
 // ---------------------------------------------------------------------------
@@ -5188,9 +5187,169 @@ namespace
 // NewMemorySystem's allocation registry: the original keeps the pointers it
 // handed out in its own hash map (FNV-1a over the pointer's four bytes) under
 // the recursive critical section at 0x101A0808. Only membership is observable,
-// so the keys go in a plain set behind an equivalent lock.
+// so the keys go in a flat open-addressing set behind an equivalent lock.
+//
+// It is a flat table rather than std::unordered_set because the set is touched
+// on *every* game allocation and free: an unordered_set node is one heap
+// allocation per insert (and a throw inside a noexcept caller on failure). The
+// table allocates only when it grows, never throws (VirtualAlloc returns null
+// and the insert is dropped), and keeps the same membership semantics.
 CRITICAL_SECTION g_nms_lock;
-std::unordered_set<uint32_t> g_nms_allocations;
+
+class NmsRegistry final
+{
+public:
+    bool insert(uint32_t key) noexcept
+    {
+        // 0 is the empty marker and 0xFFFFFFFF the erased marker; a four-byte
+        // aligned pointer can be neither.
+        if (key == kNmsEmpty || key == kNmsErased)
+            return false;
+        if (!EnsureCapacity())
+            return false;
+        return InsertNoGrow(key);
+    }
+
+    void erase(uint32_t key) noexcept
+    {
+        if (capacity_ == 0u || key == kNmsEmpty || key == kNmsErased)
+            return;
+        const size_t mask = capacity_ - 1u;
+        for (size_t probe = 0; probe <= mask; ++probe)
+        {
+            uint32_t& slot = slots_[Probe(key, probe, mask)];
+            if (slot == kNmsEmpty)
+                return;
+            if (slot == key)
+            {
+                slot = kNmsErased;
+                --count_;
+                return;
+            }
+        }
+    }
+
+    bool contains(uint32_t key) const noexcept
+    {
+        if (capacity_ == 0u || key == kNmsEmpty || key == kNmsErased)
+            return false;
+        const size_t mask = capacity_ - 1u;
+        for (size_t probe = 0; probe <= mask; ++probe)
+        {
+            const uint32_t slot = slots_[Probe(key, probe, mask)];
+            if (slot == kNmsEmpty)
+                return false;
+            if (slot == key)
+                return true;
+        }
+        return false;
+    }
+
+    size_t size() const noexcept { return count_; }
+    size_t capacity() const noexcept { return capacity_; }
+
+private:
+    static constexpr uint32_t kNmsEmpty = 0u;
+    static constexpr uint32_t kNmsErased = 0xFFFFFFFFu;
+    static constexpr size_t kMinCapacity = 1024u;
+
+    static size_t Probe(uint32_t key, size_t probe, size_t mask) noexcept
+    {
+        // Multiplicative hash, then linear probing: the keys are aligned heap
+        // addresses, whose low bits are all zero, so the multiply is what
+        // spreads them.
+        const uint32_t mixed = key * 2654435761u;
+        return (static_cast<size_t>(mixed >> 8) + probe) & mask;
+    }
+
+    bool EnsureCapacity() noexcept
+    {
+        if (capacity_ == 0u)
+            return Grow(kMinCapacity);
+        // Keep the probe chains short: grow at 3/4 occupancy, counting erased
+        // slots because they still terminate a probe. When the table is mostly
+        // tombstones (churn), rebuild it at the same size instead of doubling,
+        // so memory stays proportional to the live count.
+        if ((used_ + 1u) * 4u >= capacity_ * 3u)
+        {
+            if (count_ * 2u <= used_)
+                return Grow(capacity_);
+            return Grow(capacity_ * 2u);
+        }
+        return true;
+    }
+
+    bool InsertNoGrow(uint32_t key) noexcept
+    {
+        const size_t mask = capacity_ - 1u;
+        size_t erased = static_cast<size_t>(-1);
+        for (size_t probe = 0; probe <= mask; ++probe)
+        {
+            uint32_t& slot = slots_[Probe(key, probe, mask)];
+            if (slot == key)
+                return true;
+            if (slot == kNmsErased && erased == static_cast<size_t>(-1))
+                erased = Probe(key, probe, mask);
+            if (slot == kNmsEmpty)
+            {
+                uint32_t& target = erased != static_cast<size_t>(-1) ? slots_[erased] : slot;
+                target = key;
+                ++count_;
+                if (erased == static_cast<size_t>(-1))
+                    ++used_;
+                return true;
+            }
+        }
+        if (erased != static_cast<size_t>(-1))
+        {
+            slots_[erased] = key;
+            ++count_;
+            return true;
+        }
+        return false;
+    }
+
+    bool Grow(size_t wanted) noexcept
+    {
+        auto* replacement = static_cast<uint32_t*>(VirtualAlloc(
+            nullptr, wanted * sizeof(uint32_t), MEM_COMMIT | MEM_RESERVE,
+            PAGE_READWRITE));
+        if (replacement == nullptr)
+        {
+            // Out of address space: keep the old table and drop this insert.
+            // Membership is only a query, so a missing entry is a false
+            // negative like the original's own allocation failure path.
+            return false;
+        }
+        uint32_t* const old = slots_;
+        const size_t old_capacity = capacity_;
+        slots_ = replacement;
+        capacity_ = wanted;
+        used_ = 0u;
+        size_t live = 0u;
+        for (size_t index = 0; index < old_capacity; ++index)
+        {
+            const uint32_t key = old[index];
+            if (key != kNmsEmpty && key != kNmsErased)
+            {
+                InsertNoGrow(key);
+                ++live;
+            }
+        }
+        count_ = live;
+        if (old != nullptr)
+            VirtualFree(old, 0, MEM_RELEASE);
+        return true;
+    }
+
+    uint32_t* slots_{};
+    size_t capacity_{};
+    size_t count_{};
+    size_t used_{};
+};
+
+NmsRegistry g_nms_allocations;
+
 struct NmsRegistryInit final
 {
     NmsRegistryInit() noexcept { InitializeCriticalSection(&g_nms_lock); }
@@ -5237,9 +5396,71 @@ extern "C" void __stdcall zpatch_nms_free(void* ptr) noexcept
 extern "C" uint8_t __stdcall zpatch_nms_contains(uint32_t key) noexcept
 {
     EnterCriticalSection(&g_nms_lock);
-    const bool found = g_nms_allocations.find(key) != g_nms_allocations.end();
+    const bool found = g_nms_allocations.contains(key);
     LeaveCriticalSection(&g_nms_lock);
     return found ? uint8_t{1} : uint8_t{0};
+}
+
+// Offline check for the registry above (native tests only): a local instance,
+// so the live registry is untouched. Exercises insert/erase/contains, growth
+// past the first block, tombstone reuse and the reserved keys.
+extern "C" bool zpatch_nms_registry_selftest() noexcept
+{
+    NmsRegistry registry;
+    constexpr uint32_t kKeys = 20000u;
+    uint32_t keys[kKeys];
+    uint32_t state = 0x12345678u;
+    for (uint32_t i = 0; i < kKeys; ++i)
+    {
+        // Aligned, 4-byte-spaced pseudo-random pointers, like the real keys.
+        state = state * 1664525u + 1013904223u;
+        keys[i] = (state & 0x0FFFFFFFu) * 16u;
+    }
+
+    for (uint32_t i = 0; i < kKeys; ++i)
+        if (!registry.insert(keys[i])) return false;
+    if (registry.size() != kKeys) return false;
+    if (registry.capacity() <= 1024u) return false;  // grew at least once
+
+    // Duplicates are idempotent, not new entries.
+    if (!registry.insert(keys[0])) return false;
+    if (registry.size() != kKeys) return false;
+
+    // The reserved keys are never members.
+    if (registry.insert(0u)) return false;
+    if (registry.insert(0xFFFFFFFFu)) return false;
+    if (registry.contains(0u) || registry.contains(0xFFFFFFFFu)) return false;
+
+    // Erase every other key; the rest must survive, including across the
+    // tombstone-heavy table.
+    for (uint32_t i = 0; i < kKeys; i += 2)
+        registry.erase(keys[i]);
+    if (registry.size() != kKeys / 2) return false;
+    for (uint32_t i = 0; i < kKeys; ++i)
+        if (registry.contains(keys[i]) != ((i & 1u) != 0u)) return false;
+
+    // Re-inserting into tombstones must not grow the size past live entries.
+    for (uint32_t i = 0; i < kKeys; i += 2)
+        if (!registry.insert(keys[i])) return false;
+    if (registry.size() != kKeys) return false;
+    for (uint32_t i = 0; i < kKeys; ++i)
+        if (!registry.contains(keys[i])) return false;
+
+    // Erasing a non-member changes nothing.
+    registry.erase(0xDEADBEE0u);
+    if (registry.size() != kKeys) return false;
+
+    // Churn: repeated erase-all/re-insert cycles must stay bounded instead of
+    // doubling on tombstones alone.
+    for (uint32_t cycle = 0; cycle < 8; ++cycle)
+    {
+        for (uint32_t i = 0; i < kKeys; ++i) registry.erase(keys[i]);
+        if (registry.size() != 0u) return false;
+        for (uint32_t i = 0; i < kKeys; ++i)
+            if (!registry.insert(keys[i])) return false;
+    }
+    if (!registry.contains(keys[kKeys - 1])) return false;
+    return registry.capacity() <= 4u * kKeys;
 }
 
 // The CRageAllocator vtable, entry order and per-entry conventions as the
