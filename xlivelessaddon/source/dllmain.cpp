@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <initializer_list>
 #include <string>
@@ -22,6 +23,8 @@ std::string szCustomSavePath;
 std::string szCustomSettingsPath;
 
 #define WM_ROM (43858)
+
+static void XLog(const char* format, ...);
 
 static uint32_t g_skip_intro_resume = 0;
 __declspec(naked) static void SkipIntroBody()
@@ -57,32 +60,37 @@ struct dataStruct
 // change savefile path to "%USERPROFILE%\Documents\Rockstar Games\GTA IV\savegames\"
 void getSavefilePath(int __unused, char * pBuffer, char * pszSaveName)
 {
+    // The game hands us a 256-byte buffer. Build the path with snprintf so an
+    // over-long custom path or save name is truncated instead of writing past
+    // the buffer (the original addon copied without a bound).
+    constexpr size_t kCapacity = 256;
+    char path[kCapacity] = {};
+
     if (szCustomSavePath.empty())
-    {
-        strcpy_s(pBuffer, 256, pszPath);
-        strcat_s(pBuffer, 256, "savegames");
-    }
+        std::snprintf(path, sizeof(path), "%s%s", pszPath ? pszPath : "", "savegames");
     else
-    {
-        szCustomSavePath.copy(pBuffer, 256);
-        pBuffer[szCustomSavePath.length()] = '\0';
-    }
+        std::snprintf(path, sizeof(path), "%s", szCustomSavePath.c_str());
+
+    if (std::strlen(path) == kCapacity - 1)
+        XLog("savefile path truncated to %s", path);
 
     // check path and create directory if necessary
-    DWORD attrs = GetFileAttributes(pBuffer);
+    DWORD attrs = GetFileAttributes(path);
     if (attrs == INVALID_FILE_ATTRIBUTES)
-        CreateDirectory(pBuffer, NULL);
+        CreateDirectory(path, NULL);
     else if (!(attrs & FILE_ATTRIBUTE_DIRECTORY))
     {
-        strcpy_s(pBuffer, 256, pszSaveName);
+        std::snprintf(pBuffer, kCapacity, "%s", pszSaveName ? pszSaveName : "");
         return;
     }
 
     if (pszSaveName)
     {
-        strcat_s(pBuffer, 256, "\\");
-        strcat_s(pBuffer, 256, pszSaveName);
+        const size_t used = std::strlen(path);
+        std::snprintf(path + used, sizeof(path) - used, "\\%s", pszSaveName);
     }
+
+    std::memcpy(pBuffer, path, sizeof(path));
 }
 
 HANDLE CreateFileHook(_In_ LPCSTR lpFileName, _In_ DWORD dwDesiredAccess, _In_ DWORD dwShareMode, _In_opt_ LPSECURITY_ATTRIBUTES lpSecurityAttributes, _In_ DWORD dwCreationDisposition, _In_ DWORD dwFlagsAndAttributes, _In_opt_ HANDLE hTemplateFile)
@@ -401,8 +409,20 @@ DWORD WINAPI Init(LPVOID)
 
     if (bDelay)
     {
+        // Wait for the probe instead of spinning a core forever. Supported
+        // builds hit it on the first iterations; an unsupported build gets a
+        // log line and an orderly return instead of a hung worker.
+        int spins = 0;
         while (!(pattern.size() > 0))
+        {
+            if (++spins > 10000)
+            {
+                XLog("init: probe pattern never appeared; aborting");
+                return 1;
+            }
+            Sleep(1);
             pattern = hook::pattern("B0 04 B2 18 B1 20");
+        }
     }
 
     const std::string iniPath = EnsureIni();
@@ -520,6 +540,14 @@ DWORD WINAPI Init(LPVOID)
 
     auto game_version = gv();
     XLog("build=%u%s", game_version, game_version == UINT_MAX ? " (unknown)" : "");
+    if (game_version == UINT_MAX)
+    {
+        // Same policy as the main module: an unrecognised build gets no
+        // installs. The legacy code below used to dereference the first match
+        // of assumptions that only hold on the supported builds.
+        XLog("unsupported build; no patches applied");
+        return 0;
+    }
     auto gv_not = [&game_version](std::initializer_list<uint32_t> v) -> bool
     {
         if (std::find(std::begin(v), std::end(v), game_version) != std::end(v))
@@ -535,7 +563,10 @@ DWORD WINAPI Init(LPVOID)
         {
             auto range_end = (uintptr_t)pattern.get(2).get<uintptr_t>(0);
             auto tmp = hook::pattern(range_end - 0x80, range_end, "8A 88 ? ? ? ? 88 88 ? ? ? ? 83 C0 01");
-            pszPath = *tmp.get(0).get<char*>(2);
+            if (tmp.size() > 0)
+                pszPath = *tmp.get(0).get<char*>(2);
+            else
+                XLog("savegames: path pattern not found; using the game default");
 
             pattern = hook::pattern("75 ? 83 C1 01 83 C0 01 83 F9 04");
             if (pattern.size() > 0)
@@ -879,27 +910,53 @@ DWORD WINAPI Init(LPVOID)
 
         //[v1006 - v1008]
         pattern = hook::pattern("A1 ? ? ? ? B9 A7 FA DC 5C F7 E1 8B 0D ? ? ? ? 33 F6");
-        if (pattern.size() > 0)
+        if (pattern.size() >= 2)
         {
-            injector::MakeJMP(pattern.get(0).get<uintptr_t>(0), hook::pattern("80 BC 24 ? ? ? ? ? 6A 00").get(0).get<uintptr_t>(0), true);
-            injector::MakeJMP(pattern.get(1).get<uintptr_t>(0), hook::pattern("6A 00 68 80 00 00 00 6A 03 6A 00 6A 01 68 00 00 00 80 57").get(0).get<uintptr_t>(0), true);
+            auto first = hook::pattern("80 BC 24 ? ? ? ? ? 6A 00");
+            auto second = hook::pattern("6A 00 68 80 00 00 00 6A 03 6A 00 6A 01 68 00 00 00 80 57");
+            if (first.size() > 0 && second.size() > 0)
+            {
+                injector::MakeJMP(pattern.get(0).get<uintptr_t>(0), first.get(0).get<uintptr_t>(0), true);
+                injector::MakeJMP(pattern.get(1).get<uintptr_t>(0), second.get(0).get<uintptr_t>(0), true);
+            }
+            else
+            {
+                XLog("DFA: secondary jump targets missing (first=%zu second=%zu)",
+                     first.size(), second.size());
+            }
         }
     }
 
     // windows message id [v1000 - v1008]
-    // Note: this legacy ROM service also runs when SkipLauncher=1, i.e. next to
-    // the recovered DFA/ROM stage above. The log records it so a live run can
-    // show the overlap; gating it off is a launcher-path decision that needs a
-    // live GFWL test. The writes stay unguarded like the original addon's.
-    legacyRom = true;
-    pattern = hook::pattern("A1 ? ? ? ? 8B 0D ? ? ? ? 68 ? ? ? ? 53 50 51 FF 15");
-    injector::WriteMemory(*pattern.get_first<uint32_t>(1), WM_ROM, true);
-    injector::WriteMemory(*pattern.get_first<uint32_t>(7), CreateROMWindow(), true); // window handle
+    // The recovered ROM stage above owns the service when SkipLauncher=1; only
+    // the legacy path installs the old window/service in that case.
+    if (!bSkipLauncher)
+    {
+        legacyRom = true;
+        pattern = hook::pattern("A1 ? ? ? ? 8B 0D ? ? ? ? 68 ? ? ? ? 53 50 51 FF 15");
+        if (pattern.size() > 0)
+        {
+            injector::WriteMemory(*pattern.get_first<uint32_t>(1), WM_ROM, true);
+            injector::WriteMemory(*pattern.get_first<uint32_t>(7), CreateROMWindow(), true); // window handle
+        }
+        else
+        {
+            legacyRom = false;
+            XLog("legacy ROM window pattern missing");
+        }
 
-    // SendMessage call to this window that ends up freezing the audio update thread and resulting in a deadlock [v1000 - v1008]
-    pattern = hook::pattern("FF 15 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? B9 ? ? ? ? E8 ? ? ? ? B9 ? ? ? ? E8 ? ? ? ? 83 7C 24");
-    injector::MakeNOP(pattern.get_first(0), 6, true);
-    injector::MakeCALL(pattern.get_first(0), SendMessageFakie, true);
+        // SendMessage call to this window that ends up freezing the audio update thread and resulting in a deadlock [v1000 - v1008]
+        pattern = hook::pattern("FF 15 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? B9 ? ? ? ? E8 ? ? ? ? B9 ? ? ? ? E8 ? ? ? ? 83 7C 24");
+        if (pattern.size() > 0)
+        {
+            injector::MakeNOP(pattern.get_first(0), 6, true);
+            injector::MakeCALL(pattern.get_first(0), SendMessageFakie, true);
+        }
+        else
+        {
+            XLog("legacy ROM SendMessage pattern missing");
+        }
+    }
 
     if (bSkipWebConnect)
     {
@@ -990,16 +1047,26 @@ DWORD WINAPI Init(LPVOID)
     {
         // [v1000 - v1008]
         pattern = hook::pattern("FF 15 ? ? ? ? 5F 5E 5D 5B 83 C4 10 C2 10 00");
-        injector::MakeNOP(pattern.count(2).get(0).get<void>(0), 6, true);
-        injector::MakeCALL(pattern.count(2).get(0).get<void>(0), DefWindowProcWProxy, true);
-        injector::MakeNOP(pattern.count(2).get(1).get<void>(0), 6, true);
-        injector::MakeCALL(pattern.count(2).get(1).get<void>(0), DefWindowProcAProxy, true);
+        if (pattern.size() >= 2)
+        {
+            injector::MakeNOP(pattern.get(0).get<void>(0), 6, true);
+            injector::MakeCALL(pattern.get(0).get<void>(0), DefWindowProcWProxy, true);
+            injector::MakeNOP(pattern.get(1).get<void>(0), 6, true);
+            injector::MakeCALL(pattern.get(1).get<void>(0), DefWindowProcAProxy, true);
+        }
+        else
+        {
+            XLog("borderless: DefWindowProc patterns missing (%zu)", pattern.size());
+        }
     }
 
     if (bRemoveRegistryPathDependency)
     {
         IMAGE_IMPORT_DESCRIPTOR* pImports = (IMAGE_IMPORT_DESCRIPTOR*)(dwLoadOffset + pNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
-        size_t nNumImports = pNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size / sizeof(IMAGE_IMPORT_DESCRIPTOR) - 1;
+        const size_t importBytes = pNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size;
+        size_t nNumImports = importBytes / sizeof(IMAGE_IMPORT_DESCRIPTOR);
+        if (nNumImports > 0)
+            --nNumImports;  // the last descriptor is the null terminator
 
         auto pRegOpenKeyA = (size_t)GetProcAddress(GetModuleHandle(TEXT("ADVAPI32.DLL")), "RegOpenKeyA");
         auto pRegQueryValueExA = (size_t)GetProcAddress(GetModuleHandle(TEXT("ADVAPI32.DLL")), "RegQueryValueExA");

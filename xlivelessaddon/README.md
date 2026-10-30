@@ -36,11 +36,22 @@ pass, before the hook can run.
 `XLivelessAddon.log` records the detected build id and what actually applied:
 the window/borderless/focus-loss install results, whether the SkipIntro/SkipMenu
 sites were found, the VRAM hook count, the ADVAPI32 IAT replacement count and
-`legacyRom`. With `SkipLauncher = 1` the legacy `CreateROMWindow`/`WM_ROM` block
-still runs next to the recovered ROM stage (`legacyRom=1`); gating it off is a
-launcher/GFWL decision that needs a live A/B, so it is only observable today.
-The fork's unguarded `pattern.get(0)` sites are the original addon's fault paths
-and are deliberately preserved; see `docs/improvements.md`.
+`legacyRom`.
+
+Direct hardening (the fork is not bound to the reconstruction's 1:1 faults):
+
+- an unrecognised build logs and installs nothing, like the main module;
+- the delayed-init probe sleeps between scans and gives up after 10 s instead of
+  spinning a core;
+- the custom save path is built with a bounded `snprintf`, so an over-long path
+  is truncated and logged instead of overrunning the caller's 256-byte buffer;
+- every former unguarded `pattern.get(0)` / `get_first` site (savegames path, DFA
+  secondary targets, legacy ROM, SendMessage) and the borderless `count(2)`
+  shim checks the match count and logs a miss;
+- the legacy `CreateROMWindow`/`WM_ROM` block only runs when
+  `SkipLauncher = 0`, so the recovered ROM stage is the sole owner under the
+  shipped default (`legacyRom=0`); the import-descriptor count no longer
+  underflows on an empty import directory.
 
 ## Tests
 
