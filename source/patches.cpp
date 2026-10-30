@@ -74,6 +74,10 @@ namespace opp
             has(Improvement::skip_intro) && config.Option("SkipIntro", "1") ? 1u : 0u;
         zpatch_opt_trace_arms = has(Improvement::trace) ? 1u : 0u;
         zpatch_opt_windowed = has(Improvement::windowed) ? 1u : 0u;
+        // Runtime-pointer failsafes are not tied to one option: a body whose
+        // preamble pointer or published lookup is missing continues with the
+        // value the game would have had without the fix instead of faulting.
+        zpatch_opt_failsafe = has(Improvement::failsafe) ? 1u : 0u;
 
         for (const Feature& feature : RegisteredFeatures())
         {

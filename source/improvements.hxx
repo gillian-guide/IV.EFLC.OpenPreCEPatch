@@ -22,7 +22,13 @@ namespace opp
         skip_intro = 1u << 5,
         trace = 1u << 6,
         windowed = 1u << 7,
-        all = (1u << 8) - 1u,
+        // Runtime-pointer failsafes in the hook bodies: a preamble pointer or a
+        // game-published lookup that is missing makes the body continue with
+        // the value the game would have had without the fix instead of
+        // dereferencing null. On by default; `except:failsafe` restores the
+        // original fault for a fault-parity run.
+        failsafe = 1u << 8,
+        all = (1u << 9) - 1u,
     };
 
     constexpr uint32_t Improve(Improvement value) noexcept

@@ -43,6 +43,10 @@ namespace opp
             {"windowed", Improvement::windowed},
             {"borderless", Improvement::windowed},
             {"dontpause", Improvement::windowed},
+            {"failsafe", Improvement::failsafe},
+            {"failsafes", Improvement::failsafe},
+            {"guards", Improvement::failsafe},
+            {"null", Improvement::failsafe},
         };
 
         bool EqualsIgnoreCase(std::string_view left, std::string_view right) noexcept
@@ -149,6 +153,7 @@ namespace opp
         case Improvement::skip_intro: return "skip_intro";
         case Improvement::trace: return "trace";
         case Improvement::windowed: return "windowed";
+        case Improvement::failsafe: return "failsafe";
         case Improvement::none: return "none";
         case Improvement::all: return "all";
         }

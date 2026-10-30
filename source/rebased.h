@@ -400,3 +400,4 @@ extern "C" uint8_t zpatch_opt_model_index;         // BPM / DebugPrintSpawns
 extern "C" uint8_t zpatch_opt_skip_intro_screens;  // SkipIntro
 extern "C" uint8_t zpatch_opt_trace_arms;          // trace group (test switch)
 extern "C" uint8_t zpatch_opt_windowed;            // Borderless / DoNotPause
+extern "C" uint8_t zpatch_opt_failsafe;            // runtime-pointer failsafes

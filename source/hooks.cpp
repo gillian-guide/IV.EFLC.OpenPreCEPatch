@@ -9,6 +9,7 @@
 #include "game.hxx"
 #include "hooks.h"
 #include "catalogue.hxx"
+#include "log.hxx"
 #include "pattern.hxx"
 #include "rebased.h"
 #include "driveby_seh.h"
@@ -32,6 +33,26 @@
 #if defined(_WIN32)
 
 using namespace opp;
+
+// ---------------------------------------------------------------------------
+// Runtime-pointer failsafes
+//
+// These bodies are transcribed from the original, which calls its preamble
+// pointers and game-published lookups without checking them: on a build where a
+// pointer is missing, the original faults. With the failsafe group on (the
+// default; OPCEP_IMPROVEMENTS=except:failsafe restores the original fault) a
+// missing pointer makes the body continue with the value the game would have
+// had without the fix, and logs one line, so a partially-matching build
+// degrades instead of dying. The guard is always at the top of the body, before
+// any register or stack state the resume expects is touched.
+// ---------------------------------------------------------------------------
+static bool zpatch_failsafe_skip(const char* what, bool missing) noexcept
+{
+    if (zpatch_opt_failsafe == 0u || !missing)
+        return false;
+    opp::Log("failsafe: %s is missing, continuing without the fix", what);
+    return true;
+}
 
 // Game structure offsets used by the helpers below; the inline asm keeps the
 // numeric operands because MASM needs compile-time constants.
@@ -64,10 +85,16 @@ int32_t abi_player_ped_helper() noexcept
         static_cast<uintptr_t>(zpatch_model_lookup));
     // 0x1003D960 `call dword_10159C0C` is unguarded, so a null lookup faults.
     zpatch_player_ped_computed = 0;  // original writes 0 before the lookup
-    lookup(GameHash("player"), &index);
+    if (!zpatch_failsafe_skip("PlayerAsPedComponentsFix model lookup", lookup == nullptr))
+        lookup(GameHash("player"), &index);
     const auto* object = reinterpret_cast<const uint8_t*>(
         static_cast<uintptr_t>(zpatch_player_ped_object));
-    const int16_t model = *reinterpret_cast<const int16_t*>(object + kModelIndexOffset);
+    // The object is the argument the shim stashed; a clean skip keeps the
+    // original's "no match" answer (model -1) instead of dereferencing null.
+    const int16_t model =
+        zpatch_failsafe_skip("PlayerAsPedComponentsFix object", object == nullptr)
+            ? static_cast<int16_t>(-1)
+            : *reinterpret_cast<const int16_t*>(object + kModelIndexOffset);
     zpatch_player_ped_computed = (index == model) ? 1u : 0u;
     // Tail contract: EDX=1 (the cmove source), ECX=cookie via the /GS check,
     // EAX=the object's model (the movsx eax,[eax+2Eh] the resume sees).
@@ -88,6 +115,11 @@ bool abi_super_lod_helper(const void* object) noexcept
     int32_t index = -1;
     const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
         static_cast<uintptr_t>(zpatch_super_lod_lookup));
+    // A missing lookup or object answers "not the SuperLOD model", which is the
+    // answer the site gives when the fix does not apply.
+    if (zpatch_failsafe_skip("SuperLODFix lookup", lookup == nullptr) ||
+        zpatch_failsafe_skip("SuperLODFix object", object == nullptr))
+        return false;
     lookup(0xAE4B15D6u, &index);  // sub_100469A0's call is unguarded
     const auto* o = static_cast<const uint8_t*>(object);
     return *reinterpret_cast<const int16_t*>(o + kModelIndexOffset) == index;
@@ -113,8 +145,9 @@ void abi_popup_check() noexcept
         static_cast<uintptr_t>(zpatch_model_lookup));
     zpatch_popup_angle = 0x3FC90FDBu;  // dword_101580CC: pi/2 float bits
     zpatch_popup_flag = 0;             // dword_1015BE24
-    if (zpatch_opt_model_lookup_guards != 0u && lookup == nullptr)
-        return;  // opt-in: a preamble miss is a clean skip
+    if ((zpatch_opt_model_lookup_guards != 0u || zpatch_opt_failsafe != 0u) &&
+        lookup == nullptr)
+        return;  // opt-in / failsafe: a preamble miss is a clean skip
     // PopupLookupCache: the hash -> model-index mapping is static, so remember
     // the last resolution per hash. Direct-mapped, collision just re-resolves.
     static uint32_t cache_hash[512] = {};
@@ -180,8 +213,11 @@ void abi_fchs_check() noexcept
     // are unguarded in the original.
     const auto* base = reinterpret_cast<const uint8_t*>(
         static_cast<uintptr_t>(zpatch_fchs_param));
-    if (zpatch_opt_model_lookup_guards != 0u && (lookup == nullptr || base == nullptr))
-        return;  // opt-in: a preamble/parameter miss is a clean skip
+    if (zpatch_opt_model_lookup_guards != 0u || zpatch_opt_failsafe != 0u)
+    {
+        if (lookup == nullptr || base == nullptr)
+            return;  // a preamble/parameter miss is a clean skip
+    }
     static uint32_t cache_hash[512] = {};
     static int32_t cache_index[512] = {};
     static uint8_t cache_valid[512] = {};
@@ -449,6 +485,8 @@ extern "C" void abi_bpm_check() noexcept
 {
     const auto* models = reinterpret_cast<void* const*>(
         static_cast<uintptr_t>(zpatch_pre_ped_array));
+    if (zpatch_failsafe_skip("BadPlayerModelCrashFix model table", models == nullptr))
+        return;  // nothing to remap: the site keeps the model it was given
     void* object = models[zpatch_bpm_model_index];
     if (object == nullptr) return;
     void** vtable = *reinterpret_cast<void***>(object);
@@ -476,14 +514,22 @@ extern "C" void abi_bpm_check() noexcept
     const uint32_t hash = GameHash("m_y_multiplayer");
     if (zpatch_script_call_bool(zpatch_salt_b8, 1, &hash) == 0)
     {
-        reinterpret_cast<void(__cdecl*)(uint32_t, uint32_t)>(
-            static_cast<uintptr_t>(zpatch_pre_fn_59c74))(hash, 0);
+        const auto detour = reinterpret_cast<void(__cdecl*)(uint32_t, uint32_t)>(
+            static_cast<uintptr_t>(zpatch_pre_fn_59c74));
+        if (!zpatch_failsafe_skip("BadPlayerModelCrashFix script detour",
+                                  detour == nullptr))
+            detour(hash, 0);
         zpatch_script_call(zpatch_salt_40, 0, nullptr);
     }
     int32_t new_index = -1;
-    reinterpret_cast<void(__cdecl*)(uint32_t, int32_t*)>(
-        static_cast<uintptr_t>(zpatch_model_lookup))(hash, &new_index);
-    zpatch_bpm_model_index = static_cast<uint32_t>(new_index);
+    const auto lookup = reinterpret_cast<void(__cdecl*)(uint32_t, int32_t*)>(
+        static_cast<uintptr_t>(zpatch_model_lookup));
+    if (!zpatch_failsafe_skip("BadPlayerModelCrashFix model lookup",
+                              lookup == nullptr))
+    {
+        lookup(hash, &new_index);
+        zpatch_bpm_model_index = static_cast<uint32_t>(new_index);
+    }
 }
 
 // RestoreDeathMusic (original sub_10050A50): the death-music gate, gated on
@@ -716,6 +762,8 @@ void zpatch_garage_store_c(uint8_t* object, const uint8_t* vehicle) noexcept
     const int16_t model =
         *reinterpret_cast<const int16_t*>(vehicle + 46);
     const auto base = static_cast<uintptr_t>(zpatch_pre_ped_array);
+    if (zpatch_failsafe_skip("GarageModelFix model table", base == 0u))
+        return;  // nothing stashed: the lookup side reads hash 0 and keeps the model
     const uint32_t entry = *reinterpret_cast<const uint32_t*>(
         base + 4u * static_cast<uint32_t>(model));
     const uint32_t hash = *reinterpret_cast<const uint32_t*>(
@@ -738,6 +786,8 @@ int32_t zpatch_garage_lookup_c(uint8_t* object) noexcept
     // 0x10046C10 / 0x10046C4A call dword_10159C0C unguarded.
     const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
         static_cast<uintptr_t>(zpatch_model_lookup));
+    if (zpatch_failsafe_skip("GarageModelFix model lookup", lookup == nullptr))
+        return original;  // the garage keeps the model it stored
     int32_t out = -1;
     lookup(hash, &out);
     if (out <= 0 || out >= 32000)
@@ -760,6 +810,11 @@ __declspec(naked) void zpatch_garage_store_model()
         push esi
         mov  esi, ecx
         jne  garage_done
+        cmp  DWORD PTR [zpatch_pre_ped_array], 0
+        jne  garage_table_ok
+        cmp  BYTE PTR [zpatch_opt_failsafe], 0
+        jne  garage_done
+    garage_table_ok:
         movsx edx, WORD PTR [edx + 0x2e]
         mov  eax, DWORD PTR [zpatch_pre_ped_array]
         mov  eax, DWORD PTR [eax + edx * 4]
@@ -844,6 +899,17 @@ extern "C" uint32_t abi_steer_body() noexcept
         static_cast<uintptr_t>(zpatch_pre_fn_59cdc));
     const auto part_call = reinterpret_cast<PartFn>(
         static_cast<uintptr_t>(zpatch_steer_vtable_fn));
+
+    // The moving-parts body calls four game functions and the model lookup; a
+    // missing preamble pointer or a vehicle whose vtable slot was not published
+    // would fault in the original. The clean skip returns 0, which the resume
+    // reads as "no component moved this frame".
+    if (zpatch_failsafe_skip("moving-parts model lookup", lookup == nullptr) ||
+        zpatch_failsafe_skip("moving-parts bone lookup", get_bone == nullptr) ||
+        zpatch_failsafe_skip("moving-parts setter A", set_a == nullptr) ||
+        zpatch_failsafe_skip("moving-parts setter B", set_b == nullptr) ||
+        zpatch_failsafe_skip("moving-parts component call", part_call == nullptr))
+        return 0;
 
     // sub_10003980: read the current script float (resolver hash salt_3c).
     const auto script_float = [&]() -> float
@@ -1113,6 +1179,10 @@ extern "C" void abi_gfwl_patch() noexcept
         // 0x10005421 writes xlive base + 0x66F770.. with no base check; with
         // xlive.dll absent the base is 0 and the original faults on that page.
         const auto base = static_cast<uintptr_t>(zpatch_xlive_base);
+        // Without xlive.dll there is no GFWL update popup to remove: the four
+        // writes have no meaning at base 0, so the failsafe just skips them.
+        if (zpatch_failsafe_skip("RemoveGFWLUpdatePopup xlive.dll", base == 0u))
+            return;
         wp_dword(reinterpret_cast<void*>(base + 6748016u), 0x10000E83u);
         wp_dword(reinterpret_cast<void*>(base + 6748020u), 0x10000E83u);
         wp_dword(reinterpret_cast<void*>(base + 7034320u), 0x10000E83u);
@@ -1400,7 +1470,11 @@ bool __fastcall abi_ped_models_in_cutscenes_check(const void* self, void*)
     int32_t index = -1;
     const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
         static_cast<uintptr_t>(zpatch_model_lookup));
-    // `call dword_10159C0C` is unguarded in the original.
+    // `call dword_10159C0C` is unguarded in the original. A missing lookup or a
+    // null self answers "not the player model", the un-patched answer.
+    if (zpatch_failsafe_skip("PedModelsInCutscenesFix model lookup", lookup == nullptr) ||
+        zpatch_failsafe_skip("PedModelsInCutscenesFix object", self == nullptr))
+        return false;
     lookup(GameHash("player"), &index);
     const auto* o = static_cast<const uint8_t*>(self);
     return *reinterpret_cast<const int16_t*>(o + kModelIndexOffset) == index;
@@ -2932,6 +3006,14 @@ extern "C" __declspec(naked) void abi_driveby_fov_helper()
         push eax
         call zpatch_driveby_resolve_seh
         add esp, 8
+        // The resolver is SEH-wrapped (a null preamble pointer or a miss returns
+        // 0); the original then dereferences that 0. With the failsafe on the
+        // default 45.0f is kept and the resume runs un-patched.
+        cmp  BYTE PTR [zpatch_opt_failsafe], 0
+        je   drv_resolved
+        test eax, eax
+        je   drv_done
+    drv_resolved:
         mov ecx, DWORD PTR [eax + 0Eh]    // AVs when the handle did not resolve
         add eax, 0Eh
         add ecx, eax
@@ -2943,6 +3025,11 @@ extern "C" __declspec(naked) void abi_driveby_fov_helper()
     drv_have:
         mov eax, DWORD PTR [zpatch_driveby_cached]
     drv_read:
+        cmp  BYTE PTR [zpatch_opt_failsafe], 0
+        je   drv_cached_ok
+        test eax, eax
+        je   drv_done
+    drv_cached_ok:
         mov eax, DWORD PTR [eax]          // AVs when the cached entry is null
         test eax, eax
         je drv_done
@@ -3341,7 +3428,10 @@ extern "C" int abi_copsirens_check_a()  // sub_10005F70
         static_cast<uintptr_t>(zpatch_model_lookup));
     const int32_t index = static_cast<int32_t>(zpatch_copsirens_index);
     zpatch_copsirens_flag = 0;
-    // sub_10005F70's `call dword_10159C0C` is unguarded.
+    // sub_10005F70's `call dword_10159C0C` is unguarded. A missing lookup
+    // answers "not a police car", which leaves the siren decision un-patched.
+    if (zpatch_failsafe_skip("CopSirensFlag model lookup", lookup == nullptr))
+        return 0;
     for (int i = 0; kPolice[i]; ++i)
     {
         int32_t out = -1;
@@ -3378,6 +3468,8 @@ extern "C" int abi_copsirens_check_b()  // sub_10006260
     zpatch_copsirens_flag_b = 0;
     int32_t out = -1;
     // sub_10006260's `call dword_10159C0C` is unguarded.
+    if (zpatch_failsafe_skip("CopSirensFlag model lookup (B)", lookup == nullptr))
+        return 0;
     lookup(GameHash("police2"), &out);
     if (out != index)
     {
@@ -3893,10 +3985,18 @@ constexpr size_t kDlcPathCapacity = 0x104u;
 
 void* dlc_discovery_post(void* object)
 {
-    auto* const module_path = static_cast<char*>(::operator new(kDlcPathCapacity));
-    // Original ignores the return value and continues with the allocator buffer
-    // (sub_10023150); a failed GetModuleFileNameA is not a clean early return.
-    GetModuleFileNameA(nullptr, module_path, kDlcPathCapacity);
+    // The original allocates with a throwing operator new and ignores both its
+    // result and GetModuleFileNameA's: a failed allocation or a failed module
+    // path then builds every DLC path from uninitialized bytes. The failsafe
+    // leaves the episode list untouched instead, which is the LoadDLCs=0 state.
+    auto* const module_path =
+        static_cast<char*>(::operator new(kDlcPathCapacity, std::nothrow));
+    if (zpatch_failsafe_skip("LoadDLCs path buffer", module_path == nullptr))
+        return object;
+    const DWORD module_length = GetModuleFileNameA(nullptr, module_path, kDlcPathCapacity);
+    if (zpatch_failsafe_skip("LoadDLCs module path",
+                             module_length == 0 || module_length >= kDlcPathCapacity))
+        return object;
     PathRemoveFileSpecA(module_path);
     uint32_t last_apply_edx = 0;
     bool episode254_registered = false;
