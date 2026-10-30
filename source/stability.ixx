@@ -40,7 +40,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_aim_projectile_crash_fix")), true); //jmp
+                JumpToBody(ctx, match, "abi_aim_projectile_crash_fix");
             }
         }
 
@@ -84,7 +84,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_bad_player_model")), true); //jmp
+                JumpToBody(ctx, match, "abi_bad_player_model");
             }
         }
 
@@ -134,11 +134,9 @@ namespace opp::features
                 {
                     if (auto pattern = PatternAll(image, "E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20"); pattern.size() > 0)
                     {
-                        injector::MakeJMP(pattern.get(0).get<uint8_t>(8),
-                            reinterpret_cast<void*>(Abi("abi_benchmark_a")), true); //jmp
+                        JumpToBody(ctx, pattern.get(0).get<uint8_t>(8), "abi_benchmark_a");
                         if (pattern.size() > 1)
-                            injector::MakeJMP(pattern.get(1).get<uint8_t>(8),
-                                reinterpret_cast<void*>(Abi("abi_benchmark_b")), true); //jmp
+                            JumpToBody(ctx, pattern.get(1).get<uint8_t>(8), "abi_benchmark_b");
                     }
                 }
             }
@@ -187,7 +185,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match + 81, reinterpret_cast<void*>(Abi("abi_blackscreen_shim")), true); //jmp
+                JumpToBody(ctx, match + 81, "abi_blackscreen_shim");
             }
         }
 
@@ -231,7 +229,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_collision_deadlock_walk")), true); //jmp
+                JumpToBody(ctx, match, "abi_collision_deadlock_walk");
             }
         }
 
@@ -254,7 +252,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeCALL(match, reinterpret_cast<void*>(Abi("abi_combined_radio_freeze_fix")), true); //call
+                CallToBody(ctx, match, "abi_combined_radio_freeze_fix");
             }
         }
 
@@ -300,7 +298,7 @@ namespace opp::features
             if (auto pattern = Pattern(image, "68 6A 10 4E 31"); pattern.size() > 0)
             {
                 uint8_t* site = MatchPointer(pattern, -4);
-                injector::MakeCALL(site, reinterpret_cast<void*>(Abi("abi_crash_msg_shim")), true); //call
+                CallToBody(ctx, site, "abi_crash_msg_shim");
             }
         }
 
@@ -354,35 +352,35 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_episode_switch_shim_c")), true); //jmp
+                JumpToBody(ctx, match, "abi_episode_switch_shim_c");
             }
 
             if (auto pattern = Pattern(image, "89 43 20 8B 10 8B 52 08 57 8D 4C 24 2C 51 8B C8 FF D2 83 F8 FF 89 43 0C 0F 84"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_episode_switch_store_shim")), true); //jmp
+                JumpToBody(ctx, match, "abi_episode_switch_store_shim");
             }
 
             if (auto pattern = Pattern(image, "8B 41 10 03 41 0C C3"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_episode_switch_sum")), true); //jmp
+                JumpToBody(ctx, match, "abi_episode_switch_sum");
             }
 
             if (auto pattern = Pattern(image, "8B 4B 10 3B 4B 14 7D 0F"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_episode_switch_shim_b")), true); //jmp
+                JumpToBody(ctx, match, "abi_episode_switch_shim_b");
             }
 
             if (auto pattern = Pattern(image, "8B C1 8B 08 8B 11 8B 40 04 8B 52 30 50 FF D2 C3"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_episode_switch_vcall")), true); //jmp
+                JumpToBody(ctx, match, "abi_episode_switch_vcall");
             }
         }
 
@@ -431,14 +429,14 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_garage_body_a")), true); //jmp
+                JumpToBody(ctx, match, "abi_garage_body_a");
             }
 
             if (auto pattern = Pattern(image, "0F B7 0E 50 51 E8"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_garage_body_b")), true); //jmp
+                JumpToBody(ctx, match, "abi_garage_body_b");
             }
         }
 
@@ -482,7 +480,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_group_hack_shim")), true); //jmp
+                JumpToBody(ctx, match, "abi_group_hack_shim");
             }
         }
 
@@ -505,7 +503,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::WriteMemory<uint8_t>(match, 0xEBu, true); //jmp
+                WriteValue<uint8_t>(ctx, match, 0xEBu);
             }
         }
 
@@ -562,14 +560,14 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match + 7, reinterpret_cast<void*>(Abi("abi_ooc_branch")), true); //jmp
+                JumpToBody(ctx, match + 7, "abi_ooc_branch");
             }
 
             if (auto pattern = Pattern(image, "E8 ? ? ? ? 8B 74 24 14 83 C4 08 6A 00 56"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeCALL(match, reinterpret_cast<void*>(Abi("abi_ooc_wrap")), true); //call
+                CallToBody(ctx, match, "abi_ooc_wrap");
             }
         }
 
@@ -614,7 +612,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match + 53, reinterpret_cast<void*>(Abi("abi_path_node_shim")), true); //jmp
+                JumpToBody(ctx, match + 53, "abi_path_node_shim");
             }
         }
 
@@ -658,7 +656,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_ped_models_in_cutscenes_check")), true); //jmp
+                JumpToBody(ctx, match, "abi_ped_models_in_cutscenes_check");
             }
         }
 
@@ -703,7 +701,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match + 3, reinterpret_cast<void*>(Abi("abi_plane_crash_shim")), true); //jmp
+                JumpToBody(ctx, match + 3, "abi_plane_crash_shim");
             }
         }
 
@@ -752,7 +750,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match + 5, reinterpret_cast<void*>(Abi("abi_player_ped_components_shim")), true); //jmp
+                JumpToBody(ctx, match + 5, "abi_player_ped_components_shim");
             }
         }
 
@@ -802,15 +800,15 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match + 123, reinterpret_cast<void*>(Abi("abi_smpa60_tail_shim")), true); //jmp
-                injector::WriteMemory<uint8_t>(match - 38, 0xEBu, true); //jmp
+                JumpToBody(ctx, match + 123, "abi_smpa60_tail_shim");
+                WriteValue<uint8_t>(ctx, match - 38, 0xEBu);
             }
 
             if (auto pattern = Pattern(image, "8B 48 70 83 C0 40 50 51 8D 51 10"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_smpa60_shim")), true); //jmp
+                JumpToBody(ctx, match, "abi_smpa60_shim");
             }
         }
 
@@ -861,7 +859,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match - 21, reinterpret_cast<void*>(Abi("abi_speedup_body")), true); //jmp
+                JumpToBody(ctx, match - 21, "abi_speedup_body");
             }
         }
 
@@ -912,14 +910,12 @@ namespace opp::features
 
             if (ctx.build == GameBuild::v1070)
             {
-                injector::MakeJMP(image.base + 0x4A3CE9,
-                    reinterpret_cast<void*>(Abi("abi_super_lod_fix_shim")), true); //jmp
+                JumpToBody(ctx, image.base + 0x4A3CE9, "abi_super_lod_fix_shim");
             }
 
             if (ctx.build == GameBuild::v1080)
             {
-                injector::MakeJMP(image.base + 0x540E19,
-                    reinterpret_cast<void*>(Abi("abi_super_lod_fix_shim")), true); //jmp
+                JumpToBody(ctx, image.base + 0x540E19, "abi_super_lod_fix_shim");
             }
         }
 
@@ -942,7 +938,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::WriteMemory<uint8_t>(match, 0xC3u, true); //ret
+                WriteValue<uint8_t>(ctx, match, 0xC3u);
             }
         }
 
@@ -986,7 +982,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_wanted_level_shim")), true); //jmp
+                JumpToBody(ctx, match, "abi_wanted_level_shim");
             }
         }
 

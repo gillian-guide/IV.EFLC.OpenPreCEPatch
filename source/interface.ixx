@@ -46,7 +46,7 @@ namespace opp::features
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match - 9, 9, true); //nop
+                    NopAt(ctx, match - 9, 9);
                 }
             }
         }
@@ -70,21 +70,21 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeCALL(match - 13, reinterpret_cast<void*>(Abi("abi_death_music_install")), true); //call
+                CallToBody(ctx, match - 13, "abi_death_music_install");
             }
 
             if (auto pattern = Pattern(image, "C7 86 04 02 00 00 04 00 00 00 E9"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeCALL(match - 13, reinterpret_cast<void*>(Abi("abi_death_music_enabled")), true); //call
+                CallToBody(ctx, match - 13, "abi_death_music_enabled");
             }
 
             if (auto pattern = Pattern(image, "E8 ? ? ? ? 84 C0 74 C6 8B BE"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeCALL(match, reinterpret_cast<void*>(Abi("abi_death_music_enabled")), true); //call
+                CallToBody(ctx, match, "abi_death_music_enabled");
             }
         }
 

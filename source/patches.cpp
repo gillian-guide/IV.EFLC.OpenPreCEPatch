@@ -9,6 +9,7 @@
 #include "feature_registry.hxx"
 #include "helpers.hxx"
 #include "improvements.hxx"
+#include "log.hxx"
 #include "rebased.h"
 
 import common;
@@ -82,5 +83,10 @@ namespace opp
             if (observer.end != nullptr)
                 observer.end(observer.user, feature.name);
         }
+
+        // One line for the whole pass: the number of writes that reached the
+        // image and the number the arm failsafes refused (missing body, site
+        // outside the image). A healthy install reports 0 skipped.
+        Log("install: %zu writes applied, %zu skipped", ArmWritesApplied(), ArmWritesSkipped());
     }
 } // namespace opp

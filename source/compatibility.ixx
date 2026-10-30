@@ -41,7 +41,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_game_hash")), true); //jmp
+                JumpToBody(ctx, match, "abi_game_hash");
             }
         }
 
@@ -104,7 +104,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_gfwl_stub")), true); //jmp
+                JumpToBody(ctx, match, "abi_gfwl_stub");
             }
         }
 
@@ -116,39 +116,36 @@ namespace opp::features
         // Patch 6 (1060) modded-file checks.
         if (ctx.build == GameBuild::v1060)
         {
-            injector::MakeJMP(image.base + 0x003982,
-                reinterpret_cast<void*>(ctx.gameBase + 0x003A09), true); //jmp
-            injector::WriteMemory<uint8_t>(image.base + 0x0038AC, 0x00u, true); //patch
-            injector::WriteMemory<uint8_t>(image.base + 0x00397E, 0x00u, true); //patch
-            injector::MakeNOP(image.base + 0x0042E7, 1, true); //nop
-            injector::MakeNOP(image.base + 0x0042E8, 1, true); //nop
-            injector::MakeNOP(image.base + 0x0042E9, 1, true); //nop
-            injector::MakeNOP(image.base + 0x0042EA, 1, true); //nop
-            injector::MakeNOP(image.base + 0x0042EB, 1, true); //nop
-            injector::MakeNOP(image.base + 0x0042EC, 1, true); //nop
-            injector::MakeNOP(image.base + 0x0042ED, 1, true); //nop
-            injector::WriteMemory<uint8_t>(image.base + 0x00392E, 0xEBu, true); //jmp
-            injector::WriteMemory<uint8_t>(image.base + 0x003A14, 0xEBu, true); //jmp
+            JumpTo(ctx, image.base + 0x003982, reinterpret_cast<void*>(ctx.gameBase + 0x003A09));
+            WriteValue<uint8_t>(ctx, image.base + 0x0038AC, 0x00u);
+            WriteValue<uint8_t>(ctx, image.base + 0x00397E, 0x00u);
+            NopAt(ctx, image.base + 0x0042E7, 1);
+            NopAt(ctx, image.base + 0x0042E8, 1);
+            NopAt(ctx, image.base + 0x0042E9, 1);
+            NopAt(ctx, image.base + 0x0042EA, 1);
+            NopAt(ctx, image.base + 0x0042EB, 1);
+            NopAt(ctx, image.base + 0x0042EC, 1);
+            NopAt(ctx, image.base + 0x0042ED, 1);
+            WriteValue<uint8_t>(ctx, image.base + 0x00392E, 0xEBu);
+            WriteValue<uint8_t>(ctx, image.base + 0x003A14, 0xEBu);
         }
 
         // Patch 7 (1070) modded-file checks.
         if (ctx.build == GameBuild::v1070)
         {
-            injector::MakeJMP(image.base + 0x00389C,
-                reinterpret_cast<void*>(ctx.gameBase + 0x0038AE), true); //jmp
-            injector::MakeJMP(image.base + 0x003962,
-                reinterpret_cast<void*>(ctx.gameBase + 0x0039E9), true); //jmp
-            injector::WriteMemory<uint8_t>(image.base + 0x00388C, 0x00u, true); //patch
-            injector::WriteMemory<uint8_t>(image.base + 0x00395E, 0x00u, true); //patch
-            injector::MakeNOP(image.base + 0x0042C7, 1, true); //nop
-            injector::MakeNOP(image.base + 0x0042C8, 1, true); //nop
-            injector::MakeNOP(image.base + 0x0042C9, 1, true); //nop
-            injector::MakeNOP(image.base + 0x0042CA, 1, true); //nop
-            injector::MakeNOP(image.base + 0x0042CB, 1, true); //nop
-            injector::MakeNOP(image.base + 0x0042CC, 1, true); //nop
-            injector::MakeNOP(image.base + 0x0042CD, 1, true); //nop
-            injector::WriteMemory<uint8_t>(image.base + 0x00390E, 0xEBu, true); //jmp
-            injector::WriteMemory<uint8_t>(image.base + 0x0039F4, 0xEBu, true); //jmp
+            JumpTo(ctx, image.base + 0x00389C, reinterpret_cast<void*>(ctx.gameBase + 0x0038AE));
+            JumpTo(ctx, image.base + 0x003962, reinterpret_cast<void*>(ctx.gameBase + 0x0039E9));
+            WriteValue<uint8_t>(ctx, image.base + 0x00388C, 0x00u);
+            WriteValue<uint8_t>(ctx, image.base + 0x00395E, 0x00u);
+            NopAt(ctx, image.base + 0x0042C7, 1);
+            NopAt(ctx, image.base + 0x0042C8, 1);
+            NopAt(ctx, image.base + 0x0042C9, 1);
+            NopAt(ctx, image.base + 0x0042CA, 1);
+            NopAt(ctx, image.base + 0x0042CB, 1);
+            NopAt(ctx, image.base + 0x0042CC, 1);
+            NopAt(ctx, image.base + 0x0042CD, 1);
+            WriteValue<uint8_t>(ctx, image.base + 0x00390E, 0xEBu);
+            WriteValue<uint8_t>(ctx, image.base + 0x0039F4, 0xEBu);
         }
     }
 
@@ -171,12 +168,11 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_rgsc_login_removed")), true); //jmp
+                JumpToBody(ctx, match, "abi_rgsc_login_removed");
             }
             else if (ctx.build == GameBuild::v1080)
             {
-                injector::MakeJMP(image.base + 0x498460,
-                    reinterpret_cast<void*>(Abi("abi_rgsc_login_removed")), true); //jmp
+                JumpToBody(ctx, image.base + 0x498460, "abi_rgsc_login_removed");
             }
         }
 
@@ -199,12 +195,12 @@ namespace opp::features
                 if (auto pattern = Pattern(image, "75 ? 83 C1 01 83 C0 01 83 F9 04"); pattern.size() > 0)
                 {
                     uint8_t* match = pattern.get(0).get<uint8_t>();
-                    injector::MakeCALL(match - 73, reinterpret_cast<void*>(Abi("abi_savegame_fix_close")), true); //call
-                    injector::MakeCALL(match - 143, reinterpret_cast<void*>(Abi("abi_savegame_fix_copy")), true); //call
-                    injector::MakeCALL(match - 176, reinterpret_cast<void*>(Abi("abi_savegame_fix_copy")), true); //call
-                    injector::MakeCALL(match - 280, reinterpret_cast<void*>(Abi("abi_savegame_fix_mutex")), true); //call
-                    injector::MakeCALL(match - 240, reinterpret_cast<void*>(Abi("abi_savegame_fix_null")), true); //call
-                    injector::MakeNOP(pattern.get(0).get<uint8_t>(), 2, true); //nop
+                    CallToBody(ctx, match - 73, "abi_savegame_fix_close");
+                    CallToBody(ctx, match - 143, "abi_savegame_fix_copy");
+                    CallToBody(ctx, match - 176, "abi_savegame_fix_copy");
+                    CallToBody(ctx, match - 280, "abi_savegame_fix_mutex");
+                    CallToBody(ctx, match - 240, "abi_savegame_fix_null");
+                    NopAt(ctx, pattern.get(0).get<uint8_t>(), 2);
                 }
             }
 
@@ -212,11 +208,11 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeCALL(match - 86, reinterpret_cast<void*>(Abi("abi_savegame_fix_mutex")), true); //call
-                injector::MakeCALL(match - 47, reinterpret_cast<void*>(Abi("abi_savegame_fix_null")), true); //call
-                injector::MakeCALL(match + 10, reinterpret_cast<void*>(Abi("abi_savegame_fix_copy")), true); //call
-                injector::MakeCALL(match + 90, reinterpret_cast<void*>(Abi("abi_savegame_fix_copy")), true); //call
-                injector::MakeCALL(match + 128, reinterpret_cast<void*>(Abi("abi_savegame_fix_close")), true); //call
+                CallToBody(ctx, match - 86, "abi_savegame_fix_mutex");
+                CallToBody(ctx, match - 47, "abi_savegame_fix_null");
+                CallToBody(ctx, match + 10, "abi_savegame_fix_copy");
+                CallToBody(ctx, match + 90, "abi_savegame_fix_copy");
+                CallToBody(ctx, match + 128, "abi_savegame_fix_close");
             }
         }
 
@@ -239,49 +235,49 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeNOP(match, 6, true); //nop
+                NopAt(ctx, match, 6);
             }
 
             if (auto pattern = Pattern(image, "3B 4E 18 0F 85"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeNOP(match + 3, 6, true); //nop
+                NopAt(ctx, match + 3, 6);
             }
 
             if (auto pattern = Pattern(image, "3B 56 18 0F 85"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeNOP(match + 3, 6, true); //nop
+                NopAt(ctx, match + 3, 6);
             }
 
             if (auto pattern = Pattern(image, "74 C4 8B 07 3B 46 18 75 BD 68"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeNOP(match, 2, true); //nop
+                NopAt(ctx, match, 2);
             }
 
             if (auto pattern = Pattern(image, "74 EC 38 5E 06 74 E7 68"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeNOP(match, 2, true); //nop
+                NopAt(ctx, match, 2);
             }
 
             if (auto pattern = Pattern(image, "84 DB 0F 85 43 01 00 00 8D 4C 24 28 8B C1"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::WriteMemory<uint8_t>(match + 223, 0xEBu, true); //jmp
+                WriteValue<uint8_t>(ctx, match + 223, 0xEBu);
             }
 
             if (auto pattern = Pattern(image, "8B 56 1C 3B 56 20 ? ? 6A 00 6A 00"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::WriteMemory<uint16_t>(match, 0xC033u, true); //patch
+                WriteValue<uint16_t>(ctx, match, 0xC033u);
             }
         }
 
@@ -331,7 +327,7 @@ namespace opp::features
                 const char* body = zpatch_opt_skip_intro_screens != 0u
                                        ? "abi_skip_intro_screens"
                                        : "abi_skip_intro_body";
-                injector::MakeJMP(match - 6, reinterpret_cast<void*>(Abi(body)), true); //jmp
+                JumpToBody(ctx, match - 6, body);
             }
         }
 
@@ -385,21 +381,21 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeCALL(match + 23, reinterpret_cast<void*>(Abi("abi_skip_menu_body")), true); //call
+                CallToBody(ctx, match + 23, "abi_skip_menu_body");
             }
 
             if (auto pattern = Pattern(image, "6A 00 E8 ? ? ? ? 83 C4 04 8B 8C 24 ? ? ? ? 5F 5E 5D 5B 33 CC E8 ? ? ? ? 81 C4 ? ? ? ? C3"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeCALL(match + 2, reinterpret_cast<void*>(Abi("abi_skip_menu_body")), true); //call
+                CallToBody(ctx, match + 2, "abi_skip_menu_body");
             }
 
             if (auto pattern = Pattern(image, "6A 00 E8 ? ? ? ? 83 C4 04 8B 8C 24 ? ? ? ? 5F 5E 5B 33 CC E8 ? ? ? ? 8B E5 5D C3"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeCALL(match + 2, reinterpret_cast<void*>(Abi("abi_skip_menu_body")), true); //call
+                CallToBody(ctx, match + 2, "abi_skip_menu_body");
             }
         }
 
@@ -424,7 +420,7 @@ namespace opp::features
                 auto* site = reinterpret_cast<uint8_t*>(xlive) + 988677;
                 const uint8_t current = *site;
                 if (current == 0x74 || current == 0xEB)
-                    injector::WriteMemory<uint8_t>(site, 0xEBu, true);
+                    WriteValue<uint8_t>(ctx, site, 0xEBu);
             }
         }
 
@@ -460,7 +456,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_vram_fix_shim")), true); //jmp
+                JumpToBody(ctx, match, "abi_vram_fix_shim");
             }
         }
 

@@ -27,15 +27,27 @@ namespace opp
     // original scans module base..end of the last executable section and the arms
     // only read the first match, so the scan is limited to that range and stops
     // at the first hit. Arms that also patch match 1 use PatternAll below.
+    //
+    // A scan with no hit is the normal way an option declines to install on a
+    // build it does not fit; it is logged once (with the arm that asked) so a
+    // partially-matching image is diagnosable instead of silent.
+    void LogPatternMiss(std::string_view signature) noexcept;
+
     inline hook::pattern Pattern(const GameImage& image, std::string_view signature)
     {
         const std::string normalized = NormalizeSignature(signature);
         if (normalized.empty())
+        {
+            LogPatternMiss(signature);
             return hook::pattern{};
+        }
         const ModuleView view = ExecutableView({image.base, image.size});
         const uintptr_t begin = reinterpret_cast<uintptr_t>(view.base);
-        return hook::make_range_pattern(begin, begin + view.size, normalized)
-            .count_hint(1);
+        auto pattern =
+            hook::make_range_pattern(begin, begin + view.size, normalized).count_hint(1);
+        if (pattern.size() == 0)
+            LogPatternMiss(signature);
+        return pattern;
     }
 
     // Every match in the executable range. The original's multi-hit arms
@@ -46,10 +58,16 @@ namespace opp
     {
         const std::string normalized = NormalizeSignature(signature);
         if (normalized.empty())
+        {
+            LogPatternMiss(signature);
             return hook::pattern{};
+        }
         const ModuleView view = ExecutableView({image.base, image.size});
         const uintptr_t begin = reinterpret_cast<uintptr_t>(view.base);
-        return hook::make_range_pattern(begin, begin + view.size, normalized);
+        auto pattern = hook::make_range_pattern(begin, begin + view.size, normalized);
+        if (pattern.size() == 0)
+            LogPatternMiss(signature);
+        return pattern;
     }
 
     // The address of a site inside the current match.
@@ -138,10 +156,107 @@ namespace opp
     bool FusionFixGateClosed();
     bool NewFilesConflictModulesPresent();
 
-    // Debug-only arm trace; a no-op in release builds.
+    // Name of the arm currently installing, for the skip log below. Set by
+    // TraceArm, which every Install*/Publish* arm calls first.
+    const char* CurrentArm() noexcept;
+
+    // Install trace. Records the arm name for CurrentArm() and, with install
+    // tracing on, writes one log line before the arm runs.
     void TraceArm(const char* name);
 
-    // Address of a machine-level body by name (see hooks/bodies.cpp).
+    // ---------------------------------------------------------------------
+    // Arm failsafes
+    //
+    // Every arm write goes through one of these instead of calling
+    // injector:: directly. Each checks, before touching the image:
+    //   * the site and every byte it would overwrite is inside the game image
+    //     (a pattern matched at the very end of a section, or an RVA table row
+    //     from another build, cannot write into unmapped memory);
+    //   * the destination body resolved (a withheld or unverified body skips
+    //     instead of installing a jump to 0).
+    // A failed check writes one log line naming the arm and leaves the image
+    // untouched: that is what the original loader does when a signature does
+    // not match, so an unhealthy image degrades to a clean skip, never a
+    // fault. On a healthy image every check passes and the write set is
+    // byte-identical to the unchecked form.
+    //
+    // The arm's own option and build gate stays in the arm, where the original
+    // handler had it; these helpers only make the write itself safe.
+    bool SiteWritable(const PatchContext& ctx, const void* site, size_t length) noexcept;
+
+    // Abi(name) with the skip log: nullptr means "no verified body for this
+    // destination", which the caller turns into a skip.
+    void* AbiTarget(const char* name) noexcept;
+
+    // One skip line for a write that never reached the image.
+    void SkipArmWrite(const char* reason) noexcept;
+
+    // Address of a machine-level body by name (see hooks/bodies.cpp). Prefer
+    // AbiTarget/JumpToBody/CallToBody, which also guard the write.
     inline void* Abi(const char* name) { return AbiByName(name); }
+
+    inline void JumpTo(PatchContext& ctx, const void* site, void* target)
+    {
+        if (target == nullptr)
+        {
+            SkipArmWrite("null branch destination");
+            return;
+        }
+        if (!SiteWritable(ctx, site, kBranchLength))
+            return;
+        injector::MakeJMP(const_cast<void*>(site), target, true);
+    }
+
+    inline void CallTo(PatchContext& ctx, const void* site, void* target)
+    {
+        if (target == nullptr)
+        {
+            SkipArmWrite("null call destination");
+            return;
+        }
+        if (!SiteWritable(ctx, site, kBranchLength))
+            return;
+        injector::MakeCALL(const_cast<void*>(site), target, true);
+    }
+
+    inline void JumpToBody(PatchContext& ctx, const void* site, const char* body)
+    {
+        if (void* const target = AbiTarget(body))
+            JumpTo(ctx, site, target);
+    }
+
+    inline void CallToBody(PatchContext& ctx, const void* site, const char* body)
+    {
+        if (void* const target = AbiTarget(body))
+            CallTo(ctx, site, target);
+    }
+
+    inline void NopAt(PatchContext& ctx, const void* site, size_t length)
+    {
+        if (!SiteWritable(ctx, site, length))
+            return;
+        injector::MakeNOP(const_cast<void*>(site), length, true);
+    }
+
+    inline void WriteRaw(PatchContext& ctx, const void* site, const void* data, size_t length)
+    {
+        if (!SiteWritable(ctx, site, length))
+            return;
+        injector::WriteMemoryRaw(const_cast<void*>(site), const_cast<void*>(data), length, true);
+    }
+
+    template <typename T>
+    inline void WriteValue(PatchContext& ctx, const void* site, T value)
+    {
+        if (!SiteWritable(ctx, site, sizeof(T)))
+            return;
+        injector::WriteMemory<T>(const_cast<void*>(site), value, true);
+    }
+
+    // Counters for the install summary line: writes applied and writes skipped
+    // by the checks above. Both include publish arms; bodies that run later do
+    // not count.
+    size_t ArmWritesApplied() noexcept;
+    size_t ArmWritesSkipped() noexcept;
 } // namespace opp
 

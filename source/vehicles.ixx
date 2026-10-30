@@ -40,7 +40,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeNOP(match + 12, 12, true); //nop
+                NopAt(ctx, match + 12, 12);
             }
         }
 
@@ -63,7 +63,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeNOP(match + 33, 6, true); //nop
+                NopAt(ctx, match + 33, 6);
             }
         }
 
@@ -117,21 +117,21 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_copsirens_a")), true); //jmp
+                JumpToBody(ctx, match, "abi_copsirens_a");
             }
 
             if (auto pattern = Pattern(image, "0F BF 41 2E 39 05"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match + 22, reinterpret_cast<void*>(Abi("abi_copsirens_b")), true); //jmp
+                JumpToBody(ctx, match + 22, "abi_copsirens_b");
             }
 
             if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match - 10, reinterpret_cast<void*>(Abi("abi_copsirens_ide")), true); //jmp
+                JumpToBody(ctx, match - 10, "abi_copsirens_ide");
             }
         }
 
@@ -152,14 +152,14 @@ namespace opp::features
 
             if (ctx.build == GameBuild::v1070)
             {
-                injector::WriteMemory<uint32_t>(image.base + 0x021500, AddressOf(&zpatch_episode_flag), true); //patch
-                injector::WriteMemory<uint32_t>(image.base + 0x7D91AE, AddressOf(&zpatch_episode_flag), true); //patch
+                WriteValue<uint32_t>(ctx, image.base + 0x021500, AddressOf(&zpatch_episode_flag));
+                WriteValue<uint32_t>(ctx, image.base + 0x7D91AE, AddressOf(&zpatch_episode_flag));
             }
 
             if (ctx.build == GameBuild::v1080)
             {
-                injector::WriteMemory<uint32_t>(image.base + 0x095040, AddressOf(&zpatch_episode_flag), true); //patch
-                injector::WriteMemory<uint32_t>(image.base + 0x684ABE, AddressOf(&zpatch_episode_flag), true); //patch
+                WriteValue<uint32_t>(ctx, image.base + 0x095040, AddressOf(&zpatch_episode_flag));
+                WriteValue<uint32_t>(ctx, image.base + 0x684ABE, AddressOf(&zpatch_episode_flag));
             }
 
             if (BuildIs(ctx.build,
@@ -171,18 +171,18 @@ namespace opp::features
                 {
                     if (auto pattern = PatternAll(image, "7C 18 0F BF 4E 2E"); pattern.size() > 0)
                     {
-                        injector::MakeNOP(pattern.get(0).get<uint8_t>() - 6, 8, true); //nop
+                        NopAt(ctx, pattern.get(0).get<uint8_t>() - 6, 8);
                         if (pattern.size() > 1)
-                            injector::MakeNOP(pattern.get(1).get<uint8_t>() - 6, 8, true); //nop
+                            NopAt(ctx, pattern.get(1).get<uint8_t>() - 6, 8);
                     }
                 }
 
                 {
                     if (auto pattern = PatternAll(image, "83 3D ? ? ? ? 02 75 17 F3 0F 10 44 24 08"); pattern.size() > 0)
                     {
-                        injector::MakeNOP(pattern.get(0).get<uint8_t>(), 9, true); //nop
+                        NopAt(ctx, pattern.get(0).get<uint8_t>(), 9);
                         if (pattern.size() > 1)
-                            injector::MakeNOP(pattern.get(1).get<uint8_t>(), 9, true); //nop
+                            NopAt(ctx, pattern.get(1).get<uint8_t>(), 9);
                     }
                 }
 
@@ -190,149 +190,149 @@ namespace opp::features
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match + 6, 2, true); //nop
+                    NopAt(ctx, match + 6, 2);
                 }
 
                 if (auto pattern = Pattern(image, "74 17 83 3D ? ? ? ? 02 75 0E F3 0F 10 05"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match + 2, 9, true); //nop
+                    NopAt(ctx, match + 2, 9);
                 }
 
                 if (auto pattern = Pattern(image, "7C 22 83 F8 28 75 1D"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match, 2, true); //nop
+                    NopAt(ctx, match, 2);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 0F 8C 0E 05 00 00"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match, 13, true); //nop
+                    NopAt(ctx, match, 13);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 08 3B 05"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match, 9, true); //nop
+                    NopAt(ctx, match, 9);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 17 F3 0F 10 44 24 0C"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match, 9, true); //nop
+                    NopAt(ctx, match, 9);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 1F 8B 44 24 04"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match, 9, true); //nop
+                    NopAt(ctx, match, 9);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 21 8B 96 20 08 00 00"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match, 9, true); //nop
+                    NopAt(ctx, match, 9);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 24 F6 87 6C 02 00 00 04"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match, 9, true); //nop
+                    NopAt(ctx, match, 9);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 35 0F BF 46 2E"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match, 9, true); //nop
+                    NopAt(ctx, match, 9);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 38 8B 16"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match, 9, true); //nop
+                    NopAt(ctx, match, 9);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 11 8B 4E"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match + 7, 2, true); //nop
+                    NopAt(ctx, match + 7, 2);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 1F 8B"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match + 7, 2, true); //nop
+                    NopAt(ctx, match + 7, 2);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 26 8B 85 40 0B 00 00"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match, 9, true); //nop
+                    NopAt(ctx, match, 9);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 35 0F BF 43 2E"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match, 9, true); //nop
+                    NopAt(ctx, match, 9);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 43"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match + 7, 2, true); //nop
+                    NopAt(ctx, match + 7, 2);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 4A 0F BF 46 2E"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match, 13, true); //nop
+                    NopAt(ctx, match, 13);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 89 44 24 38"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match + 11, 6, true); //nop
+                    NopAt(ctx, match + 11, 6);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 8A 0D"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match, 7, true); //nop
-                    injector::MakeNOP(match + 17, 2, true); //nop
+                    NopAt(ctx, match, 7);
+                    NopAt(ctx, match + 17, 2);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 F3 0F 10 05 ? ? ? ? F3 0F 11 44 24 20 75 4C"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match + 21, 2, true); //nop
+                    NopAt(ctx, match + 21, 2);
                 }
 
                 if (auto pattern = Pattern(image, "8B 56 04 8B 4A 0C 89 4C 24 1C 7C 18"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match - 15, 7, true); //nop
-                    injector::MakeNOP(match + 10, 2, true); //nop
+                    NopAt(ctx, match - 15, 7);
+                    NopAt(ctx, match + 10, 2);
                 }
             }
         }
@@ -362,56 +362,56 @@ namespace opp::features
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match, 2, true); //nop
+                    NopAt(ctx, match, 2);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 0F 85 8C 01 00 00"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match + 7, 6, true); //nop
+                    NopAt(ctx, match + 7, 6);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 0F 8C D5 00"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match, 13, true); //nop
+                    NopAt(ctx, match, 13);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 20 8B CD E8"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match + 7, 2, true); //nop
+                    NopAt(ctx, match + 7, 2);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 50"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match + 7, 2, true); //nop
+                    NopAt(ctx, match + 7, 2);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 21 8B 44 24 0C"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match + 7, 2, true); //nop
+                    NopAt(ctx, match + 7, 2);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 32 8B 41"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match + 7, 2, true); //nop
+                    NopAt(ctx, match + 7, 2);
                 }
 
                 if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 7D 8B 4C 24 0C"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match + 7, 2, true); //nop
+                    NopAt(ctx, match + 7, 2);
                 }
             }
         }
@@ -456,7 +456,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_bike_physics_detour")), true); //jmp
+                JumpToBody(ctx, match, "abi_bike_physics_detour");
             }
         }
 
@@ -512,21 +512,21 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match + 2, reinterpret_cast<void*>(Abi("abi_steer_detour_eax")), true); //jmp
+                JumpToBody(ctx, match + 2, "abi_steer_detour_eax");
             }
 
             if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match + 2, reinterpret_cast<void*>(Abi("abi_steer_detour_edx")), true); //jmp
+                JumpToBody(ctx, match + 2, "abi_steer_detour_edx");
             }
 
             if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match - 10, reinterpret_cast<void*>(Abi("abi_copsirens_ide")), true); //jmp
+                JumpToBody(ctx, match - 10, "abi_copsirens_ide");
             }
         }
 
@@ -582,21 +582,21 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match + 2, reinterpret_cast<void*>(Abi("abi_steer_detour_eax")), true); //jmp
+                JumpToBody(ctx, match + 2, "abi_steer_detour_eax");
             }
 
             if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match + 2, reinterpret_cast<void*>(Abi("abi_steer_detour_edx")), true); //jmp
+                JumpToBody(ctx, match + 2, "abi_steer_detour_edx");
             }
 
             if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match - 10, reinterpret_cast<void*>(Abi("abi_copsirens_ide")), true); //jmp
+                JumpToBody(ctx, match - 10, "abi_copsirens_ide");
             }
         }
 
@@ -652,23 +652,23 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match - 237, reinterpret_cast<void*>(Abi("abi_nolivery_b")), true); //jmp
-                injector::MakeJMP(match - 199, reinterpret_cast<void*>(Abi("abi_nolivery_c")), true); //jmp
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_nolivery_a")), true); //jmp
+                JumpToBody(ctx, match - 237, "abi_nolivery_b");
+                JumpToBody(ctx, match - 199, "abi_nolivery_c");
+                JumpToBody(ctx, match, "abi_nolivery_a");
             }
 
             if (auto pattern = Pattern(image, "74 52 8D B5 3C 01 00 00 83 FB 04"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match + 2, reinterpret_cast<void*>(Abi("abi_nolivery_d")), true); //jmp
+                JumpToBody(ctx, match + 2, "abi_nolivery_d");
             }
 
             if (auto pattern = Pattern(image, "8D AF 3C 01 00 00 8D 54 24 20"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_nolivery_e")), true); //jmp
+                JumpToBody(ctx, match, "abi_nolivery_e");
             }
         }
 
@@ -697,7 +697,7 @@ namespace opp::features
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match + 6, 2, true); //nop
+                    NopAt(ctx, match + 6, 2);
                 }
             }
         }
@@ -754,25 +754,25 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_popup_headlights")), true); //jmp
-                injector::WriteMemory<uint8_t>(match + 10, static_cast<uint8_t>(0xEBu), true); //jmp
-                injector::WriteMemory<uint32_t>(match + 82, AddressOf(&zpatch_popup_angle), true); //patch
+                JumpToBody(ctx, match, "abi_popup_headlights");
+                WriteValue<uint8_t>(ctx, match + 10, static_cast<uint8_t>(0xEBu));
+                WriteValue<uint32_t>(ctx, match + 82, AddressOf(&zpatch_popup_angle));
             }
 
             if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match - 10, reinterpret_cast<void*>(Abi("abi_copsirens_ide")), true); //jmp
+                JumpToBody(ctx, match - 10, "abi_copsirens_ide");
             }
 
             if (auto pattern = Pattern(image, "0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_popup_headlights_edx")), true); //jmp
-                injector::WriteMemory<uint8_t>(match + 10, static_cast<uint8_t>(0xEBu), true); //jmp
-                injector::WriteMemory<uint32_t>(match + 82, AddressOf(&zpatch_popup_angle), true); //patch
+                JumpToBody(ctx, match, "abi_popup_headlights_edx");
+                WriteValue<uint8_t>(ctx, match + 10, static_cast<uint8_t>(0xEBu));
+                WriteValue<uint32_t>(ctx, match + 82, AddressOf(&zpatch_popup_angle));
             }
         }
 
@@ -828,21 +828,21 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match + 2, reinterpret_cast<void*>(Abi("abi_steer_detour_eax")), true); //jmp
+                JumpToBody(ctx, match + 2, "abi_steer_detour_eax");
             }
 
             if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match + 2, reinterpret_cast<void*>(Abi("abi_steer_detour_edx")), true); //jmp
+                JumpToBody(ctx, match + 2, "abi_steer_detour_edx");
             }
 
             if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match - 10, reinterpret_cast<void*>(Abi("abi_copsirens_ide")), true); //jmp
+                JumpToBody(ctx, match - 10, "abi_copsirens_ide");
             }
         }
 
@@ -871,7 +871,7 @@ namespace opp::features
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    injector::MakeNOP(match + 7, 2, true); //nop
+                    NopAt(ctx, match + 7, 2);
                 }
             }
         }

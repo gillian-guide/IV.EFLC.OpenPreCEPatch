@@ -73,59 +73,38 @@ namespace opp::features
 
             if (ctx.build == GameBuild::v1060)
             {
-                injector::MakeCALL(image.base + 0x4137CD,
-                    reinterpret_cast<void*>(Abi("abi_load_dlcs_dummy")), true); //call
-                injector::MakeJMP(image.base + 0x41445C,
-                    reinterpret_cast<void*>(ctx.gameBase + 0x4144B8), true); //jmp
-                injector::MakeJMP(image.base + 0x4144D4,
-                    reinterpret_cast<void*>(Abi("abi_load_dlcs_struct_fixup")), true); //jmp
-                injector::MakeJMP(image.base + 0x41450E,
-                    reinterpret_cast<void*>(ctx.gameBase + 0x41452C), true); //jmp
-                injector::MakeCALL(image.base + 0x41453A,
-                    reinterpret_cast<void*>(ctx.gameBase + 0x413E30), true); //call
-                injector::MakeNOP(image.base + 0x41453F, 12, true); //nop
-                injector::MakeCALL(image.base + 0x4137CD,
-                    reinterpret_cast<void*>(Abi("abi_load_dlcs_dummy")), true); //call
-                injector::MakeJMP(image.base + 0x4144D4,
-                    reinterpret_cast<void*>(Abi("abi_load_dlcs_struct_fixup")), true); //jmp
+                CallToBody(ctx, image.base + 0x4137CD, "abi_load_dlcs_dummy");
+                JumpTo(ctx, image.base + 0x41445C, reinterpret_cast<void*>(ctx.gameBase + 0x4144B8));
+                JumpToBody(ctx, image.base + 0x4144D4, "abi_load_dlcs_struct_fixup");
+                JumpTo(ctx, image.base + 0x41450E, reinterpret_cast<void*>(ctx.gameBase + 0x41452C));
+                CallTo(ctx, image.base + 0x41453A, reinterpret_cast<void*>(ctx.gameBase + 0x413E30));
+                NopAt(ctx, image.base + 0x41453F, 12);
+                CallToBody(ctx, image.base + 0x4137CD, "abi_load_dlcs_dummy");
+                JumpToBody(ctx, image.base + 0x4144D4, "abi_load_dlcs_struct_fixup");
             }
 
             if (ctx.build == GameBuild::v1070)
             {
-                injector::MakeCALL(image.base + 0x41356D,
-                    reinterpret_cast<void*>(Abi("abi_load_dlcs_dummy")), true); //call
-                injector::MakeJMP(image.base + 0x4141FC,
-                    reinterpret_cast<void*>(ctx.gameBase + 0x414258), true); //jmp
-                injector::MakeJMP(image.base + 0x414274,
-                    reinterpret_cast<void*>(Abi("abi_load_dlcs_struct_fixup")), true); //jmp
-                injector::MakeJMP(image.base + 0x4142AE,
-                    reinterpret_cast<void*>(ctx.gameBase + 0x4142CC), true); //jmp
-                injector::MakeCALL(image.base + 0x4142DA,
-                    reinterpret_cast<void*>(ctx.gameBase + 0x413BD0), true); //call
-                injector::MakeNOP(image.base + 0x4142DF, 12, true); //nop
-                injector::MakeCALL(image.base + 0x41356D,
-                    reinterpret_cast<void*>(Abi("abi_load_dlcs_dummy")), true); //call
-                injector::MakeJMP(image.base + 0x414274,
-                    reinterpret_cast<void*>(Abi("abi_load_dlcs_struct_fixup")), true); //jmp
+                CallToBody(ctx, image.base + 0x41356D, "abi_load_dlcs_dummy");
+                JumpTo(ctx, image.base + 0x4141FC, reinterpret_cast<void*>(ctx.gameBase + 0x414258));
+                JumpToBody(ctx, image.base + 0x414274, "abi_load_dlcs_struct_fixup");
+                JumpTo(ctx, image.base + 0x4142AE, reinterpret_cast<void*>(ctx.gameBase + 0x4142CC));
+                CallTo(ctx, image.base + 0x4142DA, reinterpret_cast<void*>(ctx.gameBase + 0x413BD0));
+                NopAt(ctx, image.base + 0x4142DF, 12);
+                CallToBody(ctx, image.base + 0x41356D, "abi_load_dlcs_dummy");
+                JumpToBody(ctx, image.base + 0x414274, "abi_load_dlcs_struct_fixup");
             }
 
             if (ctx.build == GameBuild::v1080)
             {
-                injector::MakeCALL(image.base + 0x48F558,
-                    reinterpret_cast<void*>(Abi("abi_load_dlcs_dummy")), true); //call
-                injector::MakeJMP(image.base + 0x49035C,
-                    reinterpret_cast<void*>(ctx.gameBase + 0x4903B8), true); //jmp
-                injector::MakeJMP(image.base + 0x4903D4,
-                    reinterpret_cast<void*>(Abi("abi_load_dlcs_struct_fixup")), true); //jmp
-                injector::MakeJMP(image.base + 0x49040E,
-                    reinterpret_cast<void*>(ctx.gameBase + 0x49042C), true); //jmp
-                injector::MakeCALL(image.base + 0x49043A,
-                    reinterpret_cast<void*>(ctx.gameBase + 0x48FBB0), true); //call
-                injector::MakeNOP(image.base + 0x49043F, 12, true); //nop
-                injector::MakeCALL(image.base + 0x48F558,
-                    reinterpret_cast<void*>(Abi("abi_load_dlcs_dummy")), true); //call
-                injector::MakeJMP(image.base + 0x4903D4,
-                    reinterpret_cast<void*>(Abi("abi_load_dlcs_struct_fixup")), true); //jmp
+                CallToBody(ctx, image.base + 0x48F558, "abi_load_dlcs_dummy");
+                JumpTo(ctx, image.base + 0x49035C, reinterpret_cast<void*>(ctx.gameBase + 0x4903B8));
+                JumpToBody(ctx, image.base + 0x4903D4, "abi_load_dlcs_struct_fixup");
+                JumpTo(ctx, image.base + 0x49040E, reinterpret_cast<void*>(ctx.gameBase + 0x49042C));
+                CallTo(ctx, image.base + 0x49043A, reinterpret_cast<void*>(ctx.gameBase + 0x48FBB0));
+                NopAt(ctx, image.base + 0x49043F, 12);
+                CallToBody(ctx, image.base + 0x48F558, "abi_load_dlcs_dummy");
+                JumpToBody(ctx, image.base + 0x4903D4, "abi_load_dlcs_struct_fixup");
             }
         }
 
@@ -169,21 +148,21 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeCALL(match, reinterpret_cast<void*>(Abi("abi_newfiles_update_a")), true); //call
+                CallToBody(ctx, match, "abi_newfiles_update_a");
             }
 
             if (auto pattern = Pattern(image, "E8 ? ? ? ? 8B 36 85 F6 75 ED E8 ? ? ? ? 8B 3F 03 EB 85 FF 0F 85 6C FF FF FF"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeCALL(match, reinterpret_cast<void*>(Abi("abi_newfiles_update_b")), true); //call
+                CallToBody(ctx, match, "abi_newfiles_update_b");
             }
 
             if (auto pattern = Pattern(image, "68 64 28 C8 67 E8"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match + 28, reinterpret_cast<void*>(Abi("abi_newfiles_register_body")), true); //jmp
+                JumpToBody(ctx, match + 28, "abi_newfiles_register_body");
             }
         }
 
@@ -240,7 +219,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_new_saves_compat")), true); //jmp
+                JumpToBody(ctx, match, "abi_new_saves_compat");
             }
         }
 
@@ -263,8 +242,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::WriteMemory<uint32_t>(
-                    match + 1, static_cast<uint32_t>(FindGlobalValue("OverrideGTADatPath")), true); //patch
+                WriteValue<uint32_t>(ctx, match + 1, static_cast<uint32_t>(FindGlobalValue("OverrideGTADatPath")));
             }
         }
 
@@ -287,7 +265,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                injector::WriteMemory<uint8_t>(match - 32, 0xEBu, true); //jmp
+                WriteValue<uint8_t>(ctx, match - 32, 0xEBu);
             }
         }
 
