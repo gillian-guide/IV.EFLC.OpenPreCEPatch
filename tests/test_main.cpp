@@ -15,6 +15,7 @@
 #include "improvements.hxx"
 #include "ini_import.hxx"
 #include "menu.hxx"
+#include "patches.hxx"
 #include "pattern.hxx"
 #include "vehicle_lights.hxx"
 
@@ -453,6 +454,89 @@ namespace
             CHECK(features[i - 1].order < features[i].order);
     }
 
+    void TestArmFailsafes()
+    {
+        // A synthetic 4 KiB image of 0xCC: no signature can match it, and every
+        // RVA-based arm points past its end. The checked write helpers must
+        // accept an in-image write, refuse one that would leave the image, and
+        // refuse a branch whose body did not resolve - all without touching a
+        // byte and without a fault.
+        std::vector<uint8_t> buffer(0x1000, 0xCC);
+        const opp::GameImage image{buffer.data(), buffer.size()};
+        const opp::Config config{"opcep_failsafe_no_such_file.ini"};
+        opp::PatchContext ctx{image, reinterpret_cast<uintptr_t>(buffer.data()),
+                              opp::GameBuild::v1080, config};
+
+        CHECK(opp::SiteWritable(ctx, buffer.data(), 5));
+        CHECK(opp::SiteWritable(ctx, buffer.data() + buffer.size() - 5, 5));
+        CHECK(!opp::SiteWritable(ctx, buffer.data() + buffer.size() - 2, 5));
+        CHECK(!opp::SiteWritable(ctx, buffer.data() - 1, 1));
+        CHECK(!opp::SiteWritable(ctx, nullptr, 1));
+
+        // A refused write is counted and leaves the image untouched.
+        const size_t skipped = opp::ArmWritesSkipped();
+        opp::NopAt(ctx, buffer.data() + buffer.size() - 2, 5);
+        CHECK(buffer[buffer.size() - 1] == 0xCC);
+        CHECK(opp::ArmWritesSkipped() == skipped + 1);
+
+        // An accepted write reaches the image and is byte-identical to the
+        // unchecked injector call it replaced.
+        std::vector<uint8_t> reference(buffer.size(), 0xCC);
+        injector::MakeNOP(reference.data(), 4, true);
+        injector::WriteMemory<uint16_t>(reference.data() + 8, 0xBEEFu, true);
+        opp::NopAt(ctx, buffer.data(), 4);
+        opp::WriteValue<uint16_t>(ctx, buffer.data() + 8, 0xBEEFu);
+        CHECK(std::memcmp(buffer.data(), reference.data(), 10) == 0);
+
+        // An unregistered body is a no-op, not a jump to 0.
+        std::vector<uint8_t> before(buffer);
+        opp::JumpToBody(ctx, buffer.data() + 16, "abi_does_not_exist");
+        CHECK(std::memcmp(buffer.data() + 16, before.data() + 16, 5) == 0);
+        CHECK(opp::ArmWritesSkipped() == skipped + 2);
+
+        // ... and a null destination is refused the same way.
+        opp::CallTo(ctx, buffer.data() + 16, nullptr);
+        CHECK(std::memcmp(buffer.data() + 16, before.data() + 16, 5) == 0);
+
+        // A registered body writes the same five-byte branch the arm wrote
+        // before: opcode + rel32 to the body, encoded from the site.
+        void* const body = AbiByName("abi_aim_projectile_crash_fix");
+        CHECK(body != nullptr);
+        opp::JumpTo(ctx, buffer.data() + 32, body);
+        CHECK(buffer[32] == 0xE9);
+        int32_t jump_rel = 0;
+        std::memcpy(&jump_rel, buffer.data() + 33, sizeof(jump_rel));
+        CHECK(reinterpret_cast<uint8_t*>(buffer.data() + 32 + 5 + jump_rel) ==
+              reinterpret_cast<uint8_t*>(body));
+        opp::CallTo(ctx, buffer.data() + 40, body);
+        CHECK(buffer[40] == 0xE8);
+        int32_t call_rel = 0;
+        std::memcpy(&call_rel, buffer.data() + 41, sizeof(call_rel));
+        CHECK(reinterpret_cast<uint8_t*>(buffer.data() + 40 + 5 + call_rel) ==
+              reinterpret_cast<uint8_t*>(body));
+
+        // A missing signature is one logged skip, and the arm is named.
+        opp::TraceArm("TestArmFailsafes");
+        CHECK(std::strcmp(opp::CurrentArm(), "TestArmFailsafes") == 0);
+        auto pattern = opp::Pattern(image, "DE AD BE EF");
+        CHECK(pattern.size() == 0);
+        CHECK(opp::PatternAll(image, "DE AD BE EF").size() == 0);
+
+        // End to end: the whole option pass over that image installs nothing.
+        // Every arm either does not match or is refused by the image check, so
+        // the image is byte-identical afterwards and the skips are reported.
+        std::vector<uint8_t> clean(buffer.size(), 0xCC);
+        const std::vector<uint8_t> untouched(clean.size(), 0xCC);
+        const opp::GameImage clean_image{clean.data(), clean.size()};
+        opp::PatchContext clean_ctx{clean_image,
+                                    reinterpret_cast<uintptr_t>(clean.data()),
+                                    opp::GameBuild::v1080, config};
+        const size_t skipped_before_pass = opp::ArmWritesSkipped();
+        opp::PatchGame(opp::GameBuild::v1080, clean_image, config);
+        CHECK(std::memcmp(clean.data(), untouched.data(), clean.size()) == 0);
+        CHECK(opp::ArmWritesSkipped() > skipped_before_pass);
+    }
+
     void TestHooks()
     {
         CHECK(HookBodyCount() > 100);
@@ -476,6 +560,7 @@ int main()
     TestVehicleLights();
     TestMenu();
     TestFeatureOrder();
+    TestArmFailsafes();
     TestHooks();
 
     if (failures != 0)
