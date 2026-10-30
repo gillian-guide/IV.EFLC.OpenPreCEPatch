@@ -168,26 +168,6 @@ extern "C"
     uint8_t zpatch_flag_patch4_modchecks = 0u; // byte_10159C14
     uint8_t zpatch_flag_gfwl_popup = 0u;       // byte_10159B87
     uint8_t zpatch_flag_debug_spawns = 0u;     // byte_10159C15
-    // OpenPreCEPatch opt-in switches. 0 selects the original branch everywhere.
-    uint8_t zpatch_opt_new_saves_guards = 0u;
-    uint8_t zpatch_opt_new_saves_seek = 0u;
-    uint8_t zpatch_opt_ooc_safe = 0u;
-    uint8_t zpatch_opt_ooc_cache = 0u;
-    uint8_t zpatch_opt_component_guards = 0u;
-    uint8_t zpatch_opt_model_lookup_guards = 0u;
-    uint8_t zpatch_opt_steer_cache = 0u;
-    uint8_t zpatch_opt_popup_cache = 0u;
-    uint8_t zpatch_opt_model_index = 0u;
-    uint8_t zpatch_opt_skip_intro_screens = 0u;
-    uint8_t zpatch_opt_trace_arms = 0u;
-    uint8_t zpatch_opt_windowed = 0u;
-    uint8_t zpatch_opt_failsafe = 0u;
-    uint8_t zpatch_opt_garage_entry = 0u;
-    uint8_t zpatch_opt_cutscene_entry = 0u;
-    uint8_t zpatch_opt_nms_thunk = 0u;
-    uint8_t zpatch_opt_alpha_nop = 0u;
-    uint32_t zpatch_nms_init_fn = 0;
-    uint32_t zpatch_nms_thunk_resume = 0;
     // RestoreDeathMusic's lazily resolved site.
     uint32_t zpatch_death_music_site = 0;
     // NewSavesCompatibility's element counter.

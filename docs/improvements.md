@@ -1,26 +1,20 @@
-# Improvement model and backlog
+# Improvements
 
-The improvements are **folded into the original INI options**: there are no
-per-fix keys. `NewSavesCompatibility=1` means the guarded/faster converter,
-`OutOfCommissionFix=1` means the cached/safe archive setup, and so on. An INI
-from the parity era still enables the improved path for the options it already
-has. Options that moved to the XLivelessAddon module (intro/menu, window,
-launcher, VRAM) are no longer in this module's INI; their improvements live in
-`xlivelessaddon/`.
+The improvements are **part of the shipped code**, not a mode: every option's
+implementation is the improved one, and there is no environment variable, build
+option or INI key that selects an older branch. `NewSavesCompatibility=1` runs
+the guarded/faster converter, `OutOfCommissionFix=1` the cached/safe archive
+setup, and so on. Options that moved to the XLivelessAddon module (intro/menu,
+window, launcher, VRAM) are no longer in this module's INI; their improvements
+live in `xlivelessaddon/`.
 
-The original code path is still compiled. It is selected by the test-only
-switches in `docs/testing.md`:
+What used to be test switches (`OPCEP_IMPROVEMENTS`, `OPCEP_PARITY_BASELINE`)
+is gone. The evidence for a change is the write-set matrix and per-arm
+attribution (`tests/parity/`), which is what caught the live-run divergences.
 
-- `OPCEP_IMPROVEMENTS` environment variable (per process / live A/B);
-- `OPCEP_PARITY_BASELINE` CMake build option (a separate legacy ASI or dump);
-- the parity matrix and per-arm attribution (`tests/parity/`).
+## What each option does now
 
-Neither switch is an INI key; a normal user never has to toggle a fix
-individually.
-
-## Folded mapping
-
-| original option | improvements folded into it |
+| original option | what its implementation does |
 | --- | --- |
 | `NewSavesCompatibility` | validated header/chunk reads, `size < 9`, `malloc`, payload reads; `fseek` over discarded payloads |
 | `OutOfCommissionFix` | fail-closed decode/allocation; one-time archive cache instead of per-call decode/leak |
@@ -28,15 +22,14 @@ individually.
 | `PopupHeadlightsFlag`, `ForceCarHeadlightShadows` | model-lookup/parameter guards; hash→index cache |
 | `BadPlayerModelCrashFix`, `DebugPrintSpawns` | one-time model-name hash index |
 | `SteamAchievements` | GFWL achievement writes mirrored to Steam at the `XUserWriteAchievements` boundary; the original GFWL call still runs |
-| installer pass | arm logging is part of the normal trace (`OPCEP_IMPROVEMENTS=except:trace` silences it); signature scans stay inside the executable sections and stop at the first match |
-| every option (the `failsafe` group) | every arm write is checked before it lands (site inside the image, destination body resolved) and the runtime bodies skip a missing preamble pointer or game-published lookup instead of dereferencing null |
-| installer pass (default) | GarageModelFix site A, CutsceneFixes (one callee hook instead of three sites) and BuildingAlphaFix site 2 (jnz-only NOP) moved to the better entry point proved on the 1.0.8.0 live run; except:<group> restores the original site |
+| installer pass | every arm logs its name and the pass logs `install: N writes applied, M skipped`; signature scans stay inside the executable sections and stop at the first match |
+| every option | every arm write is checked before it lands (site inside the image or inside the target module, destination body resolved) and the runtime bodies skip a missing preamble pointer or game-published lookup instead of dereferencing null |
+| `GarageModelFix`, `CutsceneFixes`, `BuildingAlphaFix` | hooked at the better entry point proved on the 1.0.8.0 live run: the garage prologue, one shared camera callee instead of three sites, and the `jnz` alone instead of the `test` + `jnz` pair |
 
 `SkipIntro`, `SkipMenu`, `BorderlessWindowed`, `DoNotPauseOnMinimize` and
 `VRAMFix` are XLivelessAddon features now: their improved bodies live in
 `xlivelessaddon/` and the main module no longer registers those arms.
 
-Every improved body keeps the original branch first when its switch is off.
 There is currently **no** write-set-visible improvement: the improved and the
 parity-baseline dumps are byte-identical on all 104 matrix cells (the formerly
 visible `SkipIntro` rel32 moved to the fork with the option). The scan-range
@@ -103,7 +96,7 @@ write set unchanged. Remaining candidates:
 | site | cost today | candidate |
 | --- | --- | --- |
 | plane script resolver | re-resolves the script-pointer chain per float read | resolve once per frame / cache the last `(script, index)` pair |
-| `OutOfCommissionFix` wrapper | decode + RPF build + mount per call | folded cache shipped; archive is intentionally retained |
+| `OutOfCommissionFix` wrapper | decode + RPF build + mount per call | cached; the archive is intentionally retained |
 | duplicate scans | publish and install arms scan the same signature twice | a scan cache is unsafe across arms (earlier arms patch bytes a later scan can match); keep the first-match hint only |
 
 ## Stability and safety
@@ -123,22 +116,20 @@ are now a logged clean skip:
   untouched, which is what the original loader does when a signature does not
   match. On a healthy image every check passes, so the write set is unchanged:
   the matrix reports the same 3,909 writes over 96 cells.
-- **Run time (`failsafe` group, on by default).** The bodies call their preamble
-  pointers and game-published lookups without checking them, exactly like the
-  original: a missing pointer faults. With the group on, the body continues
-  with the value the game would have had without the fix and logs one line.
+- **Run time.** The bodies call their preamble pointers and game-published
+  lookups without checking them, exactly like the original: a missing pointer
+  faults. The body now continues with the value the game would have had without
+  the fix and logs one line.
   This covers PlayerAsPedComponentsFix, PedModelsInCutscenesFix, SuperLODFix,
   BadPlayerModelCrashFix, GarageModelFix, the moving-parts trio, CopSirensFlag,
   DrivebyFOVFix, RemoveGFWLUpdatePopup and LoadDLCs' path buffer. The guards sit
   at the top of the body, before any register or stack state the resume
-  consumes. `OPCEP_IMPROVEMENTS=except:failsafe` (or `none`) restores the
-  original fault for a fault-parity run, and the `OPCEP_PARITY_BASELINE` build
-  disables the group with every other one.
+  consumes.
 
 The installer pass ends with one `install: N writes applied, M skipped` line,
 so a partially-matching image is visible without reading the whole log.
 
-- **Folded:** NewSaves guards, OOC safe init/cache, component guards, model
+- **Shipped:** NewSaves guards, OOC safe init/cache, component guards, model
   lookup guards, model-name index (table above), and the script-slot/lock-owner
   guards in the moving-parts body.
 - **Still candidates (documented, not shipped):**
@@ -153,7 +144,7 @@ so a partially-matching image is visible without reading the whole log.
   - `Config::Option` keeps `std::stoi`, so a non-numeric value (e.g. `Key = true`
     or an empty value) throws inside `DllMain` and the game exits before any
     install. This is the original's own behaviour (its source uses `std::stoi`
-    too), so it is preserved; a guarded variant is a separate opt-in key;
+    too), so it is preserved; a guarded variant would be a separate change;
   - the ZMenuIV version guard is skipped when the INI is missing or unreadable,
     although the comment says it is unconditional. The original applies it
     unconditionally; changing this alters startup for a broken install, so it
@@ -211,7 +202,7 @@ Evidence from the tree at `41167df` (before this pass): the x86 build, `ctest`
 | every installer scan walked the whole 25.9 MB image and collected all matches | `source/helpers.hxx` built `make_range_pattern(base, base+SizeOfImage)` and every arm calls `pattern.size()`; the original scans to the end of the last executable section (9.9 MB) | `ExecutableView` + `count_hint(1)`; five multi-hit arms use `PatternAll`; 3.1-3.3x faster installer pass, zero write-set delta |
 | five multi-hit arms silently depended on all matches | `graphics.ixx` (BuildingDynamicShadows hash pair, NoImpostorHeightCutoff), `stability.ixx` (BenchmarkFix), `vehicles.ixx` (EpisodicVehicleSupport), `performance.ixx` (StartupTimeFix literal loop) | explicit `PatternAll`; the matrix first caught StartupTimeFix as a missed loop consumer |
 | the fork captured the CreateFile IAT slot but never published it | `skip_launcher.cpp` filled `report.createFileSlot` and `skip_launcher.h` documented forwarding, but `SetCreateFileSlot` had no caller; the body always called `CreateFileA` directly | published inside `ApplySkipLauncher`; `xla_tests` (mutation-checked) |
-| the folded moving-parts guards still dereferenced three runtime pointers | `hooks.cpp` `script_float`, the unconditional tail and the steering lock owner only checked the script context | guarded inside the existing folded path; original path still reachable with `OPCEP_IMPROVEMENTS=none` |
+| the moving-parts guards still dereferenced three runtime pointers | `hooks.cpp` `script_float`, the unconditional tail and the steering lock owner only checked the script context | guarded inside the existing folded path; original path still reachable with `OPCEP_IMPROVEMENTS=none` |
 | the fork logged no build id or per-patch counts | `xlivelessaddon/source/dllmain.cpp` logged only the config line and SkipLauncher counts | build, window/borderless/focus, skip-intro/menu sites, VRAM hooks, registry IAT replacements and the legacy ROM flag are logged |
 
 ### Documented, left unchanged (fault preserved)

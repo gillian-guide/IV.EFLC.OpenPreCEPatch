@@ -30,17 +30,11 @@ Cells are:
 python tools\opcep_matrix.py --check      :: compare with the committed matrix
 python tools\opcep_matrix.py --update     :: record a new known-good baseline
 python tools\opcep_matrix.py --cells "option:NewSaves" --report out.json
-python tools\opcep_matrix.py --env OPCEP_IMPROVEMENTS=none --report off.json
 ```
 
-The folded improvements are part of the original options, so there are no
-per-fix cells. To compare improved and legacy paths without editing the INI:
-
-- set `OPCEP_IMPROVEMENTS=none` (or `only:...` / `except:...`) and pass it with
-  `--env`; or
-- build the legacy dump with
-  `cmake -S . -B build-parity -A x64 -DOPCEP_PARITY_BASELINE=ON` and compare its
-  output with the normal dump.
+There is no separate improved/legacy mode: the improvements are the code, and
+the matrix is the record of what the installer writes. Changing an
+implementation shows up as a cell diff, which is exactly the review signal.
 
 The tool needs `build64\Release\opcep_parity_dump.exe` and a game executable
 (default `..\game_refs\GTAIV.exe`); no game files are committed. The game image
@@ -55,13 +49,8 @@ mismatch instead of silently changing the numbers.
   one match use the explicit multi-match helper. A signature that only matched
   outside `.text` would change a cell, so `--check` guards that too (none do on
   the 1080 image: the executable-range change is a zero-diff PASS).
-- The improvements are folded into the original options, so there are no
-  per-fix cells. A folded improvement must either produce **zero** write-set
-  change (runtime branch) or change only the cell that owns the original option
-  (the `SkipIntro` rel32 is the known example). Say which in
-  `docs/improvements-log.md`.
-- Use `--env OPCEP_IMPROVEMENTS=none` or a `-DOPCEP_PARITY_BASELINE=ON` build
-  for the improved-vs-legacy comparison; do not add an INI key for a test.
+- An improvement that changes the write set must be attributed to one arm and
+  the delta stated in `docs/improvements-log.md`.
 - Never update the golden to hide an unexplained delta. Use the attribution
   files to trace the byte to an arm first.
 

@@ -403,17 +403,15 @@ namespace opp::features
             {
                 zpatch_garage_resume_a = MatchAddress(pattern, 6);
 
-                // Opt-in prologue form (garage_entry): the function entry is
-                // match-0x20 and starts with an 8-byte `movss xmm0, ds:X`, so
-                // the resume is match-0x18 and the float to reload is the
-                // dword the instruction's operand points at (match-0x1C).
-                if (zpatch_opt_garage_entry != 0u)
-                {
-                    zpatch_garage_entry_resume_a = MatchAddress(pattern, -0x18);
-                    zpatch_garage_scale = *reinterpret_cast<const float*>(
-                        static_cast<uintptr_t>(
-                            Field(pattern.get(0).get<uint8_t>(), -0x1C)));
-                }
+                // Site A is at the function's mid-body anchor; the hook goes to
+                // the prologue (match-0x20), which starts with an 8-byte
+                // `movss xmm0, ds:X`, so the resume is match-0x18 and the float
+                // to reload is the dword that instruction's operand points at
+                // (match-0x1C).
+                zpatch_garage_entry_resume_a = MatchAddress(pattern, -0x18);
+                zpatch_garage_scale = *reinterpret_cast<const float*>(
+                    static_cast<uintptr_t>(
+                        Field(pattern.get(0).get<uint8_t>(), -0x1C)));
             }
 
             if (auto pattern = Pattern(image, "0F B7 0E 50 51 E8"); pattern.size() > 0)
@@ -441,12 +439,9 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                // GarageModelFix's site A is mid-body; the opt-in rewrite hooks
-                // the function prologue (match-0x20) instead.
-                if (zpatch_opt_garage_entry != 0u)
-                    JumpToBody(ctx, match - 0x20, "abi_garage_entry_a");
-                else
-                    JumpToBody(ctx, match, "abi_garage_body_a");
+                // Site A is hooked at the function prologue (match-0x20); the
+                // body reloads the `xmm0` the skipped instruction sets.
+                JumpToBody(ctx, match - 0x20, "abi_garage_entry_a");
             }
 
             if (auto pattern = Pattern(image, "0F B7 0E 50 51 E8"); pattern.size() > 0)

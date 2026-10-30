@@ -1,5 +1,10 @@
 # Parity report — 2026-10-25
 
+> **Superseded (2026-10-30):** the improvement switches this report was written
+> against (`OPCEP_IMPROVEMENTS`, `OPCEP_PARITY_BASELINE`) have been removed. The
+> improved implementations are the shipped code; the numbers below are the record
+> of the checkpoint that established them.
+>
 > **Superseded (2026-10-26).** The split moved `SkipIntro`, `SkipMenu`,
 > `BorderlessWindowed`, `DoNotPauseOnMinimize` and `VRAMFix` to
 > XLivelessAddon, so the 4-byte `SkipIntro` delta below no longer exists in this

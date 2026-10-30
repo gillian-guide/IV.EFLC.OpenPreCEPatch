@@ -27,10 +27,9 @@ namespace
     // null target.
     constexpr DumpAbi kDumpOnlyAbi[] = {
         {"abi_skip_intro_screens", 0x0F000000u},
-        // Opt-in prologue body (garage_entry): a new entry point with no
+        // Prologue body (GarageModelFix site A): a new entry point with no
         // original destination VA, so the dump records a real rel32 install.
         {"abi_garage_entry_a", 0x0F000001u},
-        {"abi_nms_init_thunk", 0x0F000002u},
     };
 } // namespace
 

@@ -25,7 +25,7 @@
         "InstallCombinedRadioFreezeFix": 4,
         "InstallCopSirensFlag": 15,
         "InstallCrashMsgFix": 4,
-        "InstallCutsceneFixesAtCallee": 5,
+        "InstallCutsceneFixes": 5,
         "InstallDrivebyFOVFix": 5,
         "InstallDualVehicleHeadlights": 5,
         "InstallEmissiveLerpFix": 5,
@@ -101,7 +101,7 @@
         "InstallCarPartsShadowFixStandalone": 1,
         "InstallCombinedRadioFreezeFix": 4,
         "InstallCrashMsgFix": 4,
-        "InstallCutsceneFixesAtCallee": 5,
+        "InstallCutsceneFixes": 5,
         "InstallDrivebyFOVFix": 5,
         "InstallEmissiveLerpFix": 5,
         "InstallEpisodeSwitchFreezeFix": 25,
@@ -160,7 +160,7 @@
         "InstallCombinedRadioFreezeFix": 4,
         "InstallCopSirensFlag": 15,
         "InstallCrashMsgFix": 4,
-        "InstallCutsceneFixesAtCallee": 5,
+        "InstallCutsceneFixes": 5,
         "InstallDrivebyFOVFix": 5,
         "InstallEmissiveLerpFix": 5,
         "InstallEpisodeSwitchFreezeFix": 25,
@@ -470,14 +470,14 @@
     },
     "option:CutsceneFixes": {
       "arms": {
-        "InstallCutsceneFixesAtCallee": 5
+        "InstallCutsceneFixes": 5
       },
       "delta_arms": {
-        "InstallCutsceneFixesAtCallee": 5
+        "InstallCutsceneFixes": 5
       },
       "delta_base": "all-off",
       "delta_file": "deltas/option_CutsceneFixes.txt",
-      "delta_sha256": "e394b7d804cb6c6a527f41a1a18595a32611a18cd7a5dfd698cff82ca6ce25d8",
+      "delta_sha256": "006835ac50326a5c7c35dcba5dbfd031551d8e1246b7208b9829a9c4cdb65be6",
       "delta_writes": 5,
       "file": "writesets/option_CutsceneFixes.txt",
       "sha256": "d5ac1bb728de16778a198e5a6c62b9c56692a5307446cf67dc37c705988163a2",
@@ -1480,7 +1480,7 @@
       "arms": {
         "InstallBikeFeetFix": 12,
         "InstallBikePhoneAnimsFix": 6,
-        "InstallCutsceneFixesAtCallee": 5,
+        "InstallCutsceneFixes": 5,
         "InstallDrivebyFOVFix": 5,
         "InstallHighFPSBikePhysicsFix": 5,
         "InstallHighFPSSpeedupFix": 17,
@@ -1491,7 +1491,7 @@
       "delta_arms": {
         "InstallBikeFeetFix": 12,
         "InstallBikePhoneAnimsFix": 6,
-        "InstallCutsceneFixesAtCallee": 5,
+        "InstallCutsceneFixes": 5,
         "InstallDrivebyFOVFix": 5,
         "InstallHighFPSBikePhysicsFix": 5,
         "InstallHighFPSSpeedupFix": 17,
@@ -1501,7 +1501,7 @@
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_FIXES.txt",
-      "delta_sha256": "72f068228962294fc6f654f36b75818579541284f3009340fd5d5c51d4c2efb0",
+      "delta_sha256": "a8314938778e721d7e09fcc29e9661d1e9bb6bcaa9738c226993b468c91dadb5",
       "delta_writes": 116,
       "file": "writesets/section_FIXES.txt",
       "sha256": "f1f8ce2f56bae8ab0277fc6cdc59d04c2f708f129df5a58b9c28385c97b93b8d",
@@ -1703,5 +1703,5 @@
   },
   "generated_by": "tools/opcep_matrix.py",
   "schema": 1,
-  "template_sha256": "23c3112ea86348cd65e15817ced8b6c429195a8fc3d5fa0c89bc8af23e773cea"
+  "template_sha256": "e293fc2c3600815e62c4dea431c19765331eddff42cac46a9ca4a51620d9dc9c"
 }

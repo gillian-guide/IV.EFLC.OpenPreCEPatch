@@ -7,8 +7,6 @@
 
 #include <cstdio>
 
-extern "C" uint8_t zpatch_opt_trace_arms;
-
 namespace opp
 {
     namespace
@@ -136,8 +134,7 @@ namespace opp
         g_currentArm = name != nullptr ? name : "?";
         // Runtime opt-in (TraceInstallArms): the log names the arm before it
         // runs, so a crash during the install pass leaves the last arm visible.
-        if (zpatch_opt_trace_arms != 0u)
-            Log("arm %s", name);
+        Log("arm %s", name);
 #if defined(OPCEP_TRACE_INSTALLS)
         static std::FILE* log = std::fopen("IV.EFLC.OpenPreCEPatch.trace.log", "a");
         if (log)

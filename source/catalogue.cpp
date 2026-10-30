@@ -8,7 +8,7 @@
 
 extern const char* const kModelNames[];
 extern const size_t kModelNameCount;
-extern "C" uint8_t zpatch_opt_model_index;
+
 
 namespace
 {
@@ -75,16 +75,6 @@ namespace opp
 
     std::string_view ModelNameFromHash(uint32_t hash) noexcept
     {
-        if (zpatch_opt_model_index == 0u)
-        {
-            for (size_t i = 0; i < kModelNameCount; ++i)
-            {
-                if (GameHash(kModelNames[i]) == hash)
-                    return kModelNames[i];
-            }
-            return "**UNKNOWN**";
-        }
-
         if (BuildModelHashIndex())
         {
             size_t low = 0;

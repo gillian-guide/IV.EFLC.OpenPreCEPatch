@@ -15,7 +15,6 @@ module;
 #include "rebased.h"
 #include "feature_registry.hxx"
 #include "helpers.hxx"
-#include "log.hxx"
 
 export module performance;
 
@@ -217,7 +216,7 @@ namespace opp::features
         TraceArm("NewMemorySystem");
 
         // NewMemorySystem: 1 siginstall
-        if (ctx.Option("NewMemorySystem", "0") && zpatch_opt_nms_thunk == 0u)
+        if (ctx.Option("NewMemorySystem", "0"))
         {
             const GameImage& image = ctx.image;
 
@@ -231,41 +230,6 @@ namespace opp::features
         }
 
     }
-
-    // Opt-in (nms_thunk): one hook at the static-init thunk 0xD56060 instead of
-    // rewriting the allocator-ctor call and skipping the atexit registration.
-    // The body calls the game's allocator init through the published entry,
-    // stores the reimplemented vtable in the allocator object, then tail-jumps
-    // to the thunk's resume, so the per-thread call, the atexit registration
-    // and the epilogue stay the original's.
-    void InstallNewMemorySystemThunk(PatchContext& ctx)
-    {
-        TraceArm("InstallNewMemorySystem@thunk");
-
-        if (zpatch_opt_nms_thunk == 0u || !ctx.Option("NewMemorySystem", "0"))
-            return;
-        if (ctx.build != GameBuild::v1080)
-            return;  // the thunk RVA is only recovered for 1.0.8.0
-
-        constexpr uint32_t kThunkRva = 0x956060u;  // IDB VA 0xD56060 (image base 0x400000)
-        constexpr uint32_t kInitRva = 0x1060u;     // IDB VA 0x401060
-        auto* const site = ctx.image.base + kThunkRva;
-        const auto init = static_cast<uint32_t>(ctx.gameBase + kInitRva);
-        const auto site_address = reinterpret_cast<uintptr_t>(site);
-        if (!SiteWritable(ctx, site, 5))
-            return;
-        if (site[0] != 0xE8u ||
-            *reinterpret_cast<const uint32_t*>(site + 1) !=
-                init - static_cast<uint32_t>(site_address + 5u))
-        {
-            Log("nms_thunk: the init thunk does not match, keeping the call rewrite");
-            return;
-        }
-        zpatch_nms_init_fn = init;
-        zpatch_nms_thunk_resume = static_cast<uint32_t>(site_address + 5u);
-        JumpToBody(ctx, site, "abi_nms_init_thunk");
-    }
-
 
     // NoLoadingSleep
 
@@ -324,7 +288,6 @@ namespace
             RegisterFeature(68, "InstallHighFPSSpeedupFix", &InstallHighFPSSpeedupFix);
             RegisterFeature(69, "InstallImprovedShaderStreaming", &InstallImprovedShaderStreaming);
             RegisterFeature(80, "InstallNewMemorySystem", &InstallNewMemorySystem);
-            RegisterFeature(150, "InstallNewMemorySystemAtThunk", &InstallNewMemorySystemThunk);
             RegisterFeature(135, "InstallFastLoading", &InstallFastLoading);
             RegisterFeature(138, "InstallIncreaseVehicleModelLimit", &InstallIncreaseVehicleModelLimit);
             RegisterFeature(141, "InstallStartupTimeFix", &InstallStartupTimeFix);

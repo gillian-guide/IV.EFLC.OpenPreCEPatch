@@ -109,8 +109,8 @@
 007CB92E 90 InstallBikeFeetFix
 007CB92F 90 InstallBikeFeetFix
 007CB930 90 InstallBikeFeetFix
-0089A640 E9 InstallCutsceneFixesAtCallee
-0089A641 7B InstallCutsceneFixesAtCallee
-0089A642 E2 InstallCutsceneFixesAtCallee
-0089A643 39 InstallCutsceneFixesAtCallee
-0089A644 0F InstallCutsceneFixesAtCallee
+0089A640 E9 InstallCutsceneFixes
+0089A641 7B InstallCutsceneFixes
+0089A642 E2 InstallCutsceneFixes
+0089A643 39 InstallCutsceneFixes
+0089A644 0F InstallCutsceneFixes

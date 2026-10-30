@@ -325,13 +325,10 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                // The 300 ms FusionFix-style body is part of SkipIntro now; the
-                // OPCEP_IMPROVEMENTS test switch can still select the original
-                // skip-outright body without an INI key.
-                const char* body = zpatch_opt_skip_intro_screens != 0u
-                                       ? "abi_skip_intro_screens"
-                                       : "abi_skip_intro_body";
-                JumpToBody(ctx, match - 6, body);
+                // The 300 ms FusionFix-style body is the SkipIntro body; the
+                // original skip-outright body stays compiled but is no longer
+                // selected by anything.
+                JumpToBody(ctx, match - 6, "abi_skip_intro_screens");
             }
         }
 

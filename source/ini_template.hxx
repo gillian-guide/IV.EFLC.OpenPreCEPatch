@@ -11,16 +11,7 @@
 namespace opp
 {
 	inline constexpr char kDefaultIni[] =
-R"OPCEP(; IV.EFLC.OpenPreCEPatch.ini
-;
-; Grouped by subsystem. If an old ZolikaPatch.ini is present, the ASI ports
-; its values into this file on first run.
-;
-; Tags: [1060+] / [1000,1004] ... = game versions the option applies to;
-;       if not present - all versions are supported;
-;       FF = automatically disabled when a FusionFix ASI is next to the game.
-;
-
+R"OPCEP(
 [STABILITY]
 BenchmarkFix = 1                                     // fix crash after benchmark ends [all-1080,1130]
 CombinedRadioFreezeFix = 1                           // fix freeze after Concrete Jungle with the 3 EFLC exclusive radio stations installed
@@ -116,25 +107,15 @@ ShakingEngineBlock = 0                               // make the engineblock par
 MovingSteeringWheelSupport = 0                       // make the "steeringwheel" car bone rotate properly if it exists (Example of a car with proper steering wheel setup: https://mega.nz/file/vcAAib6Z#bsbJaseAbdxleRwr1XGL-d_it_P9DyjsPoXP-pnMoq8 ) use the new +wheelangle: vehicles.ide flag to specify an angle the steering wheel should be tilted forward or backwards by (in degrees) while porting a car from V, write the angle down into this flag and set the actual wheel's angle to 0, 0, 0 to make it work properly
 
 [MISC]
-; Improvements =     // leave out (or 1) for the default set: every folded improvement
-;                    // plus the garage, cutscene and building-alpha entry-point rewrites.
-;                    // 0 = original behaviour only (parity baseline).
-;                    // Anything else uses the OPCEP_IMPROVEMENTS grammar, e.g.
-;                    //   Improvements = all,entry,nms_thunk   (also the allocator rewrite;
-;                    //     not in the default set - it OOM'd on exit in its live run)
-;                    //   Improvements = except:cutscene_entry
 
 RestoreDeathMusic = 0                                // restores the unused music on death [FF]
 OverrideGTADatPath = 0                               // load gta.dat from another path
 OverrideGTADatPathTo = common:/data/gta.dat          // the path to load gta.dat from if the above is enabled
-)OPCEP"
-R"OPCEP(AllowHashesForIDE = 1                                // allow entering raw hashes into .ide files if you add "hash:" before the hash (in unsigned decimal) to get around the character limit in .ide entries
+AllowHashesForIDE = 1                                // allow entering raw hashes into .ide files if you add "hash:" before the hash (in unsigned decimal) to get around the character limit in .ide entries
 PlayerAsPedComponentsFix = 1                         // fix Niko peds' clothes never changing properly in the trainer
 PedModelsInCutscenesFix = 1                          // fixes crash when starting cutscenes as a ped
 
 [PopupLightAngles]                               // per-model popup headlight angle, in degrees
-; Car1Name = police
-; Car1Angle = 90
 
 [HeadlightConeOffsets]                           // per-model headlight cone offset
 Car1Name = admiral
@@ -160,7 +141,8 @@ Car10Offset = -6
 Car11Name = cavalcade
 Car11Offset = 4
 Car12Name = chavos
-Car12Offset = 3
+)OPCEP"
+R"OPCEP(Car12Offset = 3
 Car13Name = cognoscenti
 Car13Offset = 7
 Car14Name = comet

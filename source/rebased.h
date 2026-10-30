@@ -304,9 +304,6 @@ extern "C" uint32_t zpatch_spawns_getmodulehandlew;
 // GarageModelFix: the two resume slots its bodies tail-jump through.
 extern "C" uint32_t zpatch_garage_resume_a;  // dword_10159CD4 (match+6)
 extern "C" uint32_t zpatch_garage_resume_b;  // dword_10159CD0 (match+5)
-// Opt-in prologue form of site A (garage_entry): the resume after the 8-byte
-// `movss xmm0, ds:X` at the function entry, and the float that instruction
-// loads (published from the site's own operand).
 extern "C" uint32_t zpatch_garage_entry_resume_a;
 extern "C" float zpatch_garage_scale;
 // MovingSteeringWheelSupport / ShakingEngineBlock / MovingPlaneParts: the cached
@@ -390,27 +387,3 @@ extern "C" uint32_t zpatch_nms_object;        // dword_10159CD8
 uint32_t& DlcRegisterRva() noexcept;
 uint32_t& DlcApplyRva() noexcept;
 
-// OpenPreCEPatch-only improvement switches. They are not original ASI state:
-// PatchGame resolves them from the original INI options plus the test-only
-// OPCEP_IMPROVEMENTS environment variable / OPCEP_PARITY_BASELINE build.
-extern "C" uint8_t zpatch_opt_new_saves_guards;    // NewSavesCompatibility
-extern "C" uint8_t zpatch_opt_new_saves_seek;      // NewSavesCompatibility
-extern "C" uint8_t zpatch_opt_ooc_safe;            // OutOfCommissionFix
-extern "C" uint8_t zpatch_opt_ooc_cache;           // OutOfCommissionFix
-extern "C" uint8_t zpatch_opt_component_guards;    // moving-parts trio
-extern "C" uint8_t zpatch_opt_model_lookup_guards; // PopupHeadlightsFlag / FCHS
-extern "C" uint8_t zpatch_opt_steer_cache;         // moving-parts trio
-extern "C" uint8_t zpatch_opt_popup_cache;         // PopupHeadlightsFlag / FCHS
-extern "C" uint8_t zpatch_opt_model_index;         // BPM / DebugPrintSpawns
-extern "C" uint8_t zpatch_opt_skip_intro_screens;  // SkipIntro
-extern "C" uint8_t zpatch_opt_trace_arms;          // trace group (test switch)
-extern "C" uint8_t zpatch_opt_windowed;            // Borderless / DoNotPause
-extern "C" uint8_t zpatch_opt_failsafe;            // runtime-pointer failsafes
-extern "C" uint8_t zpatch_opt_garage_entry;        // GarageModelFix prologue form
-extern "C" uint8_t zpatch_opt_cutscene_entry;      // CutsceneFixes callee hook
-extern "C" uint8_t zpatch_opt_nms_thunk;           // NewMemorySystem init thunk
-extern "C" uint8_t zpatch_opt_alpha_nop;           // BuildingAlphaFix jnz-only NOP
-// Opt-in NewMemorySystem thunk form: the game's allocator-init entry and the
-// thunk's resume after the 5-byte call the hook overwrites.
-extern "C" uint32_t zpatch_nms_init_fn;
-extern "C" uint32_t zpatch_nms_thunk_resume;

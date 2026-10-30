@@ -96,10 +96,9 @@ The INI itself marks each of these with `FF`. The `BorderlessWindowed`,
 main module keeps the gate entries so a stale key is still reported, but no
 longer installs those features. See `xlivelessaddon/README.md`.
 
-Safety and performance improvements are folded into their original options, so
-there are no extra keys to set. The original paths can be selected for testing
-with `OPCEP_IMPROVEMENTS=none` or `-DOPCEP_PARITY_BASELINE=ON`; a normal install
-does not need either. See `docs/improvements.md`.
+Safety and performance improvements are part of the code, so there are no extra
+keys to set and no switch that selects an original path. See
+`docs/improvements.md`.
 
 ## xlive.dll packaging
 

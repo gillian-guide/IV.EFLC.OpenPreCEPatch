@@ -1,11 +1,8 @@
 # Entry-point and implementation audit
 
-Status: every row now has a final disposition — implemented (default or opt-in) or
-rejected with the evidence that makes it a bad idea. Nothing is left "to decide".
-The only outstanding item is a **live A/B of the four opt-in groups**, which needs
-the user's go-ahead and is described in `docs/testing.md`; the boot log
-(`improvements: <groups>`) and `tools/opcep_optin.py` exist to make that run
-verifiable.
+Status: every row has a final disposition — implemented in the shipped code, or
+rejected with the evidence that makes it a bad idea. Nothing is switchable: the
+improved entry points are the code, and there is no test-only selector left.
 
 Part A asks whether the *game* offers a cleaner entry point at the exact spot an
 option patches today. Part B asks whether the mod's own mechanism at that spot
@@ -21,13 +18,13 @@ unchanged but still needs a matrix cell; `behaviour change` needs an opt-in;
 | LoadDLCs duplicate same-site writes | **fixed**: each site written once (recovered rows list one) | commit "refactor: drop LoadDLCs' duplicate same-site writes" |
 | SCOSignatureFix `-32` anchor | **fixed**: signature now ends on the branch (`89 3D ? ? ? ? 85 ED 74 1E`, unique), site = match+8 | commit "fix: anchor SCOSignatureFix on the branch it flips" |
 | NewMemorySystem registry (Part B) | **done**: flat open-addressing table over VirtualAlloc, no per-entry allocation, no throw; `zpatch_nms_registry_selftest` | commit "perf: replace NewMemorySystem's allocation registry with a flat table" |
-| GarageModelFix site A → prologue | **default** since the 1.0.8.0 live run (site moves 0x868BB0 → 0x868B90, 2 sites / 10 bytes unchanged; `xmm0` reloaded by the body). `except:garage_entry` restores the mid-body site | `docs/testing.md`, `docs/improvements-log.md` |
+| GarageModelFix site A → prologue | **shipped** since the 1.0.8.0 live run (site moves 0x868BB0 → 0x868B90, 2 sites / 10 bytes unchanged; `xmm0` reloaded by the body) | `docs/testing.md`, `docs/improvements-log.md` |
 | GarageModelFix site B → prologue | **rejected**: 0x9659C3 is inside a 2-iteration loop with per-iteration ECX; a prologue hook would change lookup ordering (see `.scratch/w3_garage.md`) | analysis |
-| CutsceneFixes → single callee hook | **default** since the live run: one 5-byte hook at 0x89A640 replaces the 3 sites (9 → 5 bytes); the callee is relocated to a private copy with its 13 calls re-pointed and the branch fix baked in, and any shape mismatch falls back to the 3 original sites. `except:cutscene_entry` restores them | `docs/testing.md` |
-| NewMemorySystem → init thunk | **implemented, opt-in, and demoted after its live run**: one 5-byte hook at 0xD56060 (was: ctor-call rewrite + `atexit` skip, 8 bytes at RVA 0x107B). The game's own allocator construction and `atexit` registration run; the vtable is stored after, which restores the ~100 MiB simple-allocator block and its exit-time reset. On the first live run with it on the game OOM'd on exit (the reset frees through the original allocator while our allocations are live), so it is **out of the `Improvements = 1` convenience toggle** and stays name-only (`all,entry,nms_thunk`) | `docs/testing.md`, `docs/improvements-log.md` |
-| BuildingAlphaFix site 2 `jnz`-only NOP | **default** since the live run: six bytes at 0x559CDA instead of thirteen at 0x559CD3; the `test` keeps setting the flags. `except:alpha_nop` restores the 13-byte form | `docs/testing.md` |
+| CutsceneFixes → single callee hook | **shipped** since the live run: one 5-byte hook at 0x89A640 replaces the 3 sites (9 → 5 bytes); the callee is relocated to a private copy with its 13 calls re-pointed and the branch fix baked in, and any shape mismatch falls back to the 3 original sites | `docs/testing.md` |
+| NewMemorySystem → init thunk | **implemented, tried live, reverted**: one 5-byte hook at 0xD56060 (the ctor-call rewrite + `atexit` skip become 8 bytes at RVA 0x107B). The game's own allocator construction and `atexit` registration run, which restores the ~100 MiB simple-allocator block and its exit-time reset; the live run OOM'd on exit (the reset frees through the original allocator while our allocations are live). The thunk arm and body were **deleted**; the original two-site install is the code | `docs/testing.md`, `docs/improvements-log.md` |
+| BuildingAlphaFix site 2 `jnz`-only NOP | **shipped** since the live run: six bytes at 0x559CDA instead of thirteen at 0x559CD3; the `test` keeps setting the flags | `docs/testing.md` |
 | garage lookup memo (Part B) | **done**: 64-slot memo of successful resolutions, constant fallback hash resolved once; negative results are never cached | commit "perf: memoise the garage and popup model-table scans" |
-| popup angle precompute (Part B) | **done** under the folded `popup` group: the last matching `[PopupLightAngles]` entry per hash is memoised instead of rescanning 512 entries | same commit |
+| popup angle precompute (Part B) | **done**: the last matching `[PopupLightAngles]` entry per hash is memoised instead of rescanning 512 entries | same commit |
 | `AbiByName` hash table (Part B) | **not done, measured unnecessary**: 125 lookups at startup over ~128 names is microseconds of a ~1.9 s install pass; the linear scan is also the table's readable form | — |
 | multi-pattern scan pass, duplicate publish/install scans (Part B) | **rejected**: the original rescans at install time and an earlier arm may have written the bytes a later scan looks for; a write-aware invalidation is unproven and the delta would change installs | — |
 | LoadDLCs five-flow rewrite | **rejected**: reimplements XNotify listener registration and is sequence-sensitive | — |
@@ -53,7 +50,7 @@ are used as evidence, never the rel32 value.
 
 Part A covers the options the brief lists; options with **no 1.0.8.0 site** are stated and not
 given invented rows. Verdicts: **safe** = same effect, fewer bytes/sites; **behaviour change** =
-needs an opt-in because the write set or a guard changes; **fidelity risk** = do not ship.
+changes the write set or a guard, so it needs review; **fidelity risk** = do not ship.
 
 ## Part A — cleaner game-side entry point at the patched spot
 

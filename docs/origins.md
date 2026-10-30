@@ -60,8 +60,7 @@ selected by the original option itself, so there are no per-fix keys:
 `VRAMFix` moved to the XLivelessAddon module; their 300 ms intro body and
 FusionFix-style window manager are in `xlivelessaddon/`, not here.
 
-The original branches are compiled and can be selected for tests with
-`OPCEP_IMPROVEMENTS=none` or `-DOPCEP_PARITY_BASELINE=ON`, not with an INI key.
+The original branches are gone: the improved code is the only implementation.
 The shared model-name table and OOC payload are unchanged. The model index only
 adds a sorted `(hash, table index)` view of the same catalogue; first-match
 order is preserved.

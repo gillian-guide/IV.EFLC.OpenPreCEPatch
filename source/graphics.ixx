@@ -53,15 +53,11 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                // The 13-byte NOP covers `test dword [esi+24h], 40000000h` (7
-                // bytes) and its six-byte `jnz`, so the following code sees the
-                // flags from before the test. The opt-in form NOPs only the jnz
-                // at match+7 and leaves the test to set the flags, which is what
-                // the untaken branch would have produced.
-                if (zpatch_opt_alpha_nop != 0u)
-                    NopAt(ctx, match + 7, 6);
-                else
-                    NopAt(ctx, match, 13);
+                // NOP only the six-byte `jnz` at match+7 and leave the `test` to
+                // set the flags, which is what the untaken branch would have
+                // produced. (The original 13-byte NOP covered the test too, so
+                // the following code saw stale flags.)
+                NopAt(ctx, match + 7, 6);
             }
         }
 
@@ -424,15 +420,15 @@ namespace opp::features
         }
     }
 
-    // Opt-in (cutscene_entry): one hook at the shared camera callee instead of
-    // the three sites. The shipped body already takes its call target and poke
-    // address from globals, so instead of transcribing 0x2D2 bytes we relocate
-    // the callee into private memory, re-point its 13 direct calls and bake the
-    // branch fix into the copy. The body then calls the copy, and the game's two
-    // call sites reach the body through the five bytes at the callee entry.
+    // One hook at the shared camera callee instead of the three sites. The
+    // shipped body already takes its call target and poke address from globals,
+    // so instead of transcribing 0x2D2 bytes we relocate the callee into private
+    // memory, re-point its 13 direct calls and bake the branch fix into the
+    // copy. The body then calls the copy, and the game's two call sites reach
+    // the body through the five bytes at the callee entry.
     //
-    // Any shape mismatch is a clean skip: the three original sites are applied
-    // instead, so enabling the group can never lose the fix.
+    // Any shape mismatch falls back to the three original sites, so the fix is
+    // never lost.
     namespace
     {
         bool CutsceneBytesMatch(const uint8_t* at, const uint8_t* bytes, size_t count) noexcept
@@ -490,7 +486,7 @@ namespace opp::features
             if (callee == 0u || !InImage(image, callee) ||
                 !InImage(image, callee + kCutsceneCalleeSize - 1u))
             {
-                Log("cutscene_entry: callee %p is outside the image, keeping the 3 sites",
+                Log("CutsceneFixes: callee %p is outside the image, keeping the 3 sites",
                     reinterpret_cast<void*>(callee));
                 return nullptr;
             }
@@ -500,7 +496,7 @@ namespace opp::features
                 !CutsceneBytesMatch(source + kCutsceneBranchOffset, kBranchSite,
                                     sizeof(kBranchSite)))
             {
-                Log("cutscene_entry: callee %p does not match the 1.0.8.0 shape, keeping the 3 sites",
+                Log("CutsceneFixes: callee %p does not match the 1.0.8.0 shape, keeping the 3 sites",
                     reinterpret_cast<void*>(callee));
                 return nullptr;
             }
@@ -508,7 +504,7 @@ namespace opp::features
                 AllocateNear(image, kCutsceneCalleeSize));
             if (copy == nullptr)
             {
-                Log("cutscene_entry: no memory for the callee copy, keeping the 3 sites");
+                Log("CutsceneFixes: no memory for the callee copy, keeping the 3 sites");
                 return nullptr;
             }
             if (!zpatch_relocate_calls(copy, source, kCutsceneCalleeSize,
@@ -516,24 +512,29 @@ namespace opp::features
                                        sizeof(kCutsceneCalls) / sizeof(kCutsceneCalls[0])))
             {
                 VirtualFree(copy, 0, MEM_RELEASE);
-                Log("cutscene_entry: callee calls do not relocate, keeping the 3 sites");
+                Log("CutsceneFixes: callee calls do not relocate, keeping the 3 sites");
                 return nullptr;
             }
             // Site 2: the branch the copy takes when the camera is called back.
             copy[kCutsceneBranchOffset] = 0xEBu;
-            Log("cutscene_entry: hooked callee %p, copy %p",
+            Log("CutsceneFixes: hooked callee %p, copy %p",
                 reinterpret_cast<void*>(callee), static_cast<void*>(copy));
             return copy;
         }
     } // namespace
 
-    void InstallCutsceneFixesAtCallee(PatchContext& ctx)
+    void InstallCutsceneFixes(PatchContext& ctx)
     {
-        TraceArm("InstallCutsceneFixes@callee");
-        if (zpatch_opt_cutscene_entry == 0u || !ctx.Option("CutsceneFixes", "1"))
+
+        TraceArm("CutsceneFixes");
+
+        if (!ctx.Option("CutsceneFixes", "1"))
             return;
 
-        // The publish arm derived these from the call site's rel32.
+        // One hook at the shared camera callee instead of the three original
+        // sites. The publish arm derived the callee from the call site's rel32;
+        // any shape mismatch, a failed allocation or a relocation that does not
+        // fit applies the three sites instead, so the fix is never lost.
         const auto callee = static_cast<uintptr_t>(zpatch_cutscene_target);
         if (void* const copy = CutsceneCalleeCopy(ctx.image, callee))
         {
@@ -545,21 +546,6 @@ namespace opp::features
             return;
         }
         ApplyCutsceneSites(ctx);
-    }
-
-    // CutsceneFixes
-
-    void InstallCutsceneFixes(PatchContext& ctx)
-    {
-
-        TraceArm("CutsceneFixes");
-
-        // CutsceneFixes: 2 siginstalls, 1 sigwrite
-        if (ctx.Option("CutsceneFixes", "1") && zpatch_opt_cutscene_entry == 0u)
-        {
-            ApplyCutsceneSites(ctx);
-        }
-
     }
 
 
@@ -934,9 +920,6 @@ namespace
             RegisterFeature(116, "InstallForceCarHeadlightShadows", &InstallForceCarHeadlightShadows);
             RegisterFeature(119, "InstallCarDynamicShadowFix", &InstallCarDynamicShadowFix);
             RegisterFeature(127, "InstallCutsceneFixes", &InstallCutsceneFixes);
-            // Runs after the original arm (off when the group is on) and owns
-            // the install either way: callee hook or the three-site fallback.
-            RegisterFeature(128, "InstallCutsceneFixesAtCallee", &InstallCutsceneFixesAtCallee);
             RegisterFeature(129, "InstallCarDecalsFix", &InstallCarDecalsFix);
             RegisterFeature(131, "InstallCarDynamicShadowFixNoE", &InstallCarDynamicShadowFixNoE);
             RegisterFeature(137, "InstallCarPartsShadowFixStandalone", &InstallCarPartsShadowFixStandalone);

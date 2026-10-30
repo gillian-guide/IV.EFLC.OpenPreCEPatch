@@ -31,8 +31,7 @@ DllMain / InitializeASI
 | `source/pattern.*` | signature normalisation, the executable-section range and the scans |
 | `source/rebased.*` | the globals the hook bodies address, plus the original-name tables |
 | `source/hooks.cpp` | machine-level bodies and the reference-VA registry |
-| `source/patches.*` | the ordered option pass, the folded-improvement publish and the optional dump observer |
-| `source/improvements.*` | the `OPCEP_IMPROVEMENTS` / `OPCEP_PARITY_BASELINE` test switches |
+| `source/patches.*` | the ordered option pass and the optional dump observer |
 | `source/preamble.cpp` | the seven unconditional pointer scans and salt fallback |
 | `source/stability.ixx` | crash/freeze arms |
 | `source/performance.ixx` | loading, streaming, limits, memory |
@@ -61,13 +60,9 @@ Options are grouped into `[STABILITY]`, `[FIXES]`, `[PERFORMANCE]`, `[GRAPHICS]`
 `source/ini_template.hxx`; the raw string is emitted as adjacent literals because
 MSVC truncates a single literal above 16,380 bytes.
 
-`PatchGame` also publishes the folded improvement switches into the
-`zpatch_opt_*` globals once, before any arm runs. They are resolved from the
-original options (`NewSavesCompatibility`, `OutOfCommissionFix`, the moving-parts
-trio, `PopupHeadlightsFlag`/FCHS, `BadPlayerModelCrashFix`/`DebugPrintSpawns`)
-plus the test-only `OPCEP_IMPROVEMENTS` environment variable or the
-`OPCEP_PARITY_BASELINE` build definition. There are no per-fix INI keys; see
-`docs/improvements.md` and `docs/testing.md`.
+The improvements are the shipped code: there are no switches, no test-only
+environment variable and no per-fix INI keys. See `docs/improvements.md` for what
+each original option's implementation does.
 
 ## FusionFix gating
 

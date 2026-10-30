@@ -40,20 +40,19 @@ Eighty-five independent options. The highlights:
 Every option is documented in [docs/features.md](docs/features.md), and the full
 key table lives in [docs/ini.md](docs/ini.md).
 
-## Improvements and test switches
+## Improvements
 
-Safety and performance improvements are folded into the original options; there
-are no per-fix INI keys. `NewSavesCompatibility` uses the validated converter,
-`OutOfCommissionFix` caches the archive, the moving-parts options guard their
-vehicle walk, and the installer scans stay inside the executable sections and
-stop at the first match (which is what the original loader did; the startup pass
-is about 3x faster). Intro/window behaviour now belongs to the separate
-XLivelessAddon successor.
+Safety and performance improvements are part of the shipped code; there are no
+per-fix INI keys and no switch that selects an older branch.
+`NewSavesCompatibility` uses the validated converter, `OutOfCommissionFix`
+caches the archive, the moving-parts options guard their vehicle walk, and the
+installer scans stay inside the executable sections and stop at the first match
+(which is what the original loader did; the startup pass is about 3x faster).
+`GarageModelFix`, `CutsceneFixes` and `BuildingAlphaFix` hook the better entry
+point (prologue, shared callee, the branch alone). Intro/window behaviour
+belongs to the separate XLivelessAddon successor.
 
-The original path stays compiled. For tests and A/B runs only, set
-`OPCEP_IMPROVEMENTS` (for example `none`, `only:newsaves,ooc`,
-`except:windowed`) or build with `-DOPCEP_PARITY_BASELINE=ON`. A normal install
-does not need either. The exact write-set effect is recorded in
+The write-set effect of every option is recorded in
 [docs/improvements-log.md](docs/improvements-log.md) and checked by
 `tools/opcep_matrix.py` against the committed `tests/parity/matrix.json`.
 

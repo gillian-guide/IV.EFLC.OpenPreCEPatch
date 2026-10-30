@@ -624,3 +624,21 @@ only changed cells are the three options and the sections that own them
 moved). Every other cell is byte-identical. `tools/opcep_optin.py` now pins each
 rewrite's contribution (`except:<group>`, and `all,nms_thunk` for the allocator
 one).
+
+## 2026-10-30 — improvement switches removed; the improved code is the code
+
+The switch layer is gone: `source/improvements.*` deleted, the `zpatch_opt_*`
+globals and every branch that selected an original implementation removed, the
+`OPCEP_IMPROVEMENTS` environment variable and `OPCEP_PARITY_BASELINE` build
+option dropped, and the `Improvements` INI key plus `tools/opcep_optin.py` and
+its fixtures removed. Behaviour is unchanged from the promoted default set:
+`garage_entry`, `cutscene_entry` and `alpha_nop` are the code; the allocator
+thunk stays out (deleted after its live OOM). The write set is byte-identical
+apart from the arm name (`InstallCutsceneFixesAtCallee` folded back into
+`InstallCutsceneFixes`) and the INI template hash: defaults 482, all-on 844,
+legacy 799 writes.
+
+`docs/improvements.md`, `docs/testing.md`, `docs/architecture.md`,
+`docs/entry-points-audit.md`, `docs/installing.md`, `readme.md` and
+`tests/parity/README.md` were rewritten to describe the code rather than a
+switch. `docs/parity-report.md` keeps its historical numbers with a header note.

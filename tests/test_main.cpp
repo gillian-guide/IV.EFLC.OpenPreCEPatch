@@ -12,7 +12,6 @@
 #include "game.hxx"
 #include "helpers.hxx"
 #include "hooks.h"
-#include "improvements.hxx"
 #include "ini_import.hxx"
 #include "menu.hxx"
 #include "patches.hxx"
@@ -26,7 +25,6 @@
 #include <string>
 #include <vector>
 
-extern "C" uint8_t zpatch_opt_model_index;
 
 namespace
 {
@@ -257,75 +255,6 @@ namespace
                            {opp::GameBuild::v1070, opp::GameBuild::v1080}));
     }
 
-    void TestImprovements()
-    {
-        constexpr uint32_t all = opp::DefaultImprovements();
-        constexpr uint32_t newsaves = opp::Improve(opp::Improvement::new_saves);
-        constexpr uint32_t ooc = opp::Improve(opp::Improvement::ooc);
-        constexpr uint32_t trace = opp::Improve(opp::Improvement::trace);
-        constexpr uint32_t skipintro = opp::Improve(opp::Improvement::skip_intro);
-
-        CHECK(opp::ParseImprovements(nullptr) == all);
-        CHECK(opp::ParseImprovements("") == all);
-        CHECK(opp::ParseImprovements("all") == all);
-        CHECK(opp::ParseImprovements("ON") == all);
-        CHECK(opp::ParseImprovements("none") == 0);
-        CHECK(opp::ParseImprovements("off") == 0);
-        CHECK(opp::ParseImprovements("only:newsaves,ooc") == (newsaves | ooc));
-        CHECK(opp::ParseImprovements("except:trace") == (all & ~trace));
-        CHECK(opp::ParseImprovements("SkipIntro") == skipintro);
-        CHECK(opp::ParseImprovements(" only: newsaves ; ooc ") == (newsaves | ooc));
-        CHECK(opp::ParseImprovements("only:") == 0);
-        CHECK(opp::ParseImprovements("except:" ) == all);
-
-        char text[64] = {};
-        CHECK(opp::FormatImprovements(0u, text, sizeof(text)) == 4u);
-        CHECK(std::strcmp(text, "none") == 0);
-        CHECK(opp::FormatImprovements(newsaves | ooc, text, sizeof(text)) > 0u);
-        CHECK(std::strstr(text, "new_saves") != nullptr);
-        CHECK(std::strstr(text, "ooc") != nullptr);
-        char tiny[8] = {};
-        CHECK(opp::FormatImprovements(all, tiny, sizeof(tiny)) < sizeof(tiny));
-        CHECK(tiny[sizeof(tiny) - 1] == 0);
-        CHECK(opp::FormatImprovements(all, nullptr, 8u) == 0u);
-        CHECK(opp::FormatImprovements(all, text, 0u) == 0u);
-        constexpr uint32_t entry = opp::Improve(opp::Improvement::garage_entry) |
-                                 opp::Improve(opp::Improvement::cutscene_entry) |
-                                 opp::Improve(opp::Improvement::nms_thunk) |
-                                 opp::Improve(opp::Improvement::alpha_nop);
-        constexpr uint32_t nms = opp::Improve(opp::Improvement::nms_thunk);
-        CHECK(opp::ParseImprovements("entry") == entry);
-        CHECK(opp::ParseImprovements("all,nms_thunk") == (all | nms));
-        // The default set carries the three validated entry-point rewrites but
-        // not the allocator rewrite, which regressed on its live run.
-        CHECK((all & opp::Improve(opp::Improvement::garage_entry)) != 0u);
-        CHECK((all & opp::Improve(opp::Improvement::cutscene_entry)) != 0u);
-        CHECK((all & opp::Improve(opp::Improvement::alpha_nop)) != 0u);
-        CHECK((all & nms) == 0u);
-        CHECK(opp::ResolveImprovements(0u, nullptr) == 0u);
-        CHECK(opp::ResolveImprovements(newsaves, "") == newsaves);
-        CHECK(opp::ResolveImprovements(newsaves, "  ") == newsaves);
-        CHECK(opp::ResolveImprovements(0u, "1") == all);
-        CHECK(opp::ResolveImprovements(0u, "all") == all);
-        CHECK(opp::ResolveImprovements(newsaves, "0") == 0u);
-        CHECK(opp::ResolveImprovements(newsaves, "none") == 0u);
-        CHECK(opp::ResolveImprovements(newsaves, "all,garage_entry") ==
-              (all | opp::Improve(opp::Improvement::garage_entry)));
-
-#if defined(OPCEP_PARITY_BASELINE)
-        CHECK(opp::EnabledImprovements() == 0);
-#else
-        SetEnvironmentVariableA("OPCEP_IMPROVEMENTS", "none");
-        CHECK(opp::EnabledImprovements() == 0);
-        SetEnvironmentVariableA("OPCEP_IMPROVEMENTS", "skipintro");
-        CHECK(opp::EnabledImprovements() == skipintro);
-        SetEnvironmentVariableA("OPCEP_IMPROVEMENTS", "except:trace");
-        CHECK(opp::EnabledImprovements() == (all & ~trace));
-        SetEnvironmentVariableA("OPCEP_IMPROVEMENTS", nullptr);
-        CHECK(opp::EnabledImprovements() == all);
-#endif
-    }
-
     void TestCatalogue()
     {
         CHECK(opp::ModelCatalogSize() == 38455);
@@ -336,12 +265,10 @@ namespace
         CHECK(opp::ModelNameFromHash(0) == "**UNKNOWN**");
 
         // ModelNameIndex: the one-time hash index must answer identically.
-        zpatch_opt_model_index = 1;
         CHECK(opp::ModelNameFromHash(opp::GameHash("police")) == "police");
         CHECK(opp::ModelNameFromHash(opp::GameHash("INFERNUS")) == "infernus");
         CHECK(opp::ModelNameFromHash(opp::GameHash("01_wires_mh1")) == "01_wires_mh1");
         CHECK(opp::ModelNameFromHash(0x1234567u) == "**UNKNOWN**");
-        zpatch_opt_model_index = 0;
     }
 
     void WriteNewSaveChunk(std::FILE* file, uint32_t size)
@@ -483,7 +410,7 @@ namespace
     void TestFeatureOrder()
     {
         const auto& features = opp::RegisteredFeatures();
-        CHECK(features.size() == 124);
+        CHECK(features.size() == 122);
         for (size_t i = 1; i < features.size(); ++i)
             CHECK(features[i - 1].order < features[i].order);
     }
@@ -634,7 +561,6 @@ int main()
     TestExecutableView();
     TestPatternScan();
     TestGame();
-    TestImprovements();
     TestCatalogue();
     TestNewSavesScan();
     TestVehicleLights();
