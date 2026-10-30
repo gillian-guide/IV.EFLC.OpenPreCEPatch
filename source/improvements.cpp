@@ -59,6 +59,9 @@ namespace opp
             {"nmsthunk", Improvement::nms_thunk},
             {"nms-thunk", Improvement::nms_thunk},
             {"nms_thunk", Improvement::nms_thunk},
+            {"alpha", Improvement::alpha_nop},
+            {"alphanop", Improvement::alpha_nop},
+            {"alpha_nop", Improvement::alpha_nop},
             // The canonical group names use underscores; accept them too so the
             // names printed by ImprovementName() are always parseable.
             {"new_saves", Improvement::new_saves},
@@ -174,6 +177,7 @@ namespace opp
         case Improvement::garage_entry: return "garage_entry";
         case Improvement::cutscene_entry: return "cutscene_entry";
         case Improvement::nms_thunk: return "nms_thunk";
+        case Improvement::alpha_nop: return "alpha_nop";
         case Improvement::none: return "none";
         case Improvement::all: return "all";
         }

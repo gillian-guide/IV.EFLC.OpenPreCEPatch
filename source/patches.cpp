@@ -88,6 +88,7 @@ namespace opp
         // NewMemorySystem's init-thunk form; opt-in because it restores the
         // game's own allocator construction (memory behaviour changes).
         zpatch_opt_nms_thunk = has(Improvement::nms_thunk) ? 1u : 0u;
+        zpatch_opt_alpha_nop = has(Improvement::alpha_nop) ? 1u : 0u;
 
         for (const Feature& feature : RegisteredFeatures())
         {

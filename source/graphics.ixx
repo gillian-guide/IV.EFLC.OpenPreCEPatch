@@ -53,7 +53,15 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                NopAt(ctx, match, 13);
+                // The 13-byte NOP covers `test dword [esi+24h], 40000000h` (7
+                // bytes) and its six-byte `jnz`, so the following code sees the
+                // flags from before the test. The opt-in form NOPs only the jnz
+                // at match+7 and leaves the test to set the flags, which is what
+                // the untaken branch would have produced.
+                if (zpatch_opt_alpha_nop != 0u)
+                    NopAt(ctx, match + 7, 6);
+                else
+                    NopAt(ctx, match, 13);
             }
         }
 

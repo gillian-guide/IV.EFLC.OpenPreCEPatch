@@ -41,6 +41,9 @@ namespace opp
         // of the ctor-call rewrite + atexit skip. It restores the game's own
         // allocator construction, so it changes memory behaviour: opt-in only.
         nms_thunk = 1u << 11,
+        // BuildingAlphaFix: skip only the `jnz` instead of the `test` + `jnz`
+        // pair, so the flags the test sets stay live for the following code.
+        alpha_nop = 1u << 12,
     };
 
     constexpr uint32_t Improve(Improvement value) noexcept
