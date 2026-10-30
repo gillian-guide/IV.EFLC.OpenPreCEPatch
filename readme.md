@@ -15,7 +15,7 @@ pattern libraries as submodules, and `data/plugins/` holds the shipped INI.
 
 ## What it does
 
-Around ninety independent options. The highlights:
+Eighty-five independent options. The highlights:
 
 - **Stability** — aim-projectile, bad-player-model, benchmark, blackscreen,
   collision-deadlock, combined-radio, cutscene, episode-switch, freeze-car,
@@ -33,7 +33,7 @@ Around ninety independent options. The highlights:
   teleport protection, livery limits, spawn diagnostics and the GFWL CD-key
   kick fix.
 - **Loading / compatibility** — local settings, DLC loading, new save/file
-  compatibility, ZMenuIV guard and IVMenuAPI registration. XLivelessAddon's
+  compatibility and the ZMenuIV guard. XLivelessAddon's
   launcher/intro/menu/window/VRAM features live in the separate
   [XLivelessAddon successor](xlivelessaddon/README.md).
 

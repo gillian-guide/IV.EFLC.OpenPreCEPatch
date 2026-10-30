@@ -3,10 +3,12 @@
 > **Superseded (2026-10-26).** The split moved `SkipIntro`, `SkipMenu`,
 > `BorderlessWindowed`, `DoNotPauseOnMinimize` and `VRAMFix` to
 > XLivelessAddon, so the 4-byte `SkipIntro` delta below no longer exists in this
-> module. Re-measured after the 2026-10-26 audit: the improved and
-> `OPCEP_PARITY_BASELINE=ON` dumps are byte-identical on **all 104 cells**
-> (defaults 823 writes, all-off 0, all-on 12,700, legacy 900). The historical
-> numbers below are kept for the pre-split checkpoint.
+> module. The 2026-10-30 cleanup removed six option cells (`RemoveUselessChecks`,
+> `NoPhysicsSleep`, `HighQualityReflections`, `ForceDynamicShadowsEverywhere`,
+> `RemoveBoundingBoxCulling`, `AddOptionsInMenu`). Current matrix: **98 cells /
+> 4,294 writes**, defaults 819, all-off 0, all-on 873, legacy 810; improved and
+> `OPCEP_PARITY_BASELINE=ON` dumps are byte-identical on every cell. The
+> historical numbers below are kept for the pre-split checkpoint.
 
 Baseline: `baseline-openprece-20261025` (commit `175cb56`). Harness checkpoint:
 `good-matrix-20261025`. Folded-improvement checkpoint: `good-folded-20261025`.

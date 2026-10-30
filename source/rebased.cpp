@@ -168,7 +168,6 @@ extern "C"
     uint8_t zpatch_flag_patch4_modchecks = 0u; // byte_10159C14
     uint8_t zpatch_flag_gfwl_popup = 0u;       // byte_10159B87
     uint8_t zpatch_flag_debug_spawns = 0u;     // byte_10159C15
-    uint8_t zpatch_flag_donotpause = 0u;       // byte_1015AD43
     // OpenPreCEPatch opt-in switches. 0 selects the original branch everywhere.
     uint8_t zpatch_opt_new_saves_guards = 0u;
     uint8_t zpatch_opt_new_saves_seek = 0u;
@@ -311,12 +310,6 @@ extern "C"
     uint32_t zpatch_ooc_vector_capacity = 0;
     char zpatch_ooc_fmt_a[] = "mor";
     char zpatch_ooc_fmt_b[] = "me%sy%c%c%p,%d,%c%c%s";
-    // HighQualityReflections (see the hook bodies).
-    uint32_t zpatch_hqr_resume = 0;
-    uint32_t zpatch_hqr_builder = 0;
-    uint32_t zpatch_hqr_dump[8] = {};
-    uint32_t zpatch_hqr_flags = 0x11Du; // the original's dword_10158060
-    uint32_t zpatch_hqr_mode = 0;       // the original's BSS slot stays 0
     // CutsceneFixes chain B (see the hook bodies): the worker's two publishes, the body's
     // frame-time accumulator (the original's .data BSS, past the raw data, so 0) and
     // the read-only constants it compares against (original .rdata/.data bits).
@@ -659,11 +652,6 @@ uintptr_t FindGlobalSlot(std::string_view slot_name) noexcept
         return reinterpret_cast<uintptr_t>(&zpatch_ooc_logger);
     if (slot_name == "dword_10159C04")
         return reinterpret_cast<uintptr_t>(&zpatch_ooc_orig);
-    // HighQualityReflections publishes.
-    if (slot_name == "dword_10159CFC")
-        return reinterpret_cast<uintptr_t>(&zpatch_hqr_resume);
-    if (slot_name == "dword_10159D04")
-        return reinterpret_cast<uintptr_t>(&zpatch_hqr_builder);
     // SuperLODFix's resume slots are not rebased yet (their ABI body is pending);
     // the publishes are skipped and counted.
     return 0;

@@ -48,7 +48,6 @@ set(OPCEP_SOURCES
     source/compatibility.ixx
     source/interface.ixx
     source/data/model_catalogue.cpp
-    source/data/useless_checks.cpp
     external/hooking/Hooking.Patterns.cpp
 )
 
@@ -126,7 +125,6 @@ add_executable(opcep_parity_dump
     source/compatibility.ixx
     source/interface.ixx
     source/data/model_catalogue.cpp
-    source/data/useless_checks.cpp
     external/hooking/Hooking.Patterns.cpp
 )
 target_include_directories(opcep_parity_dump PRIVATE

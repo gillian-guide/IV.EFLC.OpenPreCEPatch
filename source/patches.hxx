@@ -11,10 +11,6 @@
 
 namespace opp
 {
-    // The loader's AddOptionsInMenu && IVMenuAPI decision. RestoreDeathMusic
-    // installs through the menu even with its INI key off, so its arm asks this.
-    void SetMenuIntegration(bool available) noexcept;
-
     // Optional per-arm instrumentation for the offline dump tool. The ASI never
     // installs an observer, so the release path stays allocation- and call-free.
     struct PatchObserver

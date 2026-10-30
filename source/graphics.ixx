@@ -321,13 +321,6 @@ namespace opp::features
 
                 injector::MakeJMP(match - 6, reinterpret_cast<void*>(Abi("abi_carparts_shadow")), true); //jmp
             }
-
-            if (auto pattern = Pattern(image, "485 DB 7E 41 55 EB 0A"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                injector::MakeJMP(match - 6, reinterpret_cast<void*>(Abi("abi_carparts_shadow")), true); //jmp
-            }
         }
 
     }
@@ -608,29 +601,6 @@ namespace opp::features
     }
 
 
-    // ForceDynamicShadowsEverywhere
-
-    void InstallForceDynamicShadowsEverywhere(PatchContext& ctx)
-    {
-
-        TraceArm("ForceDynamicShadowsEverywhere");
-
-        // ForceDynamicShadowsEverywhere: 1 literal
-        if (ctx.Option("ForceDynamicShadowsEverywhere", "0"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "F7 46 4C 00 80 00 00 74"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                injector::MakeNOP(match + 7, 2, true); //nop
-            }
-        }
-
-    }
-
-
     // ForceShadowsOnObjects
 
     void InstallForceShadowsOnObjects(PatchContext& ctx)
@@ -648,51 +618,6 @@ namespace opp::features
                 auto* match = pattern.get(0).get<uint8_t>();
 
                 injector::WriteMemory<uint8_t>(match + 7, 0xEBu, true); //jmp
-            }
-        }
-
-    }
-
-
-    // publish HighQualityReflections
-
-    void PublishHighQualityReflections(PatchContext& ctx)
-    {
-
-        TraceArm("publish HighQualityReflections");
-
-        // HighQualityReflections: 2 slots
-        if (ctx.Option("HighQualityReflections", "0"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "8B 87 38 09 00 00 6A 08 68 1D 13 00 00 50 E8"); pattern.size() > 0)
-            {
-                zpatch_hqr_resume = MatchAddress(pattern, 19);
-                zpatch_hqr_builder = MatchTarget(pattern, 15, 19);
-            }
-        }
-
-    }
-
-
-    // HighQualityReflections
-
-    void InstallHighQualityReflections(PatchContext& ctx)
-    {
-
-        TraceArm("HighQualityReflections");
-
-        // HighQualityReflections: 1 siginstall
-        if (ctx.Option("HighQualityReflections", "0"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "8B 87 38 09 00 00 6A 08 68 1D 13 00 00 50 E8"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_hqr_body")), true); //jmp
             }
         }
 
@@ -764,30 +689,6 @@ namespace opp::features
                 auto* match = pattern.get(0).get<uint8_t>();
 
                 injector::MakeNOP(match, kWordLength, true); //nop
-            }
-        }
-
-    }
-
-
-    // RemoveBoundingBoxCulling
-
-    void InstallRemoveBoundingBoxCulling(PatchContext& ctx)
-    {
-
-        TraceArm("RemoveBoundingBoxCulling");
-
-        // RemoveBoundingBoxCulling: 1 siginstall
-        if (ctx.Option("RemoveBoundingBoxCulling", "0"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "3C 01 57 0F 85"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                if (InImage(image, reinterpret_cast<uintptr_t>(match + 3)))
-                    injector::MakeJMP(match + 3, reinterpret_cast<void*>(BranchTarget(match, 3)), true); //jmp
             }
         }
 
@@ -875,23 +776,19 @@ namespace
             RegisterFeature(32, "PublishCarPartsShadowFix", &PublishCarPartsShadowFix);
             RegisterFeature(33, "PublishForceCarHeadlightShadows", &PublishForceCarHeadlightShadows);
             RegisterFeature(36, "PublishCarDynamicShadowFix", &PublishCarDynamicShadowFix);
-            RegisterFeature(43, "PublishHighQualityReflections", &PublishHighQualityReflections);
             RegisterFeature(44, "PublishCutsceneFixes", &PublishCutsceneFixes);
             RegisterFeature(53, "InstallBuildingAlphaFix", &InstallBuildingAlphaFix);
             RegisterFeature(54, "InstallBuildingDynamicShadows", &InstallBuildingDynamicShadows);
             RegisterFeature(58, "InstallDualVehicleHeadlights", &InstallDualVehicleHeadlights);
             RegisterFeature(59, "InstallEmissiveLerpFix", &InstallEmissiveLerpFix);
-            RegisterFeature(63, "InstallForceDynamicShadowsEverywhere", &InstallForceDynamicShadowsEverywhere);
             RegisterFeature(64, "InstallForceShadowsOnObjects", &InstallForceShadowsOnObjects);
             RegisterFeature(70, "InstallInfiniteCarBottomDistance", &InstallInfiniteCarBottomDistance);
-            RegisterFeature(92, "InstallRemoveBoundingBoxCulling", &InstallRemoveBoundingBoxCulling);
             RegisterFeature(94, "InstallRemoveStaticCarShadows", &InstallRemoveStaticCarShadows);
             RegisterFeature(95, "InstallRemoveStaticCutsceneCarShadows", &InstallRemoveStaticCutsceneCarShadows);
             RegisterFeature(97, "InstallReversingLightFix", &InstallReversingLightFix);
             RegisterFeature(115, "InstallCarPartsShadowFix", &InstallCarPartsShadowFix);
             RegisterFeature(116, "InstallForceCarHeadlightShadows", &InstallForceCarHeadlightShadows);
             RegisterFeature(119, "InstallCarDynamicShadowFix", &InstallCarDynamicShadowFix);
-            RegisterFeature(126, "InstallHighQualityReflections", &InstallHighQualityReflections);
             RegisterFeature(127, "InstallCutsceneFixes", &InstallCutsceneFixes);
             RegisterFeature(129, "InstallCarDecalsFix", &InstallCarDecalsFix);
             RegisterFeature(131, "InstallCarDynamicShadowFixNoE", &InstallCarDynamicShadowFixNoE);

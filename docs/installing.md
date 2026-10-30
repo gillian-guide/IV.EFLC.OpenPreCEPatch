@@ -62,17 +62,16 @@ The conflicts are listed in `source/fusionfix_compat.cpp`. The groups are:
 | EpisodicVehicleSupport, EpisodicWeaponSupport, PoliceEpisodicWeaponSupport, TBoGTHeliHeightLimit, SCOSignatureFix, PipeBombDropIconSupport | `episodiccontent.ixx` |
 | RestoreDeathMusic | `deathmusic.ixx` |
 | BikeFeetFix, BikePhoneAnimsFix, ReversingLightFix | `fixes.ixx` |
+| BuildingAlphaFix | `fixes.ixx` (LOD fade-in) |
 | CutsceneFixes | `cutscenecam.ixx`, `frameratevigilante.ixx` |
 | MouseFix | `rawinput.ixx`, `sniper.ixx` |
 | IncreasePtrNodes, IncreaseVehicleModelLimit, IncreaseVehicleStructLimit, NoLiveryLimit | `limits.ixx` |
 | FastLoading, NoLoadingSleep | `loadingdelays.ixx`, `framelimit.ixx` |
 | HighFPSBikePhysicsFix, HighFPSSpeedupFix, SpeedupBugFix | `frameratevigilante.ixx` |
 | Car/building shadow options, EmissiveLerpFix | `shadows.ixx`, `nightshadows.ixx`, `fixes.ixx` |
-| HighQualityReflections | `experimental.ixx`, `reflectionmsaa.ixx` |
 | ImprovedShaderStreaming | `shaders.ixx` |
 | VRAMFix | `memory.ixx` |
 | VSyncFix | `framelimit.ixx`, `windowed.ixx` |
-| AddOptionsInMenu | `settings.ixx` |
 | LocalSettingsPath | `userdata.ixx` |
 
 The INI itself marks each of these with `FF`. The `BorderlessWindowed`,

@@ -235,8 +235,6 @@ namespace opp::features
             {
                 injector::MakeJMP(image.base + 0x498460,
                     reinterpret_cast<void*>(Abi("abi_rgsc_login_removed")), true); //jmp
-                injector::MakeJMP(image.base + 0x498460,
-                    reinterpret_cast<void*>(Abi("abi_rgsc_login_removed")), true); //jmp
             }
 
             if (auto pattern = Pattern(image, "83 EC 44 A1 ? ? ? ? 33 C4 89 44 24 40 53 8B 5C 24 4C 56 68 ? ? ? ? E8 ? ? ? ? 83 C4"); pattern.size() > 0)

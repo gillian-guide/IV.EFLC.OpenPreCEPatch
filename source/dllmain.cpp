@@ -122,23 +122,6 @@ namespace
         zpatch_citizen_present = GetModuleHandleA("CitizenIV.exe") ? 1u : 0u;
     }
 
-    bool IsMenuIntegrationAvailable(const opp::Config& config)
-    {
-        if (!config.Option("AddOptionsInMenu", "1"))
-            return false;
-        if (GetModuleHandleA("IVMenuAPI.asi"))
-            return true;
-
-        static bool loadFailed = false;
-        if (loadFailed)
-            return false;
-        if (LoadLibraryA("IVMenuAPI.asi"))
-            return true;
-
-        loadFailed = true;
-        return false;
-    }
-
     void EnforceZMenuVersion()
     {
         uint32_t out = 0;
@@ -215,8 +198,6 @@ namespace
             if (config.Option("DebugPrintSpawns", "0"))
                 zpatch_flag_debug_spawns = 1u;
         }
-        if (config.Option("DoNotPauseOnMinimize", "0"))
-            zpatch_flag_donotpause = 1u;
         if (config.Option("MovingSteeringWheelSupport", "1"))
             zpatch_flag_steering = 1u;
         if (config.Option("MovingPlaneParts", "1"))
@@ -331,13 +312,6 @@ namespace
             return;
 
         const opp::GameImage gameImage{moduleBase, nt->OptionalHeader.SizeOfImage};
-
-        const bool menu = IsMenuIntegrationAvailable(config);
-        opp::SetMenuIntegration(menu);
-        if (menu)
-            opp::RegisterMenuOptions();
-        if (menu || config.Option("DoNotPauseOnMinimize", "0"))
-            zpatch_menu_prime_focus_loss();
 
         if (config.Option("LocalSettingsPath", "0"))
             zpatch_local_settings_capture_cwd();

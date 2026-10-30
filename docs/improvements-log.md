@@ -350,3 +350,51 @@ Verified with a targeted dump: bytes at RVA `0x4F7CE5` are `E9 06 E8 70 0F`,
 which resolve to `0x100064F0` at the dump's `0x400000` image base. The native
 feature count dropped from 137 to 135 (two arms collapsed into one).
 
+## 2026-10-30 - option cleanup, regrouping and direct fork fixes
+
+**Defaults are preferred, not inherited.** `BetterMPSync=1`,
+`Patch4RemoveModChecks=1`, `RemoveGFWLUpdatePopup=1` and
+`TryToSkipAllErrors=0` stay as the chosen defaults (they differ from the
+original distribution INI by design).
+
+### Removed
+
+`RemoveUselessChecks`, `NoPhysicsSleep`, `HighQualityReflections`,
+`ForceDynamicShadowsEverywhere`, `RemoveBoundingBoxCulling` and
+`AddOptionsInMenu`, with their arms, hook bodies (HQR), globals, table data,
+menu registration callbacks and INI keys. `ForceCarHeadlightShadows` and
+`ForceShadowsOnObjects` are kept. The CarDynamicShadowFix no-FCHS writes are now
+unconditional (FCHS remains an opt-in, default `0`).
+
+The IVMenuAPI registration surface (`ProbeMenuApi`, `MenuRegistrations`,
+`RegisterMenuOptions`, the PREF_DEATHMUSIC/PREF_FOCUSLOSS callbacks and
+`bMenuIntegration`) is gone; only the ZMenuIV version guard remains.
+
+### Regrouped / gated
+
+- MP stability keys moved to `[MULTIPLAYER]`: `AimProjectileCrashFix`,
+  `BadPlayerModelCrashFix`, `BlackscreenFix`, `CollisionDeadlockFix`,
+  `CrashMsgFix`, `GroupHackFix`, `MPNikoCrashFix`, `PathNodeCrashFix`.
+  `FreezeGunFix` moved to `[STABILITY]` (single-player rocket crash).
+- `BuildingAlphaFix` is FusionFix-gated (`[all; FF]`).
+- Duplicate writes removed: the second v1080 JMP in
+  `RemoveRGSCLoginRequirement`, and the `485 DB …` CarPartsShadowFix branch that
+  normalises to the same bytes as its first scan.
+
+### Fork (direct, no fault preservation)
+
+Bounded save-path build, `Sleep(1)` + 10 s deadline in the delayed init,
+unknown-build skip, match-count guards on the former unguarded pattern sites,
+the legacy ROM block gated behind `!SkipLauncher`, and an import-descriptor
+count that cannot underflow. See `xlivelessaddon/README.md`.
+
+### Matrix / tests
+
+98 cells / 4,294 writes (six option cells removed); defaults 823 -> 819 (the
+four-byte NoPhysicsSleep write), legacy 814 -> 810, all-on 12,700 -> 873
+(RemoveUselessChecks alone was 11,824). The per-option union still equals
+`all-on` plus the documented CarDynamic/FCHS interaction. `ctest` 2/2 PASS;
+`gen_ini_template.py --check` PASS; `opcep_dump` rebuild + matrix `--update`
+then `--check` PASS.
+
+

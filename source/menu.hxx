@@ -1,52 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// IVMenuAPI integration: the two toggles the original registers through
-// AddIVMenuOption, and the ZMenuIV version guard.
+// ZMenuIV version guard. The old IVMenuAPI registration surface (AddOptionsInMenu)
+// was removed; only the guard remains.
 
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
 
 #include "common.hxx"
 
 namespace opp
 {
-    enum class MenuProbeResult
-    {
-        disabled,
-        already_loaded,
-        loaded,
-        unavailable,
-    };
-
-    struct MenuIntegrationState final
-    {
-        bool optionEnabled{true};
-        bool modulePresent{};
-        bool attemptMade{};
-        size_t loadAttempts{};
-    };
-
-    MenuProbeResult ProbeMenuApi(bool optionEnabled, bool modulePresent, bool attemptAlreadyMade,
-                                 bool loadSucceeded) noexcept;
-    MenuProbeResult MenuIntegrationProbe(MenuIntegrationState& state, bool loadSucceeded) noexcept;
-
-    struct MenuRegistration final
-    {
-        const char* family;
-        const wchar_t* title;
-        const char* display;
-        const char* pref;
-        int a;
-        int b;
-        uintptr_t getter;
-        uintptr_t setter;
-    };
-
-    const MenuRegistration* MenuRegistrations(size_t& count) noexcept;
-    size_t RegisterMenuOptions() noexcept;
-
     constexpr uint32_t kZMenuMinVersion = 0x35DD1u;
     constexpr const char* kZMenuModuleName = "ZMenuIV.asi";
     constexpr const char* kZMenuProcName = "GetZMenuVersion";

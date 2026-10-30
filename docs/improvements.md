@@ -102,11 +102,6 @@ write set unchanged. Remaining candidates:
 
 ## Features that need a real decision
 
-- `RemoveBoundingBoxCulling` forces the non-culling side of the
-  `cmp [esi+0x3c],1; jne` branch at game RVA `0x557463` (the `jne` becomes an
-  unconditional `jmp`), so it does what the name says; the earlier "inverted"
-  note was wrong. It is still niche and unstable (only for HighQualityReflections
-  pop-in) and stays default `0`.
 - `SkipMenu` has an archived FusionFix-style savegame check. It changes
   behaviour and needs a savegame-path implementation that respects
   `LocalSettingsPath`; not shipped.
@@ -169,54 +164,62 @@ launcher/GFWL change, so it is only made observable (`legacyRom=` in the log)
 until a live A/B on the user's install confirms which ROM service the game
 actually uses.
 
-## Audit 2026-10-30 — shipped defaults, tags and dead options
+## 2026-10-30 — option removals, regrouping and direct fork fixes
 
-The original distribution's INI (`ZolikaPatch_extracted/ZolikaPatch.ini`) is the
-oracle for shipped defaults. Four keys in this template differ from it, and they
-are not documented as intentional divergences:
+**Defaults are chosen, not inherited.** Four template values differ from the
+original distribution INI and are kept deliberately as the preferred defaults:
+`BetterMPSync=1`, `Patch4RemoveModChecks=1`, `RemoveGFWLUpdatePopup=1`,
+`TryToSkipAllErrors=0`. They are no longer treated as accidental divergence.
+`FixPCIDKickbug` remains unimplemented; `RestoreDeathMusic=1` matches the user's
+copy of the original INI.
 
-| key | original | ours | effect of the divergence |
-| --- | --- | --- | --- |
-| `BetterMPSync` | `0` | `1` | a fresh install applies the 5-byte MP sync hook |
-| `Patch4RemoveModChecks` | `0` | `1` | a fresh install applies the shared GFWL stub |
-| `RemoveGFWLUpdatePopup` | `0` | `1` | same stub, and the xlive-offset writes run |
-| `TryToSkipAllErrors` | `1` | `0` | the original suppresses error dialogs by default; ours shows them |
+### Removed options
 
-`FixPCIDKickbug` (original default `1` in the extracted copy, `0` in the user's
-copy) is not implemented in either module. `RestoreDeathMusic` differs between
-the two original INI copies (`1` vs `0`); ours is `1`, matching the user's copy.
+| key | reason |
+| --- | --- |
+| `RemoveUselessChecks` | 11,824 bytes over 2,735 rows on 1080; 2,230 rows are whole `call 0x74A710` and `0x74A710` is a bare `ret`. It skips calls to an empty stub, not expensive checks, and is highly incompatible. |
+| `NoPhysicsSleep` | zeroes the `.data` float at RVA `0xC90B18` (ships `0.005f`); that stops physics objects sleeping, a realism change at a likely CPU cost, not a performance win. |
+| `HighQualityReflections` | heavy eye candy, default 0, no QoL/perf value in a stability-focused build. |
+| `ForceDynamicShadowsEverywhere` | same; a broad graphics toggle that only costs frames. |
+| `RemoveBoundingBoxCulling` | niche/unstable escape hatch tied to HQR; it did force the non-culling branch, but both the feature it served and the need for it are gone. |
+| `AddOptionsInMenu` | the IVMenuAPI registration surface (two PREF toggles and their callbacks) was removed with the option; only the ZMenuIV version guard remains. |
 
-### Build tags
+`ForceCarHeadlightShadows` and `ForceShadowsOnObjects` are kept (FCHS is still
+default 0, FF-gated, and the CarDynamicShadowFix no-FCHS writes are now
+unconditional because that option is the only survivor of the pair).
 
-`DualVehicleHeadlights` was the one hard tag/build mismatch: the arms were
-ungated, the old-body arm clobbered the new-body arm's signature, and 1080 got
-the old body. Fixed and tagged `good-dualheadlights-20261030`; the tag is now
-`[all]` and the original handler's build choice (ids 1..6 old, 7+ new) is
-explicit. The remaining `[all]` tags for `Patch4RemoveModChecks` and
-`RemoveGFWLUpdatePopup` are technically accurate (their stub is ungated in the
-original too) but their descriptions say "patch 4" / "pre-patch 6", which is
-misleading on 1.0.8.0.
+### Regrouping and gates
 
-### No-effect, misclassified and risky options
+- The multiplayer stability fixes moved from `[STABILITY]` to `[MULTIPLAYER]`:
+  `AimProjectileCrashFix`, `BadPlayerModelCrashFix`, `BlackscreenFix`,
+  `CollisionDeadlockFix`, `CrashMsgFix`, `GroupHackFix`, `MPNikoCrashFix`,
+  `PathNodeCrashFix`. `FreezeGunFix` moved the other way (it is a single-player
+  rocket crash, not a multiplayer fix). `SMPA60Fix` stays in STABILITY because it
+  also fires in single player with car mods.
+- `BuildingAlphaFix` is now FusionFix-gated (`[all; FF]`; `fixes.ixx` LOD
+  fade-in).
+- Duplicate writes removed: `RemoveRGSCLoginRequirement` wrote the same v1080
+  JMP twice, and `CarPartsShadowFix` scanned the `485 DB …` signature that
+  normalises to the same `85 DB …` bytes as its first scan.
 
-- `NoPhysicsSleep` writes `0.0f` over the `.data` float at RVA `0xC90B18`, whose
-  shipped value is `0.005f` (the next field is `0.01f`). The executable reads it
-  through five `movss` loads and has no direct writer, so the patch persists and
-  really does zero the sleep threshold: physics objects stop sleeping. That is a
-  realism change (the docs' "vehicles stop more realistically") at a likely CPU
-  cost, not a performance feature; it sits in PERFORMANCE with default `1`.
-  A live A/B is needed to measure the cost.
-- `RemoveUselessChecks` writes 11,824 bytes over 2,735 rows on 1080. 2,230 of the
-  rows are whole `call 0x74A710` instructions and `0x74A710` is a bare `ret`;
-  the rest are other instructions or mid-instruction fragments (202 rows are
-  non-NOP). It removes calls to an empty stub, not expensive checks; the gain is
-  a few cycles per call and the option is documented as highly incompatible.
-- `TryToSkipAllErrors` rewrites the error-handler entry with one `ret`; it
-  suppresses the dialog, not the underlying error. Debug aid, not QoL.
-- `Patch4RemoveModChecks` and `RemoveGFWLUpdatePopup` both install the same
-  5-byte `E9` at RVA `0x3CBF70` to `abi_gfwl_stub`; the stub's two actions are
-  independently flagged. The xlive half writes `0x10000E83` to four hard-coded
-  xlive offsets with no module/build check (original handler `0x10005340` does
-  the same).
-- `NewMemorySystem`, `HighQualityReflections` and `ForceDynamicShadowsEverywhere`
-  are experimental/heavy by design and already default `0`.
+### Fork: direct fixes (no fault preservation)
+
+- `getSavefilePath` builds into a bounded `snprintf` buffer, so a custom save
+  path over 255 chars is truncated and logged instead of writing past the
+  caller's 256-byte buffer.
+- The delayed-init probe waits with `Sleep(1)` and gives up after 10 s with a log
+  line instead of spinning a core forever.
+- An unrecognised build (`gv() == UINT_MAX`) now logs and installs nothing,
+  matching the main module instead of dereferencing unsupported patterns.
+- The unguarded `pattern.get(0)` / `get_first` sites (savegames path, DFA
+  secondary jump targets, legacy ROM window, SendMessage) and the borderless
+  `count(2)` shim now check the match count and log a miss.
+- The legacy `CreateROMWindow`/`WM_ROM` service is gated behind
+  `!bSkipLauncher`, so the recovered ROM stage is the only owner when
+  `SkipLauncher=1`; the `legacyRom` log field reports which path ran.
+- The import-descriptor count no longer underflows when the import directory is
+  empty.
+
+The matrix is now **98 cells / 4,294 writes** (six option cells removed);
+`--check` passes with the new golden.
+

@@ -138,15 +138,8 @@ namespace opp
     bool FusionFixGateClosed();
     bool NewFilesConflictModulesPresent();
 
-    // RemoveUselessChecks: the per-build NOP list, written before any scan so the
-    // later arms see the same bytes the original did.
-    void ApplyUselessChecks(const PatchContext& ctx);
-
     // Debug-only arm trace; a no-op in release builds.
     void TraceArm(const char* name);
-
-    // AddOptionsInMenu && IVMenuAPI (set by the loader before the option pass).
-    extern bool bMenuIntegration;
 
     // Address of a machine-level body by name (see hooks/bodies.cpp).
     inline void* Abi(const char* name) { return AbiByName(name); }

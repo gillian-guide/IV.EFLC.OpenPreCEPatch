@@ -62,7 +62,7 @@ namespace opp::features
         TraceArm("RestoreDeathMusic");
 
         // RestoreDeathMusic: 3 siginstalls
-        if (bMenuIntegration || ctx.Option("RestoreDeathMusic", "0"))
+        if (ctx.Option("RestoreDeathMusic", "0"))
         {
             const GameImage& image = ctx.image;
 

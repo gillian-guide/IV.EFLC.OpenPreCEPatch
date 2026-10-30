@@ -26,11 +26,6 @@ import interface;
 
 namespace opp
 {
-    void SetMenuIntegration(bool available) noexcept
-    {
-        bMenuIntegration = available;
-    }
-
     void PatchGame(GameBuild build, GameImage image, const Config& config,
                    const PatchObserver& observer)
     {

@@ -18,10 +18,10 @@ namespace opp
         // Each row is a subsystem FusionFix already replaces. The reason names the
         // FusionFix module/setting a maintainer can check when revisiting the row.
         constexpr FusionFixConflict kConflicts[] = {
-            {"AddOptionsInMenu", "FusionFix settings/menu hooks (settings.ixx)"},
             {"BikeFeetFix", "FusionFix fixes.ixx (feet on bikes)"},
             {"BikePhoneAnimsFix", "FusionFix fixes.ixx (phone/bike animation)"},
             {"BorderlessWindowed", "FusionFix windowed.ixx (PREF_BORDERLESS)"},
+            {"BuildingAlphaFix", "FusionFix fixes.ixx (LOD fade-in)"},
             {"BuildingDynamicShadows", "FusionFix shadows.ixx"},
             {"CarDynamicShadowFix", "FusionFix shadows.ixx / nightshadows.ixx"},
             {"CarPartsShadowFix", "FusionFix shadows.ixx"},
@@ -32,11 +32,9 @@ namespace opp
             {"EpisodicWeaponSupport", "FusionFix episodiccontent.ixx (EpisodicWeapons)"},
             {"FastLoading", "FusionFix loadingdelays.ixx / framelimit.ixx"},
             {"ForceCarHeadlightShadows", "FusionFix nightshadows.ixx"},
-            {"ForceDynamicShadowsEverywhere", "FusionFix shadows.ixx"},
             {"ForceShadowsOnObjects", "FusionFix shadows.ixx"},
             {"HighFPSBikePhysicsFix", "FusionFix frameratevigilante.ixx (vehicle physics)"},
             {"HighFPSSpeedupFix", "FusionFix frameratevigilante.ixx (time scale)"},
-            {"HighQualityReflections", "FusionFix experimental.ixx / reflectionmsaa.ixx"},
             {"ImprovedShaderStreaming", "FusionFix shaders.ixx"},
             {"IncreasePtrNodes", "FusionFix limits.ixx (PtrNode Double pool)"},
             {"IncreaseVehicleModelLimit", "FusionFix limits.ixx"},

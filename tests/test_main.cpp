@@ -439,19 +439,6 @@ namespace
 
     void TestMenu()
     {
-        CHECK(opp::ProbeMenuApi(false, false, false, true) == opp::MenuProbeResult::disabled);
-        CHECK(opp::ProbeMenuApi(true, true, false, false) ==
-              opp::MenuProbeResult::already_loaded);
-        CHECK(opp::ProbeMenuApi(true, false, false, true) == opp::MenuProbeResult::loaded);
-        CHECK(opp::ProbeMenuApi(true, false, true, true) ==
-              opp::MenuProbeResult::unavailable);
-
-        size_t rows = 0;
-        const auto* registrations = opp::MenuRegistrations(rows);
-        CHECK(rows == 2);
-        CHECK(std::strcmp(registrations[0].family, "PREF_DEATHMUSIC") == 0);
-        CHECK(std::strcmp(registrations[1].family, "PREF_FOCUSLOSS") == 0);
-
         CHECK(!opp::ZMenuVersionAccepted(0x35DD0u));
         CHECK(opp::ZMenuVersionAccepted(0x35DD1u));
         uint32_t version = 0;
@@ -461,7 +448,7 @@ namespace
     void TestFeatureOrder()
     {
         const auto& features = opp::RegisteredFeatures();
-        CHECK(features.size() == 135);
+        CHECK(features.size() == 128);
         for (size_t i = 1; i < features.size(); ++i)
             CHECK(features[i - 1].order < features[i].order);
     }

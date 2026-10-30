@@ -582,48 +582,6 @@ volatile ZpStrcpyS zpatch_secure_strcpy_s =
     static_cast<ZpStrcpyS>(&strcpy_s);
 }  // namespace
 
-// The AddOptionsInMenu integration's four callbacks (originals sub_10050A30/40
-// and sub_1001EDB0/C0). The focus-loss setter re-asserts the game branch
-// sub_1001ECB0 patches, using the pre-patch word saved by
-// zpatch_menu_prime_focus_loss.
-namespace
-{
-uint8_t* g_focus_loss_site = nullptr;
-uint16_t g_focus_loss_original = 0;
-}  // namespace
-
-extern "C" void zpatch_menu_prime_focus_loss() noexcept
-{
-    if (g_focus_loss_site != nullptr) return;
-    const uint8_t* found =
-        scan_game("75 ? 8B 0D ? ? ? ? 51 FF 15 ? ? ? ? 85 C0 75 ? 8B 15");
-    if (found == nullptr) return;
-    g_focus_loss_site = const_cast<uint8_t*>(
-        reinterpret_cast<const uint8_t*>(found));
-    std::memcpy(&g_focus_loss_original, g_focus_loss_site, 2);
-}
-
-extern "C" uint8_t abi_menu_death_get() noexcept
-{
-    return zpatch_flag_death_music;
-}
-extern "C" void abi_menu_death_set(uint32_t, uint32_t value) noexcept
-{
-    zpatch_flag_death_music = value != 0 ? 1u : 0u;
-}
-extern "C" uint8_t abi_menu_focus_get() noexcept
-{
-    return !zpatch_flag_donotpause;
-}
-extern "C" void abi_menu_focus_set(uint32_t, uint32_t value) noexcept
-{
-    zpatch_flag_donotpause = value == 0 ? 1u : 0u;
-    // No null check: a failed prime scan leaves the saved site null and the
-    // original's 2-byte write faults at 0.
-    wp_word(g_focus_loss_site,
-            zpatch_flag_donotpause != 0 ? 0x9090u : g_focus_loss_original);
-}
-
 // The 0x104-byte path buffer the original's LocalSettingsPath helpers use.
 constexpr size_t kLocalPathCapacity = 0x104u;
 
@@ -4839,178 +4797,6 @@ extern "C" uint32_t abi_ooc_wrap(uint32_t arg0, uint32_t arg1) noexcept
     return original(arg0, arg1);
 }
 
-// HighQualityReflections (callback 0x1001F390): scans for
-// `8B 87 38 09 00 00 6A 08 68 1D 13 00 00 50 E8` (unique on every classic build
-// and EFLC 1110/1120/1130; absent on 12043), E9s the match to the detour below,
-// and publishes dword_10159CFC = match+0x13 (resume) and
-// dword_10159D04 = match + *(match+0xF) + 0x13 (the draw-command builder called).
-// @exact 0x1001F030 detour body: dumps the registers (the original's crash aid),
-// calls the game's draw-command builder 12 times with (index 0..11, flags
-// 0x11D, mode 0) and resumes at match+0x13 (tail-jumped).
-__declspec(naked) void abi_hqr_body()
-{
-    __asm {
-            mov       dword ptr [zpatch_hqr_dump], eax
-            mov       dword ptr [zpatch_hqr_dump+4], ebx
-            mov       dword ptr [zpatch_hqr_dump+8], ecx
-            mov       dword ptr [zpatch_hqr_dump+12], edx
-            mov       dword ptr [zpatch_hqr_dump+16], esi
-            mov       dword ptr [zpatch_hqr_dump+20], edi
-            mov       dword ptr [zpatch_hqr_dump+24], ebp
-            mov       dword ptr [zpatch_hqr_dump+28], esp
-            mov       eax, 0
-            push      dword ptr [zpatch_hqr_mode]
-            push      dword ptr [zpatch_hqr_flags]
-            push      eax
-            call      dword ptr [zpatch_hqr_builder]
-            mov       eax, dword ptr [zpatch_hqr_dump]
-            mov       ebx, dword ptr [zpatch_hqr_dump+4]
-            mov       ecx, dword ptr [zpatch_hqr_dump+8]
-            mov       edx, dword ptr [zpatch_hqr_dump+12]
-            mov       esi, dword ptr [zpatch_hqr_dump+16]
-            mov       edi, dword ptr [zpatch_hqr_dump+20]
-            mov       ebp, dword ptr [zpatch_hqr_dump+24]
-            mov       esp, dword ptr [zpatch_hqr_dump+28]
-            mov       eax, 1
-            push      dword ptr [zpatch_hqr_mode]
-            push      dword ptr [zpatch_hqr_flags]
-            push      eax
-            call      dword ptr [zpatch_hqr_builder]
-            mov       eax, dword ptr [zpatch_hqr_dump]
-            mov       ebx, dword ptr [zpatch_hqr_dump+4]
-            mov       ecx, dword ptr [zpatch_hqr_dump+8]
-            mov       edx, dword ptr [zpatch_hqr_dump+12]
-            mov       esi, dword ptr [zpatch_hqr_dump+16]
-            mov       edi, dword ptr [zpatch_hqr_dump+20]
-            mov       ebp, dword ptr [zpatch_hqr_dump+24]
-            mov       esp, dword ptr [zpatch_hqr_dump+28]
-            mov       eax, 2
-            push      dword ptr [zpatch_hqr_mode]
-            push      dword ptr [zpatch_hqr_flags]
-            push      eax
-            call      dword ptr [zpatch_hqr_builder]
-            mov       eax, dword ptr [zpatch_hqr_dump]
-            mov       ebx, dword ptr [zpatch_hqr_dump+4]
-            mov       ecx, dword ptr [zpatch_hqr_dump+8]
-            mov       edx, dword ptr [zpatch_hqr_dump+12]
-            mov       esi, dword ptr [zpatch_hqr_dump+16]
-            mov       edi, dword ptr [zpatch_hqr_dump+20]
-            mov       ebp, dword ptr [zpatch_hqr_dump+24]
-            mov       esp, dword ptr [zpatch_hqr_dump+28]
-            mov       eax, 3
-            push      dword ptr [zpatch_hqr_mode]
-            push      dword ptr [zpatch_hqr_flags]
-            push      eax
-            call      dword ptr [zpatch_hqr_builder]
-            mov       eax, dword ptr [zpatch_hqr_dump]
-            mov       ebx, dword ptr [zpatch_hqr_dump+4]
-            mov       ecx, dword ptr [zpatch_hqr_dump+8]
-            mov       edx, dword ptr [zpatch_hqr_dump+12]
-            mov       esi, dword ptr [zpatch_hqr_dump+16]
-            mov       edi, dword ptr [zpatch_hqr_dump+20]
-            mov       ebp, dword ptr [zpatch_hqr_dump+24]
-            mov       esp, dword ptr [zpatch_hqr_dump+28]
-            mov       eax, 4
-            push      dword ptr [zpatch_hqr_mode]
-            push      dword ptr [zpatch_hqr_flags]
-            push      eax
-            call      dword ptr [zpatch_hqr_builder]
-            mov       eax, dword ptr [zpatch_hqr_dump]
-            mov       ebx, dword ptr [zpatch_hqr_dump+4]
-            mov       ecx, dword ptr [zpatch_hqr_dump+8]
-            mov       edx, dword ptr [zpatch_hqr_dump+12]
-            mov       esi, dword ptr [zpatch_hqr_dump+16]
-            mov       edi, dword ptr [zpatch_hqr_dump+20]
-            mov       ebp, dword ptr [zpatch_hqr_dump+24]
-            mov       esp, dword ptr [zpatch_hqr_dump+28]
-            mov       eax, 5
-            push      dword ptr [zpatch_hqr_mode]
-            push      dword ptr [zpatch_hqr_flags]
-            push      eax
-            call      dword ptr [zpatch_hqr_builder]
-            mov       eax, dword ptr [zpatch_hqr_dump]
-            mov       ebx, dword ptr [zpatch_hqr_dump+4]
-            mov       ecx, dword ptr [zpatch_hqr_dump+8]
-            mov       edx, dword ptr [zpatch_hqr_dump+12]
-            mov       esi, dword ptr [zpatch_hqr_dump+16]
-            mov       edi, dword ptr [zpatch_hqr_dump+20]
-            mov       ebp, dword ptr [zpatch_hqr_dump+24]
-            mov       esp, dword ptr [zpatch_hqr_dump+28]
-            mov       eax, 6
-            push      dword ptr [zpatch_hqr_mode]
-            push      dword ptr [zpatch_hqr_flags]
-            push      eax
-            call      dword ptr [zpatch_hqr_builder]
-            mov       eax, dword ptr [zpatch_hqr_dump]
-            mov       ebx, dword ptr [zpatch_hqr_dump+4]
-            mov       ecx, dword ptr [zpatch_hqr_dump+8]
-            mov       edx, dword ptr [zpatch_hqr_dump+12]
-            mov       esi, dword ptr [zpatch_hqr_dump+16]
-            mov       edi, dword ptr [zpatch_hqr_dump+20]
-            mov       ebp, dword ptr [zpatch_hqr_dump+24]
-            mov       esp, dword ptr [zpatch_hqr_dump+28]
-            mov       eax, 7
-            push      dword ptr [zpatch_hqr_mode]
-            push      dword ptr [zpatch_hqr_flags]
-            push      eax
-            call      dword ptr [zpatch_hqr_builder]
-            mov       eax, dword ptr [zpatch_hqr_dump]
-            mov       ebx, dword ptr [zpatch_hqr_dump+4]
-            mov       ecx, dword ptr [zpatch_hqr_dump+8]
-            mov       edx, dword ptr [zpatch_hqr_dump+12]
-            mov       esi, dword ptr [zpatch_hqr_dump+16]
-            mov       edi, dword ptr [zpatch_hqr_dump+20]
-            mov       ebp, dword ptr [zpatch_hqr_dump+24]
-            mov       esp, dword ptr [zpatch_hqr_dump+28]
-            mov       eax, 8
-            push      dword ptr [zpatch_hqr_mode]
-            push      dword ptr [zpatch_hqr_flags]
-            push      eax
-            call      dword ptr [zpatch_hqr_builder]
-            mov       eax, dword ptr [zpatch_hqr_dump]
-            mov       ebx, dword ptr [zpatch_hqr_dump+4]
-            mov       ecx, dword ptr [zpatch_hqr_dump+8]
-            mov       edx, dword ptr [zpatch_hqr_dump+12]
-            mov       esi, dword ptr [zpatch_hqr_dump+16]
-            mov       edi, dword ptr [zpatch_hqr_dump+20]
-            mov       ebp, dword ptr [zpatch_hqr_dump+24]
-            mov       esp, dword ptr [zpatch_hqr_dump+28]
-            mov       eax, 9
-            push      dword ptr [zpatch_hqr_mode]
-            push      dword ptr [zpatch_hqr_flags]
-            push      eax
-            call      dword ptr [zpatch_hqr_builder]
-            mov       eax, dword ptr [zpatch_hqr_dump]
-            mov       ebx, dword ptr [zpatch_hqr_dump+4]
-            mov       ecx, dword ptr [zpatch_hqr_dump+8]
-            mov       edx, dword ptr [zpatch_hqr_dump+12]
-            mov       esi, dword ptr [zpatch_hqr_dump+16]
-            mov       edi, dword ptr [zpatch_hqr_dump+20]
-            mov       ebp, dword ptr [zpatch_hqr_dump+24]
-            mov       esp, dword ptr [zpatch_hqr_dump+28]
-            mov       eax, 0xa
-            push      dword ptr [zpatch_hqr_mode]
-            push      dword ptr [zpatch_hqr_flags]
-            push      eax
-            call      dword ptr [zpatch_hqr_builder]
-            mov       eax, dword ptr [zpatch_hqr_dump]
-            mov       ebx, dword ptr [zpatch_hqr_dump+4]
-            mov       ecx, dword ptr [zpatch_hqr_dump+8]
-            mov       edx, dword ptr [zpatch_hqr_dump+12]
-            mov       esi, dword ptr [zpatch_hqr_dump+16]
-            mov       edi, dword ptr [zpatch_hqr_dump+20]
-            mov       ebp, dword ptr [zpatch_hqr_dump+24]
-            mov       esp, dword ptr [zpatch_hqr_dump+28]
-            mov       eax, 0xb
-            push      dword ptr [zpatch_hqr_mode]
-            push      dword ptr [zpatch_hqr_flags]
-            push      eax
-            call      dword ptr [zpatch_hqr_builder]
-            jmp       dword ptr [zpatch_hqr_resume]
-            __emit 0CCh
-    }
-}
-
 // The worker's sub_10003980: the resolver call with the salt in ECX and ESI.
 extern "C" __declspec(naked) uint32_t zpatch_cutscene_scene()
 {
@@ -5511,7 +5297,6 @@ const AbiBody kAbiBodies[] =
         {0x100243A0u, reinterpret_cast<void(*)()>(&abi_mouse_advance)},
         {0x1004C3C0u, reinterpret_cast<void(*)()>(&abi_ooc_branch)},
         {0x1004C350u, reinterpret_cast<void(*)()>(&abi_ooc_wrap)},
-        {0x1001F030u, reinterpret_cast<void(*)()>(&abi_hqr_body)},
         {0x100388C0u, reinterpret_cast<void(*)()>(&abi_cutscene_chain_b)},
         {0x100064B0u, reinterpret_cast<void(*)()>(&abi_driveby_fov_shim)},
 };
@@ -5591,7 +5376,6 @@ extern "C" void* AbiByName(const char* name) noexcept
     {"abi_gfwl_patch", reinterpret_cast<void(*)()>(&abi_gfwl_patch)},
     {"abi_gfwl_stub", reinterpret_cast<void(*)()>(&abi_gfwl_stub)},
     {"abi_group_hack_shim", reinterpret_cast<void(*)()>(&abi_group_hack_shim)},
-    {"abi_hqr_body", reinterpret_cast<void(*)()>(&abi_hqr_body)},
     {"abi_ide_parse", reinterpret_cast<void(*)()>(&abi_ide_parse)},
     {"abi_improved_shader_streaming_find_hpe", reinterpret_cast<void(*)()>(&abi_improved_shader_streaming_find_hpe)},
     {"abi_improved_shader_streaming_find_v", reinterpret_cast<void(*)()>(&abi_improved_shader_streaming_find_v)},
@@ -5599,10 +5383,6 @@ extern "C" void* AbiByName(const char* name) noexcept
     {"abi_load_dlcs_struct_fixup", reinterpret_cast<void(*)()>(&abi_load_dlcs_struct_fixup)},
     {"abi_local_settings_detour", reinterpret_cast<void(*)()>(&abi_local_settings_detour)},
     {"abi_local_settings_fallback_detour", reinterpret_cast<void(*)()>(&abi_local_settings_fallback_detour)},
-    {"abi_menu_death_get", reinterpret_cast<void(*)()>(&abi_menu_death_get)},
-    {"abi_menu_death_set", reinterpret_cast<void(*)()>(&abi_menu_death_set)},
-    {"abi_menu_focus_get", reinterpret_cast<void(*)()>(&abi_menu_focus_get)},
-    {"abi_menu_focus_set", reinterpret_cast<void(*)()>(&abi_menu_focus_set)},
     {"abi_mf_angle_step", reinterpret_cast<void(*)()>(&abi_mf_angle_step)},
     {"abi_mouse_advance", reinterpret_cast<void(*)()>(&abi_mouse_advance)},
     {"abi_mouse_angle", reinterpret_cast<void(*)()>(&abi_mouse_angle)},

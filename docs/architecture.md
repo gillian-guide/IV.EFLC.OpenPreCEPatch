@@ -13,7 +13,7 @@ DllMain / InitializeASI
   old-loader warning + unsupported-version guard
   read the grouped INI, vehicle-light sections and option globals
   ZMenuIV version guard
-  IVMenuAPI registration, LocalSettingsPath capture
+  LocalSettingsPath capture
   unconditional preamble (game pointers + hash salts)
   PatchGame (all INI-gated installs)
   LaunchWithPlayGTAIV
@@ -43,9 +43,9 @@ DllMain / InitializeASI
 | `source/multiplayer.ixx` | GFWL/CitizenIV fixes |
 | `source/loading.ixx` | files, saves, DLC |
 | `source/compatibility.ixx` | other mods, game builds, packaging |
-| `source/interface.ixx` | menu, HUD and audio toggles |
+| `source/interface.ixx` | HUD and audio toggles |
 | `xlivelessaddon/` | separate XLivelessAddon successor ASI (own source/INI/CMake) |
-| `source/data/` | the 38,455-entry model catalogue and the RemoveUselessChecks NOP list |
+| `source/data/` | the 38,455-entry model catalogue |
 
 The per-subsystem files are C++20 modules (`.ixx`), in the same style as
 FusionFix: a `module;` global fragment includes the shared headers, then
@@ -94,7 +94,7 @@ its arms with an explicit order number. `source/patches.cpp` walks the sorted
 registry. This keeps the original loader sequence independent of static-init
 order across translation units. It matters because some arms publish resume
 addresses before another arm overwrites the site that owns them.
-`RemoveUselessChecks` runs first; all slot publishes run before the install arms.
+All slot publishes run before the install arms.
 
 ## Hooks
 

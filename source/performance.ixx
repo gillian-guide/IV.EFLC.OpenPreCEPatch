@@ -257,92 +257,6 @@ namespace opp::features
     }
 
 
-    // NoPhysicsSleep
-
-    void InstallNoPhysicsSleep(PatchContext& ctx)
-    {
-
-        TraceArm("NoPhysicsSleep");
-
-        // NoPhysicsSleep: 1 indirect
-        if (ctx.Option("NoPhysicsSleep", "0"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "0F 00 00 00 C7 41 14 14 00 00 00 C7 41 1C 00 00"); pattern.size() > 0)
-            {
-                auto* target = MatchPointer(pattern, -38);
-                if (target != nullptr)
-                    injector::WriteMemory<uint32_t>(target, static_cast<uint32_t>(0x0u), true); //patch
-            }
-        }
-
-    }
-
-
-    // RemoveUselessChecks
-
-    void ApplyUselessChecksArm(PatchContext& ctx)
-    {
-
-        TraceArm("RemoveUselessChecks");
-
-        ApplyUselessChecks(ctx);
-
-    }
-
-
-    // RemoveUselessChecks
-
-    void InstallRemoveUselessChecks(PatchContext& ctx)
-    {
-
-        TraceArm("RemoveUselessChecks");
-
-        // RemoveUselessChecks: 14 literals, 9 rvas
-        if (ctx.Option("RemoveUselessChecks", "0"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (ctx.build == GameBuild::v1040)
-            {
-                injector::MakeNOP(image.base + 0x46CCE7, 38, true); //nop
-                injector::MakeNOP(image.base + 0x46CE67, 38, true); //nop
-            }
-
-            if (ctx.build == GameBuild::v1070)
-            {
-                injector::MakeNOP(image.base + 0x3DA1B7, 38, true); //nop
-                injector::MakeNOP(image.base + 0x3DA337, 38, true); //nop
-            }
-
-            if (ctx.build == GameBuild::v1080)
-            {
-                injector::MakeNOP(image.base + 0x559127, 38, true); //nop
-                injector::MakeNOP(image.base + 0x5592A7, 38, true); //nop
-                injector::MakeNOP(image.base + 0x559CC0, 9, true); //nop
-                injector::MakeNOP(image.base + 0x55EB83, 13, true); //nop
-                injector::MakeNOP(image.base + 0x77027A, 9, true); //nop
-                injector::WriteMemory<uint8_t>(image.base + 0x559598, 0xEBu, true); //jmp
-                injector::WriteMemory<uint8_t>(image.base + 0x62555D, 0xEBu, true); //jmp
-                injector::MakeNOP(image.base + 0x5594B7, 2, true); //nop
-                injector::MakeNOP(image.base + 0x559013, 6, true); //nop
-                injector::MakeNOP(image.base + 0x55EADF, 6, true); //nop
-                injector::MakeNOP(image.base + 0x55F5BD, 6, true); //nop
-                injector::MakeNOP(image.base + 0x55FC2E, 6, true); //nop
-                injector::MakeNOP(image.base + 0x5594A2, 7, true); //nop
-                injector::MakeNOP(image.base + 0x5594CA, 7, true); //nop
-                injector::MakeNOP(image.base + 0x559591, 7, true); //nop
-                injector::MakeNOP(image.base + 0x55EACA, 7, true); //nop
-                injector::MakeNOP(image.base + 0x55F5B5, 7, true); //nop
-                injector::MakeNOP(image.base + 0x55FC21, 7, true); //nop
-                injector::MakeNOP(image.base + 0x625556, 7, true); //nop
-            }
-        }
-
-    }
-
-
     // StartupTimeFix
 
     void InstallStartupTimeFix(PatchContext& ctx)
@@ -375,15 +289,12 @@ namespace
     public:
         PerformanceFeatures()
         {
-            RegisterFeature(0, "ApplyUselessChecksArm", &ApplyUselessChecksArm);
             RegisterFeature(15, "PublishNewMemorySystem", &PublishNewMemorySystem);
             RegisterFeature(68, "InstallHighFPSSpeedupFix", &InstallHighFPSSpeedupFix);
             RegisterFeature(69, "InstallImprovedShaderStreaming", &InstallImprovedShaderStreaming);
             RegisterFeature(80, "InstallNewMemorySystem", &InstallNewMemorySystem);
-            RegisterFeature(96, "InstallRemoveUselessChecks", &InstallRemoveUselessChecks);
             RegisterFeature(135, "InstallFastLoading", &InstallFastLoading);
             RegisterFeature(138, "InstallIncreaseVehicleModelLimit", &InstallIncreaseVehicleModelLimit);
-            RegisterFeature(139, "InstallNoPhysicsSleep", &InstallNoPhysicsSleep);
             RegisterFeature(141, "InstallStartupTimeFix", &InstallStartupTimeFix);
             RegisterFeature(142, "InstallIncreasePtrNodes", &InstallIncreasePtrNodes);
             RegisterFeature(143, "InstallIncreaseVehicleStructLimit", &InstallIncreaseVehicleStructLimit);

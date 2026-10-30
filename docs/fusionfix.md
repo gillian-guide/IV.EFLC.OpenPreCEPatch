@@ -11,10 +11,10 @@ mods writing one subsystem is not a combination this project can test.
 
 | option | FusionFix module / setting |
 | --- | --- |
-| AddOptionsInMenu | `settings.ixx` menu hooks |
 | BikeFeetFix | `fixes.ixx` feet on bikes |
 | BikePhoneAnimsFix | `fixes.ixx` phone/bike animation |
 | BorderlessWindowed | `windowed.ixx` (`PREF_BORDERLESS`) |
+| BuildingAlphaFix | `fixes.ixx` LOD fade-in |
 | BuildingDynamicShadows | `shadows.ixx` |
 | CarDynamicShadowFix | `shadows.ixx`, `nightshadows.ixx` |
 | CarPartsShadowFix | `shadows.ixx` |
@@ -25,11 +25,9 @@ mods writing one subsystem is not a combination this project can test.
 | EpisodicWeaponSupport | `episodiccontent.ixx` (`EpisodicWeapons`) |
 | FastLoading | `loadingdelays.ixx`, `framelimit.ixx` |
 | ForceCarHeadlightShadows | `nightshadows.ixx` |
-| ForceDynamicShadowsEverywhere | `shadows.ixx` |
 | ForceShadowsOnObjects | `shadows.ixx` |
 | HighFPSBikePhysicsFix | `frameratevigilante.ixx` vehicle physics |
 | HighFPSSpeedupFix | `frameratevigilante.ixx` time scale |
-| HighQualityReflections | `experimental.ixx`, `reflectionmsaa.ixx` |
 | ImprovedShaderStreaming | `shaders.ixx` |
 | IncreasePtrNodes | `limits.ixx` (`PtrNode Double` pool) |
 | IncreaseVehicleModelLimit | `limits.ixx` |

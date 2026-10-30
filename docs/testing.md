@@ -21,7 +21,7 @@ The suite covers:
 - the two vehicle-light tables and their atomic rejection;
 - first-run INI creation from `ZolikaPatch.ini`;
 - FusionFix presence gating;
-- IVMenuAPI probes and the ZMenuIV threshold;
+- the ZMenuIV version threshold;
 - the hook registry and the OutOfCommission payload self-test;
 - `ExecutableView` and the scan semantics: `Pattern()` returns only the first
   match inside the executable sections, `PatternAll()` returns every match in
@@ -86,7 +86,7 @@ python tools\opcep_matrix.py --exe build-parity\Release\opcep_parity_dump.exe --
 ```
 
 The normal and parity dumps are byte-identical on every cell (0 differing
-cells in the last 104-cell run: the formerly visible `SkipIntro` rel32 moved to
+cells in the last 98-cell run: the formerly visible `SkipIntro` rel32 moved to
 the fork with the option). `tools/opcep_matrix.py --env` applies the
 environment switch per cell without changing any file.
 
