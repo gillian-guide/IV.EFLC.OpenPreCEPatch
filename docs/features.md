@@ -403,7 +403,7 @@ log all entities as they sync in into GTAC console (GTAC only, requires FreezeCa
 
 ### RemoveModChecks
 
-remove modded-file checks (patch 4, 1060 and 1070) [1004,1060,1070]
+remove modded-file checks (patch 4 = 1.0.4.0, 1060 and 1070) [1040,1060,1070]
 
 - **Default:** `1`
 

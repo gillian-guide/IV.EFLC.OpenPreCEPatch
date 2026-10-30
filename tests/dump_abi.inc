@@ -103,6 +103,5 @@
 {"abi_mouse_advance", 0x100243A0u},
 {"abi_ooc_branch", 0x1004C3C0u},
 {"abi_ooc_wrap", 0x1004C350u},
-{"abi_hqr_body", 0x1001F030u},
 {"abi_cutscene_chain_b", 0x100388C0u},
 {"abi_driveby_fov_shim", 0x100064B0u},

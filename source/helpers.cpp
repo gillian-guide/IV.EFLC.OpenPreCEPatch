@@ -61,6 +61,8 @@ namespace opp
         }
         if (address < base || address - base >= ctx.image.size)
         {
+            // Options that patch another loaded module (xlive.dll) go through
+            // ModuleSiteWritable instead; a bare foreign address is a bug.
             LogSkippedWrite(site, "site outside the game image");
             return false;
         }
@@ -71,6 +73,28 @@ namespace opp
         }
         ++g_writesApplied;
         return true;
+    }
+
+    bool ModuleSiteWritable(const void* moduleBase, const void* site,
+                            size_t length) noexcept
+    {
+        if (moduleBase == nullptr || site == nullptr || length == 0)
+            return false;
+        MEMORY_BASIC_INFORMATION info{};
+        if (VirtualQuery(site, &info, sizeof(info)) == 0)
+            return false;
+        if (info.State != MEM_COMMIT)
+            return false;
+        if ((info.Protect & (PAGE_GUARD | PAGE_NOACCESS)) != 0)
+            return false;
+        // One module image is one allocation, so the allocation base identifies
+        // the module and RegionSize bounds the write.
+        if (info.AllocationBase != moduleBase)
+            return false;
+        const auto address = reinterpret_cast<uintptr_t>(site);
+        const auto region_end =
+            reinterpret_cast<uintptr_t>(info.BaseAddress) + info.RegionSize;
+        return address + length <= region_end;
     }
 
     void* AbiTarget(const char* name) noexcept

@@ -542,3 +542,34 @@ left open, because each would cost more than it saves:
 The only open item is a live A/B of the four opt-in groups
 (`garage_entry`, `cutscene_entry`, `nms_thunk`, `alpha_nop`), which the boot log
 and `tools/opcep_optin.py` were built to make checkable.
+
+## 2026-10-30 — first live run (1.0.8.0, garage_entry on)
+
+The first run on the user's install produced a clean install pass
+(`126 writes applied, 11 skipped`) and named every active group in the boot log.
+It also exposed two installs that were inert at runtime and one wrong build gate:
+
+- **FreezeCarFix's ten spawn-case hooks never installed.** The bodies existed and
+  were in `kAbiBodies` but missing from the `AbiByName` name table, so all ten
+  `CallToBody("abi_spawns_case_0x..")` calls skipped ("no body" ×10 in the log).
+  The write-set dump already had them, which is why the matrix never noticed:
+  the live ASI and the dump disagreed. Names added.
+- **GFWLProtectionDisabler's xlive.dll write was refused** by the failsafe
+  ("site outside the game image", 0x683D1605). The guard was right to reject a
+  stray pointer but wrong to reject a module the option deliberately patches.
+  Added `ModuleSiteWritable`/`WriteModuleValue`: a foreign site is accepted only
+  inside the target module's own allocation. The strict image check is unchanged
+  for every other arm.
+- **RemoveModChecks' patch-4 gate targeted 1.0.0.4 instead of 1.0.4.0.** "Patch
+  4" in GTA IV's numbering is 1.0.4.0 (id 5); the port had mapped it to 1.0.0.4
+  (id 6). The original's patch-4 modded-file check is pattern-only (its recovered
+  rows carry no build id), so the narrowed gate stays, now on the right build;
+  `docs/version-matrix.json` marks 1.0.4.0 as the semantic build.
+
+Also added: the single `Improvements` INI key (below), because the four opt-in
+entry-point rewrites were only reachable through `OPCEP_IMPROVEMENTS`.
+
+Decision on "gate out what does not work on 1.0.8.0": nothing is inert by
+design. Every arm the log skipped was one of the two bugs above (now fixed) or a
+build-gated option that is *supposed* to skip on 1.0.8.0 (VSyncFix,
+RemoveModChecks, RemoveGFWLUpdatePopup). No gate was added.

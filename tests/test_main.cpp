@@ -297,6 +297,16 @@ namespace
         CHECK(opp::ParseImprovements("all,cutscene_entry") ==
               (all | opp::Improve(opp::Improvement::cutscene_entry)));
         CHECK((opp::ParseImprovements("all") & entry) == 0u);
+        const uint32_t everything = all | entry;
+        CHECK(opp::ResolveImprovements(0u, nullptr) == 0u);
+        CHECK(opp::ResolveImprovements(newsaves, "") == newsaves);
+        CHECK(opp::ResolveImprovements(newsaves, "  ") == newsaves);
+        CHECK(opp::ResolveImprovements(0u, "1") == everything);
+        CHECK(opp::ResolveImprovements(0u, "all") == everything);
+        CHECK(opp::ResolveImprovements(newsaves, "0") == 0u);
+        CHECK(opp::ResolveImprovements(newsaves, "none") == 0u);
+        CHECK(opp::ResolveImprovements(newsaves, "all,garage_entry") ==
+              (all | opp::Improve(opp::Improvement::garage_entry)));
 
 #if defined(OPCEP_PARITY_BASELINE)
         CHECK(opp::EnabledImprovements() == 0);
@@ -491,6 +501,13 @@ namespace
         CHECK(opp::SiteWritable(ctx, buffer.data() + buffer.size() - 5, 5));
         CHECK(!opp::SiteWritable(ctx, buffer.data() + buffer.size() - 2, 5));
         CHECK(!opp::SiteWritable(ctx, buffer.data() - 1, 1));
+        CHECK(!opp::SiteWritable(ctx, reinterpret_cast<const void*>(0x10), 1));
+        // A module-scoped write (the GFWL option into xlive.dll) is accepted only
+        // inside that module's own allocation.
+        const auto* const self = reinterpret_cast<const uint8_t*>(GetModuleHandleA(nullptr));
+        CHECK(opp::ModuleSiteWritable(self, self, 4));
+        CHECK(!opp::ModuleSiteWritable(self, buffer.data(), 4));
+        CHECK(!opp::ModuleSiteWritable(self, self + 0x40000000, 4));
         CHECK(!opp::SiteWritable(ctx, nullptr, 1));
 
         // A refused write is counted and leaves the image untouched.

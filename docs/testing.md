@@ -217,3 +217,19 @@ defaults off). Expected deltas against the default write set: `garage_entry`
 moves one site (2 sites/10 bytes either way), `cutscene_entry` loses 4 bytes
 (3 sites/9 -> 1 site/5), `nms_thunk` removes the option's 8 bytes and adds 5 at
 0x956060, `alpha_nop` drops 7 bytes (13 -> 6 at 0x559CDA).
+
+### The `Improvements` INI key
+
+One key in `[MISC]` replaces the environment variable for a whole-switch test:
+
+```ini
+[MISC]
+Improvements = 1
+```
+
+`1` (`all`/`on`/`true`) selects every group, including the four opt-in
+entry-point rewrites; `0` (`none`/`off`) selects nothing (the parity baseline);
+leaving the key out keeps the default set (folded groups on, entry-point rewrites
+off). Any other value uses the `OPCEP_IMPROVEMENTS` grammar, e.g.
+`all,garage_entry`. The key wins over the environment variable, and the boot log
+still names the resulting groups.

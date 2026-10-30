@@ -37,7 +37,12 @@ namespace opp
         // an original option selects its improvement, and the test-only
         // OPCEP_IMPROVEMENTS environment variable / OPCEP_PARITY_BASELINE build
         // can turn groups back off without touching the INI.
-        const uint32_t improvements = EnabledImprovements();
+        // The INI's `Improvements` key overrides the environment switch when it
+        // is present ("1" = every group including the entry-point rewrites,
+        // "0" = none, absent = the environment / the folded default).
+        const std::string ini_improvements = config.String("", "Improvements", "");
+        const uint32_t improvements =
+            ResolveImprovements(EnabledImprovements(), ini_improvements.c_str());
         // One boot-log line naming the active groups, so a live log shows which
         // path ran (the opt-in entry-point rewrites are listed by name).
         {

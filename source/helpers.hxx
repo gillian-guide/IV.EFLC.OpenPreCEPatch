@@ -169,9 +169,9 @@ namespace opp
     //
     // Every arm write goes through one of these instead of calling
     // injector:: directly. Each checks, before touching the image:
-    //   * the site and every byte it would overwrite is inside the game image
-    //     (a pattern matched at the very end of a section, or an RVA table row
-    //     from another build, cannot write into unmapped memory);
+    //   * the site and every byte it would overwrite is inside the game image,
+    //     or (for an option that deliberately patches another module, e.g.
+    //     xlive.dll) inside one committed allocation;
     //   * the destination body resolved (a withheld or unverified body skips
     //     instead of installing a jump to 0).
     // A failed check writes one log line naming the arm and leaves the image
@@ -183,6 +183,22 @@ namespace opp
     // The arm's own option and build gate stays in the arm, where the original
     // handler had it; these helpers only make the write itself safe.
     bool SiteWritable(const PatchContext& ctx, const void* site, size_t length) noexcept;
+
+    // A site inside another loaded module (the GFWL option patches xlive.dll).
+    // The write is only accepted when the site lies inside that module's own
+    // allocation; everything else still goes through SiteWritable's image check.
+    bool ModuleSiteWritable(const void* moduleBase, const void* site,
+                            size_t length) noexcept;
+
+    template <typename T>
+    inline void WriteModuleValue(PatchContext& ctx, const void* moduleBase,
+                                 const void* site, T value)
+    {
+        (void)ctx;
+        if (!ModuleSiteWritable(moduleBase, site, sizeof(T)))
+            return;
+        injector::WriteMemory<T>(const_cast<void*>(site), value, true);
+    }
 
     // Abi(name) with the skip log: nullptr means "no verified body for this
     // destination", which the caller turns into a skip.

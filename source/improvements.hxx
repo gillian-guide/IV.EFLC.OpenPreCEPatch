@@ -63,6 +63,21 @@ namespace opp
     // every group off regardless of the environment.
     uint32_t EnabledImprovements() noexcept;
 
+    // The opt-in entry-point rewrites as one mask (`entry` in a list).
+    constexpr uint32_t EntryImprovements() noexcept
+    {
+        return Improve(Improvement::garage_entry) |
+               Improve(Improvement::cutscene_entry) |
+               Improve(Improvement::nms_thunk) |
+               Improve(Improvement::alpha_nop);
+    }
+
+    // The INI `Improvements` key: "" / absent keeps the environment's value;
+    // "1"/"all"/"on"/"true" selects every group including the entry-point
+    // rewrites; "0"/"none"/"off" selects nothing; anything else uses the same
+    // grammar as OPCEP_IMPROVEMENTS.
+    uint32_t ResolveImprovements(uint32_t environment, const char* iniValue) noexcept;
+
     const char* ImprovementName(Improvement value) noexcept;
 
     // Comma-separated names of the enabled groups, for the boot log. Writes at

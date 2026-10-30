@@ -5883,6 +5883,19 @@ extern "C" void* AbiByName(const char* name) noexcept
     {"abi_smpa60_tail_shim", reinterpret_cast<void(*)()>(&abi_smpa60_tail_shim)},
     {"abi_spawns_guard", reinterpret_cast<void(*)()>(&abi_spawns_guard)},
     {"abi_spawns_probe", reinterpret_cast<void(*)()>(&abi_spawns_probe)},
+    // The ten spawn-case bodies. They were in kAbiBodies but not in this name
+    // table, so InstallFreezeCarFix's CallToBody("abi_spawns_case_0x..") skipped
+    // all ten on every build (the live log showed ten "no body" lines).
+    {"abi_spawns_case_0x24", reinterpret_cast<void(*)()>(&abi_spawns_case_0x24)},
+    {"abi_spawns_case_0x3D", reinterpret_cast<void(*)()>(&abi_spawns_case_0x3D)},
+    {"abi_spawns_case_0x56", reinterpret_cast<void(*)()>(&abi_spawns_case_0x56)},
+    {"abi_spawns_case_0x6F", reinterpret_cast<void(*)()>(&abi_spawns_case_0x6F)},
+    {"abi_spawns_case_0x88", reinterpret_cast<void(*)()>(&abi_spawns_case_0x88)},
+    {"abi_spawns_case_0x9E", reinterpret_cast<void(*)()>(&abi_spawns_case_0x9E)},
+    {"abi_spawns_case_0xB4", reinterpret_cast<void(*)()>(&abi_spawns_case_0xB4)},
+    {"abi_spawns_case_0xCA", reinterpret_cast<void(*)()>(&abi_spawns_case_0xCA)},
+    {"abi_spawns_case_0xE0", reinterpret_cast<void(*)()>(&abi_spawns_case_0xE0)},
+    {"abi_spawns_case_0xF6", reinterpret_cast<void(*)()>(&abi_spawns_case_0xF6)},
     {"abi_speedup_body", reinterpret_cast<void(*)()>(&abi_speedup_body)},
     {"abi_steer_body", reinterpret_cast<void(*)()>(&abi_steer_body)},
     {"abi_steer_detour_eax", reinterpret_cast<void(*)()>(&abi_steer_detour_eax)},

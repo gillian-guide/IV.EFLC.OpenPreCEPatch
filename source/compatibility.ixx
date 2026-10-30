@@ -74,8 +74,12 @@ namespace opp::features
 
         bool WantsGfwlStub(const PatchContext& ctx)
         {
-            // Patch 4: the modded-file check is the RemoveModChecks half.
-            if (ctx.build == GameBuild::v1004 && ModChecksEnabled(ctx))
+            // "Patch 4" in GTA IV's numbering is 1.0.4.0 (v1040), not 1.0.0.4
+            // (v1004): the port read the INI's "patch 4" as 1.0.0.4 and gated the
+            // modded-file check to the wrong build. The original installs it from
+            // a pattern with no build compare (recovered rows carry no build id),
+            // so the narrowed gate stays, but on the build the check exists on.
+            if (ctx.build == GameBuild::v1040 && ModChecksEnabled(ctx))
                 return true;
             // Pre-patch-6: the update/sign-out popup removal half.
             if (PrePatch6(ctx.build) && ctx.Option("RemoveGFWLUpdatePopup", "0"))
@@ -416,11 +420,12 @@ namespace opp::features
             {
                 // The standalone ASI flips xlive.dll+0xF1605 from 0x74/0xEB to
                 // 0xEB. Keep the same pre-image check so a different xlive build
-                // is left untouched.
+                // is left untouched. The site is inside xlive.dll, not the game
+                // image, so the write goes through the module-scoped guard.
                 auto* site = reinterpret_cast<uint8_t*>(xlive) + 988677;
                 const uint8_t current = *site;
                 if (current == 0x74 || current == 0xEB)
-                    WriteValue<uint8_t>(ctx, site, 0xEBu);
+                    WriteModuleValue<uint8_t>(ctx, xlive, site, 0xEBu);
             }
         }
 

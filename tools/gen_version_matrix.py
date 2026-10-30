@@ -143,8 +143,13 @@ def cell(option: str, build: int, recovered: dict, arm: dict | None) -> str:
     entry = recovered.get(option, {})
     ids = BUILD_ID[build]
     if entry.get("gate_kind") in {"head_compare", "switch", "rva_rows"}:
+        # SEMANTIC builds are admitted by the option's mechanism but carry no
+        # recovered row/compare of their own, so they are not in
+        # recovered_builds; check them first.
+        if ids in entry.get("semantic_builds", []):
+            return "S"
         if ids in entry.get("recovered_builds", []):
-            return "S" if build in entry.get("semantic_builds", []) else "R"
+            return "R"
         return "."
     if entry.get("gate_kind") == "fallback":
         # The build compare only picks the missing-signature fallback, so the

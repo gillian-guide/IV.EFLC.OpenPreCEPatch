@@ -108,7 +108,7 @@ the builds the original is merely pattern-gated on, see
 | `PathNodeCrashFix` | `0` | crash fix, usually happens in GTAC |
 | `CollisionDeadlockFix` | `0` | freeze fix, usually happens in GTAC |
 | `DebugPrintSpawns` | `0` | log all entities as they sync in into GTAC console (GTAC only, requires FreezeCarFix to be on) this doesn't actually log which player spawned the entity but who's currently syncing it which 99% of the time is the person who spawned it ONLY if they spawned it while they were in sync range |
-| `RemoveModChecks` | `1` | remove modded-file checks (patch 4, 1060 and 1070) [1004,1060,1070] |
+| `RemoveModChecks` | `1` | remove modded-file checks (patch 4 = 1.0.4.0, 1060 and 1070) [1040,1060,1070] |
 | `RemoveRGSCLoginRequirement` | `1` | remove Social Club login requirement for MP (all builds; 1.0.8.0 uses an RVA fallback) [all] |
 | `RemoveGFWLUpdatePopup` | `1` | remove "update or sign out of LIVE" popup for GFWL (patch 5 and below) [1000-1040] |
 

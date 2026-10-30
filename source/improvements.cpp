@@ -90,10 +90,7 @@ namespace opp
             if (EqualsIgnoreCase(name, "all"))
                 return Improve(Improvement::all);
             if (EqualsIgnoreCase(name, "entry") || EqualsIgnoreCase(name, "entries"))
-                return Improve(Improvement::garage_entry) |
-                       Improve(Improvement::cutscene_entry) |
-                       Improve(Improvement::nms_thunk) |
-                       Improve(Improvement::alpha_nop);
+                return EntryImprovements();
             for (const ImprovementNameEntry& entry : kNames)
             {
                 if (EqualsIgnoreCase(name, entry.alias))
@@ -170,6 +167,22 @@ namespace opp
             return Improve(Improvement::all);
         return ParseImprovements(value);
 #endif
+    }
+
+    uint32_t ResolveImprovements(uint32_t environment, const char* iniValue) noexcept
+    {
+        if (iniValue == nullptr)
+            return environment;
+        const std::string_view text = Trim(iniValue);
+        if (text.empty())
+            return environment;
+        if (text == "1" || EqualsIgnoreCase(text, "all") ||
+            EqualsIgnoreCase(text, "on") || EqualsIgnoreCase(text, "true"))
+            return Improve(Improvement::all) | EntryImprovements();
+        if (text == "0" || EqualsIgnoreCase(text, "none") ||
+            EqualsIgnoreCase(text, "off") || EqualsIgnoreCase(text, "false"))
+            return 0u;
+        return ParseImprovements(iniValue);
     }
 
     const char* ImprovementName(Improvement value) noexcept
