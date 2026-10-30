@@ -1,4 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Steam achievement mirror.
+//
+// The game writes GFWL achievements through xlive.dll's
+//   DWORD XUserWriteAchievements(DWORD dwNumAchievements,
+//                                const XUSER_ACHIEVEMENT *pAchievements,
+//                                XOVERLAPPED *pXOverlapped);
+// which GTA IV imports by ordinal 5278 (5277 is XUserSetContext). We replace
+// that slot in the game's import table, call the original first (so the GFWL or
+// xliveless achievement store keeps working), and mirror the same ids through
+// ISteamUserStats v012.
+//
+// The three-argument __stdcall contract is part of the hook ABI. The caller
+// pushes 12 bytes and expects the callee to pop them (`ret 0xC`, which is what
+// both xlive.dll and xliveless export). A body compiled with an extra argument
+// returns `ret 0x10`, pops four bytes the caller owns and shifts every argument
+// by one slot - the game then loops over a stack pointer as the achievement
+// count and faults. Keep this in sync with the import, not with the old ASI.
 
 #include "steam_achievements.hxx"
 
@@ -15,8 +33,11 @@ namespace opp
 
     namespace
     {
-        // GTA IV achievement ids and their Steam API names. The standalone
-        // SteamAchievements.asi uses the same table (ids 41-50 unused).
+        // GTA IV / EFLC achievement ids and their Steam API names. Ids 1..40 are
+        // the base-game single-player achievements, 41..50 the multiplayer ones
+        // (AWARD_ACHIEVEMENT indices; the script ACHIEVEMENT_IDS enum agrees),
+        // 51..55 TLAD and 56..65 TBoGT. The same names appear in Complete
+        // Edition's achievement blob and in the standalone SteamAchievements.asi.
         struct AchievementName
         {
             uint32_t id;
@@ -64,6 +85,16 @@ namespace opp
             {38, "STORYDONE"},
             {39, "STREETLIGHTSDOWN"},
             {40, "GAMECOMPLETION100"},
+            {41, "MPTEAMWIN1"},
+            {42, "MPCOMPWIN1"},
+            {43, "MPRACEWIN1"},
+            {44, "MPCOOPWIN1"},
+            {45, "MPTEAMWINALL"},
+            {46, "MPCOMPWINALL"},
+            {47, "MPRACEWINALL"},
+            {48, "MPSTARRATING"},
+            {49, "MPCOOPWINALL"},
+            {50, "VIRALKILLME"},
             {51, "E1INTRO"},
             {52, "E1BECOMELEADER"},
             {53, "E1FINISHSTORY"},
@@ -87,9 +118,9 @@ namespace opp
             uint32_t achievementId;
         };
 
-        using WriteAchievementsFn = uint32_t(__stdcall*)(uint32_t, uint32_t,
-                                                         const XUserAchievement*,
-                                                         void*);
+        // XUserWriteAchievements is a 3-argument __stdcall. See the file note.
+        using WriteAchievementsFn =
+            uint32_t(__stdcall*)(uint32_t, const XUserAchievement*, void*);
 #if defined(_M_IX86)
 #define OPCEP_THISCALL __thiscall
 #else
@@ -97,15 +128,31 @@ namespace opp
 #endif
         using SetAchievementFn = bool(OPCEP_THISCALL*)(void*, const char*);
         using StoreStatsFn = bool(OPCEP_THISCALL*)(void*);
+        using RequestStatsFn = bool(OPCEP_THISCALL*)(void*);
         using RunCallbacksFn = void(__cdecl*)();
+
+        constexpr uint32_t kMaxAchievementId = 65;
+        constexpr uint32_t kAchievementSlots = kMaxAchievementId + 1;
+        // The game writes one achievement per call. Cap the mirror walk so a
+        // corrupt count cannot turn the mirror into an out-of-bounds read; the
+        // GFWL call itself has already happened with the caller's count.
+        constexpr uint32_t kMaxMirrorBatch = 16;
 
         WriteAchievementsFn g_write_original = nullptr;
         SetAchievementFn g_set_achievement = nullptr;
         StoreStatsFn g_store_stats = nullptr;
+        RequestStatsFn g_request_stats = nullptr;
         RunCallbacksFn g_run_callbacks = nullptr;
         void* g_user_stats = nullptr;
-        bool g_mirrored[66] = {};  // ids 1..65
-        bool g_installed = false;
+
+        // Guards the state shared by the game's achievement thread and the
+        // Steam init worker. SRWLOCK needs no initialisation.
+        SRWLOCK g_lock = SRWLOCK_INIT;
+        bool g_ready = false;                       // Steam pointers are usable
+        bool g_mirrored[kAchievementSlots] = {};    // already sent to Steam
+        bool g_pending[kAchievementSlots] = {};     // wrote before Steam was up
+
+        bool g_hook_installed = false;
         bool g_thread_started = false;
         bool g_disabled = false;
 
@@ -188,34 +235,96 @@ namespace opp
             return false;
         }
 
-        void Mirror(uint32_t id) noexcept
+        // Called with the lock released, only once g_ready is true.
+        void ApplyToSteam(uint32_t id, const char* name) noexcept
         {
-            if (g_set_achievement == nullptr || id >= 66)
+            if (g_set_achievement == nullptr)
                 return;
-            if (g_mirrored[id])
+            const bool set = g_set_achievement(g_user_stats, name);
+            if (set && g_store_stats != nullptr)
+                g_store_stats(g_user_stats);
+            if (g_run_callbacks != nullptr)
+                g_run_callbacks();
+            Log("steam: achievement %u (%s): %s", id, name,
+                set ? "unlocked" : "rejected by Steam");
+        }
+
+        // Runs on the game's achievement thread. Before Steam is ready the id is
+        // queued, so a write during initialisation is not lost.
+        void Observe(uint32_t id) noexcept
+        {
+            if (id > kMaxAchievementId)
                 return;
             const char* name = NameForId(id);
             if (name == nullptr)
                 return;
-            g_mirrored[id] = true;
-            if (g_set_achievement(g_user_stats, name) && g_store_stats != nullptr)
-                g_store_stats(g_user_stats);
-            if (g_run_callbacks != nullptr)
-                g_run_callbacks();
+
+            bool mirror_now = false;
+            bool queued = false;
+            AcquireSRWLockExclusive(&g_lock);
+            if (!g_mirrored[id])
+            {
+                if (g_ready)
+                {
+                    g_mirrored[id] = true;
+                    mirror_now = true;
+                }
+                else if (!g_pending[id])
+                {
+                    g_pending[id] = true;
+                    queued = true;
+                }
+            }
+            ReleaseSRWLockExclusive(&g_lock);
+
+            if (mirror_now)
+                ApplyToSteam(id, name);
+            else if (queued)
+                Log("steam: achievement %u (%s) queued until Steam is ready", id,
+                    name);
+        }
+
+        // Runs on the Steam init worker after the interface is resolved.
+        void PublishReady() noexcept
+        {
+            uint32_t replay[kAchievementSlots] = {};
+            uint32_t replay_count = 0;
+
+            AcquireSRWLockExclusive(&g_lock);
+            g_ready = true;
+            for (uint32_t id = 0; id < kAchievementSlots; ++id)
+            {
+                if (!g_pending[id])
+                    continue;
+                g_pending[id] = false;
+                g_mirrored[id] = true;
+                replay[replay_count++] = id;
+            }
+            ReleaseSRWLockExclusive(&g_lock);
+
+            for (uint32_t i = 0; i < replay_count; ++i)
+                ApplyToSteam(replay[i], NameForId(replay[i]));
         }
 
         extern "C" uint32_t __stdcall XUserWriteAchievementsHook(
-            uint32_t user_index, uint32_t count,
-            const XUserAchievement* achievements, void* overlapped) noexcept
+            uint32_t count, const XUserAchievement* achievements,
+            void* overlapped) noexcept
         {
             const uint32_t result =
                 g_write_original != nullptr
-                    ? g_write_original(user_index, count, achievements, overlapped)
+                    ? g_write_original(count, achievements, overlapped)
                     : 0;
-            if (achievements != nullptr)
+            if (achievements != nullptr && count != 0)
             {
-                for (uint32_t i = 0; i < count; ++i)
-                    Mirror(achievements[i].achievementId);
+                uint32_t mirror = count;
+                if (mirror > kMaxMirrorBatch)
+                {
+                    Log("steam: XUserWriteAchievements count=%u clamped to %u",
+                        count, kMaxMirrorBatch);
+                    mirror = kMaxMirrorBatch;
+                }
+                for (uint32_t i = 0; i < mirror; ++i)
+                    Observe(achievements[i].achievementId);
             }
             return result;
         }
@@ -223,7 +332,7 @@ namespace opp
 
     bool InstallSteamAchievementsBridge(GameImage image) noexcept
     {
-        if (g_installed)
+        if (g_hook_installed)
             return true;
         if (g_disabled)
             return false;
@@ -239,16 +348,32 @@ namespace opp
             return false;
         }
 
-        // SteamAPI_Init loads libraries and starts threads; doing that under
-        // the loader lock (PatchGame runs from DllMain) can deadlock. Let the
-        // worker run after the loader releases the lock.
+        // Hook the import now, from the install pass. SteamAPI_Init loads
+        // libraries and starts threads, so it has to run outside the loader lock
+        // (the worker below); installing the hook first means an achievement
+        // written during that window is still observed and queued instead of
+        // silently missed.
+        if (!ReplaceImportOrdinal(GetModuleHandleW(nullptr), "xlive.dll", 5278,
+                                  reinterpret_cast<void*>(&XUserWriteAchievementsHook),
+                                  reinterpret_cast<void**>(&g_write_original)))
+        {
+            g_disabled = true;
+            Log("steam: XUserWriteAchievements import not found, skipped");
+            return false;
+        }
+        g_hook_installed = true;
+        Log("steam: hooked xlive.dll ordinal 5278 (XUserWriteAchievements)");
+
         HANDLE thread = CreateThread(nullptr, 0, [](LPVOID) -> DWORD {
             Sleep(1000);
             (void)InstallSteamNow();
             return 0;
         }, nullptr, 0, nullptr);
         if (thread == nullptr)
+        {
+            Log("steam: could not start the Steam init worker");
             return false;
+        }
         CloseHandle(thread);
         g_thread_started = true;
         return true;
@@ -256,7 +381,7 @@ namespace opp
 
     bool InstallSteamNow() noexcept
     {
-        if (g_installed)
+        if (g_ready)
             return true;
         if (g_disabled)
             return false;
@@ -313,28 +438,34 @@ namespace opp
             Log("steam: ISteamUserStats vtable unavailable, skipped");
             return false;
         }
+        // ISteamUserStats v012: RequestCurrentStats at 0, SetAchievement at 7
+        // (28 bytes) and StoreStats at 10 (40 bytes).
+        g_request_stats = reinterpret_cast<RequestStatsFn>(vtable[0 / 4]);
         g_set_achievement = reinterpret_cast<SetAchievementFn>(vtable[28 / 4]);
         g_store_stats = reinterpret_cast<StoreStatsFn>(vtable[40 / 4]);
         g_run_callbacks = run_callbacks;
-        if (g_set_achievement == nullptr ||
-            g_store_stats == nullptr)
+        if (g_set_achievement == nullptr || g_store_stats == nullptr)
         {
             g_disabled = true;
             Log("steam: unexpected ISteamUserStats layout, skipped");
             return false;
         }
 
-        HMODULE module = GetModuleHandleW(nullptr);
-        if (!ReplaceImportOrdinal(module, "xlive.dll", 5278,
-                                  reinterpret_cast<void*>(&XUserWriteAchievementsHook),
-                                  reinterpret_cast<void**>(&g_write_original)))
+        // Load the user's stats, then let the first callbacks arrive before the
+        // mirror accepts writes. Achievements written meanwhile stay queued.
+        if (g_request_stats != nullptr)
+            (void)g_request_stats(g_user_stats);
+        if (g_run_callbacks != nullptr)
         {
-            g_disabled = true;
-            Log("steam: XUserWriteAchievements import not found, skipped");
-            return false;
+            for (int i = 0; i < 10; ++i)
+            {
+                g_run_callbacks();
+                Sleep(50);
+            }
         }
-        g_installed = true;
-        Log("steam: achievements bridge installed (GFWL preserved)");
+
+        PublishReady();
+        Log("steam: achievements bridge ready (GFWL preserved)");
         return true;
     }
 } // namespace opp

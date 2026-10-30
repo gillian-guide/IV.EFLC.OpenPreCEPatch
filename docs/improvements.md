@@ -21,7 +21,7 @@ attribution (`tests/parity/`), which is what caught the live-run divergences.
 | `MovingSteeringWheelSupport`, `ShakingEngineBlock`, `MovingPlaneParts` | component-registry/bone-chain null guards; script-resolver guard; script-slot and lock-owner guards; wheelangle model→tilt cache |
 | `PopupHeadlightsFlag`, `ForceCarHeadlightShadows` | model-lookup/parameter guards; hash→index cache |
 | `BadPlayerModelCrashFix`, `DebugPrintSpawns` | one-time model-name hash index |
-| `SteamAchievements` | GFWL achievement writes mirrored to Steam at the `XUserWriteAchievements` boundary; the original GFWL call still runs |
+| `SteamAchievements` | GFWL achievement writes mirrored to Steam at the `XUserWriteAchievements` boundary (import ordinal 5278, the exact 3-argument `__stdcall`); the original GFWL/xliveless call runs first, and writes made before `SteamAPI_Init` finishes are queued and replayed |
 | installer pass | every arm logs its name and the pass logs `install: N writes applied, M skipped`; signature scans stay inside the executable sections and stop at the first match |
 | every option | every arm write is checked before it lands (site inside the image or inside the target module, destination body resolved) and the runtime bodies skip a missing preamble pointer or game-published lookup instead of dereferencing null |
 | `GarageModelFix`, `CutsceneFixes`, `BuildingAlphaFix` | hooked at the better entry point proved on the 1.0.8.0 live run: the garage prologue, one shared camera callee instead of three sites, and the `jnz` alone instead of the `test` + `jnz` pair |

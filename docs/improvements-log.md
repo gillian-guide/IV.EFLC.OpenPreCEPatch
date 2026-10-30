@@ -482,7 +482,7 @@ reconstruction suite could not link because its Makefile omits `src/log.cpp`
 
 ---
 
-## 2026-10-30 — audit implementation round 1
+## 2026-10-30 â€” audit implementation round 1
 
 The audit (`docs/entry-points-audit.md`) is now also the work list; this round
 applied everything that did not need a live run.
@@ -505,12 +505,12 @@ Internal changes with no write-set or behaviour delta:
 
 Opt-in entry-point rewrites (each outside `all`, original install untouched):
 
-- `garage_entry` — GarageModelFix site A at the function prologue.
-- `cutscene_entry` — cutscene camera callee hook, replacing three sites.
-- `nms_thunk` — the allocator init thunk, restoring the game's own ctor and
+- `garage_entry` â€” GarageModelFix site A at the function prologue.
+- `cutscene_entry` â€” cutscene camera callee hook, replacing three sites.
+- `nms_thunk` â€” the allocator init thunk, restoring the game's own ctor and
   `atexit`; memory behaviour changes, so it must not be promoted without a live
   test.
-- `alpha_nop` — BuildingAlphaFix NOPs only the `jnz`, leaving the `test` flags.
+- `alpha_nop` â€” BuildingAlphaFix NOPs only the `jnz`, leaving the `test` flags.
 
 Rejected with evidence: garage site B (loop), the multi-pattern scan pass and
 duplicate-scan cache (write-aware invalidation unproven), the LoadDLCs flow
@@ -523,7 +523,7 @@ Every step left `build.bat --test`, `opcep_matrix.py --check` (96 cells,
 3,909 writes with the opt-in groups off), `gen_ini_template.py --check` and
 `gen_version_matrix.py --check` green.
 
-## 2026-10-30 — audit dispositions closed
+## 2026-10-30 â€” audit dispositions closed
 
 The three rows still marked "deferred" were closed with evidence rather than
 left open, because each would cost more than it saves:
@@ -543,7 +543,7 @@ The only open item is a live A/B of the four opt-in groups
 (`garage_entry`, `cutscene_entry`, `nms_thunk`, `alpha_nop`), which the boot log
 and `tools/opcep_optin.py` were built to make checkable.
 
-## 2026-10-30 — first live run (1.0.8.0, garage_entry on)
+## 2026-10-30 â€” first live run (1.0.8.0, garage_entry on)
 
 The first run on the user's install produced a clean install pass
 (`126 writes applied, 11 skipped`) and named every active group in the boot log.
@@ -551,7 +551,7 @@ It also exposed two installs that were inert at runtime and one wrong build gate
 
 - **FreezeCarFix's ten spawn-case hooks never installed.** The bodies existed and
   were in `kAbiBodies` but missing from the `AbiByName` name table, so all ten
-  `CallToBody("abi_spawns_case_0x..")` calls skipped ("no body" ×10 in the log).
+  `CallToBody("abi_spawns_case_0x..")` calls skipped ("no body" Ã—10 in the log).
   The write-set dump already had them, which is why the matrix never noticed:
   the live ASI and the dump disagreed. Names added.
 - **GFWLProtectionDisabler's xlive.dll write was refused** by the failsafe
@@ -574,9 +574,9 @@ design. Every arm the log skipped was one of the two bugs above (now fixed) or a
 build-gated option that is *supposed* to skip on 1.0.8.0 (VSyncFix,
 RemoveModChecks, RemoveGFWLUpdatePopup). No gate was added.
 
-## 2026-10-30 — second live run (1.0.8.0, `Improvements = 1`, NewMemorySystem on)
+## 2026-10-30 â€” second live run (1.0.8.0, `Improvements = 1`, NewMemorySystem on)
 
-`install: 134 writes applied, 0 skipped` — both fixes hold: the ten FreezeCarFix
+`install: 134 writes applied, 0 skipped` â€” both fixes hold: the ten FreezeCarFix
 spawn-case calls install, the xlive byte is written (no "site outside the game
 image"), and the three entry rewrites that replace sites account for the count
 (126 + 11 fixed - 3 replaced).
@@ -586,7 +586,7 @@ The only new variable against the previous run is `nms_thunk` (it is in
 `Improvements = 1`), and the reported failure matches its known risk exactly: the
 game's own allocator constructor runs (100 MiB arena) and registers
 `atexit(sub_D65C50)`, which on exit resets the vtable to the original allocator
-while objects allocated by our `HeapAlloc` allocator are still live — the original
+while objects allocated by our `HeapAlloc` allocator are still live â€” the original
 allocator then frees foreign pointers. That is an allocator-shape fault, and it is
 why the audit said the thunk must not be promoted without a live test.
 
@@ -598,7 +598,7 @@ still need isolating: `NewMemorySystem = 1` is the original mod's own
 A/B is (a) `Improvements = 1` with the allocator rewrite out, then (b)
 `NewMemorySystem = 0` as well.
 
-## 2026-10-30 — entry-point rewrites promoted to the default set
+## 2026-10-30 â€” entry-point rewrites promoted to the default set
 
 The user's 1.0.8.0 run with all four rewrites on was smooth, so the three that do
 not touch the allocator are now part of the default set instead of opt-in bits:
@@ -625,7 +625,7 @@ moved). Every other cell is byte-identical. `tools/opcep_optin.py` now pins each
 rewrite's contribution (`except:<group>`, and `all,nms_thunk` for the allocator
 one).
 
-## 2026-10-30 — improvement switches removed; the improved code is the code
+## 2026-10-30 â€” improvement switches removed; the improved code is the code
 
 The switch layer is gone: `source/improvements.*` deleted, the `zpatch_opt_*`
 globals and every branch that selected an original implementation removed, the
@@ -643,7 +643,7 @@ legacy 799 writes.
 `tests/parity/README.md` were rewritten to describe the code rather than a
 switch. `docs/parity-report.md` keeps its historical numbers with a header note.
 
-## 2026-10-30 — the pre-split XLivelessAddon leftovers are deleted
+## 2026-10-30 â€” the pre-split XLivelessAddon leftovers are deleted
 
 The XLivelessAddon split (`486b8cd`, 2026-10-26) moved its INI keys, arms and
 bodies to `xlivelessaddon/`, but six arm functions stayed in the main module
@@ -660,3 +660,31 @@ Deleted with them: the `abi_skip_intro_body`, `abi_skip_intro_screens`,
 globals and their `FindGlobalSlot` entries. The write set is unchanged (96 cells,
 3,854 writes), which is the proof they were unreachable; `dump_abi.inc` was
 regenerated (103 rows). The fork keeps its own copies in `xlivelessaddon/`.
+
+## 2026-10-30 â€” Steam achievements: the import hook ABI is fixed
+
+`SteamAchievements` never unlocked a Steam achievement and could fault the game
+on the first achievement write. `XUserWriteAchievements` is
+`DWORD __stdcall(DWORD count, const XUSER_ACHIEVEMENT*, XOVERLAPPED*)` â€” twelve
+stack bytes, `ret 0xC` in both xlive.dll (ordinal 5278; 5277 is
+`XUserSetContext`, verified against the export table and the game's own
+`XUserSetContext(0, id, value)` call site) and xliveless. The hook was declared
+with a leading `user_index` (four arguments, `ret 0x10`), so the game's call
+arrived shifted: the count landed in `user_index`, the array pointer became the
+count and the overlapped pointer became the array. The original GFWL/xliveless
+function was then invoked with a multi-megabyte count over a stack pointer, and
+the mirror loop walked the same bogus range; the achievement path corrupted the
+stack and faulted instead of unlocking (and GFWL achievements broke with it).
+
+The hook is now the exact three-argument ABI. The install pass hooks the IAT
+before `SteamAPI_Init` starts on the worker thread, and ids written before Steam
+is ready are queued and replayed, so a write in the first second is no longer
+lost. `RequestCurrentStats` runs and the initial callbacks are pumped before the
+mirror accepts writes. Ids 41..50 (the multiplayer achievements, matching the
+`AWARD_ACHIEVEMENT` index list and the script `ACHIEVEMENT_IDS` enum) are mapped
+now too; the mirror logs every id with its API name and says when Steam rejects
+one instead of failing silently.
+
+Static check: the ASI map symbol is `_XUserWriteAchievementsHook@12` and the body
+ends in `ret 0xC`; a four-argument body is the regression to watch for. The
+option remains IAT-only (zero-write matrix cell), so the write set is unchanged.

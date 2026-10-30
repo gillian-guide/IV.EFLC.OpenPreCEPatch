@@ -129,6 +129,27 @@ intentional `MiscFixes` split, the `ApplyUselessChecks` preamble wrapper and the
 shows exactly which arms ran and which declined. Sharing a log with a report is
 enough to reproduce the pass.
 
+## Steam achievements hook
+
+`SteamAchievements` hooks `xlive.dll` ordinal 5278 in the game's import table.
+That import is `XUserWriteAchievements(DWORD count, const XUSER_ACHIEVEMENT*,
+XOVERLAPPED*)`, a three-argument `__stdcall` (`ret 0xC` in xlive.dll and in
+xliveless), so the hook's ABI is part of the install. Check the built ASI:
+
+- `bin/IV.EFLC.OpenPreCEPatch.map` must list
+  `_XUserWriteAchievementsHook@12` (an `@16` symbol means a four-argument body
+  and a corrupting stack pop);
+- the hook body reads the count from `[ebp+8]`, the array from `[ebp+0xC]` and
+  the overlapped pointer from `[ebp+0x10]`, and ends in `ret 0xC`;
+- ordinal 5278, not 5277 (`5277` is `XUserSetContext`).
+
+On a live run the log shows `steam: hooked xlive.dll ordinal 5278`, then
+`steam: achievements bridge ready (GFWL preserved)` once `SteamAPI_Init` has
+finished, and one `steam: achievement <id> (<NAME>): unlocked` line per write
+(or `rejected by Steam`, or `queued until Steam is ready` for a write that
+arrives during initialisation). With `steam_api.dll` absent the option logs
+`not applicable` and leaves GFWL untouched.
+
 ## Live testing
 
 The game must be launched through `PlayGTAIV.exe` (it bypasses the DRM). Read
