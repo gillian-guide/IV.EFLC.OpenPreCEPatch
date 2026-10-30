@@ -23,7 +23,21 @@ unchanged but still needs a matrix cell; `behaviour change` needs an opt-in;
 | GarageModelFix site B → prologue | **rejected**: 0x9659C3 is inside a 2-iteration loop with per-iteration ECX; a prologue hook would change lookup ordering (see `.scratch/w3_garage.md`) | analysis |
 | CutsceneFixes → single callee hook | **implemented, opt-in** `OPCEP_IMPROVEMENTS=only:cutscene_entry`: one 5-byte hook at 0x89A640 replaces the 3 sites (9 → 5 bytes); the callee is relocated to a private copy with its 13 calls re-pointed and the branch fix baked in. Any shape mismatch falls back to the 3 original sites | `docs/testing.md` |
 | NewMemorySystem → init thunk | **implemented, opt-in** `OPCEP_IMPROVEMENTS=only:nms_thunk`: one 5-byte hook at 0xD56060 (was: ctor-call rewrite + `atexit` skip, 8 bytes at RVA 0x107B). The game's own allocator construction and `atexit` registration run; the vtable is stored after. Restores the game's ~100 MiB simple-allocator block — do not promote without a live test | `docs/testing.md` |
-| everything else | pending | — |
+| BuildingAlphaFix site 2 `jnz`-only NOP | **implemented, opt-in** `OPCEP_IMPROVEMENTS=only:alpha_nop`: six bytes at 0x559CDA instead of thirteen at 0x559CD3; the `test` keeps setting the flags | `docs/testing.md` |
+| garage lookup memo (Part B) | **done**: 64-slot memo of successful resolutions, constant fallback hash resolved once; negative results are never cached | commit "perf: memoise the garage and popup model-table scans" |
+| popup angle precompute (Part B) | **done** under the folded `popup` group: the last matching `[PopupLightAngles]` entry per hash is memoised instead of rescanning 512 entries | same commit |
+| `AbiByName` hash table (Part B) | **not done, measured unnecessary**: 125 lookups at startup over ~128 names is microseconds of a ~1.9 s install pass; the linear scan is also the table's readable form | — |
+| multi-pattern scan pass, duplicate publish/install scans (Part B) | **rejected**: the original rescans at install time and an earlier arm may have written the bytes a later scan looks for; a write-aware invalidation is unproven and the delta would change installs | — |
+| LoadDLCs five-flow rewrite | **rejected**: reimplements XNotify listener registration and is sequence-sensitive | — |
+| PopupHeadlightsFlag IDE hook relocation | **rejected for now**: the site clobbers `mov ecx,7` ten bytes before the flag OR, but relocating it needs a new body and a live cutscene/IDE test; recorded as a real fragility, not fixed | — |
+| MovingPlaneParts / ShakingEngineBlock / MovingSteeringWheelSupport vtable | **rejected**: the body depends on ESI/EDX at the site and the vtable is shared | — |
+| StartupTimeFix shared helper | **rejected**: three separately inlined WinINet builders; the multi-match loop is load-bearing | — |
+| EmissiveLerpFix instruction boundary | **deferred**: moving the 5-byte hook to 0x7F8BA5 needs a second body variant (the current one re-does the `cvtsi2ss`) and a live high-FPS cutscene test | — |
+| NoImpostorHeightCutoff data constants | **deferred**: a behaviour change (shared height constants), not a NOP equivalent | — |
+| PlaneCrashFix vtable wrapper | **deferred**: needs a live flying test; the vtable is shared by the class | — |
+| CarDynamicShadowFix function entry | **deferred**: 13 callers and a body that must replay the prologue | — |
+| OOC site 2 prologue | **rejected**: the body owns ECX/EDX and the prologue relocation changes the pre-image bytes | — |
+| options with no 1.0.8.0 site (VSyncFix, RemoveModChecks, RemoveGFWLUpdatePopup) and the already-optimal rows (NewSaves, FastLoading, RemoveRGSC, FCHS main hook, IVML/IVSL, SCOPatch's byte, NoLOD/NoImpostor NOPs) | **nothing to do** | — |
 
 Line numbers were taken while the failsafe work was in progress; the mechanisms
 are unchanged but a few `hooks.cpp` line numbers may have shifted by a few lines.

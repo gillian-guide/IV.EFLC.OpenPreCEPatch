@@ -479,3 +479,46 @@ test updated). `option_build_gates.json` records the Launch switch and the
 RemoveRGSC fallback note. A standalone harness verified the masks; the full
 reconstruction suite could not link because its Makefile omits `src/log.cpp`
 (pre-existing).
+
+---
+
+## 2026-10-30 — audit implementation round 1
+
+The audit (`docs/entry-points-audit.md`) is now also the work list; this round
+applied everything that did not need a live run.
+
+Behaviour fixes, no opt-in (they restore the original's own mechanism):
+
+- `PopupHeadlightsFlag` installs one of the two bodies, like the handler's
+  `if`/`else`, instead of both against shared resume slots.
+- `LoadDLCs` writes each site once (the recovered rows list one).
+- `SCOSignatureFix` anchors its signature on the branch it flips instead of
+  writing at `match-32`.
+
+Internal changes with no write-set or behaviour delta:
+
+- `NewMemorySystem`'s registry is a flat open-addressing table over
+  `VirtualAlloc` (no per-entry allocation, no throw), with a self-test.
+- The garage and popup model-table scans are memoised (negative results are
+  never cached; the popup memo keeps the original's last-match rule under the
+  folded `popup` group).
+
+Opt-in entry-point rewrites (each outside `all`, original install untouched):
+
+- `garage_entry` — GarageModelFix site A at the function prologue.
+- `cutscene_entry` — cutscene camera callee hook, replacing three sites.
+- `nms_thunk` — the allocator init thunk, restoring the game's own ctor and
+  `atexit`; memory behaviour changes, so it must not be promoted without a live
+  test.
+- `alpha_nop` — BuildingAlphaFix NOPs only the `jnz`, leaving the `test` flags.
+
+Rejected with evidence: garage site B (loop), the multi-pattern scan pass and
+duplicate-scan cache (write-aware invalidation unproven), the LoadDLCs flow
+rewrite, the moving-parts/plane vtable rewrites, the popup IDE relocation (needs
+a new body and a live test), and the OOC prologue. Deferred for the same reason:
+EmissiveLerpFix boundary, NoImpostorHeightCutoff constants, PlaneCrashFix vtable,
+CarDynamicShadowFix entry. `AbiByName` was measured unnecessary.
+
+Every step left `build.bat --test`, `opcep_matrix.py --check` (96 cells,
+3,909 writes with the opt-in groups off), `gen_ini_template.py --check` and
+`gen_version_matrix.py --check` green.
