@@ -449,7 +449,7 @@ namespace
     void TestFeatureOrder()
     {
         const auto& features = opp::RegisteredFeatures();
-        CHECK(features.size() == 122);
+        CHECK(features.size() == 123);
         for (size_t i = 1; i < features.size(); ++i)
             CHECK(features[i - 1].order < features[i].order);
     }
@@ -537,6 +537,44 @@ namespace
         CHECK(opp::ArmWritesSkipped() > skipped_before_pass);
     }
 
+    void TestRelocateCalls()
+    {
+        // A tiny "function" with two call rel32 instructions to fix up.
+        static uint8_t target_a[1] = {0xC3};
+        static uint8_t target_b[1] = {0xC3};
+        uint8_t source[16] = {};
+        constexpr uint32_t offset_a = 1;
+        constexpr uint32_t offset_b = 7;
+        source[offset_a] = 0xE8;
+        source[offset_b] = 0xE8;
+        const auto rel_a = static_cast<int32_t>(
+            reinterpret_cast<uint8_t*>(target_a) - (source + offset_a + 5));
+        const auto rel_b = static_cast<int32_t>(
+            reinterpret_cast<uint8_t*>(target_b) - (source + offset_b + 5));
+        std::memcpy(source + offset_a + 1, &rel_a, sizeof(rel_a));
+        std::memcpy(source + offset_b + 1, &rel_b, sizeof(rel_b));
+
+        const uint32_t offsets[2] = {offset_a, offset_b};
+        uint8_t copy[16] = {};
+        CHECK(opp::zpatch_relocate_calls(copy, source, sizeof(source), offsets, 2));
+        CHECK(std::memcmp(copy, source, sizeof(source)) != 0);
+        int32_t new_a = 0;
+        int32_t new_b = 0;
+        std::memcpy(&new_a, copy + offset_a + 1, sizeof(new_a));
+        std::memcpy(&new_b, copy + offset_b + 1, sizeof(new_b));
+        CHECK(reinterpret_cast<uint8_t*>(copy + offset_a + 5 + new_a) == target_a);
+        CHECK(reinterpret_cast<uint8_t*>(copy + offset_b + 5 + new_b) == target_b);
+
+        // A listed offset that does not hold an E8 fails the whole copy.
+        uint8_t bad[16] = {};
+        const uint32_t not_e8 = 3;  // source[3] is 0, not a call opcode
+        CHECK(!opp::zpatch_relocate_calls(bad, source, sizeof(source), &not_e8, 1));
+
+        // An offset outside the range fails too. (`far` is a Windows macro.)
+        const uint32_t out_of_range = 0x100;
+        CHECK(!opp::zpatch_relocate_calls(bad, source, sizeof(source), &out_of_range, 1));
+    }
+
     void TestHooks()
     {
         CHECK(HookBodyCount() > 100);
@@ -562,6 +600,7 @@ int main()
     TestMenu();
     TestFeatureOrder();
     TestArmFailsafes();
+    TestRelocateCalls();
     TestHooks();
 
     if (failures != 0)

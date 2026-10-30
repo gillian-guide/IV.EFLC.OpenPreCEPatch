@@ -82,6 +82,9 @@ namespace opp
         // mid-body anchor to the function prologue (the write set changes, so
         // it is never part of `all`).
         zpatch_opt_garage_entry = has(Improvement::garage_entry) ? 1u : 0u;
+        // CutsceneFixes' single-callee hook; also opt-in (it relocates the
+        // callee into private memory and changes the write set).
+        zpatch_opt_cutscene_entry = has(Improvement::cutscene_entry) ? 1u : 0u;
 
         for (const Feature& feature : RegisteredFeatures())
         {

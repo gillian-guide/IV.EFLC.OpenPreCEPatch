@@ -126,3 +126,37 @@ namespace opp
 #endif
     }
 } // namespace opp
+
+// Copy `size` bytes and re-point the listed `call rel32` instructions at their
+// original absolute targets. The offsets are the E8 opcodes; a non-E8 byte, an
+// out-of-range offset or a displacement that does not fit fails the whole copy,
+// so a shape mismatch on another build is a clean skip, never a half-fixed copy.
+extern "C" bool zpatch_relocate_calls(void* destination, const void* source,
+                                      size_t size, const uint32_t* callOffsets,
+                                      size_t callCount) noexcept
+{
+    if (destination == nullptr || source == nullptr || callOffsets == nullptr ||
+        size < 5u)
+        return false;
+    std::memcpy(destination, source, size);
+    auto* dst = static_cast<uint8_t*>(destination);
+    const auto* src = static_cast<const uint8_t*>(source);
+    for (size_t i = 0; i < callCount; ++i)
+    {
+        const size_t offset = callOffsets[i];
+        if (offset + 5u > size || dst[offset] != 0xE8u)
+            return false;
+        int32_t old_rel = 0;
+        std::memcpy(&old_rel, src + offset + 1u, sizeof(old_rel));
+        const uintptr_t target = reinterpret_cast<uintptr_t>(src + offset + 5u) +
+                                 static_cast<uintptr_t>(static_cast<intptr_t>(old_rel));
+        const intptr_t new_rel = static_cast<intptr_t>(target) -
+                                 static_cast<intptr_t>(reinterpret_cast<uintptr_t>(
+                                     dst + offset + 5u));
+        if (new_rel > INT32_MAX || new_rel < INT32_MIN)
+            return false;
+        const auto narrowed = static_cast<int32_t>(new_rel);
+        std::memcpy(dst + offset + 1u, &narrowed, sizeof(narrowed));
+    }
+    return true;
+}

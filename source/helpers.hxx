@@ -258,5 +258,15 @@ namespace opp
     // not count.
     size_t ArmWritesApplied() noexcept;
     size_t ArmWritesSkipped() noexcept;
+
+    // Copy `size` bytes of `source` to `destination` and re-point every `call
+    // rel32` whose E8 opcode sits at one of `callOffsets` at the absolute target
+    // it had in the source. A non-E8 byte, an out-of-range offset or a
+    // displacement that does not fit fails the whole copy, so a relocated body
+    // is either exact or not installed. Lives in helpers.cpp (not hooks.cpp) so
+    // the 64-bit dump, which stubs the body registry, still links it.
+    extern "C" bool zpatch_relocate_calls(void* destination, const void* source,
+                                          size_t size, const uint32_t* callOffsets,
+                                          size_t callCount) noexcept;
 } // namespace opp
 

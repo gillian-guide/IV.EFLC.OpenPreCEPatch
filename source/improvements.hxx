@@ -33,6 +33,10 @@ namespace opp
         // to a function prologue, so the write set changes; kept outside `all`
         // so a default run is byte-identical to the original install.
         garage_entry = 1u << 9,
+        // CutsceneFixes: one hook at the shared camera callee instead of the
+        // three sites (two call rewrites + the branch byte). Needs a relocated
+        // copy of the callee, so it is opt-in as well.
+        cutscene_entry = 1u << 10,
     };
 
     constexpr uint32_t Improve(Improvement value) noexcept

@@ -90,6 +90,7 @@ never installs them; they exist to be A/B tested and promoted later:
 | group | what it moves |
 | --- | --- |
 | `garage_entry` | `GarageModelFix` site A from the mid-body anchor (0x868BB0) to the function prologue (0x868B90), reusing the store body and reloading the `xmm0` the prologue instruction sets |
+| `cutscene_entry` | `CutsceneFixes` from its three sites (two camera call rewrites + the branch byte) to one hook at the shared camera callee (0x89A640), by relocating the callee into a private copy whose 13 `call rel32`s are re-pointed and whose branch fix is baked in |
 
 Run one with `OPCEP_IMPROVEMENTS=only:<group>` (or `all,<group>` is not a thing:
 `all` does not include these bits, so use `only:` lists that name every group you

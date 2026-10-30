@@ -183,6 +183,7 @@ extern "C"
     uint8_t zpatch_opt_windowed = 0u;
     uint8_t zpatch_opt_failsafe = 0u;
     uint8_t zpatch_opt_garage_entry = 0u;
+    uint8_t zpatch_opt_cutscene_entry = 0u;
     // RestoreDeathMusic's lazily resolved site.
     uint32_t zpatch_death_music_site = 0;
     // NewSavesCompatibility's element counter.

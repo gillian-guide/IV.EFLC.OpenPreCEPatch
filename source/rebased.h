@@ -407,3 +407,4 @@ extern "C" uint8_t zpatch_opt_trace_arms;          // trace group (test switch)
 extern "C" uint8_t zpatch_opt_windowed;            // Borderless / DoNotPause
 extern "C" uint8_t zpatch_opt_failsafe;            // runtime-pointer failsafes
 extern "C" uint8_t zpatch_opt_garage_entry;        // GarageModelFix prologue form
+extern "C" uint8_t zpatch_opt_cutscene_entry;      // CutsceneFixes callee hook

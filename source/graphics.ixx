@@ -15,6 +15,7 @@ module;
 #include "rebased.h"
 #include "feature_registry.hxx"
 #include "helpers.hxx"
+#include "log.hxx"
 
 export module graphics;
 
@@ -382,6 +383,162 @@ namespace opp::features
     }
 
 
+    // CutsceneFixes: the three original sites (two call rewrites at the camera
+    // call sites plus the branch byte inside the camera callee). Shared by the
+    // default arm and by the opt-in callee hook's fallback.
+    void ApplyCutsceneSites(PatchContext& ctx)
+    {
+        const GameImage& image = ctx.image;
+
+        if (auto pattern = Pattern(image, "8B 4C 24 2C 5F 5E 5B 33 CC B0 01 E8"); pattern.size() > 0)
+        {
+            auto* match = pattern.get(0).get<uint8_t>();
+
+            CallToBody(ctx, match - 5, "abi_cutscene_chain_b");
+        }
+
+        if (auto pattern = Pattern(image, "8B CF 88 44 24 0F E8 ? ? ? ? A1"); pattern.size() > 0)
+        {
+            auto* match = pattern.get(0).get<uint8_t>();
+
+            CallToBody(ctx, match - 5, "abi_cutscene_chain_b");
+        }
+
+        {
+            // 1080 has exactly one match of the primary pattern (0xC9A840); the
+            // alternate is only for builds where it is absent. Falling back on
+            // "<= 1 match" threw that single match away and applied nothing.
+            auto pattern = Pattern(image, "74 24 8B 44 24 2C 83 F8 03");
+            if (pattern.size() == 0)
+                pattern = Pattern(image, "74 0B 83 7C 24 2C 03");
+            if (pattern.size() > 0)
+                WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(), 0xEBu);
+        }
+    }
+
+    // Opt-in (cutscene_entry): one hook at the shared camera callee instead of
+    // the three sites. The shipped body already takes its call target and poke
+    // address from globals, so instead of transcribing 0x2D2 bytes we relocate
+    // the callee into private memory, re-point its 13 direct calls and bake the
+    // branch fix into the copy. The body then calls the copy, and the game's two
+    // call sites reach the body through the five bytes at the callee entry.
+    //
+    // Any shape mismatch is a clean skip: the three original sites are applied
+    // instead, so enabling the group can never lose the fix.
+    namespace
+    {
+        bool CutsceneBytesMatch(const uint8_t* at, const uint8_t* bytes, size_t count) noexcept
+        {
+            return std::memcmp(at, bytes, count) == 0;
+        }
+
+        // 0xC9A640 on 1.0.8.0.
+        constexpr size_t kCutsceneCalleeSize = 0x2D2u;
+        constexpr uint32_t kCutscenePokeOffset = 0x4Fu;   // poke-1 = +0x4E
+        constexpr uint32_t kCutsceneBranchOffset = 0x200u;  // the `jz` site 2
+        constexpr uint32_t kCutsceneShapePoke = 0x4Au;
+        constexpr uint32_t kCutsceneCalls[] = {
+            0x00Eu, 0x01Du, 0x092u, 0x0E9u, 0x0F1u, 0x101u, 0x118u,
+            0x127u, 0x13Cu, 0x233u, 0x24Cu, 0x286u, 0x29Au,
+        };
+
+        // The copy's own `call rel32`s only reach their targets if it lives
+        // within 2 GB of the game image, so ask for an address near it instead
+        // of letting VirtualAlloc pick (on 64-bit that can be gigabytes away).
+        void* AllocateNear(const GameImage& image, size_t size)
+        {
+            constexpr uintptr_t kStep = 0x1000000u;
+            constexpr uintptr_t kReach = 0x40000000u;
+            const auto base = reinterpret_cast<uintptr_t>(image.base);
+            const uintptr_t first =
+                (base + image.size + 0xFFFFu) & ~static_cast<uintptr_t>(0xFFFFu);
+            for (uintptr_t candidate = first; candidate < first + kReach;
+                 candidate += kStep)
+            {
+                if (void* const block = VirtualAlloc(
+                        reinterpret_cast<void*>(candidate), size,
+                        MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))
+                    return block;
+            }
+            // Below the image as well, in case the region above is occupied.
+            for (uintptr_t candidate = first - kStep;
+                 candidate > kStep && candidate > base - kReach; candidate -= kStep)
+            {
+                if (void* const block = VirtualAlloc(
+                        reinterpret_cast<void*>(candidate), size,
+                        MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))
+                    return block;
+            }
+            return nullptr;
+        }
+
+        void* CutsceneCalleeCopy(const GameImage& image, uintptr_t callee)
+        {
+            static constexpr uint8_t kPrologue[5] = {0x55u, 0x8Bu, 0xECu, 0x83u, 0xE4u};
+            static constexpr uint8_t kPokeSite[5] = {0xC6u, 0x44u, 0x24u, 0x1Cu, 0x01u};
+            static constexpr uint8_t kBranchSite[8] = {0x74u, 0x24u, 0x8Bu,
+                                                       0x44u, 0x24u, 0x2Cu,
+                                                       0x83u, 0xF8u};
+            if (callee == 0u || !InImage(image, callee) ||
+                !InImage(image, callee + kCutsceneCalleeSize - 1u))
+            {
+                Log("cutscene_entry: callee %p is outside the image, keeping the 3 sites",
+                    reinterpret_cast<void*>(callee));
+                return nullptr;
+            }
+            const auto* source = reinterpret_cast<const uint8_t*>(callee);
+            if (!CutsceneBytesMatch(source, kPrologue, sizeof(kPrologue)) ||
+                !CutsceneBytesMatch(source + kCutsceneShapePoke, kPokeSite, sizeof(kPokeSite)) ||
+                !CutsceneBytesMatch(source + kCutsceneBranchOffset, kBranchSite,
+                                    sizeof(kBranchSite)))
+            {
+                Log("cutscene_entry: callee %p does not match the 1.0.8.0 shape, keeping the 3 sites",
+                    reinterpret_cast<void*>(callee));
+                return nullptr;
+            }
+            auto* copy = static_cast<uint8_t*>(
+                AllocateNear(image, kCutsceneCalleeSize));
+            if (copy == nullptr)
+            {
+                Log("cutscene_entry: no memory for the callee copy, keeping the 3 sites");
+                return nullptr;
+            }
+            if (!zpatch_relocate_calls(copy, source, kCutsceneCalleeSize,
+                                       kCutsceneCalls,
+                                       sizeof(kCutsceneCalls) / sizeof(kCutsceneCalls[0])))
+            {
+                VirtualFree(copy, 0, MEM_RELEASE);
+                Log("cutscene_entry: callee calls do not relocate, keeping the 3 sites");
+                return nullptr;
+            }
+            // Site 2: the branch the copy takes when the camera is called back.
+            copy[kCutsceneBranchOffset] = 0xEBu;
+            Log("cutscene_entry: hooked callee %p, copy %p",
+                reinterpret_cast<void*>(callee), static_cast<void*>(copy));
+            return copy;
+        }
+    } // namespace
+
+    void InstallCutsceneFixesAtCallee(PatchContext& ctx)
+    {
+        TraceArm("InstallCutsceneFixes@callee");
+        if (zpatch_opt_cutscene_entry == 0u || !ctx.Option("CutsceneFixes", "1"))
+            return;
+
+        // The publish arm derived these from the call site's rel32.
+        const auto callee = static_cast<uintptr_t>(zpatch_cutscene_target);
+        if (void* const copy = CutsceneCalleeCopy(ctx.image, callee))
+        {
+            zpatch_cutscene_target =
+                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(copy));
+            zpatch_cutscene_poke = static_cast<uint32_t>(
+                reinterpret_cast<uintptr_t>(copy) + kCutscenePokeOffset);
+            JumpToBody(ctx, reinterpret_cast<void*>(callee), "abi_cutscene_chain_b");
+            return;
+        }
+        ApplyCutsceneSites(ctx);
+    }
+
     // CutsceneFixes
 
     void InstallCutsceneFixes(PatchContext& ctx)
@@ -390,34 +547,9 @@ namespace opp::features
         TraceArm("CutsceneFixes");
 
         // CutsceneFixes: 2 siginstalls, 1 sigwrite
-        if (ctx.Option("CutsceneFixes", "1"))
+        if (ctx.Option("CutsceneFixes", "1") && zpatch_opt_cutscene_entry == 0u)
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "8B 4C 24 2C 5F 5E 5B 33 CC B0 01 E8"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                CallToBody(ctx, match - 5, "abi_cutscene_chain_b");
-            }
-
-            if (auto pattern = Pattern(image, "8B CF 88 44 24 0F E8 ? ? ? ? A1"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                CallToBody(ctx, match - 5, "abi_cutscene_chain_b");
-            }
-
-            {
-                // 1080 has exactly one match of the primary pattern (0xC9A840); the
-                // alternate is only for builds where it is absent. Falling back on
-                // "<= 1 match" threw that single match away and applied nothing.
-                auto pattern = Pattern(image, "74 24 8B 44 24 2C 83 F8 03");
-                if (pattern.size() == 0)
-                    pattern = Pattern(image, "74 0B 83 7C 24 2C 03");
-                if (pattern.size() > 0)
-                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(), 0xEBu);
-            }
+            ApplyCutsceneSites(ctx);
         }
 
     }
@@ -794,6 +926,9 @@ namespace
             RegisterFeature(116, "InstallForceCarHeadlightShadows", &InstallForceCarHeadlightShadows);
             RegisterFeature(119, "InstallCarDynamicShadowFix", &InstallCarDynamicShadowFix);
             RegisterFeature(127, "InstallCutsceneFixes", &InstallCutsceneFixes);
+            // Runs after the original arm (off when the group is on) and owns
+            // the install either way: callee hook or the three-site fallback.
+            RegisterFeature(128, "InstallCutsceneFixesAtCallee", &InstallCutsceneFixesAtCallee);
             RegisterFeature(129, "InstallCarDecalsFix", &InstallCarDecalsFix);
             RegisterFeature(131, "InstallCarDynamicShadowFixNoE", &InstallCarDynamicShadowFixNoE);
             RegisterFeature(137, "InstallCarPartsShadowFixStandalone", &InstallCarPartsShadowFixStandalone);
