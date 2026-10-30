@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace opp
@@ -63,4 +64,10 @@ namespace opp
     uint32_t EnabledImprovements() noexcept;
 
     const char* ImprovementName(Improvement value) noexcept;
+
+    // Comma-separated names of the enabled groups, for the boot log. Writes at
+    // most `size` bytes (always NUL-terminated) and returns the length written.
+    // "none" when no group is enabled; the opt-in rewrites are listed by name so
+    // a live log shows exactly which path ran.
+    size_t FormatImprovements(uint32_t mask, char* buffer, size_t size) noexcept;
 } // namespace opp

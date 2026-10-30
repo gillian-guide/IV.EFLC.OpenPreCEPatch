@@ -194,4 +194,43 @@ namespace opp
         }
         return "unknown";
     }
+
+    size_t FormatImprovements(uint32_t mask, char* buffer, size_t size) noexcept
+    {
+        if (buffer == nullptr || size == 0u)
+            return 0u;
+        size_t used = 0u;
+        buffer[0] = '\0';
+        const Improvement groups[] = {
+            Improvement::new_saves,   Improvement::ooc,      Improvement::vehicle,
+            Improvement::popup,       Improvement::model_index, Improvement::skip_intro,
+            Improvement::trace,       Improvement::windowed, Improvement::failsafe,
+            Improvement::garage_entry, Improvement::cutscene_entry,
+            Improvement::nms_thunk,   Improvement::alpha_nop,
+        };
+        for (const Improvement group : groups)
+        {
+            if ((mask & Improve(group)) == 0u)
+                continue;
+            const char* const name = ImprovementName(group);
+            const size_t length = std::strlen(name);
+            const size_t separator = used == 0u ? 0u : 2u;  // ", "
+            if (used + separator + length + 1u > size)
+                break;
+            if (separator != 0u)
+            {
+                buffer[used++] = ',';
+                buffer[used++] = ' ';
+            }
+            std::memcpy(buffer + used, name, length);
+            used += length;
+            buffer[used] = '\0';
+        }
+        if (used == 0u && size >= 5u)
+        {
+            std::memcpy(buffer, "none", 5u);  // includes the NUL
+            used = 4u;
+        }
+        return used;
+    }
 } // namespace opp

@@ -277,6 +277,18 @@ namespace
         CHECK(opp::ParseImprovements(" only: newsaves ; ooc ") == (newsaves | ooc));
         CHECK(opp::ParseImprovements("only:") == 0);
         CHECK(opp::ParseImprovements("except:" ) == all);
+
+        char text[64] = {};
+        CHECK(opp::FormatImprovements(0u, text, sizeof(text)) == 4u);
+        CHECK(std::strcmp(text, "none") == 0);
+        CHECK(opp::FormatImprovements(newsaves | ooc, text, sizeof(text)) > 0u);
+        CHECK(std::strstr(text, "new_saves") != nullptr);
+        CHECK(std::strstr(text, "ooc") != nullptr);
+        char tiny[8] = {};
+        CHECK(opp::FormatImprovements(all, tiny, sizeof(tiny)) < sizeof(tiny));
+        CHECK(tiny[sizeof(tiny) - 1] == 0);
+        CHECK(opp::FormatImprovements(all, nullptr, 8u) == 0u);
+        CHECK(opp::FormatImprovements(all, text, 0u) == 0u);
         constexpr uint32_t entry = opp::Improve(opp::Improvement::garage_entry) |
                                  opp::Improve(opp::Improvement::cutscene_entry) |
                                  opp::Improve(opp::Improvement::nms_thunk) |

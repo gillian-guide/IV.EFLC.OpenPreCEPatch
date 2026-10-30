@@ -38,6 +38,13 @@ namespace opp
         // OPCEP_IMPROVEMENTS environment variable / OPCEP_PARITY_BASELINE build
         // can turn groups back off without touching the INI.
         const uint32_t improvements = EnabledImprovements();
+        // One boot-log line naming the active groups, so a live log shows which
+        // path ran (the opt-in entry-point rewrites are listed by name).
+        {
+            char groups[256];
+            FormatImprovements(improvements, groups, sizeof(groups));
+            Log("improvements: %s", groups);
+        }
         const auto has = [improvements](Improvement group) {
             return (improvements & Improve(group)) != 0u;
         };

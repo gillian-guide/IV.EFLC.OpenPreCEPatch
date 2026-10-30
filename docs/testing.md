@@ -193,6 +193,12 @@ reference. To validate one on the user's install:
 5. `OPCEP_IMPROVEMENTS=all,entry` runs all four together. A group that misbehaves
    is disabled by dropping it from the list; no rebuild, no INI edit.
 
+### Boot log
+
+`PatchGame` logs one `improvements: <groups>` line before the install pass, so a live log
+names exactly which folded groups and opt-in rewrites are active (`none` when every
+switch is off). `FormatImprovements` has a native test.
+
 ### Opt-in write-set fixtures
 
 `tools/opcep_optin.py` locks the four opt-in rewrites' write sets, which the
