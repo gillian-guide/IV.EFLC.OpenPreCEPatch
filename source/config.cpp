@@ -13,8 +13,8 @@ namespace opp
         // an old flat ZolikaPatch.ini keeps working unchanged.
         constexpr const char* kOptionSections[] = {
             "Options",      "STABILITY", "PERFORMANCE", "GRAPHICS", "VEHICLES",
-            "INPUT",        "MULTIPLAYER", "LOADING",   "COMPATIBILITY", "XLIVELESS",
-            "INTERFACE",    "DEBUG",
+            "INPUT",        "MULTIPLAYER", "EPISODIC", "LOADING", "COMPATIBILITY",
+            "MISC",         "XLIVELESS", "INTERFACE", "DEBUG",
         };
     } // namespace
 

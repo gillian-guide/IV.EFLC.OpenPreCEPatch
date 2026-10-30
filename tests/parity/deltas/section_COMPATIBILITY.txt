@@ -1,8 +1,3 @@
-0005CF50 E9 InstallAllowHashesForIDE
-0005CF51 FB InstallAllowHashesForIDE
-0005CF52 6E InstallAllowHashesForIDE
-0005CF53 BA InstallAllowHashesForIDE
-0005CF54 0F InstallAllowHashesForIDE
 0021EB4C 90 InstallSavegameFix
 0021EB4D 6A InstallSavegameFix
 0021EB4E A2 InstallSavegameFix

@@ -73,17 +73,7 @@ vehicle behaviour and model flags
 | --- | --- | --- |
 | `BikeFeetFix` | `1` | previously TLAD-exclusive foot position fix for chopper bikes (patch 5+) [all; FF] |
 | `BikePhoneAnimsFix` | `1` | fixed standing still animation for bikes during a phone call (patch 5+) [all; FF] |
-| `CopSirensFlag` | `1` | add +siren vehicles.ide flag to cars to make them use sirens [all] |
-| `EpisodicVehicleSupport` | `1` | APC and buzzard support for all episodes [all-1000,1040; FF] |
-| `EpisodicWeaponSupport` | `1` | explosive shotgun, stickybomb and DSR1 sniper support for all episodes [all-1000,1040; FF] |
 | `HighFPSBikePhysicsFix` | `1` | fix bikes sliding out easily above 60FPS [all; FF] |
-| `MovingPlaneParts` | `1` | makes propellers, ailerons, elevators and rudders move on planes that support them [all] |
-| `MovingSteeringWheelSupport` | `1` | make the "steeringwheel" car bone rotate properly if it exists (Example of a car with proper steering wheel setup: https://mega.nz/file/vcAAib6Z#bsbJaseAbdxleRwr1XGL-d_it_P9DyjsPoXP-pnMoq8 ) use the new +wheelangle: vehicles.ide flag to specify an angle the steering wheel should be tilted forward or backwards by (in degrees) while porting a car from V, write the angle down into this flag and set the actual wheel's angle to 0, 0, 0 to make it work properly [all] |
-| `NoLiveryLimit` | `1` | removes the 4 livery limit, allowing up to 255 unique livery textures for any car [all; FF] |
-| `PoliceEpisodicWeaponSupport` | `0` | makes cops use P90s and assault shotguns - only enable this if those weapons exist, or NOOSE and FIB will spawn unarmed [all-1000,1040; FF] |
-| `PopupHeadlightsFlag` | `1` | vehicles.ide flag for Hakumai's popup headlights on any car that supports it (+popuplights) [all] |
-| `ShakingEngineBlock` | `1` | make the engineblock part of cars shake like V if they have support for it [all] |
-| `TBoGTHeliHeightLimit` | `0` | unlocks the height limit for aircraft to the TBoGT level for all episodes [all-1000,1040; FF] |
 
 ## INPUT
 
@@ -115,18 +105,30 @@ GFWL/CitizenIV multiplayer fixes
 | `RemoveAllWeaponsProtection` | `1` | make other players no longer able to use malicious trainers to remove all your weapons [all] |
 | `TeleportProtection` | `1` | make other players no longer able to use malicious trainers to teleport you [all] |
 
-## LOADING
+## EPISODIC
 
-files, saves, DLC and launcher hooks
+episodic (EFLC) content support
 
 | key | default | notes |
 | --- | --- | --- |
+| `EpisodicVehicleSupport` | `1` | APC and buzzard support for all episodes [all-1000,1040; FF] |
+| `EpisodicWeaponSupport` | `1` | explosive shotgun, stickybomb and DSR1 sniper support for all episodes [all-1000,1040; FF] |
+| `PoliceEpisodicWeaponSupport` | `0` | makes cops use P90s and assault shotguns - only enable this if those weapons exist, or NOOSE and FIB will spawn unarmed [all-1000,1040; FF] |
+| `TBoGTHeliHeightLimit` | `0` | unlocks the height limit for aircraft to the TBoGT level for all episodes [all-1000,1040; FF] |
 | `LoadDLCs` | `1` | load TBoGT and TLAD in the same folder structure EFLC does it (root folder -> episode's folder) and any more addon episodes in the same format (extra DLC folders should be named Episode3, Episode4, etc. and their ids in setup2.xml be the episode id multiplied by 2) [1060,1070,1080] |
+| `SCOSignatureFix` | `1` | allow loading of any .sco file regardless of which episode it came from (or which platform it came from, in case of patch 4 and below) this is required for trainer IV parachute support to work [all; FF] |
+| `PipeBombDropIconSupport` | `1` | use droppipebomb_icon for pipe bomb in base IV [all-1000,1040; FF] |
+
+## LOADING
+
+files, saves and DLC
+
+| key | default | notes |
+| --- | --- | --- |
 | `LocalSettingsPath` | `0` | moves your savegames and settings to a saves folder inside the game folder [all; FF] |
 | `NewFilesCompatibility` | `1` | adds some extra code that allows script.img and radiohud from newer versions to work (script.img is still 1060+ only, radiohud works on all versions) [all] |
 | `NewSavesCompatibility` | `1` | makes newer savefiles load properly without needing them to be downgraded first (1060+ only) [all] |
 | `OverrideGTADatPath` | `0` | load gta.dat from another path [all] |
-| `SCOSignatureFix` | `1` | allow loading of any .sco file regardless of which episode it came from (or which platform it came from, in case of patch 4 and below) this is required for trainer IV parachute support to work [all; FF] |
 | `OverrideGTADatPathTo` | `common:/data/gta.dat` | the path to load gta.dat from if the above is enabled [all] |
 
 ## COMPATIBILITY
@@ -135,7 +137,6 @@ other mods, game builds and packaging
 
 | key | default | notes |
 | --- | --- | --- |
-| `AllowHashesForIDE` | `1` | allow entering raw hashes into .ide files if you add "hash:" before the hash (in unsigned decimal) to get around the character limit in .ide entries [all] |
 | `LaunchWithPlayGTAIV` | `1` | ability to use a (non-SecuROM) launcher renamed to PlayGTAIV so you can launch patch 7 or 8 through Steam [1000,1040,1060,1070,1080] |
 | `Patch4RemoveModChecks` | `1` | remove modded file checks from patch 4 to make MP work [all] |
 | `Patch6and7RemoveModChecks` | `1` | remove modded file checks from 1060 and 1070 for compatibility with 1080 players [1060,1070] |
@@ -145,11 +146,17 @@ other mods, game builds and packaging
 | `RemoveRGSCLoginRequirement` | `1` | remove Social Club login requirement so you can play MP even if you skip login on patch 4 and below, or use Play Offline on patch 7 [all] |
 | `SavegameFix` | `1` | remove GFWL savegame CRC check [all] |
 
-## INTERFACE
+## MISC
 
-menu, HUD and audio toggles
+mod support flags and miscellaneous features
 
 | key | default | notes |
 | --- | --- | --- |
-| `PipeBombDropIconSupport` | `1` | use droppipebomb_icon for pipe bomb in base IV [all-1000,1040; FF] |
+| `CopSirensFlag` | `1` | add +siren vehicles.ide flag to cars to make them use sirens [all] |
+| `MovingPlaneParts` | `1` | makes propellers, ailerons, elevators and rudders move on planes that support them [all] |
+| `MovingSteeringWheelSupport` | `1` | make the "steeringwheel" car bone rotate properly if it exists (Example of a car with proper steering wheel setup: https://mega.nz/file/vcAAib6Z#bsbJaseAbdxleRwr1XGL-d_it_P9DyjsPoXP-pnMoq8 ) use the new +wheelangle: vehicles.ide flag to specify an angle the steering wheel should be tilted forward or backwards by (in degrees) while porting a car from V, write the angle down into this flag and set the actual wheel's angle to 0, 0, 0 to make it work properly [all] |
+| `NoLiveryLimit` | `1` | removes the 4 livery limit, allowing up to 255 unique livery textures for any car [all; FF] |
+| `PopupHeadlightsFlag` | `1` | vehicles.ide flag for Hakumai's popup headlights on any car that supports it (+popuplights) [all] |
+| `ShakingEngineBlock` | `1` | make the engineblock part of cars shake like V if they have support for it [all] |
+| `AllowHashesForIDE` | `1` | allow entering raw hashes into .ide files if you add "hash:" before the hash (in unsigned decimal) to get around the character limit in .ide entries [all] |
 | `RestoreDeathMusic` | `1` | restores the unused music on death [all; FF] |

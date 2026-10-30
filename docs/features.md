@@ -265,71 +265,11 @@ fixed standing still animation for bikes during a phone call (patch 5+) [all; FF
 
 - **Default:** `1`
 
-### CopSirensFlag
-
-add +siren vehicles.ide flag to cars to make them use sirens [all]
-
-- **Default:** `1`
-
-### EpisodicVehicleSupport
-
-APC and buzzard support for all episodes [all-1000,1040; FF]
-
-- **Default:** `1`
-
-### EpisodicWeaponSupport
-
-explosive shotgun, stickybomb and DSR1 sniper support for all episodes [all-1000,1040; FF]
-
-- **Default:** `1`
-
 ### HighFPSBikePhysicsFix
 
 fix bikes sliding out easily above 60FPS [all; FF]
 
 - **Default:** `1`
-
-### MovingPlaneParts
-
-makes propellers, ailerons, elevators and rudders move on planes that support them [all]
-
-- **Default:** `1`
-
-### MovingSteeringWheelSupport
-
-make the "steeringwheel" car bone rotate properly if it exists (Example of a car with proper steering wheel setup: https://mega.nz/file/vcAAib6Z#bsbJaseAbdxleRwr1XGL-d_it_P9DyjsPoXP-pnMoq8 ) use the new +wheelangle: vehicles.ide flag to specify an angle the steering wheel should be tilted forward or backwards by (in degrees) while porting a car from V, write the angle down into this flag and set the actual wheel's angle to 0, 0, 0 to make it work properly [all]
-
-- **Default:** `1`
-
-### NoLiveryLimit
-
-removes the 4 livery limit, allowing up to 255 unique livery textures for any car [all; FF]
-
-- **Default:** `1`
-
-### PoliceEpisodicWeaponSupport
-
-makes cops use P90s and assault shotguns - only enable this if those weapons exist, or NOOSE and FIB will spawn unarmed [all-1000,1040; FF]
-
-- **Default:** `0`
-
-### PopupHeadlightsFlag
-
-vehicles.ide flag for Hakumai's popup headlights on any car that supports it (+popuplights) [all]
-
-- **Default:** `1`
-
-### ShakingEngineBlock
-
-make the engineblock part of cars shake like V if they have support for it [all]
-
-- **Default:** `1`
-
-### TBoGTHeliHeightLimit
-
-unlocks the height limit for aircraft to the TBoGT level for all episodes [all-1000,1040; FF]
-
-- **Default:** `0`
 
 ## INPUT
 
@@ -435,15 +375,55 @@ make other players no longer able to use malicious trainers to teleport you [all
 
 - **Default:** `1`
 
-## LOADING
+## EPISODIC
 
-files, saves, DLC and launcher hooks
+episodic (EFLC) content support
+
+### EpisodicVehicleSupport
+
+APC and buzzard support for all episodes [all-1000,1040; FF]
+
+- **Default:** `1`
+
+### EpisodicWeaponSupport
+
+explosive shotgun, stickybomb and DSR1 sniper support for all episodes [all-1000,1040; FF]
+
+- **Default:** `1`
+
+### PoliceEpisodicWeaponSupport
+
+makes cops use P90s and assault shotguns - only enable this if those weapons exist, or NOOSE and FIB will spawn unarmed [all-1000,1040; FF]
+
+- **Default:** `0`
+
+### TBoGTHeliHeightLimit
+
+unlocks the height limit for aircraft to the TBoGT level for all episodes [all-1000,1040; FF]
+
+- **Default:** `0`
 
 ### LoadDLCs
 
 load TBoGT and TLAD in the same folder structure EFLC does it (root folder -> episode's folder) and any more addon episodes in the same format (extra DLC folders should be named Episode3, Episode4, etc. and their ids in setup2.xml be the episode id multiplied by 2) [1060,1070,1080]
 
 - **Default:** `1`
+
+### SCOSignatureFix
+
+allow loading of any .sco file regardless of which episode it came from (or which platform it came from, in case of patch 4 and below) this is required for trainer IV parachute support to work [all; FF]
+
+- **Default:** `1`
+
+### PipeBombDropIconSupport
+
+use droppipebomb_icon for pipe bomb in base IV [all-1000,1040; FF]
+
+- **Default:** `1`
+
+## LOADING
+
+files, saves and DLC
 
 ### LocalSettingsPath
 
@@ -469,12 +449,6 @@ load gta.dat from another path [all]
 
 - **Default:** `0`
 
-### SCOSignatureFix
-
-allow loading of any .sco file regardless of which episode it came from (or which platform it came from, in case of patch 4 and below) this is required for trainer IV parachute support to work [all; FF]
-
-- **Default:** `1`
-
 ### OverrideGTADatPathTo
 
 the path to load gta.dat from if the above is enabled [all]
@@ -484,12 +458,6 @@ the path to load gta.dat from if the above is enabled [all]
 ## COMPATIBILITY
 
 other mods, game builds and packaging
-
-### AllowHashesForIDE
-
-allow entering raw hashes into .ide files if you add "hash:" before the hash (in unsigned decimal) to get around the character limit in .ide entries [all]
-
-- **Default:** `1`
 
 ### LaunchWithPlayGTAIV
 
@@ -539,13 +507,49 @@ remove GFWL savegame CRC check [all]
 
 - **Default:** `1`
 
-## INTERFACE
+## MISC
 
-menu, HUD and audio toggles
+mod support flags and miscellaneous features
 
-### PipeBombDropIconSupport
+### CopSirensFlag
 
-use droppipebomb_icon for pipe bomb in base IV [all-1000,1040; FF]
+add +siren vehicles.ide flag to cars to make them use sirens [all]
+
+- **Default:** `1`
+
+### MovingPlaneParts
+
+makes propellers, ailerons, elevators and rudders move on planes that support them [all]
+
+- **Default:** `1`
+
+### MovingSteeringWheelSupport
+
+make the "steeringwheel" car bone rotate properly if it exists (Example of a car with proper steering wheel setup: https://mega.nz/file/vcAAib6Z#bsbJaseAbdxleRwr1XGL-d_it_P9DyjsPoXP-pnMoq8 ) use the new +wheelangle: vehicles.ide flag to specify an angle the steering wheel should be tilted forward or backwards by (in degrees) while porting a car from V, write the angle down into this flag and set the actual wheel's angle to 0, 0, 0 to make it work properly [all]
+
+- **Default:** `1`
+
+### NoLiveryLimit
+
+removes the 4 livery limit, allowing up to 255 unique livery textures for any car [all; FF]
+
+- **Default:** `1`
+
+### PopupHeadlightsFlag
+
+vehicles.ide flag for Hakumai's popup headlights on any car that supports it (+popuplights) [all]
+
+- **Default:** `1`
+
+### ShakingEngineBlock
+
+make the engineblock part of cars shake like V if they have support for it [all]
+
+- **Default:** `1`
+
+### AllowHashesForIDE
+
+allow entering raw hashes into .ide files if you add "hash:" before the hash (in unsigned decimal) to get around the character limit in .ide entries [all]
 
 - **Default:** `1`
 

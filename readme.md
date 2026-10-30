@@ -70,8 +70,8 @@ it, the ASI ports its values into the grouped file first; no external converter
 is involved.
 
 Options are grouped into `[STABILITY]`, `[PERFORMANCE]`, `[GRAPHICS]`,
-`[VEHICLES]`, `[INPUT]`, `[MULTIPLAYER]`, `[LOADING]`, `[COMPATIBILITY]`
-and `[INTERFACE]`. Each line ends with a compact build tag
+`[VEHICLES]`, `[INPUT]`, `[MULTIPLAYER]`, `[EPISODIC]`, `[LOADING]`,
+`[COMPATIBILITY]` and `[MISC]`. Each line ends with a compact build tag
 (`[all]`, `[1060+]`, ...) and, when applicable, `FF`, meaning the option is
 automatically disabled when a FusionFix ASI is present. See
 [docs/fusionfix.md](docs/fusionfix.md) for the full overlap list. If an FF

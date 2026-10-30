@@ -54,8 +54,8 @@ FusionFix: a `module;` global fragment includes the shared headers, then
 ## Configuration
 
 Options are grouped into `[STABILITY]`, `[PERFORMANCE]`, `[GRAPHICS]`,
-`[VEHICLES]`, `[INPUT]`, `[MULTIPLAYER]`, `[LOADING]`, `[COMPATIBILITY]` and
-`[INTERFACE]`. Keys are unique across sections, so
+`[VEHICLES]`, `[INPUT]`, `[MULTIPLAYER]`, `[EPISODIC]`, `[LOADING]`,
+`[COMPATIBILITY]` and `[MISC]`. Keys are unique across sections, so
 `Config::Option` looks in `[Options]` first (old flat files) and then walks the
 grouped sections.
 

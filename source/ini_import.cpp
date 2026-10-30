@@ -24,8 +24,8 @@ namespace opp
 
         constexpr const char* kSections[] = {
             "Options",      "STABILITY", "PERFORMANCE", "GRAPHICS",
-            "VEHICLES",     "INPUT",       "MULTIPLAYER", "LOADING",   "COMPATIBILITY",
-            "XLIVELESS",    "INTERFACE",   "DEBUG",
+            "VEHICLES",     "INPUT",       "MULTIPLAYER", "EPISODIC", "LOADING",
+            "COMPATIBILITY", "MISC",       "XLIVELESS",   "INTERFACE", "DEBUG",
         };
 
         constexpr const char* kXlivelessKeys[] = {

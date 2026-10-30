@@ -1483,24 +1483,49 @@
     },
     "section:COMPATIBILITY": {
       "arms": {
-        "InstallAllowHashesForIDE": 5,
         "InstallPatch4RemoveModChecks": 5,
         "InstallRemoveRGSCLoginRequirement": 5,
         "InstallSavegameFix": 42
       },
       "delta_arms": {
-        "InstallAllowHashesForIDE": 5,
         "InstallPatch4RemoveModChecks": 5,
         "InstallRemoveRGSCLoginRequirement": 5,
         "InstallSavegameFix": 42
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_COMPATIBILITY.txt",
-      "delta_sha256": "a0ec8d99ecfa8abe028f61481c22307036c8c24ae60e34d4284299ddad2b9c24",
-      "delta_writes": 57,
+      "delta_sha256": "3d7bcf108f0b1af66b5f30f722cd464223c490dbf52d1dfea70337c80a2b1dca",
+      "delta_writes": 52,
       "file": "writesets/section_COMPATIBILITY.txt",
-      "sha256": "2806fd1eab11894bf3bbd998b9d23a1eed4e489f62cdf9124e35e5c8524cc413",
-      "writes": 57
+      "sha256": "c9352906958afc9ece256fd1582b0658f3dddb13a31398a7d878cd1eb046a8a4",
+      "writes": 52
+    },
+    "section:EPISODIC": {
+      "arms": {
+        "InstallEpisodicVehicleSupport": 194,
+        "InstallEpisodicWeaponSupport": 31,
+        "InstallLoadDLCs": 33,
+        "InstallPipeBombDropIconSupport": 9,
+        "InstallPoliceEpisodicWeaponSupport": 2,
+        "InstallSCOSignatureFix": 1,
+        "InstallTBoGTHeliHeightLimit": 2
+      },
+      "delta_arms": {
+        "InstallEpisodicVehicleSupport": 194,
+        "InstallEpisodicWeaponSupport": 31,
+        "InstallLoadDLCs": 33,
+        "InstallPipeBombDropIconSupport": 9,
+        "InstallPoliceEpisodicWeaponSupport": 2,
+        "InstallSCOSignatureFix": 1,
+        "InstallTBoGTHeliHeightLimit": 2
+      },
+      "delta_base": "all-off",
+      "delta_file": "deltas/section_EPISODIC.txt",
+      "delta_sha256": "7e8b856690c23cd3fe6ef1a90af80450cbe5dce6d57e54bc320c7ff314b1cdb2",
+      "delta_writes": 272,
+      "file": "writesets/section_EPISODIC.txt",
+      "sha256": "fa33606eee7346d85a1f811968fead8cbdb79d0ccc02a107100dfc65b1d66d44",
+      "writes": 272
     },
     "section:GRAPHICS": {
       "arms": {
@@ -1566,47 +1591,51 @@
       "sha256": "e0aeb7cf1c32ef02026dccca69bef7b0699794cd982907436122d76acd23977d",
       "writes": 58
     },
-    "section:INTERFACE": {
-      "arms": {
-        "InstallPipeBombDropIconSupport": 9,
-        "InstallRestoreDeathMusic": 12
-      },
-      "delta_arms": {
-        "InstallPipeBombDropIconSupport": 9,
-        "InstallRestoreDeathMusic": 12
-      },
-      "delta_base": "all-off",
-      "delta_file": "deltas/section_INTERFACE.txt",
-      "delta_sha256": "4486bbeb3e22728f996a377dfb264dd39a502d41781b0ce379150e2246f54abe",
-      "delta_writes": 21,
-      "file": "writesets/section_INTERFACE.txt",
-      "sha256": "98a2c755ec0ebfaa0b734bd0799129663a785483eb9c533e7bd97a9e9141ec2d",
-      "writes": 21
-    },
     "section:LOADING": {
       "arms": {
-        "InstallLoadDLCs": 33,
         "InstallLocalSettingsPath": 13,
         "InstallNewFilesCompatibility": 13,
         "InstallNewSavesCompatibility": 5,
-        "InstallOverrideGTADatPath": 4,
-        "InstallSCOSignatureFix": 1
+        "InstallOverrideGTADatPath": 4
       },
       "delta_arms": {
-        "InstallLoadDLCs": 33,
         "InstallLocalSettingsPath": 13,
         "InstallNewFilesCompatibility": 13,
         "InstallNewSavesCompatibility": 5,
-        "InstallOverrideGTADatPath": 4,
-        "InstallSCOSignatureFix": 1
+        "InstallOverrideGTADatPath": 4
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_LOADING.txt",
-      "delta_sha256": "aed332e37186080fd1ac346f4a01e8d81f74c03d5097b2d542a2add008d8121e",
-      "delta_writes": 69,
+      "delta_sha256": "51713bdd9872d1b71e8e473987879faef3cc7d4996195af5953707698f3e578d",
+      "delta_writes": 35,
       "file": "writesets/section_LOADING.txt",
-      "sha256": "66badd93c2667fceb78e1f7c43a417813041f797b03d2a77ddf151d83522f75d",
-      "writes": 69
+      "sha256": "987a9e96500d43b259c9bccd5923563fd4fd66ba21691deff1eac07483b73bbf",
+      "writes": 35
+    },
+    "section:MISC": {
+      "arms": {
+        "InstallAllowHashesForIDE": 5,
+        "InstallCopSirensFlag": 15,
+        "InstallMovingSteeringWheelSupport": 5,
+        "InstallNoLiveryLimit": 20,
+        "InstallPopupHeadlightsFlag": 10,
+        "InstallRestoreDeathMusic": 12
+      },
+      "delta_arms": {
+        "InstallAllowHashesForIDE": 5,
+        "InstallCopSirensFlag": 15,
+        "InstallMovingSteeringWheelSupport": 5,
+        "InstallNoLiveryLimit": 20,
+        "InstallPopupHeadlightsFlag": 10,
+        "InstallRestoreDeathMusic": 12
+      },
+      "delta_base": "all-off",
+      "delta_file": "deltas/section_MISC.txt",
+      "delta_sha256": "2c8e03ad6a4a4071d77b959bf945753f61c982a690650a2c2edc7f02a0d02688",
+      "delta_writes": 67,
+      "file": "writesets/section_MISC.txt",
+      "sha256": "0a0889643a85181c65363d66906c169b79663d3286b102b3be27be1f5b81a90c",
+      "writes": 67
     },
     "section:MULTIPLAYER": {
       "arms": {
@@ -1719,36 +1748,20 @@
       "arms": {
         "InstallBikeFeetFix": 12,
         "InstallBikePhoneAnimsFix": 6,
-        "InstallCopSirensFlag": 15,
-        "InstallEpisodicVehicleSupport": 194,
-        "InstallEpisodicWeaponSupport": 31,
-        "InstallHighFPSBikePhysicsFix": 5,
-        "InstallMovingSteeringWheelSupport": 5,
-        "InstallNoLiveryLimit": 20,
-        "InstallPoliceEpisodicWeaponSupport": 2,
-        "InstallPopupHeadlightsFlag": 10,
-        "InstallTBoGTHeliHeightLimit": 2
+        "InstallHighFPSBikePhysicsFix": 5
       },
       "delta_arms": {
         "InstallBikeFeetFix": 12,
         "InstallBikePhoneAnimsFix": 6,
-        "InstallCopSirensFlag": 15,
-        "InstallEpisodicVehicleSupport": 194,
-        "InstallEpisodicWeaponSupport": 31,
-        "InstallHighFPSBikePhysicsFix": 5,
-        "InstallMovingSteeringWheelSupport": 5,
-        "InstallNoLiveryLimit": 20,
-        "InstallPoliceEpisodicWeaponSupport": 2,
-        "InstallPopupHeadlightsFlag": 10,
-        "InstallTBoGTHeliHeightLimit": 2
+        "InstallHighFPSBikePhysicsFix": 5
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_VEHICLES.txt",
-      "delta_sha256": "6229920130235b5e3cafedca9ff6c9e1d6708884f649989476a266f2c8625d1f",
-      "delta_writes": 302,
+      "delta_sha256": "c5da58934aefbb1c99876ff73bf3f047eff299c473c1b979226eaa8f42428d64",
+      "delta_writes": 23,
       "file": "writesets/section_VEHICLES.txt",
-      "sha256": "96a52ea1f127e9373bebd0bb5751baf7039436d09f457a47c3598cda32bedef4",
-      "writes": 302
+      "sha256": "c12c0917a4f590011cac716a44bf93fced71e22fadf83d48a4ace62f82e18ae7",
+      "writes": 23
     }
   },
   "game": {
@@ -1758,5 +1771,5 @@
   },
   "generated_by": "tools/opcep_matrix.py",
   "schema": 1,
-  "template_sha256": "2cb9cb9336ffa13f4bb7178ef69cfb7bd7a698c2a8aa1a98210f1793a62f293b"
+  "template_sha256": "3a48c94d4b606fb33e005b3a769ee33c840c7b434986adb0413a9bb00347cea0"
 }

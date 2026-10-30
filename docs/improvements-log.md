@@ -397,4 +397,34 @@ four-byte NoPhysicsSleep write), legacy 814 -> 810, all-on 12,700 -> 873
 `gen_ini_template.py --check` PASS; `opcep_dump` rebuild + matrix `--update`
 then `--check` PASS.
 
+## 2026-10-30 - INI categories: EPISODIC and MISC
+
+`[INTERFACE]` is abandoned. Two new sections group the content/mod-support
+options:
+
+- `[EPISODIC]`: `LoadDLCs`, `EpisodicVehicleSupport`, `EpisodicWeaponSupport`,
+  `PoliceEpisodicWeaponSupport`, `TBoGTHeliHeightLimit`, `SCOSignatureFix`,
+  `PipeBombDropIconSupport`.
+- `[MISC]`: `AllowHashesForIDE`, `CopSirensFlag`, `MovingPlaneParts`,
+  `MovingSteeringWheelSupport`, `NoLiveryLimit`, `PopupHeadlightsFlag`,
+  `ShakingEngineBlock`, `RestoreDeathMusic`.
+
+`Config::Option` and the legacy INI importer still accept the old `[INTERFACE]`
+(and `[MAIN]`/`[XLIVELESS]`) section names, so a hand-edited or old grouped file
+keeps working. Generated `docs/features.md`/`docs/ini.md` now show 12 sections.
+
+Matrix: 98 -> 99 cells (two new section cells, `section:INTERFACE` removed).
+Defaults/all-on/legacy are unchanged (same keys and values). Section deltas:
+`section:VEHICLES` 302 -> 23, `section:LOADING` 69 -> 35,
+`section:COMPATIBILITY` 57 -> 52, new `section:EPISODIC` 272 and
+`section:MISC` 67.
+
+`XLivelessAddon.ini` now uses the original flat `[Options]` style
+(`;` comment, `Key=Value`, no aligned spaces); the embedded first-run template
+(`kDefaultIni`) is byte-for-byte the same content, so recreating a missing INI
+no longer produces different defaults from the shipped one (it previously set
+SkipWebConnect/SkipIntro/SkipMenu/DoNotPause/Borderless to 0 while the shipped
+file set them to 1).
+
+
 
