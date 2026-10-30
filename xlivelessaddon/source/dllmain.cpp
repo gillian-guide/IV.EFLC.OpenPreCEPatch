@@ -1,9 +1,11 @@
 #include <windows.h>
+#include <Shlobj.h>
 #include <stdint.h>
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <initializer_list>
 #include <string>
@@ -292,16 +294,12 @@ LSTATUS WINAPI CustomRegQueryValueExA(HKEY hKey, LPCSTR lpValueName, LPDWORD lpR
 }
 
 static const char kDefaultIni[] =
-    "; XLivelessAddon successor\n"
-    ";\n"
-    "; Flat [Options] layout, the same style as ZolikaPatch.ini. A key that is absent\n"
-    "; uses its default; a value must be non-zero to enable it. An old\n"
-    "; ZolikaPatch.ini next to this file is used as a fallback for missing keys.\n"
+    "; XLivelessAddon\n"
     "\n"
     "[Options]\n"
-    "; custom savegames folder; leave empty to use the game default\n"
+    "; custom savegames folder; leave empty to use the game default (FusionFix userdata.ixx owns this when present)\n"
     "CustomSavePath=\n"
-    "; custom settings folder; leave empty to use the game default\n"
+    "; custom settings folder; leave empty to use the game default (FusionFix userdata.ixx owns this when present)\n"
     "CustomSettingsPath=\n"
     "; skip the launcher/DRM checks (recovered DFA and ROM stages)\n"
     "SkipLauncher=1\n"
@@ -309,19 +307,19 @@ static const char kDefaultIni[] =
     "RemoveRegistryPathDependency=1\n"
     "; skip the GFWL web-connect and health checks\n"
     "SkipWebConnect=1\n"
-    "; shorten the intro screens to 300 ms\n"
+    "; shorten the intro screens to 300 ms (FusionFix skipintro.ixx owns this when present)\n"
     "SkipIntro=1\n"
-    "; skip the main menu (hold SHIFT on startup to reach it)\n"
-    "SkipMenu=1\n"
-    "; keep rendering while the borderless window is unfocused\n"
+    "; skip the main menu (hold SHIFT on startup to reach it) (FusionFix skipintro.ixx owns this when present)\n"
+    "SkipMenu=0\n"
+    "; keep rendering while the borderless window is unfocused (FusionFix windowed.ixx owns this when present)\n"
     "DoNotPauseOnMinimize=1\n"
-    "; borderless window\n"
+    "; borderless window (FusionFix windowed.ixx owns this when present)\n"
     "BorderlessWindowed=1\n"
-    "; fix the VRAM detection so the settings are not locked out\n"
+    "; fix the VRAM detection so the settings are not locked out (FusionFix memory.ixx owns this when present)\n"
     "VRAMFix=1\n"
-    "\n"
-    "; Report issues in this topic:\n"
-    "; https://gtaforums.com/topic/388658-relgtaiv-xliveless/#comments\n";
+    "; move savegames and settings to a saves folder inside the game folder (FusionFix userdata.ixx owns this when present)\n"
+    "LocalSettingsPath=0\n"
+;
 
 static void XLog(const char* format, ...)
 {
@@ -380,8 +378,8 @@ static std::string ReadOption(CIniReader& own, CIniReader* legacy, const char* k
 {
     static constexpr const char* kSections[] = {
         "MAIN", "Options", "COMPATIBILITY", "INPUT", "LOADING", "XLIVELESS",
-        "STABILITY", "PERFORMANCE", "GRAPHICS", "VEHICLES", "MULTIPLAYER",
-        "INTERFACE",
+        "STABILITY", "FIXES", "PERFORMANCE", "GRAPHICS", "VEHICLES", "MULTIPLAYER",
+        "EPISODIC", "MISC", "INTERFACE",
     };
     std::string value;
     for (const char* section : kSections)
@@ -410,6 +408,127 @@ static bool FusionFixPresent()
         return false;
     FindClose(find);
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// LocalSettingsPath, implemented the FusionFix way (userdata.ixx): redirect the
+// shell user-data folders (CSIDL_APPDATA/PERSONAL/...) to <game>\saves instead
+// of rewriting the game's path buffers. One hook covers saves and settings.
+// ---------------------------------------------------------------------------
+
+static std::string g_localProfilePath;
+static std::wstring g_localProfilePathW;
+
+using ShGetFolderPathAFn = HRESULT(WINAPI*)(HWND, int, HANDLE, DWORD, LPSTR);
+using ShGetFolderPathWFn = HRESULT(WINAPI*)(HWND, int, HANDLE, DWORD, LPWSTR);
+static ShGetFolderPathAFn g_shellFolderA = nullptr;
+static ShGetFolderPathWFn g_shellFolderW = nullptr;
+
+static bool RedirectUserFolder(int csidl) noexcept
+{
+    switch (csidl)
+    {
+    case CSIDL_APPDATA:
+    case CSIDL_COMMON_APPDATA:
+    case CSIDL_COMMON_DOCUMENTS:
+    case CSIDL_LOCAL_APPDATA:
+    case CSIDL_PERSONAL:
+        return true;
+    default:
+        return false;
+    }
+}
+
+HRESULT WINAPI ShellFolderPathA(HWND hwnd, int csidl, HANDLE token, DWORD flags, LPSTR path)
+{
+    if (RedirectUserFolder(csidl))
+    {
+        if (path == nullptr) return E_INVALIDARG;
+        return strncpy_s(path, MAX_PATH, g_localProfilePath.c_str(), _TRUNCATE) == 0
+                   ? S_OK
+                   : E_FAIL;
+    }
+    return g_shellFolderA ? g_shellFolderA(hwnd, csidl, token, flags, path) : E_FAIL;
+}
+
+HRESULT WINAPI ShellFolderPathW(HWND hwnd, int csidl, HANDLE token, DWORD flags, LPWSTR path)
+{
+    if (RedirectUserFolder(csidl))
+    {
+        if (path == nullptr) return E_INVALIDARG;
+        return wcsncpy_s(path, MAX_PATH, g_localProfilePathW.c_str(), _TRUNCATE) == 0
+                   ? S_OK
+                   : E_FAIL;
+    }
+    return g_shellFolderW ? g_shellFolderW(hwnd, csidl, token, flags, path) : E_FAIL;
+}
+
+// Replaces one shell32 IAT slot in the game module and hands back the original.
+static bool ReplaceShellImport(const char* function, void* replacement, void** original)
+{
+    HMODULE module = GetModuleHandleA(nullptr);
+    if (module == nullptr || function == nullptr || replacement == nullptr) return false;
+    auto* base = reinterpret_cast<uint8_t*>(module);
+    auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
+    auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
+    const auto& directory =
+        nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    if (directory.VirtualAddress == 0) return false;
+
+    auto* descriptor = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(
+        base + directory.VirtualAddress);
+    for (; descriptor->Name != 0; ++descriptor)
+    {
+        const char* dll = reinterpret_cast<const char*>(base + descriptor->Name);
+        if (_stricmp(dll, "SHELL32.DLL") != 0) continue;
+        auto* thunk = reinterpret_cast<IMAGE_THUNK_DATA*>(
+            base + (descriptor->OriginalFirstThunk ? descriptor->OriginalFirstThunk
+                                                   : descriptor->FirstThunk));
+        auto* iat = reinterpret_cast<IMAGE_THUNK_DATA*>(base + descriptor->FirstThunk);
+        for (; thunk->u1.AddressOfData != 0; ++thunk, ++iat)
+        {
+            if (IMAGE_SNAP_BY_ORDINAL(thunk->u1.Ordinal)) continue;
+            const auto* import = reinterpret_cast<const IMAGE_IMPORT_BY_NAME*>(
+                base + thunk->u1.AddressOfData);
+            if (std::strcmp(reinterpret_cast<const char*>(import->Name), function) != 0)
+                continue;
+
+            DWORD oldProtect = 0;
+            if (!VirtualProtect(&iat->u1.Function, sizeof(void*), PAGE_READWRITE, &oldProtect))
+                return false;
+            *original = reinterpret_cast<void*>(iat->u1.Function);
+            iat->u1.Function = reinterpret_cast<ULONG_PTR>(replacement);
+            DWORD ignored = 0;
+            VirtualProtect(&iat->u1.Function, sizeof(void*), oldProtect, &ignored);
+            return true;
+        }
+    }
+    return false;
+}
+
+static void InstallLocalSettingsPath()
+{
+    std::filesystem::path directory =
+        std::filesystem::path(ModuleDirectory()) / "saves";
+    std::error_code error;
+    std::filesystem::create_directories(directory, error);
+    if (!std::filesystem::exists(directory))
+    {
+        XLog("localSettings: cannot create %s", directory.string().c_str());
+        return;
+    }
+
+    g_localProfilePath = directory.string();
+    g_localProfilePathW = directory.wstring();
+
+    const bool ansi = ReplaceShellImport("SHGetFolderPathA", reinterpret_cast<void*>(&ShellFolderPathA),
+                                         reinterpret_cast<void**>(&g_shellFolderA));
+    const bool wide = ReplaceShellImport("SHGetFolderPathW", reinterpret_cast<void*>(&ShellFolderPathW),
+                                         reinterpret_cast<void**>(&g_shellFolderW));
+    XLog("localSettings: profile=%s (A=%d W=%d)", g_localProfilePath.c_str(), ansi ? 1 : 0,
+         wide ? 1 : 0);
 }
 
 DWORD WINAPI Init(LPVOID)
@@ -468,15 +587,47 @@ DWORD WINAPI Init(LPVOID)
     bool bBorderlessWindowed = flag("BorderlessWindowed", "0");
     bool bVRAMFix = flag("VRAMFix", "1");
     bool bSkipLauncher = flag("SkipLauncher", "1");
+    bool bLocalSettingsPath = flag("LocalSettingsPath", "0");
 
-    // Never stack on FusionFix: it owns the intro/window/VRAM subsystems.
+    // Never stack on FusionFix. Each overlapping fork feature is gated by the
+    // FusionFix module that owns the same subsystem; the log names every gate so
+    // a live run shows why an option did nothing.
     if (FusionFixPresent())
     {
-        bSkipIntro = false;
-        bSkipMenu = false;
-        bDoNotPauseOnMinimize = false;
-        bBorderlessWindowed = false;
-        bVRAMFix = false;
+        struct ForkGate
+        {
+            const char* option;
+            bool* enabled;
+            const char* fusionFixModule;
+        };
+        ForkGate gates[] = {
+            {"SkipIntro", &bSkipIntro, "skipintro.ixx"},
+            {"SkipMenu", &bSkipMenu, "skipintro.ixx"},
+            {"BorderlessWindowed", &bBorderlessWindowed, "windowed.ixx"},
+            {"DoNotPauseOnMinimize", &bDoNotPauseOnMinimize, "windowed.ixx"},
+            {"VRAMFix", &bVRAMFix, "memory.ixx"},
+            {"LocalSettingsPath", &bLocalSettingsPath, "userdata.ixx"},
+        };
+        for (const ForkGate& gate : gates)
+        {
+            if (!*gate.enabled)
+                continue;
+            *gate.enabled = false;
+            XLog("fusionfix: gating %s (FusionFix %s)", gate.option, gate.fusionFixModule);
+        }
+
+        // The custom path hooks overlap FusionFix's CustomUserProfilePath
+        // redirect even when the key is set to a value.
+        if (!szCustomSavePath.empty())
+        {
+            XLog("fusionfix: gating CustomSavePath (FusionFix userdata.ixx)");
+            szCustomSavePath.clear();
+        }
+        if (!szCustomSettingsPath.empty())
+        {
+            XLog("fusionfix: gating CustomSettingsPath (FusionFix userdata.ixx)");
+            szCustomSettingsPath.clear();
+        }
     }
     XLog("ini=%s legacy=%s skipLauncher=%d skipIntro=%d skipMenu=%d dontPause=%d borderless=%d vram=%d skipWeb=%d registry=%d fusionfix=%d", iniPath.c_str(), legacyPath.c_str(), bSkipLauncher, bSkipIntro, bSkipMenu, bDoNotPauseOnMinimize, bBorderlessWindowed, bVRAMFix, bSkipWebConnect, bRemoveRegistryPathDependency, FusionFixPresent());
 
@@ -573,6 +724,11 @@ DWORD WINAPI Init(LPVOID)
 
         return true;
     };
+
+    // LocalSettingsPath owns the shell user-data folders; install it before the
+    // game can query them.
+    if (bLocalSettingsPath)
+        InstallLocalSettingsPath();
 
     // savegames [v1000 - v1008]
     {

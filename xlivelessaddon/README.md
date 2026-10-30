@@ -39,7 +39,6 @@ sites were found, the VRAM hook count, the ADVAPI32 IAT replacement count and
 `legacyRom`.
 
 Direct hardening (the fork is not bound to the reconstruction's 1:1 faults):
-
 - an unrecognised build logs and installs nothing, like the main module;
 - the delayed-init probe sleeps between scans and gives up after 10 s instead of
   spinning a core;
@@ -52,6 +51,30 @@ Direct hardening (the fork is not bound to the reconstruction's 1:1 faults):
   `SkipLauncher = 0`, so the recovered ROM stage is the sole owner under the
   shipped default (`legacyRom=0`); the import-descriptor count no longer
   underflows on an empty import directory.
+
+## LocalSettingsPath
+
+Moved here from the main module. It uses the FusionFix `userdata.ixx` approach
+instead of rewriting the game's path buffers: it redirects
+`SHGetFolderPathA/W` in the game's shell32 import table to `<game>\saves` for
+`CSIDL_APPDATA`/`CSIDL_PERSONAL`/`CSIDL_COMMON_*`/`CSIDL_LOCAL_APPDATA`, so the
+game stores both saves and settings there. The hook preserves the original
+function for every other CSIDL.
+
+## FusionFix gating
+
+Each overlapping fork feature is gated by the FusionFix module that owns the
+same subsystem, and every gate is logged:
+
+| fork feature | FusionFix module |
+| --- | --- |
+| `SkipIntro`, `SkipMenu` | `skipintro.ixx` |
+| `BorderlessWindowed`, `DoNotPauseOnMinimize` | `windowed.ixx` |
+| `VRAMFix` | `memory.ixx` |
+| `LocalSettingsPath`, `CustomSavePath`, `CustomSettingsPath` | `userdata.ixx` |
+
+The launcher/DFA/ROM and registry paths have no FusionFix equivalent and remain
+active.
 
 ## Tests
 
