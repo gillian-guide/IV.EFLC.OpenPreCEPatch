@@ -276,7 +276,15 @@ namespace
         CHECK(opp::ParseImprovements("SkipIntro") == skipintro);
         CHECK(opp::ParseImprovements(" only: newsaves ; ooc ") == (newsaves | ooc));
         CHECK(opp::ParseImprovements("only:") == 0);
-        CHECK(opp::ParseImprovements("except:") == all);
+        CHECK(opp::ParseImprovements("except:" ) == all);
+        constexpr uint32_t entry = opp::Improve(opp::Improvement::garage_entry) |
+                                 opp::Improve(opp::Improvement::cutscene_entry) |
+                                 opp::Improve(opp::Improvement::nms_thunk) |
+                                 opp::Improve(opp::Improvement::alpha_nop);
+        CHECK(opp::ParseImprovements("entry") == entry);
+        CHECK(opp::ParseImprovements("all,cutscene_entry") ==
+              (all | opp::Improve(opp::Improvement::cutscene_entry)));
+        CHECK((opp::ParseImprovements("all") & entry) == 0u);
 
 #if defined(OPCEP_PARITY_BASELINE)
         CHECK(opp::EnabledImprovements() == 0);

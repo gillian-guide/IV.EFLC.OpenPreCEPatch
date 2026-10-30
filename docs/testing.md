@@ -94,12 +94,13 @@ never installs them; they exist to be A/B tested and promoted later:
 | `nms_thunk` | `NewMemorySystem` from the allocator-ctor call rewrite + `atexit` skip to one hook at the static-init thunk 0xD56060: the game's own allocator construction and its `atexit` registration run, then the reimplemented vtable is stored. This restores the game's ~100 MiB simple-allocator block, so it changes memory behaviour and must not be promoted without a live test |
 | `alpha_nop` | `BuildingAlphaFix` site 2 NOPs only the six-byte `jnz` (0x559CDA) instead of the 13-byte `test` + `jnz`, so the flags the `test` sets stay live for the following code |
 
-Run one with `OPCEP_IMPROVEMENTS=only:<group>` (or `all,<group>` is not a thing:
-`all` does not include these bits, so use `only:` lists that name every group you
-want, or `except:` on the folded ones plus an explicit `only:` run for the
-comparison). The default `opcep_matrix.py --check` must stay green with every
-opt-in group off; the delta for a group is attributed with
-`--env OPCEP_IMPROVEMENTS=only:<group>`.
+Run one with `OPCEP_IMPROVEMENTS=only:<group>`. Because `all` excludes the
+opt-in bits, a list may name `all` to mean the folded groups:
+`OPCEP_IMPROVEMENTS=all,cutscene_entry` keeps every folded improvement (including
+the failsafes) on and adds one entry-point rewrite. `entry` expands to all four
+opt-in rewrites at once, so `all,entry` is the full A/B. The default
+`opcep_matrix.py --check` must stay green with every opt-in group off; the delta
+for a group is attributed with `--env OPCEP_IMPROVEMENTS=all,<group>`.
 
 ## Build applicability
 

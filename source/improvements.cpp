@@ -83,6 +83,17 @@ namespace opp
 
         uint32_t NamedGroup(std::string_view name) noexcept
         {
+            // `all` inside a list means the folded groups, so
+            // `all,cutscene_entry` keeps the folded improvements on. `entry`
+            // expands to every opt-in entry-point rewrite, so one word covers
+            // their A/B run.
+            if (EqualsIgnoreCase(name, "all"))
+                return Improve(Improvement::all);
+            if (EqualsIgnoreCase(name, "entry") || EqualsIgnoreCase(name, "entries"))
+                return Improve(Improvement::garage_entry) |
+                       Improve(Improvement::cutscene_entry) |
+                       Improve(Improvement::nms_thunk) |
+                       Improve(Improvement::alpha_nop);
             for (const ImprovementNameEntry& entry : kNames)
             {
                 if (EqualsIgnoreCase(name, entry.alias))
