@@ -78,6 +78,10 @@ namespace opp
         // preamble pointer or published lookup is missing continues with the
         // value the game would have had without the fix instead of faulting.
         zpatch_opt_failsafe = has(Improvement::failsafe) ? 1u : 0u;
+        // Opt-in entry-point rewrite: GarageModelFix's site A moves from the
+        // mid-body anchor to the function prologue (the write set changes, so
+        // it is never part of `all`).
+        zpatch_opt_garage_entry = has(Improvement::garage_entry) ? 1u : 0u;
 
         for (const Feature& feature : RegisteredFeatures())
         {

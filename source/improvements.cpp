@@ -47,6 +47,15 @@ namespace opp
             {"failsafes", Improvement::failsafe},
             {"guards", Improvement::failsafe},
             {"null", Improvement::failsafe},
+            {"garage", Improvement::garage_entry},
+            {"garageentry", Improvement::garage_entry},
+            {"garage-entry", Improvement::garage_entry},
+            {"garage_entry", Improvement::garage_entry},
+            // The canonical group names use underscores; accept them too so the
+            // names printed by ImprovementName() are always parseable.
+            {"new_saves", Improvement::new_saves},
+            {"model_index", Improvement::model_index},
+            {"skip_intro", Improvement::skip_intro},
         };
 
         bool EqualsIgnoreCase(std::string_view left, std::string_view right) noexcept

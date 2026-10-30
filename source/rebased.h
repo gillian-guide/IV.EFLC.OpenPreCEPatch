@@ -304,6 +304,11 @@ extern "C" uint32_t zpatch_spawns_getmodulehandlew;
 // GarageModelFix: the two resume slots its bodies tail-jump through.
 extern "C" uint32_t zpatch_garage_resume_a;  // dword_10159CD4 (match+6)
 extern "C" uint32_t zpatch_garage_resume_b;  // dword_10159CD0 (match+5)
+// Opt-in prologue form of site A (garage_entry): the resume after the 8-byte
+// `movss xmm0, ds:X` at the function entry, and the float that instruction
+// loads (published from the site's own operand).
+extern "C" uint32_t zpatch_garage_entry_resume_a;
+extern "C" float zpatch_garage_scale;
 // MovingSteeringWheelSupport / ShakingEngineBlock / MovingPlaneParts: the cached
 // vehicle, the published call target/resume, the engine state and three flags.
 extern "C" uint32_t zpatch_steer_vehicle;     // dword_1015AD38
@@ -401,3 +406,4 @@ extern "C" uint8_t zpatch_opt_skip_intro_screens;  // SkipIntro
 extern "C" uint8_t zpatch_opt_trace_arms;          // trace group (test switch)
 extern "C" uint8_t zpatch_opt_windowed;            // Borderless / DoNotPause
 extern "C" uint8_t zpatch_opt_failsafe;            // runtime-pointer failsafes
+extern "C" uint8_t zpatch_opt_garage_entry;        // GarageModelFix prologue form

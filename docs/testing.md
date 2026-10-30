@@ -84,6 +84,20 @@ set OPCEP_IMPROVEMENTS=except:trace
 XLivelessAddon with the options themselves. `except:failsafe` restores the
 original null-dereference faults in the bodies for a fault-parity run.
 
+Opt-in entry-point rewrites are separate bits **outside** `all`, so a default run
+never installs them; they exist to be A/B tested and promoted later:
+
+| group | what it moves |
+| --- | --- |
+| `garage_entry` | `GarageModelFix` site A from the mid-body anchor (0x868BB0) to the function prologue (0x868B90), reusing the store body and reloading the `xmm0` the prologue instruction sets |
+
+Run one with `OPCEP_IMPROVEMENTS=only:<group>` (or `all,<group>` is not a thing:
+`all` does not include these bits, so use `only:` lists that name every group you
+want, or `except:` on the folded ones plus an explicit `only:` run for the
+comparison). The default `opcep_matrix.py --check` must stay green with every
+opt-in group off; the delta for a group is attributed with
+`--env OPCEP_IMPROVEMENTS=only:<group>`.
+
 ## Build applicability
 
 `tools/gen_version_matrix.py` renders `docs/version-matrix.md` from

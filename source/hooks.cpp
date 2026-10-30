@@ -2212,6 +2212,34 @@ __declspec(naked) void abi_garage_body_a()
         __emit 0CCh   // body delimiter for verify_hook_bodies (unreachable after jmp)
     }
 }
+// Opt-in prologue form of body A (garage_entry, installed at game 0xC68B90):
+// the function entry is the mid-body site minus 0x20 and starts with an 8-byte
+// `movss xmm0, ds:X`. The hook skips that instruction, runs the same store
+// helper with the prologue's own arguments (ECX=this/object, [esp+4]=vehicle),
+// restores every GPR, reloads xmm0 and resumes after the instruction (+8). The
+// prologue's ECX/arg0 are the object/vehicle the mid-body site reads from
+// ESI/EDI, so the store sees the same pair; the store writes object+0x13/+0x40/
+// +0x41/+0x46, which the copier that follows never touches.
+__declspec(naked) void abi_garage_entry_a()
+{
+    __asm {
+        pushad
+        mov  ecx, dword ptr [esp + 18h]   // ECX at entry = this (object)
+        mov  edx, dword ptr [esp + 24h]   // [esp+4] at entry = vehicle
+        call zpatch_garage_store_model
+        popad
+        push eax
+        mov  eax, OFFSET zpatch_garage_scale
+        __emit 0F3h
+        __emit 00Fh
+        __emit 010h
+        __emit 000h                       // movss xmm0, DWORD PTR [eax]
+        pop  eax
+        jmp  dword ptr [zpatch_garage_entry_resume_a]
+        __emit 0CCh   // body delimiter for verify_hook_bodies (unreachable)
+    }
+}
+
 // @exact 0x10046CA0 GarageModelFix body B (installed at game 0x9659C3): pushad;
 // call the lookup helper (object in ECX); popad; replay
 // movzx ecx,[esi]; push eax; push ecx; tail-jump to the resume (match+5).
@@ -5693,6 +5721,7 @@ extern "C" void* AbiByName(const char* name) noexcept
     {"abi_freeze_gun_shim", reinterpret_cast<void(*)()>(&abi_freeze_gun_shim)},
     {"abi_game_hash", reinterpret_cast<void(*)()>(&abi_game_hash)},
     {"abi_garage_body_a", reinterpret_cast<void(*)()>(&abi_garage_body_a)},
+    {"abi_garage_entry_a", reinterpret_cast<void(*)()>(&abi_garage_entry_a)},
     {"abi_garage_body_b", reinterpret_cast<void(*)()>(&abi_garage_body_b)},
     {"abi_gfwl_patch", reinterpret_cast<void(*)()>(&abi_gfwl_patch)},
     {"abi_gfwl_stub", reinterpret_cast<void(*)()>(&abi_gfwl_stub)},

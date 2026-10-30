@@ -182,6 +182,7 @@ extern "C"
     uint8_t zpatch_opt_trace_arms = 0u;
     uint8_t zpatch_opt_windowed = 0u;
     uint8_t zpatch_opt_failsafe = 0u;
+    uint8_t zpatch_opt_garage_entry = 0u;
     // RestoreDeathMusic's lazily resolved site.
     uint32_t zpatch_death_music_site = 0;
     // NewSavesCompatibility's element counter.
@@ -258,6 +259,8 @@ extern "C"
     uint32_t zpatch_spawns_getmodulehandlew = 0;
     uint32_t zpatch_garage_resume_a = 0;
     uint32_t zpatch_garage_resume_b = 0;
+    uint32_t zpatch_garage_entry_resume_a = 0;
+    float zpatch_garage_scale = 0.0f;
     uint32_t zpatch_steer_vehicle = 0;
     uint32_t zpatch_steer_resume = 0;
     uint32_t zpatch_steer_vtable_fn = 0;

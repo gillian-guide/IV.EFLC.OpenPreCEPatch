@@ -1,14 +1,27 @@
 # Entry-point and implementation audit
 
-Audit only: nothing in this document is implemented. Each row needs an explicit
-decision before it is shipped, because most of them change either the write set or
-the runtime contract.
+Status: every row was audited; this document is also the work list. **Applied**
+rows are listed under "Implementation status" below and in
+`docs/improvements-log.md`; the tables keep the original analysis so a rejected
+row is not re-litigated.
 
 Part A asks whether the *game* offers a cleaner entry point at the exact spot an
 option patches today. Part B asks whether the mod's own mechanism at that spot
 could be simpler or cheaper. A row marked `safe` would leave the write set
 unchanged but still needs a matrix cell; `behaviour change` needs an opt-in;
 `fidelity risk` must not ship without a live A/B.
+
+## Implementation status
+
+| row | status | where |
+| --- | --- | --- |
+| PopupHeadlightsFlag EAX/EDX twins | **fixed**: if/else like the original handler 0x10044590 | commit "fix: install only one PopupHeadlightsFlag body" |
+| LoadDLCs duplicate same-site writes | **fixed**: each site written once (recovered rows list one) | commit "refactor: drop LoadDLCs' duplicate same-site writes" |
+| SCOSignatureFix `-32` anchor | **fixed**: signature now ends on the branch (`89 3D ? ? ? ? 85 ED 74 1E`, unique), site = match+8 | commit "fix: anchor SCOSignatureFix on the branch it flips" |
+| NewMemorySystem registry (Part B) | **done**: flat open-addressing table over VirtualAlloc, no per-entry allocation, no throw; `zpatch_nms_registry_selftest` | commit "perf: replace NewMemorySystem's allocation registry with a flat table" |
+| GarageModelFix site A → prologue | **implemented, opt-in** `OPCEP_IMPROVEMENTS=only:garage_entry`: site moves 0x868BB0 → 0x868B90, 2 sites / 10 bytes unchanged; `xmm0` reloaded by the body | this document + `docs/testing.md` |
+| GarageModelFix site B → prologue | **rejected**: 0x9659C3 is inside a 2-iteration loop with per-iteration ECX; a prologue hook would change lookup ordering (see `.scratch/w3_garage.md`) | analysis |
+| everything else | pending | — |
 
 Line numbers were taken while the failsafe work was in progress; the mechanisms
 are unchanged but a few `hooks.cpp` line numbers may have shifted by a few lines.

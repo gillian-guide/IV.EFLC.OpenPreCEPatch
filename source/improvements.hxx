@@ -29,6 +29,10 @@ namespace opp
         // original fault for a fault-parity run.
         failsafe = 1u << 8,
         all = (1u << 9) - 1u,
+        // Opt-in entry-point rewrites. They move a patch from a mid-body site
+        // to a function prologue, so the write set changes; kept outside `all`
+        // so a default run is byte-identical to the original install.
+        garage_entry = 1u << 9,
     };
 
     constexpr uint32_t Improve(Improvement value) noexcept
