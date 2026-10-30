@@ -320,3 +320,33 @@ Gating it changes the launcher path, so it is documented in
 `docs/improvements.md` and left for a live GFWL A/B rather than changed here.
 The fork's unguarded `pattern.get(0)` sites, its busy-wait init loop and the
 custom-save-path length overflow are likewise preserved faults and documented.
+
+## 2026-10-30 - DualVehicleHeadlights: install the build-correct body
+
+**Tag:** `good-dualheadlights-20261030`.
+
+The original handler `0x10006770` patches the game match **once** and picks body
+`0x10006630` for build ids 1..6 (`v1000`/`v1040`/`v1004`) or `0x100064F0` for 7+
+(`v1060` and later, including `v1080` and EFLC). The port registered three arms:
+an empty `InstallDualVehicleHeadlights`, plus `...Old` and `...New`, all ungated
+and scanning the same five bytes. The old arm ran first; its `E9` overwrote the
+signature, so the new arm's scan missed and 1.0.8.0 silently installed the **old**
+body. The matrix's attribution showed exactly that (`InstallDualVehicleHeadlightsOld`).
+
+The INI tag `[1000,1004,1040]` therefore described where the accidental old-body
+install happened to be correct, not where the feature works. One arm now chooses
+the body from the build and installs once; the tag is `[all]`.
+
+Write-set delta:
+
+| cell | before | after |
+| --- | --- | --- |
+| `option:DualVehicleHeadlights` | 5 bytes, rel32 -> `0x10006630` | 5 bytes, rel32 -> `0x100064F0` |
+| `section:GRAPHICS` | same 5 bytes | same 5 bytes, new target |
+| `all-on` | same 5 bytes | same 5 bytes, new target |
+| defaults / all-off / legacy | unchanged | unchanged (option default `0`) |
+
+Verified with a targeted dump: bytes at RVA `0x4F7CE5` are `E9 06 E8 70 0F`,
+which resolve to `0x100064F0` at the dump's `0x400000` image base. The native
+feature count dropped from 137 to 135 (two arms collapsed into one).
+

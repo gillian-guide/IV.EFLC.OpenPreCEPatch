@@ -63,7 +63,7 @@ shadows, lights, LODs and reflections
 | `CarDynamicShadowFix` | `1` | tunnel, lamppost and heli spotlight shadows for cars (disables headlight shadows) [all; FF] |
 | `CarPartsShadowFix` | `1` | tunnel, lamppost and heli spotlight shadows for detached car parts [all; FF] |
 | `CutsceneFixes` | `1` | fix zoomed in cutscenes and jittery cutscene camera motion at high framerates [all; FF] |
-| `DualVehicleHeadlights` | `0` | cast 2 separate lights for car headlights with their own shadows [1000,1004,1040] |
+| `DualVehicleHeadlights` | `0` | cast 2 separate lights for car headlights with their own shadows [all] |
 | `EmissiveLerpFix` | `1` | fix emissive lights like lampposts slowly fading in and out depending on time of day [all; FF] |
 | `ForceCarHeadlightShadows` | `0` | use this to re-enable headlight shadows if CarDynamicShadowFix is enabled, buggy and should never be used with DualVehicleHeadlights [all; FF] |
 | `ForceDynamicShadowsEverywhere` | `0` | make all light sources cast dynamic shadows [all; FF] |

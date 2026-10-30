@@ -28,7 +28,7 @@
         "InstallCrashMsgFix": 4,
         "InstallCutsceneFixes": 9,
         "InstallDrivebyFOVFix": 5,
-        "InstallDualVehicleHeadlightsOld": 5,
+        "InstallDualVehicleHeadlights": 5,
         "InstallEmissiveLerpFix": 5,
         "InstallEpisodeSwitchFreezeFix": 25,
         "InstallEpisodicVehicleSupport": 194,
@@ -92,7 +92,7 @@
         "InstallWantedLevelCrashFix": 5
       },
       "file": "writesets/all-on.txt",
-      "sha256": "39dde2734f5e0c8b9538507d76fab89a38f80781f7554e922f59c18f13e53cd8",
+      "sha256": "4f5fd1670e6ffa671c1ae3444946462758decd0bccc1ede5d742891fe32231ba",
       "writes": 12700
     },
     "defaults": {
@@ -547,17 +547,17 @@
     },
     "option:DualVehicleHeadlights": {
       "arms": {
-        "InstallDualVehicleHeadlightsOld": 5
+        "InstallDualVehicleHeadlights": 5
       },
       "delta_arms": {
-        "InstallDualVehicleHeadlightsOld": 5
+        "InstallDualVehicleHeadlights": 5
       },
       "delta_base": "all-off",
       "delta_file": "deltas/option_DualVehicleHeadlights.txt",
-      "delta_sha256": "78c26e66629e0fe6af17dfaf1d12996bbf208d278634ed98330b7ef06f784a27",
+      "delta_sha256": "4e93b306eab7c65566d28c9add4972ab29beb9f3bc26bedae9d0039b52be3714",
       "delta_writes": 5,
       "file": "writesets/option_DualVehicleHeadlights.txt",
-      "sha256": "9741b20c526f45624f72cffc7159a63f2712295d6e4c9c78d388fee737b8dac7",
+      "sha256": "eaf93e710856ddaf4ae8b52bd5f0ac428a0d480f3f4f95a68da058e4815f58c5",
       "writes": 5
     },
     "option:EmissiveLerpFix": {
@@ -1607,7 +1607,7 @@
         "InstallCarPartsShadowFix": 5,
         "InstallCarPartsShadowFixStandalone": 1,
         "InstallCutsceneFixes": 9,
-        "InstallDualVehicleHeadlightsOld": 5,
+        "InstallDualVehicleHeadlights": 5,
         "InstallEmissiveLerpFix": 5,
         "InstallForceCarHeadlightShadows": 15,
         "InstallForceDynamicShadowsEverywhere": 2,
@@ -1629,7 +1629,7 @@
         "InstallCarPartsShadowFix": 5,
         "InstallCarPartsShadowFixStandalone": 1,
         "InstallCutsceneFixes": 9,
-        "InstallDualVehicleHeadlightsOld": 5,
+        "InstallDualVehicleHeadlights": 5,
         "InstallEmissiveLerpFix": 5,
         "InstallForceCarHeadlightShadows": 15,
         "InstallForceDynamicShadowsEverywhere": 2,
@@ -1645,10 +1645,10 @@
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_GRAPHICS.txt",
-      "delta_sha256": "6d858a3e2b39c04bc6e3b611adb148d619f9cd5c271b6c1ff157a8a21e0f7cf7",
+      "delta_sha256": "68f135ee2422538118b0ddb25392425e1d4a90d0fed5ca009a52615f5b2da64b",
       "delta_writes": 97,
       "file": "writesets/section_GRAPHICS.txt",
-      "sha256": "c9fe65159068bd93abb0c7b1361f6ea0ae0960e2c9f114ac6ff9bf3fb36b1924",
+      "sha256": "55fd1c1710b64c6ff8ba7f260c273eb50ab59bc2a3dc96dc9d03c6f1da11c87c",
       "writes": 97
     },
     "section:INPUT": {
@@ -1866,5 +1866,5 @@
   },
   "generated_by": "tools/opcep_matrix.py",
   "schema": 1,
-  "template_sha256": "9d1035e1f7d7ad77a7da33e8dd3d3159470aba4c51f3406ca65f3149a304077c"
+  "template_sha256": "e479834a7c549483660b94e9aabc88350f4e8e6a0c4d6348fb513e61ffa28bd6"
 }

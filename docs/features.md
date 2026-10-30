@@ -245,7 +245,7 @@ fix zoomed in cutscenes and jittery cutscene camera motion at high framerates [a
 
 ### DualVehicleHeadlights
 
-cast 2 separate lights for car headlights with their own shadows [1000,1004,1040]
+cast 2 separate lights for car headlights with their own shadows [all]
 
 - **Default:** `0`
 

@@ -458,22 +458,13 @@ namespace opp::features
 
         TraceArm("DualVehicleHeadlights");
 
-        // DualVehicleHeadlights
-        if (ctx.Option("DualVehicleHeadlights", "1"))
-        {
-        }
-
-    }
-
-
-    // DualVehicleHeadlightsOld
-
-    void InstallDualVehicleHeadlightsOld(PatchContext& ctx)
-    {
-
-        TraceArm("DualVehicleHeadlightsOld");
-
-        // DualVehicleHeadlights@old: 1 siginstall
+        // DualVehicleHeadlights (handler 0x10006770): one E9 at the game match.
+        // The original picks the old body for build ids 1..6 and the new body for
+        // 7+ (0x10006630 / 0x100064F0); the bodies are not interchangeable. The
+        // pre-fix layout registered both bodies ungated: the old arm ran first and
+        // overwrote the five bytes the new arm's scan needs, so 1.0.8.0 (build 9)
+        // silently got the old body. Keep the build choice explicit and install
+        // the site once.
         if (ctx.Option("DualVehicleHeadlights", "1"))
         {
             const GameImage& image = ctx.image;
@@ -481,31 +472,12 @@ namespace opp::features
             if (auto pattern = Pattern(image, "8B 17 8B 42 64 8B CF FF D0 8B 54"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
+                const bool old_body = BuildIs(
+                    ctx.build, {GameBuild::v1000, GameBuild::v1040, GameBuild::v1004});
+                const char* body =
+                    old_body ? "abi_dual_headlights_old" : "abi_dual_headlights_new";
 
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_dual_headlights_old")), true); //jmp
-            }
-        }
-
-    }
-
-
-    // DualVehicleHeadlightsNew
-
-    void InstallDualVehicleHeadlightsNew(PatchContext& ctx)
-    {
-
-        TraceArm("DualVehicleHeadlightsNew");
-
-        // DualVehicleHeadlights@new: 1 siginstall
-        if (ctx.Option("DualVehicleHeadlights", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "8B 17 8B 42 64 8B CF FF D0 8B 54"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_dual_headlights_new")), true); //jmp
+                injector::MakeJMP(match, reinterpret_cast<void*>(Abi(body)), true); //jmp
             }
         }
 
@@ -923,8 +895,6 @@ namespace
             RegisterFeature(127, "InstallCutsceneFixes", &InstallCutsceneFixes);
             RegisterFeature(129, "InstallCarDecalsFix", &InstallCarDecalsFix);
             RegisterFeature(131, "InstallCarDynamicShadowFixNoE", &InstallCarDynamicShadowFixNoE);
-            RegisterFeature(132, "InstallDualVehicleHeadlightsOld", &InstallDualVehicleHeadlightsOld);
-            RegisterFeature(133, "InstallDualVehicleHeadlightsNew", &InstallDualVehicleHeadlightsNew);
             RegisterFeature(137, "InstallCarPartsShadowFixStandalone", &InstallCarPartsShadowFixStandalone);
             RegisterFeature(140, "InstallNoImpostorHeightCutoff", &InstallNoImpostorHeightCutoff);
             RegisterFeature(144, "InstallNoLODLightHeightCutoff", &InstallNoLODLightHeightCutoff);
