@@ -116,13 +116,13 @@ ShakingEngineBlock = 0                               // make the engineblock par
 MovingSteeringWheelSupport = 0                       // make the "steeringwheel" car bone rotate properly if it exists (Example of a car with proper steering wheel setup: https://mega.nz/file/vcAAib6Z#bsbJaseAbdxleRwr1XGL-d_it_P9DyjsPoXP-pnMoq8 ) use the new +wheelangle: vehicles.ide flag to specify an angle the steering wheel should be tilted forward or backwards by (in degrees) while porting a car from V, write the angle down into this flag and set the actual wheel's angle to 0, 0, 0 to make it work properly
 
 [MISC]
-; Improvements = 1   // one switch for every improvement: the folded groups and the
-;                    // opt-in entry-point rewrites (garage, cutscene, building-alpha).
-;                    // 0 = original behaviour only; leave the key out to keep the
-;                    // default set (folded groups on, entry-point rewrites off).
-;                    // The allocator rewrite is NOT part of 1/all: it OOM'd on exit
-;                    // on the first live run. Enable it explicitly, e.g.
-;                    // Improvements = all,entry,nms_thunk
+; Improvements =     // leave out (or 1) for the default set: every folded improvement
+;                    // plus the garage, cutscene and building-alpha entry-point rewrites.
+;                    // 0 = original behaviour only (parity baseline).
+;                    // Anything else uses the OPCEP_IMPROVEMENTS grammar, e.g.
+;                    //   Improvements = all,entry,nms_thunk   (also the allocator rewrite;
+;                    //     not in the default set - it OOM'd on exit in its live run)
+;                    //   Improvements = except:cutscene_entry
 
 RestoreDeathMusic = 0                                // restores the unused music on death [FF]
 OverrideGTADatPath = 0                               // load gta.dat from another path

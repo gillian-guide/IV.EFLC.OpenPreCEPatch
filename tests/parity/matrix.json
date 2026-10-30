@@ -15,7 +15,7 @@
         "InstallBikeFeetFix": 12,
         "InstallBikePhoneAnimsFix": 6,
         "InstallBlackscreenFix": 4,
-        "InstallBuildingAlphaFix": 17,
+        "InstallBuildingAlphaFix": 10,
         "InstallBuildingDynamicShadows": 6,
         "InstallCarDecalsFix": 5,
         "InstallCarDynamicShadowFix": 6,
@@ -25,7 +25,7 @@
         "InstallCombinedRadioFreezeFix": 4,
         "InstallCopSirensFlag": 15,
         "InstallCrashMsgFix": 4,
-        "InstallCutsceneFixes": 9,
+        "InstallCutsceneFixesAtCallee": 5,
         "InstallDrivebyFOVFix": 5,
         "InstallDualVehicleHeadlights": 5,
         "InstallEmissiveLerpFix": 5,
@@ -84,8 +84,8 @@
         "InstallWantedLevelCrashFix": 5
       },
       "file": "writesets/all-on.txt",
-      "sha256": "f011f8944a223fec40b6352c5e18b308d0fb3403d9b0fd2ce06be934bb2097b5",
-      "writes": 855
+      "sha256": "4d12a6ace54afacf85e8b72f6e797b35998fd583db5c100962d851934ba8cbc3",
+      "writes": 844
     },
     "defaults": {
       "arms": {
@@ -95,13 +95,13 @@
         "InstallBikeFeetFix": 12,
         "InstallBikePhoneAnimsFix": 6,
         "InstallBlackscreenFix": 4,
-        "InstallBuildingAlphaFix": 17,
+        "InstallBuildingAlphaFix": 10,
         "InstallCarDynamicShadowFix": 12,
         "InstallCarPartsShadowFix": 5,
         "InstallCarPartsShadowFixStandalone": 1,
         "InstallCombinedRadioFreezeFix": 4,
         "InstallCrashMsgFix": 4,
-        "InstallCutsceneFixes": 9,
+        "InstallCutsceneFixesAtCallee": 5,
         "InstallDrivebyFOVFix": 5,
         "InstallEmissiveLerpFix": 5,
         "InstallEpisodeSwitchFreezeFix": 25,
@@ -140,8 +140,8 @@
         "InstallWantedLevelCrashFix": 5
       },
       "file": "writesets/defaults.txt",
-      "sha256": "02575eaacf18c13d1321acdc88f84d240f6b274e868effd3d9fac90589d5007b",
-      "writes": 493
+      "sha256": "8de199cd02c716b3858f08293af62444d3236c4a0236de6589b0cee261fc31d1",
+      "writes": 482
     },
     "legacy": {
       "arms": {
@@ -151,7 +151,7 @@
         "InstallBikeFeetFix": 12,
         "InstallBikePhoneAnimsFix": 6,
         "InstallBlackscreenFix": 4,
-        "InstallBuildingAlphaFix": 17,
+        "InstallBuildingAlphaFix": 10,
         "InstallCarDecalsFix": 5,
         "InstallCarDynamicShadowFix": 12,
         "InstallCarPartsShadowFix": 5,
@@ -160,7 +160,7 @@
         "InstallCombinedRadioFreezeFix": 4,
         "InstallCopSirensFlag": 15,
         "InstallCrashMsgFix": 4,
-        "InstallCutsceneFixes": 9,
+        "InstallCutsceneFixesAtCallee": 5,
         "InstallDrivebyFOVFix": 5,
         "InstallEmissiveLerpFix": 5,
         "InstallEpisodeSwitchFreezeFix": 25,
@@ -210,8 +210,8 @@
         "InstallWantedLevelCrashFix": 5
       },
       "file": "writesets/legacy.txt",
-      "sha256": "2b5731f3f0904fd887c67cc090ee60fcc8701d464892bc6c8f48dacc654712cb",
-      "writes": 810
+      "sha256": "cba98fe44752bdd640f24bbba0a8f3e5e42de86a57704bbf4aecd9ddccd81f7b",
+      "writes": 799
     },
     "option:AimProjectileCrashFix": {
       "arms": {
@@ -331,18 +331,18 @@
     },
     "option:BuildingAlphaFix": {
       "arms": {
-        "InstallBuildingAlphaFix": 17
+        "InstallBuildingAlphaFix": 10
       },
       "delta_arms": {
-        "InstallBuildingAlphaFix": 17
+        "InstallBuildingAlphaFix": 10
       },
       "delta_base": "all-off",
       "delta_file": "deltas/option_BuildingAlphaFix.txt",
-      "delta_sha256": "34439757bb830ae8fc7477d7f527a6dbba304e74f4087582f209291f2385dc43",
-      "delta_writes": 17,
+      "delta_sha256": "65a2c34abda28eab9a6494319dfd9160ac92a573b5b738e4d86ac75cf27c83c8",
+      "delta_writes": 10,
       "file": "writesets/option_BuildingAlphaFix.txt",
-      "sha256": "a874e6a03fd2061b3e37c89fe7a57aa342f84aa5ca4f4635d64840fa564fde55",
-      "writes": 17
+      "sha256": "6ba59ad197228377809e4fe2ecac43b575c67c466ec4c2d712aa18bca573fa1b",
+      "writes": 10
     },
     "option:BuildingDynamicShadows": {
       "arms": {
@@ -470,18 +470,18 @@
     },
     "option:CutsceneFixes": {
       "arms": {
-        "InstallCutsceneFixes": 9
+        "InstallCutsceneFixesAtCallee": 5
       },
       "delta_arms": {
-        "InstallCutsceneFixes": 9
+        "InstallCutsceneFixesAtCallee": 5
       },
       "delta_base": "all-off",
       "delta_file": "deltas/option_CutsceneFixes.txt",
-      "delta_sha256": "222e032597306e2671adf4103a9c3dd641acf0a30563dc639581cb8a4a61ce1e",
-      "delta_writes": 9,
+      "delta_sha256": "e394b7d804cb6c6a527f41a1a18595a32611a18cd7a5dfd698cff82ca6ce25d8",
+      "delta_writes": 5,
       "file": "writesets/option_CutsceneFixes.txt",
-      "sha256": "6ef5716fbc582706114103ba762e4adc11d2eec534f3395834d520fb34260f18",
-      "writes": 9
+      "sha256": "d5ac1bb728de16778a198e5a6c62b9c56692a5307446cf67dc37c705988163a2",
+      "writes": 5
     },
     "option:DebugPrintSpawns": {
       "arms": {},
@@ -679,10 +679,10 @@
       },
       "delta_base": "all-off",
       "delta_file": "deltas/option_GarageModelFix.txt",
-      "delta_sha256": "4bba095d5cc575a5daee12a5f0b44aa2b0edbf033210d4d52605693533a27f53",
+      "delta_sha256": "15c251781ed4289327f02555fdd721b034b669cdaa4ac45e21ba67ba01c0b408",
       "delta_writes": 10,
       "file": "writesets/option_GarageModelFix.txt",
-      "sha256": "56a3833e71913042613b6f5b431a31296a47624334b446adb63b2afdf2411652",
+      "sha256": "dbad1afa3758222687c16b9d1a4df3a4368378168b9ebe3998f3618d268dfa27",
       "writes": 10
     },
     "option:GroupHackFix": {
@@ -1480,7 +1480,7 @@
       "arms": {
         "InstallBikeFeetFix": 12,
         "InstallBikePhoneAnimsFix": 6,
-        "InstallCutsceneFixes": 9,
+        "InstallCutsceneFixesAtCallee": 5,
         "InstallDrivebyFOVFix": 5,
         "InstallHighFPSBikePhysicsFix": 5,
         "InstallHighFPSSpeedupFix": 17,
@@ -1491,7 +1491,7 @@
       "delta_arms": {
         "InstallBikeFeetFix": 12,
         "InstallBikePhoneAnimsFix": 6,
-        "InstallCutsceneFixes": 9,
+        "InstallCutsceneFixesAtCallee": 5,
         "InstallDrivebyFOVFix": 5,
         "InstallHighFPSBikePhysicsFix": 5,
         "InstallHighFPSSpeedupFix": 17,
@@ -1501,15 +1501,15 @@
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_FIXES.txt",
-      "delta_sha256": "bdffd5ba4ca88e0f559d0e9c4f9ec143a909759c73b7adbcb6833cf0c15ece94",
-      "delta_writes": 120,
+      "delta_sha256": "72f068228962294fc6f654f36b75818579541284f3009340fd5d5c51d4c2efb0",
+      "delta_writes": 116,
       "file": "writesets/section_FIXES.txt",
-      "sha256": "047fe5a67f341d8bc8c53b11682a12d8d5a4a295d669dbc132714aaf1db564d3",
-      "writes": 120
+      "sha256": "f1f8ce2f56bae8ab0277fc6cdc59d04c2f708f129df5a58b9c28385c97b93b8d",
+      "writes": 116
     },
     "section:GRAPHICS": {
       "arms": {
-        "InstallBuildingAlphaFix": 17,
+        "InstallBuildingAlphaFix": 10,
         "InstallBuildingDynamicShadows": 6,
         "InstallCarDynamicShadowFix": 6,
         "InstallCarPartsShadowFix": 5,
@@ -1526,7 +1526,7 @@
         "InstallReversingLightFix": 1
       },
       "delta_arms": {
-        "InstallBuildingAlphaFix": 17,
+        "InstallBuildingAlphaFix": 10,
         "InstallBuildingDynamicShadows": 6,
         "InstallCarDynamicShadowFix": 6,
         "InstallCarPartsShadowFix": 5,
@@ -1544,11 +1544,11 @@
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_GRAPHICS.txt",
-      "delta_sha256": "16a921faf33334f3c6877eb88611063532da19e82625432e86f1490b64b6a511",
-      "delta_writes": 72,
+      "delta_sha256": "147664fe168f447ed3449008140d7e292a597962b245bb2663dfed6e1987f8b7",
+      "delta_writes": 65,
       "file": "writesets/section_GRAPHICS.txt",
-      "sha256": "ae3c30759c21f2a8e0336d40cb06807d848b1e59c9aa9e583f27d09010f9f86f",
-      "writes": 72
+      "sha256": "dd0e61cf9cef2d09cd84a176c7e8a5eeb3f2c309d3b1a899a1695636463accae",
+      "writes": 65
     },
     "section:MISC": {
       "arms": {
@@ -1689,10 +1689,10 @@
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_VEHICLES.txt",
-      "delta_sha256": "11315c584a6a3921a48c09ce8822a98b975fa26f9e77f066ee8b8f575dce0b6b",
+      "delta_sha256": "873958ccc19ec06f6ea4e79b0516e051f205f321dad0e012b9b757912454a6e1",
       "delta_writes": 73,
       "file": "writesets/section_VEHICLES.txt",
-      "sha256": "087f07fece4a365cb8ea7670619608a6654ec6ab43337dfa75e0319b99a8d5b6",
+      "sha256": "83320f75746dbd89be9383e1384f5f8aff9d384306917463b43663a830d982d6",
       "writes": 73
     }
   },
@@ -1703,5 +1703,5 @@
   },
   "generated_by": "tools/opcep_matrix.py",
   "schema": 1,
-  "template_sha256": "3a045f509c74f7559555e2a1ac389bff82ec2dff8ed19bfd2e080c1213fbaaf6"
+  "template_sha256": "23c3112ea86348cd65e15817ced8b6c429195a8fc3d5fa0c89bc8af23e773cea"
 }

@@ -1,9 +1,5 @@
-00623629 93 InstallCutsceneFixes
-0062362A 52 InstallCutsceneFixes
-0062362B 61 InstallCutsceneFixes
-0062362C 0F InstallCutsceneFixes
-0089A840 EB InstallCutsceneFixes
-0089AB1C A0 InstallCutsceneFixes
-0089AB1D DD InstallCutsceneFixes
-0089AB1E 39 InstallCutsceneFixes
-0089AB1F 0F InstallCutsceneFixes
+0089A640 E9 InstallCutsceneFixesAtCallee
+0089A641 7B InstallCutsceneFixesAtCallee
+0089A642 E2 InstallCutsceneFixesAtCallee
+0089A643 39 InstallCutsceneFixesAtCallee
+0089A644 0F InstallCutsceneFixesAtCallee

@@ -597,3 +597,30 @@ still need isolating: `NewMemorySystem = 1` is the original mod's own
 "potentially unstable" option and was already on in the previous run, so the next
 A/B is (a) `Improvements = 1` with the allocator rewrite out, then (b)
 `NewMemorySystem = 0` as well.
+
+## 2026-10-30 — entry-point rewrites promoted to the default set
+
+The user's 1.0.8.0 run with all four rewrites on was smooth, so the three that do
+not touch the allocator are now part of the default set instead of opt-in bits:
+
+| rewrite | effect on the default write set |
+| --- | --- |
+| `garage_entry` | site moves 0x868BB0 -> 0x868B90 (2 sites / 10 bytes either way) |
+| `cutscene_entry` | 3 sites / 9 bytes -> 1 site / 5 bytes at 0x89A640 |
+| `alpha_nop` | 13 bytes at 0x559CD3 -> 6 bytes at 0x559CDA (the `test` keeps setting the flags) |
+
+`nms_thunk` stays out of the default set: its live run OOM'd on exit (the game's
+own allocator `atexit` reset frees through the original allocator while our
+allocations are live). It remains reachable by name (`all,entry,nms_thunk`).
+
+`Improvement::all` keeps meaning the folded groups; the new
+`DefaultImprovements()` = folded + the three rewrites is what `all`/absent/`1`
+resolve to, and `except:<group>` turns one rewrite off (the parity baseline is
+`Improvements = 0`).
+
+Matrix: defaults 493 -> 482 writes, all-on 855 -> 844, legacy 810 -> 799; the
+only changed cells are the three options and the sections that own them
+(FIXES 120 -> 116, GRAPHICS 72 -> 65, VEHICLES 73 -> 73 with the garage site
+moved). Every other cell is byte-identical. `tools/opcep_optin.py` now pins each
+rewrite's contribution (`except:<group>`, and `all,nms_thunk` for the allocator
+one).

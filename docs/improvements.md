@@ -30,6 +30,7 @@ individually.
 | `SteamAchievements` | GFWL achievement writes mirrored to Steam at the `XUserWriteAchievements` boundary; the original GFWL call still runs |
 | installer pass | arm logging is part of the normal trace (`OPCEP_IMPROVEMENTS=except:trace` silences it); signature scans stay inside the executable sections and stop at the first match |
 | every option (the `failsafe` group) | every arm write is checked before it lands (site inside the image, destination body resolved) and the runtime bodies skip a missing preamble pointer or game-published lookup instead of dereferencing null |
+| installer pass (default) | GarageModelFix site A, CutsceneFixes (one callee hook instead of three sites) and BuildingAlphaFix site 2 (jnz-only NOP) moved to the better entry point proved on the 1.0.8.0 live run; except:<group> restores the original site |
 
 `SkipIntro`, `SkipMenu`, `BorderlessWindowed`, `DoNotPauseOnMinimize` and
 `VRAMFix` are XLivelessAddon features now: their improved bodies live in

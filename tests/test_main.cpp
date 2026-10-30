@@ -259,7 +259,7 @@ namespace
 
     void TestImprovements()
     {
-        constexpr uint32_t all = opp::Improve(opp::Improvement::all);
+        constexpr uint32_t all = opp::DefaultImprovements();
         constexpr uint32_t newsaves = opp::Improve(opp::Improvement::new_saves);
         constexpr uint32_t ooc = opp::Improve(opp::Improvement::ooc);
         constexpr uint32_t trace = opp::Improve(opp::Improvement::trace);
@@ -293,18 +293,20 @@ namespace
                                  opp::Improve(opp::Improvement::cutscene_entry) |
                                  opp::Improve(opp::Improvement::nms_thunk) |
                                  opp::Improve(opp::Improvement::alpha_nop);
+        constexpr uint32_t nms = opp::Improve(opp::Improvement::nms_thunk);
         CHECK(opp::ParseImprovements("entry") == entry);
-        CHECK(opp::ParseImprovements("all,cutscene_entry") ==
-              (all | opp::Improve(opp::Improvement::cutscene_entry)));
-        CHECK((opp::ParseImprovements("all") & entry) == 0u);
-        // The convenience toggle selects everything except the allocator rewrite,
-        // which regressed on the first live run (OOM on exit).
-        const uint32_t everything = all | (entry & ~opp::Improve(opp::Improvement::nms_thunk));
+        CHECK(opp::ParseImprovements("all,nms_thunk") == (all | nms));
+        // The default set carries the three validated entry-point rewrites but
+        // not the allocator rewrite, which regressed on its live run.
+        CHECK((all & opp::Improve(opp::Improvement::garage_entry)) != 0u);
+        CHECK((all & opp::Improve(opp::Improvement::cutscene_entry)) != 0u);
+        CHECK((all & opp::Improve(opp::Improvement::alpha_nop)) != 0u);
+        CHECK((all & nms) == 0u);
         CHECK(opp::ResolveImprovements(0u, nullptr) == 0u);
         CHECK(opp::ResolveImprovements(newsaves, "") == newsaves);
         CHECK(opp::ResolveImprovements(newsaves, "  ") == newsaves);
-        CHECK(opp::ResolveImprovements(0u, "1") == everything);
-        CHECK(opp::ResolveImprovements(0u, "all") == everything);
+        CHECK(opp::ResolveImprovements(0u, "1") == all);
+        CHECK(opp::ResolveImprovements(0u, "all") == all);
         CHECK(opp::ResolveImprovements(newsaves, "0") == 0u);
         CHECK(opp::ResolveImprovements(newsaves, "none") == 0u);
         CHECK(opp::ResolveImprovements(newsaves, "all,garage_entry") ==

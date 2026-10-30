@@ -77,30 +77,28 @@ set OPCEP_IMPROVEMENTS=except:ooc
 set OPCEP_IMPROVEMENTS=except:trace
 ```
 
-`all`/unset enables every group; `none` disables every group; a bare list is an
-`only:` list. The groups are `new_saves`, `ooc`, `vehicle`, `popup`,
+`all`/unset means the **default set**: every folded group plus the three
+entry-point rewrites that were validated on a live run (`garage_entry`,
+`cutscene_entry`, `alpha_nop`). `none` disables everything; a bare list is an
+`only:` list. The folded groups are `new_saves`, `ooc`, `vehicle`, `popup`,
 `model_index`, `skip_intro`, `trace`, `windowed` and `failsafe`. `skip_intro` and
 `windowed` are vestigial in this module now: the `SkipIntro`/window arms moved to
 XLivelessAddon with the options themselves. `except:failsafe` restores the
 original null-dereference faults in the bodies for a fault-parity run.
 
-Opt-in entry-point rewrites are separate bits **outside** `all`, so a default run
-never installs them; they exist to be A/B tested and promoted later:
+Entry-point rewrites move a patch from a mid-body site to a function entry point:
 
 | group | what it moves |
 | --- | --- |
-| `garage_entry` | `GarageModelFix` site A from the mid-body anchor (0x868BB0) to the function prologue (0x868B90), reusing the store body and reloading the `xmm0` the prologue instruction sets |
-| `cutscene_entry` | `CutsceneFixes` from its three sites (two camera call rewrites + the branch byte) to one hook at the shared camera callee (0x89A640), by relocating the callee into a private copy whose 13 `call rel32`s are re-pointed and whose branch fix is baked in |
-| `nms_thunk` | `NewMemorySystem` from the allocator-ctor call rewrite + `atexit` skip to one hook at the static-init thunk 0xD56060: the game's own allocator construction and its `atexit` registration run, then the reimplemented vtable is stored. This restores the game's ~100 MiB simple-allocator block, so it changes memory behaviour and must not be promoted without a live test |
-| `alpha_nop` | `BuildingAlphaFix` site 2 NOPs only the six-byte `jnz` (0x559CDA) instead of the 13-byte `test` + `jnz`, so the flags the `test` sets stay live for the following code |
+| `garage_entry` (default) | `GarageModelFix` site A from the mid-body anchor (0x868BB0) to the function prologue (0x868B90), reusing the store body and reloading the `xmm0` the prologue instruction sets |
+| `cutscene_entry` (default) | `CutsceneFixes` from its three sites (two camera call rewrites + the branch byte) to one hook at the shared camera callee (0x89A640), by relocating the callee into a private copy whose 13 `call rel32`s are re-pointed and whose branch fix is baked in |
+| `alpha_nop` (default) | `BuildingAlphaFix` site 2 NOPs only the six-byte `jnz` (0x559CDA) instead of the 13-byte `test` + `jnz`, so the flags the `test` sets stay live for the following code |
+| `nms_thunk` | `NewMemorySystem` from the allocator-ctor call rewrite + `atexit` skip to one hook at the static-init thunk 0xD56060: the game's own allocator construction and its `atexit` registration run, then the reimplemented vtable is stored. This restores the game's ~100 MiB simple-allocator block and its exit-time reset; the live run with it on OOM'd on exit, so it is **not** in the default set |
 
-Run one with `OPCEP_IMPROVEMENTS=only:<group>`. Because `all` excludes the
-opt-in bits, a list may name `all` to mean the folded groups:
-`OPCEP_IMPROVEMENTS=all,cutscene_entry` keeps every folded improvement (including
-the failsafes) on and adds one entry-point rewrite. `entry` expands to all four
-opt-in rewrites at once, so `all,entry` is the full A/B. The default
-`opcep_matrix.py --check` must stay green with every opt-in group off; the delta
-for a group is attributed with `--env OPCEP_IMPROVEMENTS=all,<group>`.
+`except:<group>` turns one rewrite off, `entry` names all four at once, and
+`nms_thunk` is enabled by name (`all,nms_thunk` or `all,entry,nms_thunk`). The
+default `opcep_matrix.py --check` is green for the default set, and
+`tools/opcep_optin.py` pins each rewrite's contribution.
 
 ## Build applicability
 
@@ -199,39 +197,39 @@ reference. To validate one on the user's install:
 names exactly which folded groups and opt-in rewrites are active (`none` when every
 switch is off). `FormatImprovements` has a native test.
 
-### Opt-in write-set fixtures
+### Entry-rewrite write-set fixtures
 
-`tools/opcep_optin.py` locks the four opt-in rewrites' write sets, which the
-main matrix cannot see because the groups are off by default:
+`tools/opcep_optin.py` pins each entry-point rewrite's contribution, which the
+main matrix shows only as part of the default set:
 
 ```bat
 python tools\opcep_optin.py --check    :: compare with tests/parity/optin/
 python tools\opcep_optin.py --update   :: record a new golden, read the diff
 ```
 
-It runs the dump once per group with the folded improvements on and the group
-added (`OPCEP_IMPROVEMENTS=all,<group>`), so a fixture failing means one of the
-rewrites changed its sites or bytes without the documented delta. The INI is the
-shipped defaults plus, for `nms_thunk` only, `NewMemorySystem=1` (the option
-defaults off). Expected deltas against the default write set: `garage_entry`
-moves one site (2 sites/10 bytes either way), `cutscene_entry` loses 4 bytes
-(3 sites/9 -> 1 site/5), `nms_thunk` removes the option's 8 bytes and adds 5 at
-0x956060, `alpha_nop` drops 7 bytes (13 -> 6 at 0x559CDA).
+It runs the dump once per group: the three default rewrites with that group
+**excluded** (`OPCEP_IMPROVEMENTS=except:<group>`) and the allocator rewrite with
+it added (`all,nms_thunk`, whose INI also gets `NewMemorySystem=1` because the
+option defaults off). A fixture failing means a rewrite changed its sites or
+bytes without the documented delta. Expected against the default write set
+(482 writes): `garage_entry` moves one site (10 bytes either way, 482 -> 482),
+`cutscene_entry` restores 4 bytes (482 -> 486), `alpha_nop` restores 7
+(482 -> 489), `nms_thunk` adds its own 5-byte hook (482 -> 487).
 
 ### The `Improvements` INI key
 
-One key in `[MISC]` replaces the environment variable for a whole-switch test:
+One key in `[MISC]` overrides the environment variable for a whole-switch test:
 
 ```ini
 [MISC]
-Improvements = 1
+Improvements = 0
 ```
 
-`1` (`all`/`on`/`true`) selects every group, including three of the four opt-in
-entry-point rewrites; the allocator rewrite (`nms_thunk`) is excluded because it
-OOM'd on exit on the first live run — enable it by name with
-`Improvements = all,entry,nms_thunk`. `0` (`none`/`off`) selects nothing (the
-parity baseline), and leaving the key out keeps the default set (folded groups on,
-entry-point rewrites off). Any other value uses the `OPCEP_IMPROVEMENTS` grammar,
-e.g. `all,garage_entry`. The key wins over the environment variable, and the boot
-log still names the resulting groups.
+`1` (`all`/`on`/`true`) and leaving the key out both mean the **default set**
+(every folded group plus the three validated entry-point rewrites); `0`
+(`none`/`off`) selects nothing, which is the parity baseline. Anything else uses
+the `OPCEP_IMPROVEMENTS` grammar, so one option can be turned off the other way:
+`Improvements = except:cutscene_entry`. The allocator rewrite is not in the
+default set — its live run OOM'd on exit — and is enabled by name with
+`Improvements = all,entry,nms_thunk`. The key wins over the environment variable,
+and the boot log still names the resulting groups.

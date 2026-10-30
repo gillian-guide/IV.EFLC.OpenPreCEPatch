@@ -88,7 +88,7 @@ namespace opp
             // expands to every opt-in entry-point rewrite, so one word covers
             // their A/B run.
             if (EqualsIgnoreCase(name, "all"))
-                return Improve(Improvement::all);
+                return DefaultImprovements();
             if (EqualsIgnoreCase(name, "entry") || EqualsIgnoreCase(name, "entries"))
                 return EntryImprovements();
             for (const ImprovementNameEntry& entry : kNames)
@@ -129,7 +129,7 @@ namespace opp
 
     uint32_t ParseImprovements(const char* value) noexcept
     {
-        constexpr uint32_t all = Improve(Improvement::all);
+        constexpr uint32_t all = DefaultImprovements();
         if (value == nullptr)
             return all;
 
@@ -164,7 +164,7 @@ namespace opp
         const DWORD length = GetEnvironmentVariableA(
             "OPCEP_IMPROVEMENTS", value, static_cast<DWORD>(sizeof(value)));
         if (length == 0 || length >= sizeof(value))
-            return Improve(Improvement::all);
+            return DefaultImprovements();
         return ParseImprovements(value);
 #endif
     }
@@ -179,13 +179,11 @@ namespace opp
         if (text == "1" || EqualsIgnoreCase(text, "all") ||
             EqualsIgnoreCase(text, "on") || EqualsIgnoreCase(text, "true"))
         {
-            // The convenience toggle deliberately leaves the allocator rewrite
-            // out: on the first live run with it on, the game OOM'd on exit
-            // (the game's own allocator atexit handler resets the vtable while
-            // our allocations are still live). It stays selectable by name
-            // (`Improvements = all,entry,nms_thunk`).
-            return Improve(Improvement::all) |
-                   (EntryImprovements() & ~Improve(Improvement::nms_thunk));
+            // The default set already excludes the allocator rewrite: its live
+            // run OOM'd on exit (the game's own allocator atexit handler resets
+            // the vtable while our allocations are still live). It stays
+            // selectable by name (`Improvements = all,entry,nms_thunk`).
+            return DefaultImprovements();
         }
         if (text == "0" || EqualsIgnoreCase(text, "none") ||
             EqualsIgnoreCase(text, "off") || EqualsIgnoreCase(text, "false"))

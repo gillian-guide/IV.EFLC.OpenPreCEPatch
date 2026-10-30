@@ -53,10 +53,10 @@ namespace opp
     }
 
     // Pure parser used by the loader and the native tests.
-    //   unset/empty/all/on/1          -> all
+    //   unset/empty/all/on/1          -> the default set (DefaultImprovements)
     //   none/off/0                    -> none
     //   only:a,b / a,b                -> only the named groups
-    //   except:a,b                    -> all except the named groups
+    //   except:a,b                    -> the default set minus the named groups
     uint32_t ParseImprovements(const char* value) noexcept;
 
     // Resolves OPCEP_IMPROVEMENTS once per call. OPCEP_PARITY_BASELINE forces
@@ -69,6 +69,17 @@ namespace opp
         return Improve(Improvement::garage_entry) |
                Improve(Improvement::cutscene_entry) |
                Improve(Improvement::nms_thunk) |
+               Improve(Improvement::alpha_nop);
+    }
+
+    // The default set: every folded group plus the three entry-point rewrites
+    // that are validated on a live 1.0.8.0 run (garage prologue, cutscene
+    // callee hook, BuildingAlphaFix jnz-only NOP). `nms_thunk` is not here: its
+    // live run OOM'd on exit, so it stays name-only.
+    constexpr uint32_t DefaultImprovements() noexcept
+    {
+        return Improve(Improvement::all) | Improve(Improvement::garage_entry) |
+               Improve(Improvement::cutscene_entry) |
                Improve(Improvement::alpha_nop);
     }
 

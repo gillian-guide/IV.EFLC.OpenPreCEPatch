@@ -64,10 +64,10 @@
 00797A2B 58 InstallNoLiveryLimit
 00797A2C 4A InstallNoLiveryLimit
 00797A2D 0F InstallNoLiveryLimit
-00868BB0 E9 InstallGarageModelFix
-00868BB1 CB InstallGarageModelFix
-00868BB2 E0 InstallGarageModelFix
-00868BB3 3D InstallGarageModelFix
-00868BB4 0F InstallGarageModelFix
+00868B90 E9 InstallGarageModelFix
+00868B91 6C InstallGarageModelFix
+00868B92 74 InstallGarageModelFix
+00868B93 39 InstallGarageModelFix
+00868B94 0E InstallGarageModelFix
 00B3E8E8 00 InstallIncreaseVehicleModelLimit
 00B3E8E9 04 InstallIncreaseVehicleModelLimit
