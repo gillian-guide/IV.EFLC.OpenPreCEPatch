@@ -255,11 +255,17 @@ namespace opp::features
         {
             const GameImage& image = ctx.image;
 
-            if (auto pattern = Pattern(image, "8B 6C 24 1C 66 89 6E 14 64 8B 0D 2C 00 00 00 8B"); pattern.size() > 0)
+            // The recovered op row anchors the write at offset 0 of its own
+            // signature. The old arm scanned a signature 32 bytes downstream
+            // and wrote at match-32, which is only correct while that distance
+            // holds; a build where it does not would flip an unrelated `jz`.
+            // This signature ends on the `jz` itself (`mov ds:X,edi; test
+            // ebp,ebp; jz`), unique on 1.0.8.0, so the site is match+8.
+            if (auto pattern = Pattern(image, "89 3D ? ? ? ? 85 ED 74 1E"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                WriteValue<uint8_t>(ctx, match - 32, 0xEBu);
+                WriteValue<uint8_t>(ctx, match + 8, 0xEBu);
             }
         }
 
