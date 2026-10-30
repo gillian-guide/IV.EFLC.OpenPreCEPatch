@@ -717,21 +717,28 @@ namespace opp::features
         {
             const GameImage& image = ctx.image;
 
+            // The original handler (0x10044590) is `if (pattern A) { ... }
+            // else { pattern B ... }`: exactly ONE of the two EAX/EDX sites is
+            // ever patched, and the two resume slots belong to that site. Two
+            // independent `if`s would install both bodies against whichever
+            // pattern matched last, so the first body would tail-jump to the
+            // second site's resume.
             if (auto pattern = Pattern(image, "0F BF 46 2E 3B 05 ? ? ? ? 75 ? A1"); pattern.size() > 0)
             {
                 zpatch_popup_resume_b = MatchAddress(pattern, 10);
                 zpatch_popup_resume_a = MatchAddress(pattern, 12);
             }
-
-            if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
-            {
-                zpatch_ide_hook_slot = MatchAddress(pattern, -1);
-            }
-
-            if (auto pattern = Pattern(image, "0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1"); pattern.size() > 0)
+            else if (auto pattern = Pattern(image, "0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1"); pattern.size() > 0)
             {
                 zpatch_popup_resume_b = MatchAddress(pattern, 10);
                 zpatch_popup_resume_a = MatchAddress(pattern, 12);
+            }
+
+            // The IDE parser hook is independent of the two model tests and is
+            // shared with the other arms that install it.
+            if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
+            {
+                zpatch_ide_hook_slot = MatchAddress(pattern, -1);
             }
         }
 
@@ -750,11 +757,20 @@ namespace opp::features
         {
             const GameImage& image = ctx.image;
 
+            // if / else, like the original: see the publish arm above.
             if (auto pattern = Pattern(image, "0F BF 46 2E 3B 05 ? ? ? ? 75 ? A1"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
                 JumpToBody(ctx, match, "abi_popup_headlights");
+                WriteValue<uint8_t>(ctx, match + 10, static_cast<uint8_t>(0xEBu));
+                WriteValue<uint32_t>(ctx, match + 82, AddressOf(&zpatch_popup_angle));
+            }
+            else if (auto pattern = Pattern(image, "0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                JumpToBody(ctx, match, "abi_popup_headlights_edx");
                 WriteValue<uint8_t>(ctx, match + 10, static_cast<uint8_t>(0xEBu));
                 WriteValue<uint32_t>(ctx, match + 82, AddressOf(&zpatch_popup_angle));
             }
@@ -764,15 +780,6 @@ namespace opp::features
                 auto* match = pattern.get(0).get<uint8_t>();
 
                 JumpToBody(ctx, match - 10, "abi_copsirens_ide");
-            }
-
-            if (auto pattern = Pattern(image, "0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpToBody(ctx, match, "abi_popup_headlights_edx");
-                WriteValue<uint8_t>(ctx, match + 10, static_cast<uint8_t>(0xEBu));
-                WriteValue<uint32_t>(ctx, match + 82, AddressOf(&zpatch_popup_angle));
             }
         }
 
