@@ -165,8 +165,21 @@ so a partially-matching image is visible without reading the whole log.
     `noexcept` caller; a failed allocation terminates instead of faulting at the
     original store.
 
-## Features that need a real decision
+## Entry-point audit (2026-10-30)
 
+`docs/entry-points-audit.md` is an audit-only list: for the options that patch
+the game, whether a cleaner *game-side* entry point exists at the same spot
+(function prologue instead of a mid-body byte, a shared callee instead of two
+call sites, a vtable slot instead of a virtual body, a data value instead of
+NOPs), plus the mod-side mechanisms that could be simpler. Findings worth a
+decision: one hook at `sub_C9A640` for CutsceneFixes (3 sites → 1), the
+NewMemorySystem init thunk instead of the ctor-call/atexit pair, the garage
+prologues, a flat open-addressing allocator registry, and a real fragility in
+PopupHeadlightsFlag whose site clobbers an unrelated `mov ecx,7` ten bytes before
+the instruction it wants. Nothing there is implemented; each row needs approval
+and, for the write-set-visible ones, a matrix cell.
+
+## Features that need a real decision
 - `SkipMenu` has an archived FusionFix-style savegame check. It changes
   behaviour and needs a savegame-path implementation; not shipped.
 - `NewMemorySystem` replaces the game's allocator wholesale and fills
