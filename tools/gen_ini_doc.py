@@ -55,6 +55,11 @@ def main():
         "Tags: `[all]` / `[1060+]` / `[all-1080,1130]` list the game builds an option applies to.",
         "`FF` means the option is automatically disabled when a FusionFix ASI is present.",
         "",
+        "The tag is the applicability the shipped arm implements. For the recovered",
+        "per-build evidence behind it (handler, gate instruction, RVA row) and for",
+        "the builds the original is merely pattern-gated on, see",
+        "[version-matrix.md](version-matrix.md).",
+        "",
     ]
     features = [
         "# Features",

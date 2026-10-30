@@ -87,7 +87,7 @@ fixes the game being permanently sped up slightly in some cases [FF]
 
 ### VSyncFix
 
-fix VSync locking below 60FPS [1004,1060-1070,1100-1130,12043; FF]
+fix VSync locking below 60FPS [1004,1060-1061,1070,1100-1120,12043; FF]
 
 - **Default:** `1`
 
@@ -237,31 +237,31 @@ allow loading of any .sco file regardless of which episode it came from (or whic
 
 ### EpisodicVehicleSupport
 
-APC and buzzard support for all episodes [1004,1060-1130,12043; FF]
+APC and buzzard support for all episodes [1004,1060-1130,1061,12043; FF]
 
 - **Default:** `0`
 
 ### EpisodicWeaponSupport
 
-explosive shotgun, stickybomb and DSR1 sniper support for all episodes [1004,1060-1130,12043; FF]
+explosive shotgun, stickybomb and DSR1 sniper support for all episodes [1004,1060-1130,1061,12043; FF]
 
 - **Default:** `0`
 
 ### PoliceEpisodicWeaponSupport
 
-makes cops use P90s and assault shotguns - only enable this if those weapons exist, or NOOSE and FIB will spawn unarmed [1004,1060-1130,12043; FF]
+makes cops use P90s and assault shotguns - only enable this if those weapons exist, or NOOSE and FIB will spawn unarmed [1004,1060-1130,1061,12043; FF]
 
 - **Default:** `0`
 
 ### TBoGTHeliHeightLimit
 
-unlocks the height limit for aircraft to the TBoGT level for all episodes [1004,1060-1130,12043; FF]
+unlocks the height limit for aircraft to the TBoGT level for all episodes [1004,1060-1130,1061,12043; FF]
 
 - **Default:** `0`
 
 ### PipeBombDropIconSupport
 
-use droppipebomb_icon for pipe bomb in base IV [1004,1060-1130,12043; FF]
+use droppipebomb_icon for pipe bomb in base IV [1004,1060-1130,1061,12043; FF]
 
 - **Default:** `0`
 

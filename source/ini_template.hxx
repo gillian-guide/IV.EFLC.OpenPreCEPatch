@@ -37,7 +37,7 @@ BikeFeetFix = 1                                      // previously TLAD-exclusiv
 BikePhoneAnimsFix = 1                                // fixed standing still animation for bikes during a phone call [FF]
 HighFPSSpeedupFix = 1                                // fix game speeding up above 300FPS [FF]
 SpeedupBugFix = 1                                    // fixes the game being permanently sped up slightly in some cases [FF]
-VSyncFix = 1                                         // fix VSync locking below 60FPS [1004,1060-1070,1100-1130,12043; FF]
+VSyncFix = 1                                         // fix VSync locking below 60FPS [1004,1060-1061,1070,1100-1120,12043; FF]
 MouseFix = 1                                         // fixes the mouse deadzone and removes mouse acceleration from snipers [FF]
 DrivebyFOVFix = 1                                    // fix for driveby shots not landing in the center of the crosshair if you're too high above ground level
 
@@ -67,11 +67,11 @@ InfiniteCarBottomDistance = 0                        // remove the draw distance
 [EPISODIC]
 LoadDLCs = 1                                         // load TBoGT and TLAD from EFLC or CE folders, plus any more addon episodes in the same format (extra DLC folders should be named Episode3, Episode4, etc. and their ids in setup2.xml be the episode id multiplied by 2) [1060,1070,1080]
 SCOSignatureFix = 1                                  // allow loading of any .sco file regardless of which episode it came from (or which platform it came from, in case of patch 4 and below) this is required for trainer IV parachute support to work [all; FF]
-EpisodicVehicleSupport = 0                           // APC and buzzard support for all episodes [1004,1060-1130,12043; FF]
-EpisodicWeaponSupport = 0                            // explosive shotgun, stickybomb and DSR1 sniper support for all episodes [1004,1060-1130,12043; FF]
-PoliceEpisodicWeaponSupport = 0                      // makes cops use P90s and assault shotguns - only enable this if those weapons exist, or NOOSE and FIB will spawn unarmed [1004,1060-1130,12043; FF]
-TBoGTHeliHeightLimit = 0                             // unlocks the height limit for aircraft to the TBoGT level for all episodes [1004,1060-1130,12043; FF]
-PipeBombDropIconSupport = 0                          // use droppipebomb_icon for pipe bomb in base IV [1004,1060-1130,12043; FF]
+EpisodicVehicleSupport = 0                           // APC and buzzard support for all episodes [1004,1060-1130,1061,12043; FF]
+EpisodicWeaponSupport = 0                            // explosive shotgun, stickybomb and DSR1 sniper support for all episodes [1004,1060-1130,1061,12043; FF]
+PoliceEpisodicWeaponSupport = 0                      // makes cops use P90s and assault shotguns - only enable this if those weapons exist, or NOOSE and FIB will spawn unarmed [1004,1060-1130,1061,12043; FF]
+TBoGTHeliHeightLimit = 0                             // unlocks the height limit for aircraft to the TBoGT level for all episodes [1004,1060-1130,1061,12043; FF]
+PipeBombDropIconSupport = 0                          // use droppipebomb_icon for pipe bomb in base IV [1004,1060-1130,1061,12043; FF]
 
 [COMPATIBILITY]
 LaunchWithPlayGTAIV = 1                              // ability to use a (non-SecuROM) launcher renamed to PlayGTAIV [1000,1040,1060,1070,1080]
@@ -128,10 +128,10 @@ PedModelsInCutscenesFix = 1                          // fixes crash when startin
 ; Car1Angle = 90
 
 [HeadlightConeOffsets]                           // per-model headlight cone offset
-Car1Name = admiral
-Car1Offset = -5
 )OPCEP"
-R"OPCEP(Car2Name = airtug
+R"OPCEP(Car1Name = admiral
+Car1Offset = -5
+Car2Name = airtug
 Car2Offset = 5
 Car3Name = benson
 Car3Offset = -4
