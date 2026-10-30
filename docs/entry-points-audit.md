@@ -22,6 +22,7 @@ unchanged but still needs a matrix cell; `behaviour change` needs an opt-in;
 | GarageModelFix site A → prologue | **implemented, opt-in** `OPCEP_IMPROVEMENTS=only:garage_entry`: site moves 0x868BB0 → 0x868B90, 2 sites / 10 bytes unchanged; `xmm0` reloaded by the body | this document + `docs/testing.md` |
 | GarageModelFix site B → prologue | **rejected**: 0x9659C3 is inside a 2-iteration loop with per-iteration ECX; a prologue hook would change lookup ordering (see `.scratch/w3_garage.md`) | analysis |
 | CutsceneFixes → single callee hook | **implemented, opt-in** `OPCEP_IMPROVEMENTS=only:cutscene_entry`: one 5-byte hook at 0x89A640 replaces the 3 sites (9 → 5 bytes); the callee is relocated to a private copy with its 13 calls re-pointed and the branch fix baked in. Any shape mismatch falls back to the 3 original sites | `docs/testing.md` |
+| NewMemorySystem → init thunk | **implemented, opt-in** `OPCEP_IMPROVEMENTS=only:nms_thunk`: one 5-byte hook at 0xD56060 (was: ctor-call rewrite + `atexit` skip, 8 bytes at RVA 0x107B). The game's own allocator construction and `atexit` registration run; the vtable is stored after. Restores the game's ~100 MiB simple-allocator block — do not promote without a live test | `docs/testing.md` |
 | everything else | pending | — |
 
 Line numbers were taken while the failsafe work was in progress; the mechanisms

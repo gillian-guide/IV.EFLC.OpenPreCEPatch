@@ -91,6 +91,7 @@ never installs them; they exist to be A/B tested and promoted later:
 | --- | --- |
 | `garage_entry` | `GarageModelFix` site A from the mid-body anchor (0x868BB0) to the function prologue (0x868B90), reusing the store body and reloading the `xmm0` the prologue instruction sets |
 | `cutscene_entry` | `CutsceneFixes` from its three sites (two camera call rewrites + the branch byte) to one hook at the shared camera callee (0x89A640), by relocating the callee into a private copy whose 13 `call rel32`s are re-pointed and whose branch fix is baked in |
+| `nms_thunk` | `NewMemorySystem` from the allocator-ctor call rewrite + `atexit` skip to one hook at the static-init thunk 0xD56060: the game's own allocator construction and its `atexit` registration run, then the reimplemented vtable is stored. This restores the game's ~100 MiB simple-allocator block, so it changes memory behaviour and must not be promoted without a live test |
 
 Run one with `OPCEP_IMPROVEMENTS=only:<group>` (or `all,<group>` is not a thing:
 `all` does not include these bits, so use `only:` lists that name every group you

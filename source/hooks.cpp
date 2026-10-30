@@ -5210,6 +5210,29 @@ extern "C" void __cdecl abi_nms_apply()
     if (object) *object = zpatch_nms_vtable;
 }
 
+// Opt-in (nms_thunk): the 1.0.8.0 static-init thunk 0xD56060 is
+// `call initialize_memoryAllocators` (0x401060) followed by a per-thread call,
+// an atexit registration and the epilogue. The hook replaces the five-byte call:
+// the body calls the allocator init through the published entry (so the game's
+// own construction and its atexit registration run), stores the reimplemented
+// vtable in the allocator object, then tail-jumps to the thunk's resume so the
+// rest of the thunk stays the original's. The thunk reloads EAX/ECX/EDX in its
+// own next instructions, so the body only needs to keep the stack balanced.
+extern "C" __declspec(naked) void abi_nms_init_thunk()
+{
+    __asm {
+        call dword ptr [zpatch_nms_init_fn]
+        mov  eax, dword ptr [zpatch_nms_object]
+        test eax, eax
+        je   nms_thunk_done
+        mov  ecx, OFFSET zpatch_nms_vtable
+        mov  dword ptr [eax], ecx
+    nms_thunk_done:
+        jmp  dword ptr [zpatch_nms_thunk_resume]
+        __emit 0CCh   // body delimiter for verify_hook_bodies (unreachable)
+    }
+}
+
 namespace
 {
 // NewMemorySystem's allocation registry: the original keeps the pointers it
@@ -5754,6 +5777,7 @@ extern "C" void* AbiByName(const char* name) noexcept
     {"abi_newfiles_update_a", reinterpret_cast<void(*)()>(&abi_newfiles_update_a)},
     {"abi_newfiles_update_b", reinterpret_cast<void(*)()>(&abi_newfiles_update_b)},
     {"abi_nms_apply", reinterpret_cast<void(*)()>(&abi_nms_apply)},
+    {"abi_nms_init_thunk", reinterpret_cast<void(*)()>(&abi_nms_init_thunk)},
     {"abi_nms_ctor", reinterpret_cast<void(*)()>(&abi_nms_ctor)},
     {"abi_nms_noop_arg", reinterpret_cast<void(*)()>(&abi_nms_noop_arg)},
     {"abi_nms_noop_pair", reinterpret_cast<void(*)()>(&abi_nms_noop_pair)},

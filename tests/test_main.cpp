@@ -449,7 +449,7 @@ namespace
     void TestFeatureOrder()
     {
         const auto& features = opp::RegisteredFeatures();
-        CHECK(features.size() == 123);
+        CHECK(features.size() == 124);
         for (size_t i = 1; i < features.size(); ++i)
             CHECK(features[i - 1].order < features[i].order);
     }

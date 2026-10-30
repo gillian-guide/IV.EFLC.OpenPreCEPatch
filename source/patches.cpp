@@ -85,6 +85,9 @@ namespace opp
         // CutsceneFixes' single-callee hook; also opt-in (it relocates the
         // callee into private memory and changes the write set).
         zpatch_opt_cutscene_entry = has(Improvement::cutscene_entry) ? 1u : 0u;
+        // NewMemorySystem's init-thunk form; opt-in because it restores the
+        // game's own allocator construction (memory behaviour changes).
+        zpatch_opt_nms_thunk = has(Improvement::nms_thunk) ? 1u : 0u;
 
         for (const Feature& feature : RegisteredFeatures())
         {

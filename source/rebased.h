@@ -408,3 +408,8 @@ extern "C" uint8_t zpatch_opt_windowed;            // Borderless / DoNotPause
 extern "C" uint8_t zpatch_opt_failsafe;            // runtime-pointer failsafes
 extern "C" uint8_t zpatch_opt_garage_entry;        // GarageModelFix prologue form
 extern "C" uint8_t zpatch_opt_cutscene_entry;      // CutsceneFixes callee hook
+extern "C" uint8_t zpatch_opt_nms_thunk;           // NewMemorySystem init thunk
+// Opt-in NewMemorySystem thunk form: the game's allocator-init entry and the
+// thunk's resume after the 5-byte call the hook overwrites.
+extern "C" uint32_t zpatch_nms_init_fn;
+extern "C" uint32_t zpatch_nms_thunk_resume;

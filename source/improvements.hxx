@@ -37,6 +37,10 @@ namespace opp
         // three sites (two call rewrites + the branch byte). Needs a relocated
         // copy of the callee, so it is opt-in as well.
         cutscene_entry = 1u << 10,
+        // NewMemorySystem: one hook at the static-init thunk (0xD56060) instead
+        // of the ctor-call rewrite + atexit skip. It restores the game's own
+        // allocator construction, so it changes memory behaviour: opt-in only.
+        nms_thunk = 1u << 11,
     };
 
     constexpr uint32_t Improve(Improvement value) noexcept
