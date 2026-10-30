@@ -427,4 +427,55 @@ SkipWebConnect/SkipIntro/SkipMenu/DoNotPause/Borderless to 0 while the shipped
 file set them to 1).
 
 
+## 2026-10-30 - adopted INI surface, gate audit and fork ownership
 
+**Adopted from the user's INI:** categories `[STABILITY]`, `[FIXES]`,
+`[PERFORMANCE]`, `[GRAPHICS]`, `[EPISODIC]`, `[COMPATIBILITY]`, `[MULTIPLAYER]`,
+`[VEHICLES]`, `[MISC]` (MULTIPLAYER after COMPATIBILITY), the user's defaults,
+the populated `[HeadlightConeOffsets]` table and the FF tags (32 options; see
+`source/fusionfix_compat.cpp` for the authoritative list).
+
+### Gate audit
+
+The binary was re-examined instead of trusting the generated JSON:
+
+- Only 14 handlers read `dword_1015BE04` at all. The rest are genuinely ungated;
+  the "missing" gates are successor policy, not lost recoveries.
+- `LaunchWithPlayGTAIV`: the JSON's `!=9` is a mis-extraction. Handler
+  `0x100441B0` is a switch with a **1080 case** and its own RVA pair; 1080 is
+  restored and tagged `[1000,1040,1060,1070,1080]`.
+- `RemoveRGSCLoginRequirement`: no option gate in the binary. The `build == 9`
+  branch in `0x10045490` is the missing-signature fallback; the tag is `[all]`
+  and the 1080 RVA is restored.
+- `BenchmarkFix`: `!=9 && !=13` (tag `[all-1080,1130]`).
+- `VSyncFix`: `!=1..5,9,13` (tag includes `12043`).
+- `Episodic*`, `TBoGTHeliHeightLimit`, `PipeBombDropIconSupport`: mask
+  `0x4bfc0` = 1004 + 1060..1130 + 12043. PipeBomb was already gated in code;
+  tags are now explicit `[1004,1060-1130,12043; FF]`.
+- Semantic gates added per request: `BuildingAlphaFix` 1060+,
+  `NewSavesCompatibility` 1060-1080, `OutOfCommissionFix` 1060-1130,
+  `RemoveModChecks` 1004/1060/1070, `RemoveGFWLUpdatePopup` 1000-1040.
+- `RemoveModChecks` unifies the old `Patch4RemoveModChecks`,
+  `Patch6and7RemoveModChecks` and `Patch7RemoveModChecks`; the old keys remain
+  readable as aliases. `RemoveGFWLUpdatePopup` shares the same stub and is gated
+  to pre-patch-6.
+- `LocalSettingsPath` moved to XLivelessAddon. The main arms/registrations are
+  gone; the fork implements it the FusionFix way (redirect
+  `SHGetFolderPathA/W`), and gates it off when FusionFix is present.
+
+### Matrix / tests
+
+96 cells / 3,909 writes; defaults 493, all-on 855, legacy 810. The removed
+cells are `LocalSettingsPath`, `Patch4RemoveModChecks`,
+`Patch6and7RemoveModChecks` and the `[INPUT]`/`[LOADING]` section cells;
+`RemoveModChecks` and `[FIXES]` are new. `build.bat --test` will be re-run after
+the docs commit.
+
+### Reconstruction mirror
+
+`recovered_build_gates.inc` now carries the relational gates the first
+extraction dropped: `BenchmarkFix` `0x49de2`, `VSyncFix` `0x49dc0` (15 rows,
+test updated). `option_build_gates.json` records the Launch switch and the
+RemoveRGSC fallback note. A standalone harness verified the masks; the full
+reconstruction suite could not link because its Makefile omits `src/log.cpp`
+(pre-existing).

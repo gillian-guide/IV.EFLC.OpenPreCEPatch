@@ -48,40 +48,59 @@ namespace opp::features
     }
 
 
-    // publish Patch4RemoveModChecks
+    // RemoveModChecks / RemoveGFWLUpdatePopup (patch 4 and patch 6/7 modded-file
+    // checks plus the pre-patch-6 GFWL update popup).
 
-    void PublishPatch4RemoveModChecks(PatchContext& ctx)
+    namespace
     {
+        constexpr const char* kGfwlStubPattern =
+            "2B C1 1B D6 89 44 24 0C 89 54 24 10 DF 6C 24 0C D8 0D ? ? ? ? D9 5C 24 08";
 
-        TraceArm("publish Patch4RemoveModChecks");
-
-        // Patch4RemoveModChecks: 1 slot
-        if (ctx.Option("Patch4RemoveModChecks", "0"))
+        bool ModChecksEnabled(const PatchContext& ctx)
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "2B C1 1B D6 89 44 24 0C 89 54 24 10 DF 6C 24 0C D8 0D ? ? ? ? D9 5C 24 08"); pattern.size() > 0)
-            {
-                zpatch_gfwl_resume = MatchAddress(pattern, 12);
-            }
+            // RemoveModChecks is the unified key. The old per-patch keys stay
+            // readable as aliases, so an existing INI keeps working without the
+            // user having to rewrite it.
+            return ctx.Option("RemoveModChecks", "0") ||
+                   ctx.Option("Patch4RemoveModChecks", "0") ||
+                   ctx.Option("Patch6and7RemoveModChecks", "0") ||
+                   ctx.Option("Patch7RemoveModChecks", "0");
         }
 
+        bool PrePatch6(GameBuild build) noexcept
+        {
+            return BuildIs(build, {GameBuild::v1000, GameBuild::v1004, GameBuild::v1040});
+        }
+
+        bool WantsGfwlStub(const PatchContext& ctx)
+        {
+            // Patch 4: the modded-file check is the RemoveModChecks half.
+            if (ctx.build == GameBuild::v1004 && ModChecksEnabled(ctx))
+                return true;
+            // Pre-patch-6: the update/sign-out popup removal half.
+            if (PrePatch6(ctx.build) && ctx.Option("RemoveGFWLUpdatePopup", "0"))
+                return true;
+            return false;
+        }
+    } // namespace
+
+    void PublishRemoveModChecks(PatchContext& ctx)
+    {
+        TraceArm("publish RemoveModChecks");
+        if (!WantsGfwlStub(ctx))
+            return;
+        if (auto pattern = Pattern(ctx.image, kGfwlStubPattern); pattern.size() > 0)
+            zpatch_gfwl_resume = MatchAddress(pattern, 12);
     }
 
-
-    // Patch4RemoveModChecks
-
-    void InstallPatch4RemoveModChecks(PatchContext& ctx)
+    void InstallRemoveModChecks(PatchContext& ctx)
     {
+        TraceArm("RemoveModChecks");
 
-        TraceArm("Patch4RemoveModChecks");
-
-        // Patch4RemoveModChecks: 1 siginstall
-        if (ctx.Option("Patch4RemoveModChecks", "0"))
+        // Patch 4 / pre-6 GFWL update popup share one stub.
+        if (WantsGfwlStub(ctx))
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "2B C1 1B D6 89 44 24 0C 89 54 24 10 DF 6C 24 0C D8 0D ? ? ? ? D9 5C 24 08"); pattern.size() > 0)
+            if (auto pattern = Pattern(ctx.image, kGfwlStubPattern); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
@@ -89,133 +108,48 @@ namespace opp::features
             }
         }
 
-    }
+        if (!ModChecksEnabled(ctx))
+            return;
 
+        const GameImage& image = ctx.image;
 
-    // Patch6and7RemoveModChecks
-
-    void InstallPatch6and7RemoveModChecks(PatchContext& ctx)
-    {
-
-        TraceArm("Patch6and7RemoveModChecks");
-
-        // Patch6and7RemoveModChecks: 22 literals, 3 rvas
-        if (ctx.Option("Patch6and7RemoveModChecks", "0") ||
-            ctx.Option("Patch7RemoveModChecks", "0"))
+        // Patch 6 (1060) modded-file checks.
+        if (ctx.build == GameBuild::v1060)
         {
-            const GameImage& image = ctx.image;
-
-            if (ctx.build == GameBuild::v1060)
-            {
-                injector::MakeJMP(image.base + 0x003982,
-                    reinterpret_cast<void*>(ctx.gameBase + 0x003A09), true); //jmp
-                injector::WriteMemory<uint8_t>(image.base + 0x0038AC, 0x00u, true); //patch
-                injector::WriteMemory<uint8_t>(image.base + 0x00397E, 0x00u, true); //patch
-                injector::MakeNOP(image.base + 0x0042E7, 1, true); //nop
-                injector::MakeNOP(image.base + 0x0042E8, 1, true); //nop
-                injector::MakeNOP(image.base + 0x0042E9, 1, true); //nop
-                injector::MakeNOP(image.base + 0x0042EA, 1, true); //nop
-                injector::MakeNOP(image.base + 0x0042EB, 1, true); //nop
-                injector::MakeNOP(image.base + 0x0042EC, 1, true); //nop
-                injector::MakeNOP(image.base + 0x0042ED, 1, true); //nop
-                injector::WriteMemory<uint8_t>(image.base + 0x00392E, 0xEBu, true); //jmp
-                injector::WriteMemory<uint8_t>(image.base + 0x003A14, 0xEBu, true); //jmp
-            }
-
-            if (ctx.build == GameBuild::v1070)
-            {
-                injector::MakeJMP(image.base + 0x00389C,
-                    reinterpret_cast<void*>(ctx.gameBase + 0x0038AE), true); //jmp
-                injector::MakeJMP(image.base + 0x003962,
-                    reinterpret_cast<void*>(ctx.gameBase + 0x0039E9), true); //jmp
-                injector::WriteMemory<uint8_t>(image.base + 0x00388C, 0x00u, true); //patch
-                injector::WriteMemory<uint8_t>(image.base + 0x00395E, 0x00u, true); //patch
-                injector::MakeNOP(image.base + 0x0042C7, 1, true); //nop
-                injector::MakeNOP(image.base + 0x0042C8, 1, true); //nop
-                injector::MakeNOP(image.base + 0x0042C9, 1, true); //nop
-                injector::MakeNOP(image.base + 0x0042CA, 1, true); //nop
-                injector::MakeNOP(image.base + 0x0042CB, 1, true); //nop
-                injector::MakeNOP(image.base + 0x0042CC, 1, true); //nop
-                injector::MakeNOP(image.base + 0x0042CD, 1, true); //nop
-                injector::WriteMemory<uint8_t>(image.base + 0x00390E, 0xEBu, true); //jmp
-                injector::WriteMemory<uint8_t>(image.base + 0x0039F4, 0xEBu, true); //jmp
-            }
+            injector::MakeJMP(image.base + 0x003982,
+                reinterpret_cast<void*>(ctx.gameBase + 0x003A09), true); //jmp
+            injector::WriteMemory<uint8_t>(image.base + 0x0038AC, 0x00u, true); //patch
+            injector::WriteMemory<uint8_t>(image.base + 0x00397E, 0x00u, true); //patch
+            injector::MakeNOP(image.base + 0x0042E7, 1, true); //nop
+            injector::MakeNOP(image.base + 0x0042E8, 1, true); //nop
+            injector::MakeNOP(image.base + 0x0042E9, 1, true); //nop
+            injector::MakeNOP(image.base + 0x0042EA, 1, true); //nop
+            injector::MakeNOP(image.base + 0x0042EB, 1, true); //nop
+            injector::MakeNOP(image.base + 0x0042EC, 1, true); //nop
+            injector::MakeNOP(image.base + 0x0042ED, 1, true); //nop
+            injector::WriteMemory<uint8_t>(image.base + 0x00392E, 0xEBu, true); //jmp
+            injector::WriteMemory<uint8_t>(image.base + 0x003A14, 0xEBu, true); //jmp
         }
 
-    }
-
-
-    // Patch7RemoveModChecks
-
-    void InstallPatch7RemoveModChecks(PatchContext& ctx)
-    {
-
-        TraceArm("Patch7RemoveModChecks");
-
-        // Patch7RemoveModChecks: 3 rvas
-        if (ctx.Option("Patch7RemoveModChecks", "0"))
+        // Patch 7 (1070) modded-file checks.
+        if (ctx.build == GameBuild::v1070)
         {
-            const GameImage& image = ctx.image;
-
-            if (ctx.build == GameBuild::v1060)
-            {
-                injector::MakeJMP(image.base + 0x003982,
-                    reinterpret_cast<void*>(ctx.gameBase + 0x003A09), true); //jmp
-            }
-
-            if (ctx.build == GameBuild::v1070)
-            {
-                injector::MakeJMP(image.base + 0x00389C,
-                    reinterpret_cast<void*>(ctx.gameBase + 0x0038AE), true); //jmp
-                injector::MakeJMP(image.base + 0x003962,
-                    reinterpret_cast<void*>(ctx.gameBase + 0x0039E9), true); //jmp
-            }
+            injector::MakeJMP(image.base + 0x00389C,
+                reinterpret_cast<void*>(ctx.gameBase + 0x0038AE), true); //jmp
+            injector::MakeJMP(image.base + 0x003962,
+                reinterpret_cast<void*>(ctx.gameBase + 0x0039E9), true); //jmp
+            injector::WriteMemory<uint8_t>(image.base + 0x00388C, 0x00u, true); //patch
+            injector::WriteMemory<uint8_t>(image.base + 0x00395E, 0x00u, true); //patch
+            injector::MakeNOP(image.base + 0x0042C7, 1, true); //nop
+            injector::MakeNOP(image.base + 0x0042C8, 1, true); //nop
+            injector::MakeNOP(image.base + 0x0042C9, 1, true); //nop
+            injector::MakeNOP(image.base + 0x0042CA, 1, true); //nop
+            injector::MakeNOP(image.base + 0x0042CB, 1, true); //nop
+            injector::MakeNOP(image.base + 0x0042CC, 1, true); //nop
+            injector::MakeNOP(image.base + 0x0042CD, 1, true); //nop
+            injector::WriteMemory<uint8_t>(image.base + 0x00390E, 0xEBu, true); //jmp
+            injector::WriteMemory<uint8_t>(image.base + 0x0039F4, 0xEBu, true); //jmp
         }
-
-    }
-
-
-    // publish RemoveGFWLUpdatePopup
-
-    void PublishRemoveGFWLUpdatePopup(PatchContext& ctx)
-    {
-
-        TraceArm("publish RemoveGFWLUpdatePopup");
-
-        // RemoveGFWLUpdatePopup: 1 slot
-        if (ctx.Option("RemoveGFWLUpdatePopup", "0"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "2B C1 1B D6 89 44 24 0C 89 54 24 10 DF 6C 24 0C D8 0D ? ? ? ? D9 5C 24 08"); pattern.size() > 0)
-            {
-                zpatch_gfwl_resume = MatchAddress(pattern, 12);
-            }
-        }
-
-    }
-
-
-    // RemoveGFWLUpdatePopup
-
-    void InstallRemoveGFWLUpdatePopup(PatchContext& ctx)
-    {
-
-        TraceArm("RemoveGFWLUpdatePopup");
-
-        // RemoveGFWLUpdatePopup: 1 siginstall
-        if (ctx.Option("RemoveGFWLUpdatePopup", "0"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "2B C1 1B D6 89 44 24 0C 89 54 24 10 DF 6C 24 0C D8 0D ? ? ? ? D9 5C 24 08"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_gfwl_stub")), true); //jmp
-            }
-        }
-
     }
 
 
@@ -226,22 +160,23 @@ namespace opp::features
 
         TraceArm("RemoveRGSCLoginRequirement");
 
-        // RemoveRGSCLoginRequirement: 1 rva, 1 rvajump, 1 sigjump
+        // RemoveRGSCLoginRequirement: no option gate in the original. The
+        // pattern handles every build; 1.0.8.0 has an RVA fallback because the
+        // pattern is absent there (original handler 0x10045490).
         if (ctx.Option("RemoveRGSCLoginRequirement", "0"))
         {
             const GameImage& image = ctx.image;
-
-            if (ctx.build == GameBuild::v1080)
-            {
-                injector::MakeJMP(image.base + 0x498460,
-                    reinterpret_cast<void*>(Abi("abi_rgsc_login_removed")), true); //jmp
-            }
 
             if (auto pattern = Pattern(image, "83 EC 44 A1 ? ? ? ? 33 C4 89 44 24 40 53 8B 5C 24 4C 56 68 ? ? ? ? E8 ? ? ? ? 83 C4"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
                 injector::MakeJMP(match, reinterpret_cast<void*>(Abi("abi_rgsc_login_removed")), true); //jmp
+            }
+            else if (ctx.build == GameBuild::v1080)
+            {
+                injector::MakeJMP(image.base + 0x498460,
+                    reinterpret_cast<void*>(Abi("abi_rgsc_login_removed")), true); //jmp
             }
         }
 
@@ -538,15 +473,11 @@ namespace
     public:
         CompatibilityFeatures()
         {
-            RegisterFeature(34, "PublishPatch4RemoveModChecks", &PublishPatch4RemoveModChecks);
-            RegisterFeature(45, "PublishRemoveGFWLUpdatePopup", &PublishRemoveGFWLUpdatePopup);
+            RegisterFeature(34, "PublishRemoveModChecks", &PublishRemoveModChecks);
             RegisterFeature(47, "InstallAllowHashesForIDE", &InstallAllowHashesForIDE);
-            RegisterFeature(83, "InstallPatch6and7RemoveModChecks", &InstallPatch6and7RemoveModChecks);
+            RegisterFeature(83, "InstallRemoveModChecks", &InstallRemoveModChecks);
             RegisterFeature(93, "InstallRemoveRGSCLoginRequirement", &InstallRemoveRGSCLoginRequirement);
             RegisterFeature(100, "InstallSavegameFix", &InstallSavegameFix);
-            RegisterFeature(110, "InstallPatch7RemoveModChecks", &InstallPatch7RemoveModChecks);
-            RegisterFeature(117, "InstallPatch4RemoveModChecks", &InstallPatch4RemoveModChecks);
-            RegisterFeature(128, "InstallRemoveGFWLUpdatePopup", &InstallRemoveGFWLUpdatePopup);
             RegisterFeature(148, "InstallGFWLProtectionDisabler", &InstallGFWLProtectionDisabler);
             RegisterFeature(149, "InstallSteamAchievements", &InstallSteamAchievements);
         }

@@ -132,75 +132,6 @@ namespace opp::features
     }
 
 
-    // publish LocalSettingsPath
-
-    void PublishLocalSettingsPath(PatchContext& ctx)
-    {
-
-        TraceArm("publish LocalSettingsPath");
-
-        // LocalSettingsPath: 7 slots
-        if (ctx.Option("LocalSettingsPath", "0"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D6 5F 5E 5B C3"); pattern.size() > 0)
-            {
-                zpatch_local_path_1c = *pattern.get(0).get<uint32_t>(-178);
-                zpatch_local_path_10 = *pattern.get(0).get<uint32_t>(-190);
-                zpatch_local_episode_ptr = *pattern.get(0).get<uint32_t>(-151);
-                zpatch_local_path_18 = *pattern.get(0).get<uint32_t>(-444);
-                zpatch_local_path_08 = *pattern.get(0).get<uint32_t>(-432);
-            }
-
-            if (auto pattern = Pattern(image, "7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D7 5F C3"); pattern.size() > 0)
-            {
-                zpatch_local_path_18 = *pattern.get(0).get<uint32_t>(-160);
-                zpatch_local_path_1c = *pattern.get(0).get<uint32_t>(-55);
-            }
-        }
-
-    }
-
-
-    // LocalSettingsPath
-
-    void InstallLocalSettingsPath(PatchContext& ctx)
-    {
-
-        TraceArm("LocalSettingsPath");
-
-        // LocalSettingsPath: 3 siginstalls
-        if (ctx.Option("LocalSettingsPath", "0"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "53 8B 5C 24 08 56 6A 00 6A 00"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                injector::WriteMemory<uint32_t>(match + 16, AddressOf(&zpatch_local_saves_slot), true); //patch
-                injector::WriteMemory<uint32_t>(match + 32, AddressOf(&zpatch_local_iv_suffix), true); //patch
-            }
-
-            if (auto pattern = Pattern(image, "7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D6 5F 5E 5B C3"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                injector::MakeJMP(match + 14, reinterpret_cast<void*>(Abi("abi_local_settings_detour")), true); //jmp
-            }
-
-            if (auto pattern = Pattern(image, "7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D7 5F C3"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                injector::MakeJMP(match - 13, reinterpret_cast<void*>(Abi("abi_local_settings_fallback_detour")), true); //jmp
-            }
-        }
-
-    }
-
-
     // publish NewFilesCompatibility
 
     void PublishNewFilesCompatibility(PatchContext& ctx)
@@ -266,8 +197,13 @@ namespace opp::features
 
         TraceArm("publish NewSavesCompatibility");
 
-        // NewSavesCompatibility: 3 slots
-        if (ctx.Option("NewSavesCompatibility", "1") && Pattern(ctx.image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08").size() > 0)
+        // NewSavesCompatibility: 3 slots. The newer save format is 1060-1080
+        // only; gate the arm instead of relying on the pattern coincidentally
+        // missing on 1000/1004/1040 and EFLC.
+        if (ctx.Option("NewSavesCompatibility", "1") &&
+            BuildIs(ctx.build, {GameBuild::v1060, GameBuild::v1061, GameBuild::v1070,
+                                GameBuild::v1080}) &&
+            Pattern(ctx.image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08").size() > 0)
         {
             const GameImage& image = ctx.image;
 
@@ -293,7 +229,10 @@ namespace opp::features
         TraceArm("NewSavesCompatibility");
 
         // NewSavesCompatibility: 1 siginstall, 1 sigjump
-        if (ctx.Option("NewSavesCompatibility", "1") && Pattern(ctx.image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08").size() > 0)
+        if (ctx.Option("NewSavesCompatibility", "1") &&
+            BuildIs(ctx.build, {GameBuild::v1060, GameBuild::v1061, GameBuild::v1070,
+                                GameBuild::v1080}) &&
+            Pattern(ctx.image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08").size() > 0)
         {
             const GameImage& image = ctx.image;
 
@@ -362,11 +301,9 @@ namespace
         LoadingFeatures()
         {
             RegisterFeature(12, "PublishLoadDLCs", &PublishLoadDLCs);
-            RegisterFeature(13, "PublishLocalSettingsPath", &PublishLocalSettingsPath);
             RegisterFeature(14, "PublishNewFilesCompatibility", &PublishNewFilesCompatibility);
             RegisterFeature(16, "PublishNewSavesCompatibility", &PublishNewSavesCompatibility);
             RegisterFeature(71, "InstallLoadDLCs", &InstallLoadDLCs);
-            RegisterFeature(72, "InstallLocalSettingsPath", &InstallLocalSettingsPath);
             RegisterFeature(79, "InstallNewFilesCompatibility", &InstallNewFilesCompatibility);
             RegisterFeature(81, "InstallNewSavesCompatibility", &InstallNewSavesCompatibility);
             RegisterFeature(98, "InstallSCOSignatureFix", &InstallSCOSignatureFix);

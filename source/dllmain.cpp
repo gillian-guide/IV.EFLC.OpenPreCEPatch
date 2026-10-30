@@ -189,7 +189,8 @@ namespace
 
         if (config.Option("RestoreDeathMusic", "0"))
             zpatch_flag_death_music = 1u;
-        if (config.Option("Patch4RemoveModChecks", "0"))
+        if (config.Option("RemoveModChecks", "0") ||
+            config.Option("Patch4RemoveModChecks", "0"))
             zpatch_flag_patch4_modchecks = 1u;
         if (config.Option("RemoveGFWLUpdatePopup", "0"))
             zpatch_flag_gfwl_popup = 1u;
@@ -312,9 +313,6 @@ namespace
             return;
 
         const opp::GameImage gameImage{moduleBase, nt->OptionalHeader.SizeOfImage};
-
-        if (config.Option("LocalSettingsPath", "0"))
-            zpatch_local_settings_capture_cwd();
 
         (void)opp::FindGamePointers(gameImage);
 

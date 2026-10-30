@@ -31,8 +31,12 @@ namespace opp::features
 
         TraceArm("BuildingAlphaFix");
 
-        // BuildingAlphaFix: 1 literal, 1 siginstall
-        if (ctx.Option("BuildingAlphaFix", "1"))
+        // BuildingAlphaFix: 1 literal, 1 siginstall. Patch 6+ only (the LOD
+        // fade-in path it fixes does not exist before 1060).
+        if (ctx.Option("BuildingAlphaFix", "1") &&
+            BuildIs(ctx.build, {GameBuild::v1060, GameBuild::v1061, GameBuild::v1070,
+                                GameBuild::v1080, GameBuild::v1100, GameBuild::v1110,
+                                GameBuild::v1120, GameBuild::v1130, GameBuild::v12043}))
         {
             const GameImage& image = ctx.image;
 

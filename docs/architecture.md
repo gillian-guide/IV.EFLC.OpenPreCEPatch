@@ -13,7 +13,6 @@ DllMain / InitializeASI
   old-loader warning + unsupported-version guard
   read the grouped INI, vehicle-light sections and option globals
   ZMenuIV version guard
-  LocalSettingsPath capture
   unconditional preamble (game pointers + hash salts)
   PatchGame (all INI-gated installs)
   LaunchWithPlayGTAIV
@@ -53,11 +52,8 @@ FusionFix: a `module;` global fragment includes the shared headers, then
 
 ## Configuration
 
-Options are grouped into `[STABILITY]`, `[PERFORMANCE]`, `[GRAPHICS]`,
-`[VEHICLES]`, `[INPUT]`, `[MULTIPLAYER]`, `[EPISODIC]`, `[LOADING]`,
-`[COMPATIBILITY]` and `[MISC]`. Keys are unique across sections, so
-`Config::Option` looks in `[Options]` first (old flat files) and then walks the
-grouped sections.
+Options are grouped into `[STABILITY]`, `[FIXES]`, `[PERFORMANCE]`, `[GRAPHICS]`,
+`[EPISODIC]`, `[COMPATIBILITY]`, `[MULTIPLAYER]`, `[VEHICLES]` and `[MISC]`.
 
 `ini_import.cpp` owns the first-run path: it writes the embedded template when
 `IV.EFLC.OpenPreCEPatch.ini` is absent, or builds that file from an old

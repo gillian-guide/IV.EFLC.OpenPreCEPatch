@@ -23,7 +23,7 @@ namespace opp
         constexpr const char* kLegacyName = "ZolikaPatch.ini";
 
         constexpr const char* kSections[] = {
-            "Options",      "STABILITY", "PERFORMANCE", "GRAPHICS",
+            "Options",      "STABILITY", "FIXES",     "PERFORMANCE", "GRAPHICS",
             "VEHICLES",     "INPUT",       "MULTIPLAYER", "EPISODIC", "LOADING",
             "COMPATIBILITY", "MISC",       "XLIVELESS",   "INTERFACE", "DEBUG",
         };

@@ -69,13 +69,8 @@ shipped template if the file is absent. If an old `ZolikaPatch.ini` is next to
 it, the ASI ports its values into the grouped file first; no external converter
 is involved.
 
-Options are grouped into `[STABILITY]`, `[PERFORMANCE]`, `[GRAPHICS]`,
-`[VEHICLES]`, `[INPUT]`, `[MULTIPLAYER]`, `[EPISODIC]`, `[LOADING]`,
-`[COMPATIBILITY]` and `[MISC]`. Each line ends with a compact build tag
-(`[all]`, `[1060+]`, ...) and, when applicable, `FF`, meaning the option is
-automatically disabled when a FusionFix ASI is present. See
-[docs/fusionfix.md](docs/fusionfix.md) for the full overlap list. If an FF
-option is enabled, a one-time notice lists the options that will not be active.
+Options are grouped into `[STABILITY]`, `[FIXES]`, `[PERFORMANCE]`, `[GRAPHICS]`,
+`[EPISODIC]`, `[COMPATIBILITY]`, `[MULTIPLAYER]`, `[VEHICLES]` and `[MISC]`.
 
 XLivelessAddon is a **separate module** now. Build it from
 `xlivelessaddon/` (output `XLivelessAddon.asi` plus `XLivelessAddon.ini`) when

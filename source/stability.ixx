@@ -519,8 +519,12 @@ namespace opp::features
 
         TraceArm("publish OutOfCommissionFix");
 
-        // OutOfCommissionFix: 3 slots
-        if (ctx.Option("OutOfCommissionFix", "1"))
+        // OutOfCommissionFix: 3 slots. The finale archive path exists on
+        // 1060-1130; gate it explicitly (12043 has no verified payload).
+        if (ctx.Option("OutOfCommissionFix", "1") &&
+            BuildIs(ctx.build, {GameBuild::v1060, GameBuild::v1061, GameBuild::v1070,
+                                GameBuild::v1080, GameBuild::v1100, GameBuild::v1110,
+                                GameBuild::v1120, GameBuild::v1130}))
         {
             const GameImage& image = ctx.image;
 
@@ -547,7 +551,10 @@ namespace opp::features
         TraceArm("OutOfCommissionFix");
 
         // OutOfCommissionFix: 2 siginstalls
-        if (ctx.Option("OutOfCommissionFix", "1"))
+        if (ctx.Option("OutOfCommissionFix", "1") &&
+            BuildIs(ctx.build, {GameBuild::v1060, GameBuild::v1061, GameBuild::v1070,
+                                GameBuild::v1080, GameBuild::v1100, GameBuild::v1110,
+                                GameBuild::v1120, GameBuild::v1130}))
         {
             const GameImage& image = ctx.image;
 

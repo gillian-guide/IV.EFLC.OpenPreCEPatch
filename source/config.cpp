@@ -12,9 +12,9 @@ namespace opp
         // a key without a generated key->section table. [Options] stays first so
         // an old flat ZolikaPatch.ini keeps working unchanged.
         constexpr const char* kOptionSections[] = {
-            "Options",      "STABILITY", "PERFORMANCE", "GRAPHICS", "VEHICLES",
-            "INPUT",        "MULTIPLAYER", "EPISODIC", "LOADING", "COMPATIBILITY",
-            "MISC",         "XLIVELESS", "INTERFACE", "DEBUG",
+            "Options",      "STABILITY", "FIXES",     "PERFORMANCE", "GRAPHICS",
+            "VEHICLES",     "INPUT",       "MULTIPLAYER", "EPISODIC", "LOADING",
+            "COMPATIBILITY", "MISC",       "XLIVELESS",   "INTERFACE", "DEBUG",
         };
     } // namespace
 

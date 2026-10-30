@@ -11,44 +11,38 @@ mods writing one subsystem is not a combination this project can test.
 
 | option | FusionFix module / setting |
 | --- | --- |
-| BikeFeetFix | `fixes.ixx` feet on bikes |
-| BikePhoneAnimsFix | `fixes.ixx` phone/bike animation |
-| BorderlessWindowed | `windowed.ixx` (`PREF_BORDERLESS`) |
-| BuildingAlphaFix | `fixes.ixx` LOD fade-in |
-| BuildingDynamicShadows | `shadows.ixx` |
-| CarDynamicShadowFix | `shadows.ixx`, `nightshadows.ixx` |
-| CarPartsShadowFix | `shadows.ixx` |
-| CutsceneFixes | `cutscenecam.ixx`, `frameratevigilante.ixx` |
-| DoNotPauseOnMinimize | `windowed.ixx` (`PREF_BLOCKONLOSTFOCUS`) |
-| EmissiveLerpFix | `fixes.ixx`, `shaders.ixx` emissive state |
-| EpisodicVehicleSupport | `episodiccontent.ixx` (`EpisodicVehicles`) |
-| EpisodicWeaponSupport | `episodiccontent.ixx` (`EpisodicWeapons`) |
-| FastLoading | `loadingdelays.ixx`, `framelimit.ixx` |
-| ForceCarHeadlightShadows | `nightshadows.ixx` |
-| ForceShadowsOnObjects | `shadows.ixx` |
-| HighFPSBikePhysicsFix | `frameratevigilante.ixx` vehicle physics |
-| HighFPSSpeedupFix | `frameratevigilante.ixx` time scale |
-| ImprovedShaderStreaming | `shaders.ixx` |
-| IncreasePtrNodes | `limits.ixx` (`PtrNode Double` pool) |
-| IncreaseVehicleModelLimit | `limits.ixx` |
-| IncreaseVehicleStructLimit | `limits.ixx` (`VehicleStruct` pool) |
-| LocalSettingsPath | `userdata.ixx` (`CustomUserProfilePath`) |
-| MouseFix | `rawinput.ixx`, `sniper.ixx` |
-| NoImpostorHeightCutoff | `lodlights.ixx`, `fixes.ixx` |
-| NoLODLightHeightCutoff | `lodlights.ixx` |
-| NoLiveryLimit | `limits.ixx` (`LiveriesLimit`) |
-| NoLoadingSleep | `loadingdelays.ixx` Sleep hook |
-| PipeBombDropIconSupport | `episodiccontent.ixx` |
-| PoliceEpisodicWeaponSupport | `episodiccontent.ixx` (`TBoGTPoliceWeapons`) |
-| ReversingLightFix | `fixes.ixx` reversing-light bone |
-| RestoreDeathMusic | `deathmusic.ixx` (`DeathMusic`) |
-| SCOSignatureFix | `episodiccontent.ixx` (`RemoveSCOSignatureCheck`) |
-| SkipIntro | `skipintro.ixx` (`PREF_SKIP_INTRO`) |
-| SkipMenu | `skipintro.ixx` (`PREF_SKIP_MENU`) |
-| SpeedupBugFix | `frameratevigilante.ixx` time scale |
-| TBoGTHeliHeightLimit | `episodiccontent.ixx` |
-| VRAMFix | `memory.ixx` VRAM detection |
-| VSyncFix | `framelimit.ixx`, `windowed.ixx` |
+| BikeFeetFix | `FusionFix fixes.ixx (feet on bikes)` |
+| BikePhoneAnimsFix | `FusionFix fixes.ixx (phone/bike animation)` |
+| BuildingAlphaFix | `FusionFix fixes.ixx (LOD fade-in)` |
+| BuildingDynamicShadows | `FusionFix shadows.ixx` |
+| CarDynamicShadowFix | `FusionFix shadows.ixx / nightshadows.ixx` |
+| CarPartsShadowFix | `FusionFix shadows.ixx` |
+| CutsceneFixes | `FusionFix cutscenecam.ixx / frameratevigilante.ixx` |
+| EmissiveLerpFix | `FusionFix fixes.ixx / shaders.ixx (emissive state)` |
+| EpisodicVehicleSupport | `FusionFix episodiccontent.ixx (EpisodicVehicles)` |
+| EpisodicWeaponSupport | `FusionFix episodiccontent.ixx (EpisodicWeapons)` |
+| FastLoading | `FusionFix loadingdelays.ixx / framelimit.ixx` |
+| ForceCarHeadlightShadows | `FusionFix nightshadows.ixx` |
+| ForceShadowsOnObjects | `FusionFix shadows.ixx` |
+| HighFPSBikePhysicsFix | `FusionFix frameratevigilante.ixx (vehicle physics)` |
+| HighFPSSpeedupFix | `FusionFix frameratevigilante.ixx (time scale)` |
+| IncreasePtrNodes | `FusionFix limits.ixx (PtrNode Double pool)` |
+| IncreaseVehicleModelLimit | `FusionFix limits.ixx` |
+| IncreaseVehicleStructLimit | `FusionFix limits.ixx (VehicleStruct pool)` |
+| MouseFix | `FusionFix rawinput.ixx / sniper.ixx` |
+| NoImpostorHeightCutoff | `FusionFix lodlights.ixx / fixes.ixx` |
+| NoLODLightHeightCutoff | `FusionFix lodlights.ixx` |
+| NoLiveryLimit | `FusionFix limits.ixx (LiveriesLimit)` |
+| NoLoadingSleep | `FusionFix loadingdelays.ixx (Sleep hook)` |
+| OutOfCommissionFix | `FusionFix frameratevigilante.ixx / fixes.ixx (high-FPS QTE)` |
+| PipeBombDropIconSupport | `FusionFix episodiccontent.ixx` |
+| PoliceEpisodicWeaponSupport | `FusionFix episodiccontent.ixx (TBoGTPoliceWeapons)` |
+| ReversingLightFix | `FusionFix fixes.ixx (reversing light bone)` |
+| RestoreDeathMusic | `FusionFix deathmusic.ixx (DeathMusic)` |
+| SCOSignatureFix | `FusionFix episodiccontent.ixx (RemoveSCOSignatureCheck)` |
+| SpeedupBugFix | `FusionFix frameratevigilante.ixx (time scale)` |
+| TBoGTHeliHeightLimit | `FusionFix episodiccontent.ixx NOPs the same height check` |
+| VSyncFix | `FusionFix framelimit.ixx / windowed.ixx` |
 
 Options not in this table patch sites FusionFix does not touch (for example the
 path-node, plane, projectile, MP-sync, save and file-compatibility fixes), so

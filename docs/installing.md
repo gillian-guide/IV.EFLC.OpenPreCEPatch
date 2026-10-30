@@ -56,23 +56,40 @@ value is not rewritten; remove FusionFix and the option becomes active again.
 
 The conflicts are listed in `source/fusionfix_compat.cpp`. The groups are:
 
-| OpenPreCEPatch options | FusionFix module |
+| OpenPreCEPatch option | FusionFix module / setting |
 | --- | --- |
-| BorderlessWindowed, DoNotPauseOnMinimize | `windowed.ixx` |
-| EpisodicVehicleSupport, EpisodicWeaponSupport, PoliceEpisodicWeaponSupport, TBoGTHeliHeightLimit, SCOSignatureFix, PipeBombDropIconSupport | `episodiccontent.ixx` |
-| RestoreDeathMusic | `deathmusic.ixx` |
-| BikeFeetFix, BikePhoneAnimsFix, ReversingLightFix | `fixes.ixx` |
-| BuildingAlphaFix | `fixes.ixx` (LOD fade-in) |
-| CutsceneFixes | `cutscenecam.ixx`, `frameratevigilante.ixx` |
-| MouseFix | `rawinput.ixx`, `sniper.ixx` |
-| IncreasePtrNodes, IncreaseVehicleModelLimit, IncreaseVehicleStructLimit, NoLiveryLimit | `limits.ixx` |
-| FastLoading, NoLoadingSleep | `loadingdelays.ixx`, `framelimit.ixx` |
-| HighFPSBikePhysicsFix, HighFPSSpeedupFix, SpeedupBugFix | `frameratevigilante.ixx` |
-| Car/building shadow options, EmissiveLerpFix | `shadows.ixx`, `nightshadows.ixx`, `fixes.ixx` |
-| ImprovedShaderStreaming | `shaders.ixx` |
-| VRAMFix | `memory.ixx` |
-| VSyncFix | `framelimit.ixx`, `windowed.ixx` |
-| LocalSettingsPath | `userdata.ixx` |
+| BikeFeetFix | `FusionFix fixes.ixx (feet on bikes)` |
+| BikePhoneAnimsFix | `FusionFix fixes.ixx (phone/bike animation)` |
+| BuildingAlphaFix | `FusionFix fixes.ixx (LOD fade-in)` |
+| BuildingDynamicShadows | `FusionFix shadows.ixx` |
+| CarDynamicShadowFix | `FusionFix shadows.ixx / nightshadows.ixx` |
+| CarPartsShadowFix | `FusionFix shadows.ixx` |
+| CutsceneFixes | `FusionFix cutscenecam.ixx / frameratevigilante.ixx` |
+| EmissiveLerpFix | `FusionFix fixes.ixx / shaders.ixx (emissive state)` |
+| EpisodicVehicleSupport | `FusionFix episodiccontent.ixx (EpisodicVehicles)` |
+| EpisodicWeaponSupport | `FusionFix episodiccontent.ixx (EpisodicWeapons)` |
+| FastLoading | `FusionFix loadingdelays.ixx / framelimit.ixx` |
+| ForceCarHeadlightShadows | `FusionFix nightshadows.ixx` |
+| ForceShadowsOnObjects | `FusionFix shadows.ixx` |
+| HighFPSBikePhysicsFix | `FusionFix frameratevigilante.ixx (vehicle physics)` |
+| HighFPSSpeedupFix | `FusionFix frameratevigilante.ixx (time scale)` |
+| IncreasePtrNodes | `FusionFix limits.ixx (PtrNode Double pool)` |
+| IncreaseVehicleModelLimit | `FusionFix limits.ixx` |
+| IncreaseVehicleStructLimit | `FusionFix limits.ixx (VehicleStruct pool)` |
+| MouseFix | `FusionFix rawinput.ixx / sniper.ixx` |
+| NoImpostorHeightCutoff | `FusionFix lodlights.ixx / fixes.ixx` |
+| NoLODLightHeightCutoff | `FusionFix lodlights.ixx` |
+| NoLiveryLimit | `FusionFix limits.ixx (LiveriesLimit)` |
+| NoLoadingSleep | `FusionFix loadingdelays.ixx (Sleep hook)` |
+| OutOfCommissionFix | `FusionFix frameratevigilante.ixx / fixes.ixx (high-FPS QTE)` |
+| PipeBombDropIconSupport | `FusionFix episodiccontent.ixx` |
+| PoliceEpisodicWeaponSupport | `FusionFix episodiccontent.ixx (TBoGTPoliceWeapons)` |
+| ReversingLightFix | `FusionFix fixes.ixx (reversing light bone)` |
+| RestoreDeathMusic | `FusionFix deathmusic.ixx (DeathMusic)` |
+| SCOSignatureFix | `FusionFix episodiccontent.ixx (RemoveSCOSignatureCheck)` |
+| SpeedupBugFix | `FusionFix frameratevigilante.ixx (time scale)` |
+| TBoGTHeliHeightLimit | `FusionFix episodiccontent.ixx NOPs the same height check` |
+| VSyncFix | `FusionFix framelimit.ixx / windowed.ixx` |
 
 The INI itself marks each of these with `FF`. The `BorderlessWindowed`,
 `DoNotPauseOnMinimize` and `VRAMFix` rows are XLivelessAddon options now: the

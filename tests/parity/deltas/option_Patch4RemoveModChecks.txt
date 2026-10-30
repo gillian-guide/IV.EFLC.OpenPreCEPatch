@@ -1,5 +1,0 @@
-003CBF70 E9 InstallPatch4RemoveModChecks
-003CBF71 6B InstallPatch4RemoveModChecks
-003CBF72 95 InstallPatch4RemoveModChecks
-003CBF73 83 InstallPatch4RemoveModChecks
-003CBF74 0F InstallPatch4RemoveModChecks

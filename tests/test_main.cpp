@@ -96,8 +96,8 @@ namespace
 
         opp::Config config(created);
         CHECK(!config.Option("MouseFix", "1")); // old value 0
-        CHECK(config.Option("AimProjectileCrashFix", "1")); // template default
-        CHECK(config.String("LOADING", "OverrideGTADatPathTo", "") ==
+        CHECK(config.Option("CombinedRadioFreezeFix", "1")); // template default
+        CHECK(config.String("MISC", "OverrideGTADatPathTo", "") ==
               "common:/data/custom.dat");
         CHECK(config.String("PopupLightAngles", "Car1Name", "") == "police");
         std::filesystem::remove_all(dir);
@@ -108,28 +108,28 @@ namespace
         const std::filesystem::path defaultIni = opp::EnsureConfigFile(fresh);
         CHECK(defaultIni == fresh / "IV.EFLC.OpenPreCEPatch.ini");
         opp::Config defaults(defaultIni);
-        CHECK(defaults.Option("AimProjectileCrashFix", "0"));
+        CHECK(defaults.Option("CombinedRadioFreezeFix", "0"));
         std::filesystem::remove_all(fresh);
     }
 
     void TestFusionFixGate()
     {
         const std::filesystem::path path = "opcep_gate.ini";
-        WriteFile(path, "[INPUT]\nSkipIntro = 1\n[STABILITY]\nAimProjectileCrashFix = 1\n");
+        WriteFile(path, "[FIXES]\nVSyncFix = 1\n[STABILITY]\nAimProjectileCrashFix = 1\n");
         opp::Config config(path);
 
         opp::SetFusionFixPresent(false);
-        CHECK(config.Option("SkipIntro", "1"));
+        CHECK(config.Option("VSyncFix", "1"));
 
         opp::SetFusionFixPresent(true);
-        CHECK(!config.Option("SkipIntro", "1"));
-        CHECK(config.RawOption("SkipIntro", "0")); // notice still sees the INI value
+        CHECK(!config.Option("VSyncFix", "1"));
+        CHECK(config.RawOption("VSyncFix", "0")); // notice still sees the INI value
         CHECK(config.Option("AimProjectileCrashFix", "1")); // not a FusionFix overlap
-        CHECK(opp::IsFusionFixGated("SkipIntro"));
-        CHECK(opp::FusionFixGateReason("SkipIntro") != nullptr);
+        CHECK(opp::IsFusionFixGated("VSyncFix"));
+        CHECK(opp::FusionFixGateReason("VSyncFix") != nullptr);
 
         opp::SetFusionFixPresent(false);
-        CHECK(config.Option("SkipIntro", "1"));
+        CHECK(config.Option("VSyncFix", "1"));
         std::filesystem::remove(path);
 
         const std::filesystem::path dir = "opcep_ff_test";
@@ -448,7 +448,7 @@ namespace
     void TestFeatureOrder()
     {
         const auto& features = opp::RegisteredFeatures();
-        CHECK(features.size() == 128);
+        CHECK(features.size() == 122);
         for (size_t i = 1; i < features.size(); ++i)
             CHECK(features[i - 1].order < features[i].order);
     }

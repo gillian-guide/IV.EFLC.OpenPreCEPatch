@@ -103,8 +103,7 @@ write set unchanged. Remaining candidates:
 ## Features that need a real decision
 
 - `SkipMenu` has an archived FusionFix-style savegame check. It changes
-  behaviour and needs a savegame-path implementation that respects
-  `LocalSettingsPath`; not shipped.
+  behaviour and needs a savegame-path implementation; not shipped.
 - `NewMemorySystem` replaces the game's allocator wholesale and fills
   allocations with `0xCD`. Keep the original behaviour; a guarded variant is a
   separate decision.

@@ -86,7 +86,7 @@ python tools\opcep_matrix.py --exe build-parity\Release\opcep_parity_dump.exe --
 ```
 
 The normal and parity dumps are byte-identical on every cell (0 differing
-cells in the last 98-cell run: the formerly visible `SkipIntro` rel32 moved to
+cells in the last 96-cell run: the formerly visible `SkipIntro` rel32 moved to
 the fork with the option). `tools/opcep_matrix.py --env` applies the
 environment switch per cell without changing any file.
 
