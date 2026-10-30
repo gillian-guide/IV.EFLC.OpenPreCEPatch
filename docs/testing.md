@@ -192,3 +192,22 @@ reference. To validate one on the user's install:
      the only difference from the default 13-byte NOP.
 5. `OPCEP_IMPROVEMENTS=all,entry` runs all four together. A group that misbehaves
    is disabled by dropping it from the list; no rebuild, no INI edit.
+
+### Opt-in write-set fixtures
+
+`tools/opcep_optin.py` locks the four opt-in rewrites' write sets, which the
+main matrix cannot see because the groups are off by default:
+
+```bat
+python tools\opcep_optin.py --check    :: compare with tests/parity/optin/
+python tools\opcep_optin.py --update   :: record a new golden, read the diff
+```
+
+It runs the dump once per group with the folded improvements on and the group
+added (`OPCEP_IMPROVEMENTS=all,<group>`), so a fixture failing means one of the
+rewrites changed its sites or bytes without the documented delta. The INI is the
+shipped defaults plus, for `nms_thunk` only, `NewMemorySystem=1` (the option
+defaults off). Expected deltas against the default write set: `garage_entry`
+moves one site (2 sites/10 bytes either way), `cutscene_entry` loses 4 bytes
+(3 sites/9 -> 1 site/5), `nms_thunk` removes the option's 8 bytes and adds 5 at
+0x956060, `alpha_nop` drops 7 bytes (13 -> 6 at 0x559CDA).
