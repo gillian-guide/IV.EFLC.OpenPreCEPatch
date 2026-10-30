@@ -178,7 +178,15 @@ namespace opp
             return environment;
         if (text == "1" || EqualsIgnoreCase(text, "all") ||
             EqualsIgnoreCase(text, "on") || EqualsIgnoreCase(text, "true"))
-            return Improve(Improvement::all) | EntryImprovements();
+        {
+            // The convenience toggle deliberately leaves the allocator rewrite
+            // out: on the first live run with it on, the game OOM'd on exit
+            // (the game's own allocator atexit handler resets the vtable while
+            // our allocations are still live). It stays selectable by name
+            // (`Improvements = all,entry,nms_thunk`).
+            return Improve(Improvement::all) |
+                   (EntryImprovements() & ~Improve(Improvement::nms_thunk));
+        }
         if (text == "0" || EqualsIgnoreCase(text, "none") ||
             EqualsIgnoreCase(text, "off") || EqualsIgnoreCase(text, "false"))
             return 0u;

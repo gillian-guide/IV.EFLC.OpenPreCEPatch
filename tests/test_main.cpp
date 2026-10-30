@@ -297,7 +297,9 @@ namespace
         CHECK(opp::ParseImprovements("all,cutscene_entry") ==
               (all | opp::Improve(opp::Improvement::cutscene_entry)));
         CHECK((opp::ParseImprovements("all") & entry) == 0u);
-        const uint32_t everything = all | entry;
+        // The convenience toggle selects everything except the allocator rewrite,
+        // which regressed on the first live run (OOM on exit).
+        const uint32_t everything = all | (entry & ~opp::Improve(opp::Improvement::nms_thunk));
         CHECK(opp::ResolveImprovements(0u, nullptr) == 0u);
         CHECK(opp::ResolveImprovements(newsaves, "") == newsaves);
         CHECK(opp::ResolveImprovements(newsaves, "  ") == newsaves);

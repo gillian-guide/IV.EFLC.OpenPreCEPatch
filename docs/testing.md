@@ -227,9 +227,11 @@ One key in `[MISC]` replaces the environment variable for a whole-switch test:
 Improvements = 1
 ```
 
-`1` (`all`/`on`/`true`) selects every group, including the four opt-in
-entry-point rewrites; `0` (`none`/`off`) selects nothing (the parity baseline);
-leaving the key out keeps the default set (folded groups on, entry-point rewrites
-off). Any other value uses the `OPCEP_IMPROVEMENTS` grammar, e.g.
-`all,garage_entry`. The key wins over the environment variable, and the boot log
-still names the resulting groups.
+`1` (`all`/`on`/`true`) selects every group, including three of the four opt-in
+entry-point rewrites; the allocator rewrite (`nms_thunk`) is excluded because it
+OOM'd on exit on the first live run — enable it by name with
+`Improvements = all,entry,nms_thunk`. `0` (`none`/`off`) selects nothing (the
+parity baseline), and leaving the key out keeps the default set (folded groups on,
+entry-point rewrites off). Any other value uses the `OPCEP_IMPROVEMENTS` grammar,
+e.g. `all,garage_entry`. The key wins over the environment variable, and the boot
+log still names the resulting groups.

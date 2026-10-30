@@ -573,3 +573,27 @@ Decision on "gate out what does not work on 1.0.8.0": nothing is inert by
 design. Every arm the log skipped was one of the two bugs above (now fixed) or a
 build-gated option that is *supposed* to skip on 1.0.8.0 (VSyncFix,
 RemoveModChecks, RemoveGFWLUpdatePopup). No gate was added.
+
+## 2026-10-30 — second live run (1.0.8.0, `Improvements = 1`, NewMemorySystem on)
+
+`install: 134 writes applied, 0 skipped` — both fixes hold: the ten FreezeCarFix
+spawn-case calls install, the xlive byte is written (no "site outside the game
+image"), and the three entry rewrites that replace sites account for the count
+(126 + 11 fixed - 3 replaced).
+
+The run also reported **more stutters** and an **out-of-memory error on Alt+F4**.
+The only new variable against the previous run is `nms_thunk` (it is in
+`Improvements = 1`), and the reported failure matches its known risk exactly: the
+game's own allocator constructor runs (100 MiB arena) and registers
+`atexit(sub_D65C50)`, which on exit resets the vtable to the original allocator
+while objects allocated by our `HeapAlloc` allocator are still live — the original
+allocator then frees foreign pointers. That is an allocator-shape fault, and it is
+why the audit said the thunk must not be promoted without a live test.
+
+Action taken: the convenience toggle (`Improvements = 1`/`all`/`on`) no longer
+includes `nms_thunk`; the group stays reachable by name
+(`Improvements = all,entry,nms_thunk`) for a dedicated experiment. The stutters
+still need isolating: `NewMemorySystem = 1` is the original mod's own
+"potentially unstable" option and was already on in the previous run, so the next
+A/B is (a) `Improvements = 1` with the allocator rewrite out, then (b)
+`NewMemorySystem = 0` as well.
