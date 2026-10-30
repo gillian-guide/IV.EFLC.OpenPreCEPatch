@@ -688,3 +688,21 @@ one instead of failing silently.
 Static check: the ASI map symbol is `_XUserWriteAchievementsHook@12` and the body
 ends in `ret 0xC`; a four-argument body is the regression to watch for. The
 option remains IAT-only (zero-write matrix cell), so the write set is unchanged.
+
+The first live run after the ABI fix (21:23) showed the other half of the
+failure: the hook saw `XUserWriteAchievements count=1 first id=1`, but
+`SteamAPI_Init failed, skipped` - a direct `PlayGTAIV.exe` start with the Steam
+client running does not inherit the `SteamAppId` the client passes to the
+process it launches, so the SDK cannot resolve the game and init fails; the
+achievement stayed queued and never reached Steam. The worker now logs the
+inherited `SteamAppId` (or supplies `12210` for GTA IV and `12220` for the EFLC
+executables when it is absent) and retries init for about 40 s, so a slow client
+start is also covered while the ids queue. A dedicated probe (temporary
+`ZSteamProbe.asi`, removed after the run) called the game's own
+`XUserWriteAchievements` import with id 1; the 21:34 live run then logged
+`inherited SteamAppId=12210`, `achievements bridge ready`,
+`XUserWriteAchievements count=1 first id=1` and
+`achievement 1 (THETOUR): unlocked`, with the GFWL side (xlln) recording the
+same write. That is the end-to-end confirmation: hook ABI, GFWL passthrough and
+Steam mirror all on the real game.
+

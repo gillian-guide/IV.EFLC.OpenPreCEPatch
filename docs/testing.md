@@ -143,12 +143,16 @@ xliveless), so the hook's ABI is part of the install. Check the built ASI:
   the overlapped pointer from `[ebp+0x10]`, and ends in `ret 0xC`;
 - ordinal 5278, not 5277 (`5277` is `XUserSetContext`).
 
-On a live run the log shows `steam: hooked xlive.dll ordinal 5278`, then
+On a live run the log shows `steam: hooked xlive.dll ordinal 5278`, then the
+AppID line (`inherited SteamAppId=...`, or `no inherited SteamAppId, using ...`
+for a direct `PlayGTAIV.exe` start), then
 `steam: achievements bridge ready (GFWL preserved)` once `SteamAPI_Init` has
 finished, and one `steam: achievement <id> (<NAME>): unlocked` line per write
 (or `rejected by Steam`, or `queued until Steam is ready` for a write that
 arrives during initialisation). With `steam_api.dll` absent the option logs
-`not applicable` and leaves GFWL untouched.
+`not applicable` and leaves GFWL untouched. A `SteamAPI_Init failed` line is
+retried for about 40 s; if it never succeeds the option logs that the mirror is
+off for the session and GFWL keeps working.
 
 ## Live testing
 

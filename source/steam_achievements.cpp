@@ -29,10 +29,19 @@
 
 namespace opp
 {
-    bool InstallSteamNow() noexcept;
+    bool InstallSteamNow(int attempt) noexcept;
 
     namespace
     {
+        bool IsEpisodesExecutable() noexcept
+        {
+            char module[MAX_PATH] = {};
+            if (GetModuleFileNameA(nullptr, module, MAX_PATH) == 0)
+                return false;
+            const char* name = std::strrchr(module, '\\');
+            name = name != nullptr ? name + 1 : module;
+            return _strnicmp(name, "EFLC", 4) == 0;
+        }
         // GTA IV / EFLC achievement ids and their Steam API names. Ids 1..40 are
         // the base-game single-player achievements, 41..50 the multiplayer ones
         // (AWARD_ACHIEVEMENT indices; the script ACHIEVEMENT_IDS enum agrees),
@@ -144,6 +153,7 @@ namespace opp
         RequestStatsFn g_request_stats = nullptr;
         RunCallbacksFn g_run_callbacks = nullptr;
         void* g_user_stats = nullptr;
+        char g_app_id[32] = "12210";
 
         // Guards the state shared by the game's achievement thread and the
         // Steam init worker. SRWLOCK needs no initialisation.
@@ -180,6 +190,35 @@ namespace opp
             char path[MAX_PATH] = {};
             std::snprintf(path, sizeof(path), "%ssteam_api.dll", module);
             return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES;
+        }
+
+        // SteamAPI_Init takes the AppID from the environment the Steam client
+        // passes to the process it launched. When the game is started directly
+        // (desktop shortcut to PlayGTAIV.exe) with the client running, that
+        // variable is absent and Init fails even though Steam is up and the user
+        // owns the game. Supply the product the executable belongs to.
+        void PrepareSteamAppId() noexcept
+        {
+            static bool prepared = false;
+            if (prepared)
+                return;
+            prepared = true;
+
+            char inherited[32] = {};
+            const DWORD length =
+                GetEnvironmentVariableA("SteamAppId", inherited, sizeof(inherited));
+            if (length != 0)
+            {
+                std::snprintf(g_app_id, sizeof(g_app_id), "%s", inherited);
+                Log("steam: inherited SteamAppId=%s", g_app_id);
+                return;
+            }
+
+            std::snprintf(g_app_id, sizeof(g_app_id), "%s",
+                          IsEpisodesExecutable() ? "12220" : "12210");
+            SetEnvironmentVariableA("SteamAppId", g_app_id);
+            SetEnvironmentVariableA("SteamGameId", g_app_id);
+            Log("steam: no inherited SteamAppId, using %s", g_app_id);
         }
 
         bool ReplaceImportOrdinal(HMODULE module, const char* dll_name,
@@ -254,10 +293,16 @@ namespace opp
         void Observe(uint32_t id) noexcept
         {
             if (id > kMaxAchievementId)
+            {
+                Log("steam: achievement id %u is outside the table, ignored", id);
                 return;
+            }
             const char* name = NameForId(id);
             if (name == nullptr)
+            {
+                Log("steam: achievement id %u has no Steam name, ignored", id);
                 return;
+            }
 
             bool mirror_now = false;
             bool queued = false;
@@ -323,6 +368,8 @@ namespace opp
                         count, kMaxMirrorBatch);
                     mirror = kMaxMirrorBatch;
                 }
+                Log("steam: XUserWriteAchievements count=%u first id=%u", count,
+                    achievements[0].achievementId);
                 for (uint32_t i = 0; i < mirror; ++i)
                     Observe(achievements[i].achievementId);
             }
@@ -365,8 +412,20 @@ namespace opp
         Log("steam: hooked xlive.dll ordinal 5278 (XUserWriteAchievements)");
 
         HANDLE thread = CreateThread(nullptr, 0, [](LPVOID) -> DWORD {
-            Sleep(1000);
-            (void)InstallSteamNow();
+            // Give the client and the game a moment to settle, then retry while
+            // the failure is transient (Steam still starting, the launch not yet
+            // registered). Achievement ids seen meanwhile stay queued and are
+            // replayed when the mirror finally comes up.
+            for (int attempt = 0; attempt < 20; ++attempt)
+            {
+                Sleep(attempt == 0 ? 1000 : 2000);
+                if (InstallSteamNow(attempt))
+                    return 0;
+                if (g_disabled)
+                    return 0;
+            }
+            Log("steam: not ready after 20 attempts; Steam mirror off this session "
+                "(GFWL unaffected)");
             return 0;
         }, nullptr, 0, nullptr);
         if (thread == nullptr)
@@ -379,12 +438,14 @@ namespace opp
         return true;
     }
 
-    bool InstallSteamNow() noexcept
+    bool InstallSteamNow(int attempt) noexcept
     {
         if (g_ready)
             return true;
         if (g_disabled)
             return false;
+
+        PrepareSteamAppId();
 
         HMODULE steam = LoadLibraryA("steam_api.dll");
         if (steam == nullptr)
@@ -412,15 +473,14 @@ namespace opp
         }
         if (is_running != nullptr && !is_running())
         {
-            g_disabled = true;
-            Log("steam: Steam client not running, skipped");
-            return false;
+            Log("steam: Steam client not running yet (attempt %d)", attempt + 1);
+            return false;  // transient: the client may still be starting
         }
         if (!init())
         {
-            g_disabled = true;
-            Log("steam: SteamAPI_Init failed, skipped");
-            return false;
+            Log("steam: SteamAPI_Init failed (attempt %d, appid %s)", attempt + 1,
+                g_app_id);
+            return false;  // transient: launch may not be registered yet
         }
 
         g_user_stats =
