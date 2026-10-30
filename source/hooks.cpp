@@ -138,6 +138,37 @@ void abi_bike_physics_helper() noexcept
 // pushad/popad: look up 0xEB9F21D3 ("popuplights"), walk the +popuplights list,
 // then copy the last matching [PopupLightAngles] angle (starts at pi/2). A
 // failed lookup leaves -1, which matches a model of -1, as in the original.
+namespace
+{
+// PopupAngleMemo: the [PopupLightAngles] table is loaded once at startup, so the
+// angle a matching model maps to is remembered instead of rescanning all 512
+// entries on every matching vehicle. The original takes the *last* matching
+// entry, which the forward scan below keeps.
+uint32_t PopupAngleFor(uint32_t hash) noexcept
+{
+    struct AngleMemo final
+    {
+        uint32_t hash;
+        uint32_t bits;
+        uint8_t valid;
+    };
+    static AngleMemo memo[64] = {};
+    const size_t slot = (hash * 2654435761u) >> 26;
+    if (memo[slot].valid != 0u && memo[slot].hash == hash)
+        return memo[slot].bits;
+    uint32_t bits = 0x3FC90FDBu;  // pi/2: the caller's default when nothing matches
+    for (uint32_t k = 0; k < 512; ++k)
+    {
+        if (zpatch_popup_hashes[k] != 0u && zpatch_popup_hashes[k] == hash)
+            std::memcpy(&bits, &zpatch_popup_angles[k], sizeof(bits));
+    }
+    memo[slot].hash = hash;
+    memo[slot].bits = bits;
+    memo[slot].valid = 1u;
+    return bits;
+}
+}  // namespace
+
 void abi_popup_check() noexcept
 {
     const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
@@ -182,6 +213,11 @@ void abi_popup_check() noexcept
         out = resolve(hash);
         if (out != static_cast<int32_t>(zpatch_popup_model)) continue;
         zpatch_popup_flag = 1;
+        if (zpatch_opt_popup_cache != 0u)
+        {
+            zpatch_popup_angle = PopupAngleFor(hash);
+            return;
+        }
         for (uint32_t k = 0; k < 512; ++k)
         {
             if (zpatch_popup_hashes[k] != 0 &&
@@ -787,12 +823,40 @@ int32_t zpatch_garage_lookup_c(uint8_t* object) noexcept
         static_cast<uintptr_t>(zpatch_model_lookup));
     if (zpatch_failsafe_skip("GarageModelFix model lookup", lookup == nullptr))
         return original;  // the garage keeps the model it stored
+    // GarageLookupMemo: the hash -> index mapping is static after startup, so a
+    // successful resolution is remembered (direct-mapped, a collision just
+    // re-resolves). Negative results are never cached: a model that is not
+    // loaded yet must still be found later.
+    struct GarageMemo final
+    {
+        uint32_t hash;
+        int32_t index;
+    };
+    static GarageMemo memo[64] = {};
+    const size_t memo_slot = (hash * 2654435761u) >> 26;
     int32_t out = -1;
-    lookup(hash, &out);
+    if (memo[memo_slot].hash == hash && memo[memo_slot].index > 0)
+    {
+        out = memo[memo_slot].index;
+    }
+    else
+    {
+        lookup(hash, &out);
+        if (out > 0)
+        {
+            memo[memo_slot].hash = hash;
+            memo[memo_slot].index = out;
+        }
+    }
     if (out <= 0 || out >= 32000)
     {
-        out = -1;
-        lookup(0xC703DB5Fu, &out);
+        // The replacement model is a constant hash, so its index is resolved
+        // once; the original looks it up on every miss.
+        constexpr uint32_t kFallbackHash = 0xC703DB5Fu;
+        static int32_t fallback_index = -1;
+        if (fallback_index < 0)
+            lookup(kFallbackHash, &fallback_index);
+        out = fallback_index > 0 ? fallback_index : -1;
         *reinterpret_cast<int16_t*>(object + 16) = static_cast<int16_t>(out);
         *reinterpret_cast<uint16_t*>(object + 48) &= 0xFFFEu;
         return 65534;
