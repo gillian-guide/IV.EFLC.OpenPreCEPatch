@@ -125,7 +125,11 @@ def parse_arms() -> dict[str, dict]:
                 if re.search(rf"\b{re.escape(name)}\(", body):
                     gates.update(found)
             keys = sorted(set(OPTION.findall(body)))
-            for key in keys:
+            # The arm's own name names the option too: an arm that delegates
+            # its option check to a helper (RemoveModChecks) has no direct
+            # ctx.Option call, and its build blocks must still count.
+            keys.append(match.group(2))
+            for key in sorted(set(keys)):
                 entry = arms.setdefault(key, {"gate": set(), "patterns": 0,
                                               "bodies": set(), "arms": []})
                 entry["gate"].update(gates)

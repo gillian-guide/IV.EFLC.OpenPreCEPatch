@@ -42,6 +42,40 @@ visible `SkipIntro` rel32 moved to the fork with the option). The scan-range
 change is also a pure implementation fix: the original `hook::pattern(module)`
 never scanned `.rdata`/`.data`/`.rsrc`, so the write set is identical.
 
+## Cross-build coverage (audit 2026-10-30)
+
+`docs/version-matrix.md` is the table this audit produced: per option, per build,
+whether the original handler's own gate admits it (R), whether the original
+admits a successor build with no per-build data (S), whether the original is
+pattern-gated only (A), or whether the port narrowed an ungated install (G).
+
+Findings, against `docs/version-matrix.json` (IDA) and the arms:
+
+- **Every install is build-gated.** Twelve options have a recovered gate
+  (`head_compare`, `switch` or `rva_rows`) and the arm mirrors it exactly;
+  `LaunchWithPlayGTAIV` is gated in `source/dllmain.cpp` by the per-build
+  launcher table. The other 64 shipped options have no build compare in the
+  original either: their install is a pattern scan, so they apply on any build
+  whose bytes match. That is a property of the view, not a missing gate, and the
+  failsafe layer now makes a non-matching view a logged skip.
+- **No arm installs on a build its recovered gate excludes.** The twelve were
+  compared instruction-by-instruction; the only mismatches the tool reports are
+  the shared arms, where one arm serves two options (RemoveModChecks installs the
+  GFWL stub that `RemoveGFWLUpdatePopup` owns on the pre-patch-6 builds).
+- **Six arms narrow an otherwise ungated install**: `OutOfCommissionFix`
+  (1060-1130), `BuildingAlphaFix` (1060+), `NewSavesCompatibility` (1060-1080),
+  `RemoveGFWLUpdatePopup` (1000-1040), `AllowHashesForIDE` (1000-1040) and
+  `RemoveRGSCLoginRequirement`'s 1.0.8.0 fallback branch. Each narrowing is
+  deliberate: the feature or its payload only exists on those builds. Widening
+  one needs per-build evidence (a verified pattern or an RVA row), not a guess;
+  none was widened here, and the matrix lists them so the gap stays visible.
+- **Untested.** Only the 1.0.8.0 executable is committed, so every non-1080 cell
+  is evidence-based, not a live result. A build is "supported" here when its
+  gate and pattern are recovered; it is "verified" only on 1080. Testing another
+  build means running the dump against that build's executable
+  (`python tools\opcep_matrix.py --exe ...`) and, for runtime behaviour, a live
+  run on that install.
+
 ## Compatibility
 
 - **XLivelessAddon.** Its feature set lives in the separate `xlivelessaddon/`
