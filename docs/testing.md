@@ -167,3 +167,28 @@ The game must be launched through `PlayGTAIV.exe` (it bypasses the DRM). Read
 `IV.EFLC.OpenPreCEPatch.log` next to the ASI afterwards; it names the config,
 build and stages. Ask the user to launch; do not edit an installed game
 directory automatically.
+
+## Live validation of the opt-in groups
+
+The four entry-point rewrites are off unless asked for, so a normal run is the
+reference. To validate one on the user's install:
+
+1. `build.bat`, copy `bin\IV.EFLC.OpenPreCEPatch.asi` (and its INI) next to the
+   game. Launch through `PlayGTAIV.exe`.
+2. Run once with no `OPCEP_IMPROVEMENTS` and keep `IV.EFLC.OpenPreCEPatch.log`
+   (the baseline: `install: N writes applied, M skipped`).
+3. Run again with the group, e.g. `set OPCEP_IMPROVEMENTS=all,garage_entry`, and
+   compare the same log line and the per-arm lines. The expected write-set
+   change is the one listed in `docs/entry-points-audit.md`.
+4. What to watch, per group:
+   - `garage_entry` - enter/leave a safehouse garage with a modded car; the car
+     must keep its model, no new log skip lines.
+   - `cutscene_entry` - the first story cutscene (the cutscene camera fix) at
+     >= 120 FPS: no crash on entry, zoom/jitter still fixed.
+   - `nms_thunk` - boot to the main menu, then load a save (allocator active):
+     watch for SMPA*/out-of-memory and the process's memory use, which is higher
+     by the game's ~100 MiB simple-allocator block by design.
+   - `alpha_nop` - look at LOD fade-in on buildings; the flags after the test are
+     the only difference from the default 13-byte NOP.
+5. `OPCEP_IMPROVEMENTS=all,entry` runs all four together. A group that misbehaves
+   is disabled by dropping it from the list; no rebuild, no INI edit.
