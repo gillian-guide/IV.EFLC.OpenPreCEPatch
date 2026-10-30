@@ -35,6 +35,12 @@ fix rare crash when getting a wanted level
 
 - **Default:** `1`
 
+### SMPA60Fix
+
+fix SMPA60 when abusing the game with car mods
+
+- **Default:** `1`
+
 ### TryToSkipAllErrors
 
 attempt to completely ignore any and all error messages, possibly useful for debugging
@@ -113,7 +119,7 @@ fixes the 15+ second startup times before the game window even pops up
 
 ### FastLoading
 
-cut loading times in half or more [FF]
+cut loading times in half or more
 
 - **Default:** `1`
 
@@ -308,12 +314,6 @@ mirror GFWL achievements to Steam
 ### BetterMPSync
 
 increase sync interval when far away
-
-- **Default:** `1`
-
-### SMPA60Fix
-
-fix SMPA60 when abusing the game with car mods
 
 - **Default:** `1`
 

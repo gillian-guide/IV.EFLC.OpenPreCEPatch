@@ -19,6 +19,7 @@ the builds the original is merely pattern-gated on, see
 | `EpisodeSwitchFreezeFix` | `1` | fix crash when switching episode mid game |
 | `FreezeGunFix` | `1` | fix crash when firing the ROCKET weapon |
 | `WantedLevelCrashFix` | `1` | fix rare crash when getting a wanted level |
+| `SMPA60Fix` | `1` | fix SMPA60 when abusing the game with car mods |
 | `TryToSkipAllErrors` | `0` | attempt to completely ignore any and all error messages, possibly useful for debugging |
 
 ## FIXES
@@ -41,7 +42,7 @@ the builds the original is merely pattern-gated on, see
 | key | default | notes |
 | --- | --- | --- |
 | `StartupTimeFix` | `1` | fixes the 15+ second startup times before the game window even pops up |
-| `FastLoading` | `1` | cut loading times in half or more [FF] |
+| `FastLoading` | `1` | cut loading times in half or more |
 | `NoLoadingSleep` | `1` | makes the game get to the main menu faster [FF] |
 | `ImprovedShaderStreaming` | `0` | allegedly improves stutter, potentially unstable |
 | `NewMemorySystem` | `0` | reimplements memory allocation, allegedly reducing loading times and memory usage and eliminating SMPA* errors, potentially unstable |
@@ -93,7 +94,6 @@ the builds the original is merely pattern-gated on, see
 | key | default | notes |
 | --- | --- | --- |
 | `BetterMPSync` | `1` | increase sync interval when far away |
-| `SMPA60Fix` | `1` | fix SMPA60 when abusing the game with car mods |
 | `MPNikoCrashFix` | `1` | fix crash if another player changes their model to Niko then changes it back to something else |
 | `IncreasePtrNodes` | `1` | increase the PtrNode limit, fixes random crashing in big Cunning Stunts maps [FF] |
 | `BadPlayerModelCrashFix` | `1` | fix crash if another player switches to an invalid playermodel |

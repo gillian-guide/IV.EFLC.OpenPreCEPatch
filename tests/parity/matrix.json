@@ -1588,7 +1588,6 @@
         "InstallPathNodeCrashFix": 5,
         "InstallRemoveAllWeaponsProtection": 12,
         "InstallRemoveRGSCLoginRequirement": 5,
-        "InstallSMPA60Fix": 11,
         "InstallSuperLODFix": 5,
         "InstallTeleportProtection": 3
       },
@@ -1606,17 +1605,16 @@
         "InstallPathNodeCrashFix": 5,
         "InstallRemoveAllWeaponsProtection": 12,
         "InstallRemoveRGSCLoginRequirement": 5,
-        "InstallSMPA60Fix": 11,
         "InstallSuperLODFix": 5,
         "InstallTeleportProtection": 3
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_MULTIPLAYER.txt",
-      "delta_sha256": "fbf7239b4d7da6217f0d2b01df167e12267549dadca62449dc7a222b0f756c67",
-      "delta_writes": 146,
+      "delta_sha256": "d672b5a335b0730c2a4ad60a8f11bff220806790990686e893141efa7d17fa88",
+      "delta_writes": 135,
       "file": "writesets/section_MULTIPLAYER.txt",
-      "sha256": "0f417c91129622d9e25d57df52f67cf079abf530ab76d39e8e8b6bfe9c418fe8",
-      "writes": 146
+      "sha256": "72f8aca38e128b1bc7930980db51520095a703f65a710e895377b361e256bccc",
+      "writes": 135
     },
     "section:PERFORMANCE": {
       "arms": {
@@ -1646,6 +1644,7 @@
         "InstallCombinedRadioFreezeFix": 4,
         "InstallEpisodeSwitchFreezeFix": 25,
         "InstallFreezeGunFix": 5,
+        "InstallSMPA60Fix": 11,
         "InstallTryToSkipAllErrors": 1,
         "InstallWantedLevelCrashFix": 5
       },
@@ -1653,16 +1652,17 @@
         "InstallCombinedRadioFreezeFix": 4,
         "InstallEpisodeSwitchFreezeFix": 25,
         "InstallFreezeGunFix": 5,
+        "InstallSMPA60Fix": 11,
         "InstallTryToSkipAllErrors": 1,
         "InstallWantedLevelCrashFix": 5
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_STABILITY.txt",
-      "delta_sha256": "7da0915053842602da5af3750c110b7fb239aa8729a307b63c8f79744f96be24",
-      "delta_writes": 40,
+      "delta_sha256": "b795a3a9f58b61ea2da961316666565a6f7b9a266b268066d8f5ebc8fd0d7d23",
+      "delta_writes": 51,
       "file": "writesets/section_STABILITY.txt",
-      "sha256": "5b9be253001894658063ebe8064e585868d1c7745f9d12543a9f6c60bb93f902",
-      "writes": 40
+      "sha256": "38a2e2c69fee2d41f183a3b009ddd64e1345042e8582d33819cf79999a5780e1",
+      "writes": 51
     },
     "section:VEHICLES": {
       "arms": {
@@ -1703,5 +1703,5 @@
   },
   "generated_by": "tools/opcep_matrix.py",
   "schema": 1,
-  "template_sha256": "e293fc2c3600815e62c4dea431c19765331eddff42cac46a9ca4a51620d9dc9c"
+  "template_sha256": "915a4ae1087f69c4f0c1db6b713dd4c89f665f7ab6f5170113b768f8b6e5a32f"
 }

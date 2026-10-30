@@ -21,7 +21,6 @@ mods writing one subsystem is not a combination this project can test.
 | EmissiveLerpFix | `FusionFix fixes.ixx / shaders.ixx (emissive state)` |
 | EpisodicVehicleSupport | `FusionFix episodiccontent.ixx (EpisodicVehicles)` |
 | EpisodicWeaponSupport | `FusionFix episodiccontent.ixx (EpisodicWeapons)` |
-| FastLoading | `FusionFix loadingdelays.ixx / framelimit.ixx` |
 | ForceCarHeadlightShadows | `FusionFix nightshadows.ixx` |
 | ForceShadowsOnObjects | `FusionFix shadows.ixx` |
 | HighFPSBikePhysicsFix | `FusionFix frameratevigilante.ixx (vehicle physics)` |
@@ -33,7 +32,7 @@ mods writing one subsystem is not a combination this project can test.
 | NoImpostorHeightCutoff | `FusionFix lodlights.ixx / fixes.ixx` |
 | NoLODLightHeightCutoff | `FusionFix lodlights.ixx` |
 | NoLiveryLimit | `FusionFix limits.ixx (LiveriesLimit)` |
-| NoLoadingSleep | `FusionFix loadingdelays.ixx (Sleep hook)` |
+| NoLoadingSleep | `FusionFix loadingdelays.ixx` writes 0 to the same `push 0x1388` immediate (`get_first(1)` of `68 ? ? ? ? FF 15 ? ? ? ? 39 1D`) |
 | OutOfCommissionFix | `FusionFix frameratevigilante.ixx / fixes.ixx (high-FPS QTE)` |
 | PipeBombDropIconSupport | `FusionFix episodiccontent.ixx` |
 | PoliceEpisodicWeaponSupport | `FusionFix episodiccontent.ixx (TBoGTPoliceWeapons)` |

@@ -48,6 +48,7 @@ build-blind. The full evidence is in `docs/version-matrix.json`.
 | `EpisodeSwitchFreezeFix` | `0x1001b0e0` | A | A | A | A | A | A | A | A | A | A | A | A | `none`: no 0x1015BE04 reference; 5 pattern sites (sub_10003830 @0x1001B102, 0x1001B16F, 0x1001B1CE, 0x1001B224, 0x1001B27A) | ungated; 8 pattern site(s) |
 | `FreezeGunFix` | `0x10037070` | A | A | A | A | A | A | A | A | A | A | A | A | `none`: no 0x1015BE04 reference; 1 pattern site (sub_10003830 @0x10037092) | ungated; 2 pattern site(s) |
 | `WantedLevelCrashFix` | `0x100504b0` | A | A | A | A | A | A | A | A | A | A | A | A | `none`: no 0x1015BE04 reference; 1 pattern site (sub_10003830 @0x100504D2) | ungated; 2 pattern site(s) |
+| `SMPA60Fix` | `0x100467a0` | A | A | A | A | A | A | A | A | A | A | A | A | `none`: no 0x1015BE04 reference; 2 pattern sites (sub_10003830 @0x100467C2, 0x10046856) | ungated; 4 pattern site(s) |
 | `TryToSkipAllErrors` | `0x10046b30` | A | A | A | A | A | A | A | A | A | A | A | A | `none`: no 0x1015BE04 reference; 1 pattern site (sub_10003830 @0x10046B50) | ungated; 1 pattern site(s) |
 | `CutsceneFixes` | `0x100441a0` | A | A | A | A | A | A | A | A | A | A | A | A | `none`: 10-byte thunk at 0x100441A0, no 0x1015BE04 reference | ungated; 5 pattern site(s) |
 | `OutOfCommissionFix` | `0x10050a20` | . | . | . | G | G | G | G | G | G | G | G | . | `none`: 10-byte thunk 'return sub_10050A10()' @0x10050A28, no 0x1015BE04 reference in 0x10050A20 or 0x10050A10 | gated 1060,1061,1070,1080,1100,1110,1120,1130; 4 pattern site(s) |
@@ -92,7 +93,6 @@ build-blind. The full evidence is in `docs/version-matrix.json`.
 | `GFWLProtectionDisabler` | `inline` | A | A | A | A | A | A | A | A | A | A | A | A | `none`: no option string in the image (find_regex 'GFWL\|ProtectionDisabler' finds only RemoveGFWLUpdatePopup @0x10131FB0); no handler in option_handlers.json | ungated |
 | `SteamAchievements` | `inline` | A | A | A | A | A | A | A | A | A | A | A | A | `none`: no option string in the image (find_regex 'Steam\|Achievement' -> no hit); no handler in option_handlers.json | ungated |
 | `BetterMPSync` | `0x10005800` | A | A | A | A | A | A | A | A | A | A | A | A | `none`: no 0x1015BE04 reference; 1 pattern site (sub_10003830 @0x10005822) | ungated; 1 pattern site(s) |
-| `SMPA60Fix` | `0x100467a0` | A | A | A | A | A | A | A | A | A | A | A | A | `none`: no 0x1015BE04 reference; 2 pattern sites (sub_10003830 @0x100467C2, 0x10046856) | ungated; 4 pattern site(s) |
 | `MPNikoCrashFix` | `0x10037290` | A | A | A | A | A | A | A | A | A | A | A | A | `none`: no 0x1015BE04 reference; 1 pattern site (sub_10003830 @0x100372B0) | ungated; 1 pattern site(s) |
 | `IncreasePtrNodes` | `0x10023080` | A | A | A | A | A | A | A | A | A | A | A | A | `none`: no 0x1015BE04 reference; 3 pattern sites (sub_10003830 @0x100230A4, 0x100230DE, 0x10023112) | ungated; 3 pattern site(s) |
 | `BadPlayerModelCrashFix` | `0x10037be0` | A | A | A | A | A | A | A | A | A | A | A | A | `none`: no 0x1015BE04 reference; 1 pattern site (sub_10003830 @0x10037C02) | ungated; 2 pattern site(s) |
