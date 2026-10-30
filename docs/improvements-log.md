@@ -522,3 +522,23 @@ CarDynamicShadowFix entry. `AbiByName` was measured unnecessary.
 Every step left `build.bat --test`, `opcep_matrix.py --check` (96 cells,
 3,909 writes with the opt-in groups off), `gen_ini_template.py --check` and
 `gen_version_matrix.py --check` green.
+
+## 2026-10-30 — audit dispositions closed
+
+The three rows still marked "deferred" were closed with evidence rather than
+left open, because each would cost more than it saves:
+
+- **NoImpostorHeightCutoff data constants.** The arm writes two 2-byte NOPs
+  (0x8A058D, 0x8A118E); shifting the shared height constants would write 4 bytes
+  per constant and change every other reader of them.
+- **PlaneCrashFix vtable wrapper.** The current fix is one 5-byte JMP
+  (0x5E0D0B); a vtable-slot wrapper is the same byte count plus an unverified
+  body on a slot shared by the whole class.
+- **CarDynamicShadowFix function entry.** 0x40C9F9 is written by *two* options
+  (CarDynamicShadowFix and CarPartsShadowFix each install a body there), so an
+  entry hook would have to merge both behaviours; the 0x40C9F0 entry has 13
+  callers and the body would replay the prologue for no byte saved.
+
+The only open item is a live A/B of the four opt-in groups
+(`garage_entry`, `cutscene_entry`, `nms_thunk`, `alpha_nop`), which the boot log
+and `tools/opcep_optin.py` were built to make checkable.

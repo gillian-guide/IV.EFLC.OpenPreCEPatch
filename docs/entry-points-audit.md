@@ -1,9 +1,11 @@
 # Entry-point and implementation audit
 
-Status: every row was audited; this document is also the work list. **Applied**
-rows are listed under "Implementation status" below and in
-`docs/improvements-log.md`; the tables keep the original analysis so a rejected
-row is not re-litigated.
+Status: every row now has a final disposition — implemented (default or opt-in) or
+rejected with the evidence that makes it a bad idea. Nothing is left "to decide".
+The only outstanding item is a **live A/B of the four opt-in groups**, which needs
+the user's go-ahead and is described in `docs/testing.md`; the boot log
+(`improvements: <groups>`) and `tools/opcep_optin.py` exist to make that run
+verifiable.
 
 Part A asks whether the *game* offers a cleaner entry point at the exact spot an
 option patches today. Part B asks whether the mod's own mechanism at that spot
@@ -33,9 +35,9 @@ unchanged but still needs a matrix cell; `behaviour change` needs an opt-in;
 | MovingPlaneParts / ShakingEngineBlock / MovingSteeringWheelSupport vtable | **rejected**: the body depends on ESI/EDX at the site and the vtable is shared | — |
 | StartupTimeFix shared helper | **rejected**: three separately inlined WinINet builders; the multi-match loop is load-bearing | — |
 | EmissiveLerpFix instruction boundary | **rejected on re-reading the disassembly**: the body re-executes both instructions the five-byte hook covers (`cvtsi2ss xmm0,edx` and the `mulss` whose `F3` prefix it eats) and resumes at 0x7F8BAD, so the split is by design, not a hazard. Hooking at 0x7F8BA5 would leave the game's own `cvtsi2ss` running on the game global before the body rewrites the value, for no byte saving | — |
-| NoImpostorHeightCutoff data constants | **deferred**: a behaviour change (shared height constants), not a NOP equivalent | — |
-| PlaneCrashFix vtable wrapper | **deferred**: needs a live flying test; the vtable is shared by the class | — |
-| CarDynamicShadowFix function entry | **deferred**: 13 callers and a body that must replay the prologue | — |
+| NoImpostorHeightCutoff data constants | **rejected**: the arm writes two 2-byte NOPs (0x8A058D, 0x8A118E). Shifting the shared height constants instead would write 4 bytes per constant (8+ in total) and change every other user of those constants, so it is strictly worse than the NOPs it replaces | — |
+| PlaneCrashFix vtable wrapper | **rejected**: the current fix is a single 5-byte JMP at 0x5E0D0B, already the minimum. A vtable-slot wrapper moves the guard to a slot shared by every object of the class and needs an unverified body for the same byte count | — |
+| CarDynamicShadowFix function entry | **rejected**: the +9 site (0x40C9F9) is written by **two** options (`CarDynamicShadowFix` and `CarPartsShadowFix` each install a body there), so a function-entry hook would have to merge both behaviours rather than replace one; the 0x40C9F0 entry has 13 callers and the body would have to replay the prologue, saving no byte | — |
 | OOC site 2 prologue | **rejected**: the body owns ECX/EDX and the prologue relocation changes the pre-image bytes | — |
 | options with no 1.0.8.0 site (VSyncFix, RemoveModChecks, RemoveGFWLUpdatePopup) and the already-optimal rows (NewSaves, FastLoading, RemoveRGSC, FCHS main hook, IVML/IVSL, SCOPatch's byte, NoLOD/NoImpostor NOPs) | **nothing to do** | — |
 
