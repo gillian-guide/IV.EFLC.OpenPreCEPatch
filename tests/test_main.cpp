@@ -946,6 +946,24 @@ namespace
         CHECK(!opp::zpatch_relocate_calls(bad, source, sizeof(source), &out_of_range, 1));
     }
 
+    void TestHookBodyRegistry()
+    {
+        // One table now backs both lookups: a name resolves to its body, and a
+        // body's original handler VA resolves to the same body. The VA count is
+        // pinned so a dropped row is a test failure, not a silent skip.
+        CHECK(HookBodyCount() == 103);
+        void* const aim = AbiByName("abi_aim_projectile_crash_fix");
+        CHECK(aim != nullptr);
+        CHECK(ResolveHookBody(0x10005590u, nullptr) ==
+              reinterpret_cast<uintptr_t>(aim));
+        CHECK(ResolveHookBody(0u, nullptr) == 0);
+        CHECK(ResolveHookBody(0x10000000u, nullptr) == 0);
+        CHECK(AbiByName("does_not_exist") == nullptr);
+        CHECK(AbiByName(nullptr) == nullptr);
+        // A name-only body (no recovered handler VA) still resolves by name.
+        CHECK(AbiByName("abi_spawns_case_0x24") != nullptr);
+    }
+
     void TestHooks()
     {
         CHECK(HookBodyCount() > 100);
@@ -979,6 +997,7 @@ int main()
     TestArmFailsafes();
     TestLauncherNamePatch();
     TestRelocateCalls();
+    TestHookBodyRegistry();
     TestHooks();
 
     if (failures != 0)

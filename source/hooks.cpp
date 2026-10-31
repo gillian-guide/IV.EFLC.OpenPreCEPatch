@@ -223,17 +223,6 @@ void abi_popup_check() noexcept
         zpatch_popup_flag = 1;
         zpatch_popup_angle = PopupAngleFor(hash);
         return;
-        for (uint32_t k = 0; k < 512; ++k)
-        {
-            if (zpatch_popup_hashes[k] != 0 &&
-                zpatch_popup_hashes[k] == hash)
-            {
-                uint32_t bits = 0;
-                std::memcpy(&bits, &zpatch_popup_angles[k], sizeof(bits));
-                zpatch_popup_angle = bits;
-            }
-        }
-        return;
     }
 }
 
@@ -931,11 +920,11 @@ __declspec(naked) int32_t zpatch_garage_lookup_model()
 extern "C" const void* abi_vehicle_component(const void* registry,
                                              const char* name) noexcept
 {
-    // sub_10003F40 dereferences the registry and each candidate name unguarded.
-    constexpr bool guarded = true;
-    if (guarded && registry == nullptr) return nullptr;
+    // sub_10003F40 dereferences the registry and each candidate name unguarded;
+    // the default-on failsafes below keep a missing table out of the body.
+    if (registry == nullptr) return nullptr;
     const auto* entries = *reinterpret_cast<const uint8_t* const*>(registry);
-    if (guarded && entries == nullptr) return nullptr;
+    if (entries == nullptr) return nullptr;
     // The registry's component count is its uint16 at +0x14.
     constexpr size_t kComponentArrayOffset = 0x14;
     const auto count = *reinterpret_cast<const uint16_t*>(
@@ -946,7 +935,7 @@ extern "C" const void* abi_vehicle_component(const void* registry,
         constexpr size_t kComponentEntrySize = 0xE0;
         const auto* entry = entries + static_cast<size_t>(i) * kComponentEntrySize;
         const char* candidate = *reinterpret_cast<const char* const*>(entry);
-        if (guarded && candidate == nullptr) continue;
+        if (candidate == nullptr) continue;
         if (_stricmp(candidate, name) == 0) return entry;
     }
     return nullptr;
@@ -962,8 +951,7 @@ extern "C" uint32_t abi_steer_body() noexcept
 {
     auto* const vehicle = reinterpret_cast<uint8_t*>(
         static_cast<uintptr_t>(zpatch_steer_vehicle));
-    constexpr bool guarded = true;
-    if (guarded && vehicle == nullptr) return 0;
+    if (vehicle == nullptr) return 0;
 
     using BoneFn = uint32_t*(__thiscall*)(void*, uint32_t);
     using SetFn = void(__thiscall*)(uint32_t*, float);
@@ -994,7 +982,7 @@ extern "C" uint32_t abi_steer_body() noexcept
     const auto script_float = [&]() -> float
     {
         const uint32_t ctx = zpatch_script_resolve(zpatch_salt_3c);
-        if (guarded && ctx == 0) return 0.0f;
+        if (ctx == 0) return 0.0f;
         const uint32_t offset =
             *reinterpret_cast<const uint32_t*>(
                 static_cast<uintptr_t>(ctx) + kScriptOffsetField);
@@ -1002,7 +990,7 @@ extern "C" uint32_t abi_steer_body() noexcept
             static_cast<uintptr_t>(ctx) + offset + kScriptSlotBase);
         // The script slot can be empty before the script has run; the original
         // dereferences it (fault preserved when the folded guard is off).
-        if (guarded && value == 0) return 0.0f;
+        if (value == 0) return 0.0f;
         return *reinterpret_cast<const float*>(
             static_cast<uintptr_t>(value) + kScriptFloatOffset);
     };
@@ -1028,10 +1016,10 @@ extern "C" uint32_t abi_steer_body() noexcept
     const auto bone_matrix = [&](int16_t model, const char* name) -> uint32_t*
     {
         const auto base = static_cast<uintptr_t>(zpatch_pre_ped_array);
-        if (guarded && (base == 0u || model < 0)) return nullptr;
+        if ((base == 0u || model < 0)) return nullptr;
         const uint32_t ped = *reinterpret_cast<const uint32_t*>(
             base + 4u * static_cast<uint32_t>(model));
-        if (guarded && ped == 0u) return nullptr;
+        if (ped == 0u) return nullptr;
         // The chain is ped -> [ped+0x8] -> [+0xB4] -> [+0xC]; each link is a
         // pointer the original dereferences unguarded.
         constexpr size_t kVehicleChainFirstOffset = 8;
@@ -1039,13 +1027,13 @@ extern "C" uint32_t abi_steer_body() noexcept
         constexpr size_t kVehicleChainRegistryOffset = 0xC;
         const uint32_t p1 = *reinterpret_cast<const uint32_t*>(
             static_cast<uintptr_t>(ped) + kVehicleChainFirstOffset);
-        if (guarded && p1 == 0u) return nullptr;
+        if (p1 == 0u) return nullptr;
         const uint32_t p2 = *reinterpret_cast<const uint32_t*>(
             static_cast<uintptr_t>(p1) + kVehicleChainSecondOffset);
-        if (guarded && p2 == 0u) return nullptr;
+        if (p2 == 0u) return nullptr;
         const uint32_t registry = *reinterpret_cast<const uint32_t*>(
             static_cast<uintptr_t>(p2) + kVehicleChainRegistryOffset);
-        if (guarded && registry == 0u) return nullptr;
+        if (registry == 0u) return nullptr;
         const auto* entry = static_cast<const uint8_t*>(abi_vehicle_component(
             reinterpret_cast<const void*>(static_cast<uintptr_t>(registry)), name));
         if (entry == nullptr) return nullptr;  // the original's own `if (v6)` check
@@ -1058,13 +1046,13 @@ extern "C" uint32_t abi_steer_body() noexcept
         return get_bone(vehicle, bone);
     };
 
-    // The steering block dereferences the vehicle's lock owner. The folded guard
-    // skips it while there is no owner (the original faults); the original path
-    // keeps the plain `zpatch_flag_steering` condition.
+    // The steering block dereferences the vehicle's lock owner. The default-on
+    // failsafe skips it while there is no owner (the original faults); there is
+    // no selectable guard-off path in this tree.
     const int16_t steer_model = model_of();
     const uint32_t steer_lock_owner = *reinterpret_cast<const uint32_t*>(
         vehicle + kVehicleBoneOffset);
-    if (zpatch_flag_steering && (!guarded || steer_lock_owner != 0u))
+    if (zpatch_flag_steering && steer_lock_owner != 0u)
     {
         const int16_t model = steer_model;
         const float steering = *reinterpret_cast<const float*>(vehicle + kVehicleSteeringOffset);
@@ -1096,7 +1084,7 @@ extern "C" uint32_t abi_steer_body() noexcept
                 const uint32_t hash = zpatch_wheelangle_models[i];
                 if (hash == 0u) break;
                 int32_t resolved = -1;
-                if (guarded && lookup == nullptr) break;
+                if (lookup == nullptr) break;
                 lookup(hash, &resolved);  // sub_10004C70 0x10004CE7: unconditional
                 if (resolved == model)
                 {
@@ -1183,7 +1171,7 @@ extern "C" uint32_t abi_steer_body() noexcept
     }
     // Unconditional tail: snapshot the last script timestep and return its slot.
     const uint32_t ctx = zpatch_script_resolve(zpatch_salt_3c);
-    if (guarded && ctx == 0u)
+    if (ctx == 0u)
     {
         zpatch_engine_last_timestep = 0.0f;
         return 0;
@@ -1192,7 +1180,7 @@ extern "C" uint32_t abi_steer_body() noexcept
         static_cast<uintptr_t>(ctx) + kScriptOffsetField);
     const uint32_t value_ptr = *reinterpret_cast<const uint32_t*>(
         static_cast<uintptr_t>(ctx) + offset + kScriptSlotBase);
-    if (guarded && value_ptr == 0u)
+    if (value_ptr == 0u)
     {
         zpatch_engine_last_timestep = 0.0f;
         return 0;
@@ -5688,304 +5676,192 @@ uintptr_t zpatch_nms_vtable[24] =
 };
 }  // extern "C"
 
-struct AbiBody final
+struct AbiEntry final
 {
-    uint32_t reference_va;
+    const char* name;
     void (*address)();
+    uint32_t reference_va;  // original handler VA, or 0 when only the name is used
 };
 
-// Only destinations whose conventions are verified appear here; everything else
-// resolves to 0 and the installer reports it as skipped.
-// Each row is {reference VA, body}. The VA is the original handler's address in
-// the original ASI (image base 0x10000000): provenance, not an install address.
-// The body name states which handler the VA belongs to (research 07 appendix A).
-const AbiBody kAbiBodies[] =
+// The one hook-body table: name -> function, plus the original handler VA where
+// the body replaces one. Only destinations whose conventions are verified appear
+// here; a missing row resolves to 0 and the installer reports it as skipped. The
+// VA is provenance (image base 0x10000000), not an install address; combining
+// both lookups in one table means a body cannot be added to one and forgotten in
+// the other (the ten spawn cases were silently skipped once that way).
+const AbiEntry kAbiTable[] =
 {
-        {0x10005590u, reinterpret_cast<void(*)()>(&abi_aim_projectile_crash_fix)},
-        {0x100057f0u, reinterpret_cast<void(*)()>(&abi_better_mp_sync)},
-        {0x10005ed0u, reinterpret_cast<void(*)()>(&abi_combined_radio_freeze_fix)},
-        {0x10006880u, reinterpret_cast<void(*)()>(&abi_carparts_shadow)},
-        {0x10044530u, reinterpret_cast<void(*)()>(&abi_popup_headlights)},
-        {0x10044560u, reinterpret_cast<void(*)()>(&abi_popup_headlights_edx)},
-        {0x1001ADB0u, reinterpret_cast<void(*)()>(&abi_fchs_shim)},
-        {0x100064F0u, reinterpret_cast<void(*)()>(&abi_dual_headlights_new)},
-        {0x10006630u, reinterpret_cast<void(*)()>(&abi_dual_headlights_old)},
-        {0x1001B2E0u, reinterpret_cast<void(*)()>(&abi_car_decals_fix)},
-        {0x10037BA0u, reinterpret_cast<void(*)()>(&abi_bad_player_model)},
-        {0x10050AD0u, reinterpret_cast<void(*)()>(&abi_death_music_install)},
-        {0x10050A50u, reinterpret_cast<void(*)()>(&abi_death_music_enabled)},
-        {0x100521E0u, reinterpret_cast<void(*)()>(&abi_new_saves_compat)},
-        {0x100054E0u, reinterpret_cast<void(*)()>(&abi_gfwl_stub)},
-        {0x1003D3E0u, reinterpret_cast<void(*)()>(&abi_nolivery_e)},
-        {0x100068A0u, reinterpret_cast<void(*)()>(&abi_carparts_shadow_2)},
-        {0x100068D0u, reinterpret_cast<void(*)()>(&abi_carparts_shadow_2b)},
-        {0x10046C80u, reinterpret_cast<void(*)()>(&abi_garage_body_a)},
-        {0x10046CA0u, reinterpret_cast<void(*)()>(&abi_garage_body_b)},
-        {0x100051B0u, reinterpret_cast<void(*)()>(&abi_steer_detour_eax)},
-        {0x100051E0u, reinterpret_cast<void(*)()>(&abi_steer_detour_edx)},
-        {0x100512F0u, reinterpret_cast<void(*)()>(&abi_local_settings_detour)},
-        {0x10051300u, reinterpret_cast<void(*)()>(&abi_local_settings_fallback_detour)},
-        {0x10037510u, reinterpret_cast<void(*)()>(&abi_spawns_probe)},
-        {0x100372F0u, reinterpret_cast<void(*)()>(&abi_spawns_guard)},
-        {0x10037330u, reinterpret_cast<void(*)()>(&abi_spawns_case_0x24)},
-        {0x100373F0u, reinterpret_cast<void(*)()>(&abi_spawns_case_0x3D)},
-        {0x10037420u, reinterpret_cast<void(*)()>(&abi_spawns_case_0x56)},
-        {0x10037390u, reinterpret_cast<void(*)()>(&abi_spawns_case_0x6F)},
-        {0x10037450u, reinterpret_cast<void(*)()>(&abi_spawns_case_0x88)},
-        {0x10037480u, reinterpret_cast<void(*)()>(&abi_spawns_case_0x9E)},
-        {0x100374E0u, reinterpret_cast<void(*)()>(&abi_spawns_case_0xB4)},
-        {0x10037360u, reinterpret_cast<void(*)()>(&abi_spawns_case_0xCA)},
-        {0x100373C0u, reinterpret_cast<void(*)()>(&abi_spawns_case_0xE0)},
-        {0x100374B0u, reinterpret_cast<void(*)()>(&abi_spawns_case_0xF6)},
-        {0x10003e50u, reinterpret_cast<void(*)()>(&abi_game_hash)},
-        {0x10050870u, reinterpret_cast<void(*)()>(&abi_ped_models_in_cutscenes_check)},
-        {0x10045a30u, reinterpret_cast<void(*)()>(&abi_improved_shader_streaming_find_hpe)},
-        {0x10045a80u, reinterpret_cast<void(*)()>(&abi_improved_shader_streaming_find_v)},
-        // 0x100064b0 (DrivebyFOVFix) is registered above: the arm installs
-        // unconditionally when its pattern matches, and the pattern exists on 1.0.8.0.
-        {0x1003d310u, reinterpret_cast<void(*)()>(&abi_nolivery_a)},
-        {0x1003d340u, reinterpret_cast<void(*)()>(&abi_nolivery_b)},
-        {0x1003d370u, reinterpret_cast<void(*)()>(&abi_nolivery_c)},
-        {0x1003d3a0u, reinterpret_cast<void(*)()>(&abi_nolivery_d)},
-        {0x10036f00u, reinterpret_cast<void(*)()>(&abi_crash_msg_shim)},
-        {0x10051600u, reinterpret_cast<void(*)()>(&abi_newfiles_register_body)},
-        {0x10051890u, reinterpret_cast<void(*)()>(&abi_newfiles_update_a)},
-        {0x100518d0u, reinterpret_cast<void(*)()>(&abi_newfiles_update_b)},
-        {0x10005650u, reinterpret_cast<void(*)()>(&abi_benchmark_a)},
-        {0x10005670u, reinterpret_cast<void(*)()>(&abi_benchmark_b)},
-        {0x10005af0u, reinterpret_cast<void(*)()>(&abi_building_dynamic_shadows)},
-        {0x10006310u, reinterpret_cast<void(*)()>(&abi_copsirens_a)},
-        {0x10006330u, reinterpret_cast<void(*)()>(&abi_copsirens_b)},
-        {0x100040e0u, reinterpret_cast<void(*)()>(&abi_copsirens_ide)},
-        {0x10005890u, reinterpret_cast<void(*)()>(&abi_borderless_w)},
-        {0x10005900u, reinterpret_cast<void(*)()>(&abi_borderless_a)},
-        {0x10050540u, reinterpret_cast<void(*)()>(&abi_speedup_body)},
-        {0x1001b080u, reinterpret_cast<void(*)()>(&abi_episode_switch_sum)},
-        {0x10023480u, reinterpret_cast<void(*)()>(&abi_load_dlcs_dummy)},
-        {0x10023490u, reinterpret_cast<void(*)()>(&abi_load_dlcs_struct_fixup)},
-        {0x10038550u, reinterpret_cast<void(*)()>(&abi_rgsc_login_removed)},
-        {0x10038570u, reinterpret_cast<void(*)()>(&abi_savegame_fix_null)},
-        // NewMemorySystem's CRageAllocator stubs (the E8 body's vtable); the alloc/
-        // free/contains methods are compiled methods registered only through the
-        // vtable, not here.
-        {0x10038640u, reinterpret_cast<void(*)()>(&abi_nms_ctor)},
-        {0x10038350u, reinterpret_cast<void(*)()>(&abi_nms_reject_ptr)},
-        {0x10038540u, reinterpret_cast<void(*)()>(&abi_nms_self)},
-        {0x10001950u, reinterpret_cast<void(*)()>(&abi_nms_zero_ptr)},
-        {0x10038560u, reinterpret_cast<void(*)()>(&abi_nms_noop_ret0)},
-        {0x10038580u, reinterpret_cast<void(*)()>(&abi_nms_noop_pair)},
-        {0x10038590u, reinterpret_cast<void(*)()>(&abi_nms_reject)},
-        {0x10038620u, reinterpret_cast<void(*)()>(&abi_nms_thunk18)},
-        {0x10038630u, reinterpret_cast<void(*)()>(&abi_nms_noop_arg)},
-        {0x10038670u, reinterpret_cast<void(*)()>(&abi_nms_apply)},
-        {0x10045580u, reinterpret_cast<void(*)()>(&abi_savegame_fix_close)},
-        {0x100455a0u, reinterpret_cast<void(*)()>(&abi_savegame_fix_copy)},
-        {0x100455e0u, reinterpret_cast<void(*)()>(&abi_savegame_fix_mutex)},
-        // Crash-fix shims (0x10036ee0..0x10005d80). WantedLevelCrashFix's null
-        // path pops ebx (the site sits after `push ebx`); CollisionDeadlock needs
-        // eax/edx for its predicate (see the body).
-        {0x10036ee0u, reinterpret_cast<void(*)()>(&abi_blackscreen_shim)},
-        {0x1003d7b0u, reinterpret_cast<void(*)()>(&abi_path_node_shim)},
-        {0x1003d870u, reinterpret_cast<void(*)()>(&abi_plane_crash_shim)},
-        {0x10050490u, reinterpret_cast<void(*)()>(&abi_wanted_level_shim)},
-        {0x10036e90u, reinterpret_cast<void(*)()>(&abi_group_hack_shim)},
-        {0x10046750u, reinterpret_cast<void(*)()>(&abi_smpa60_shim)},
-        {0x10046780u, reinterpret_cast<void(*)()>(&abi_smpa60_tail_shim)},
-        {0x10036eb0u, reinterpret_cast<void(*)()>(&abi_freeze_gun_shim)},
-        {0x1003d9a0u, reinterpret_cast<void(*)()>(&abi_player_ped_components_shim)},
-        {0x1001af60u, reinterpret_cast<void(*)()>(&abi_emissive_lerp_shim)},
-        {0x100469e0u, reinterpret_cast<void(*)()>(&abi_super_lod_fix_shim)},
-        {0x1001b040u, reinterpret_cast<void(*)()>(&abi_episode_switch_store_shim)},
-        {0x1001b060u, reinterpret_cast<void(*)()>(&abi_episode_switch_shim_b)},
-        {0x1001b0a0u, reinterpret_cast<void(*)()>(&abi_episode_switch_vcall)},
-        {0x1001b0c0u, reinterpret_cast<void(*)()>(&abi_episode_switch_shim_c)},
-        {0x1001ef60u, reinterpret_cast<void(*)()>(&abi_bike_physics_detour)},
-        {0x10005d80u, reinterpret_cast<void(*)()>(&abi_collision_deadlock_walk)},
-        {0x10024060u, reinterpret_cast<void(*)()>(&abi_mouse_axis_float)},
-        {0x100240C0u, reinterpret_cast<void(*)()>(&abi_mouse_axis_neg)},
-        {0x10024120u, reinterpret_cast<void(*)()>(&abi_mouse_axis_int)},
-        {0x10024170u, reinterpret_cast<void(*)()>(&abi_mouse_axis_flag)},
-        {0x10024440u, reinterpret_cast<void(*)()>(&abi_mf_angle_step)},
-        {0x10024560u, reinterpret_cast<void(*)()>(&abi_mouse_angle)},
-        {0x100243A0u, reinterpret_cast<void(*)()>(&abi_mouse_advance)},
-        {0x1004C3C0u, reinterpret_cast<void(*)()>(&abi_ooc_branch)},
-        {0x1004C350u, reinterpret_cast<void(*)()>(&abi_ooc_wrap)},
-        {0x100388C0u, reinterpret_cast<void(*)()>(&abi_cutscene_chain_b)},
-        {0x100064B0u, reinterpret_cast<void(*)()>(&abi_driveby_fov_shim)},
+    {"abi_aim_projectile_crash_fix", reinterpret_cast<void(*)()>(&abi_aim_projectile_crash_fix), 0x10005590u},
+    {"abi_bad_player_model", reinterpret_cast<void(*)()>(&abi_bad_player_model), 0x10037BA0u},
+    {"abi_benchmark_a", reinterpret_cast<void(*)()>(&abi_benchmark_a), 0x10005650u},
+    {"abi_benchmark_b", reinterpret_cast<void(*)()>(&abi_benchmark_b), 0x10005670u},
+    {"abi_better_mp_sync", reinterpret_cast<void(*)()>(&abi_better_mp_sync), 0x100057F0u},
+    {"abi_bike_physics_detour", reinterpret_cast<void(*)()>(&abi_bike_physics_detour), 0x1001EF60u},
+    {"abi_bike_physics_helper", reinterpret_cast<void(*)()>(&abi_bike_physics_helper), 0u},
+    {"abi_blackscreen_shim", reinterpret_cast<void(*)()>(&abi_blackscreen_shim), 0x10036EE0u},
+    {"abi_borderless_a", reinterpret_cast<void(*)()>(&abi_borderless_a), 0x10005900u},
+    {"abi_borderless_w", reinterpret_cast<void(*)()>(&abi_borderless_w), 0x10005890u},
+    {"abi_bpm_check", reinterpret_cast<void(*)()>(&abi_bpm_check), 0u},
+    {"abi_building_dynamic_shadows", reinterpret_cast<void(*)()>(&abi_building_dynamic_shadows), 0x10005AF0u},
+    {"abi_car_decals_fix", reinterpret_cast<void(*)()>(&abi_car_decals_fix), 0x1001B2E0u},
+    {"abi_carparts_shadow", reinterpret_cast<void(*)()>(&abi_carparts_shadow), 0x10006880u},
+    {"abi_carparts_shadow_2", reinterpret_cast<void(*)()>(&abi_carparts_shadow_2), 0x100068A0u},
+    {"abi_carparts_shadow_2b", reinterpret_cast<void(*)()>(&abi_carparts_shadow_2b), 0x100068D0u},
+    {"abi_collision_deadlock_walk", reinterpret_cast<void(*)()>(&abi_collision_deadlock_walk), 0x10005D80u},
+    {"abi_combined_radio_freeze_fix", reinterpret_cast<void(*)()>(&abi_combined_radio_freeze_fix), 0x10005ED0u},
+    {"abi_copsirens_a", reinterpret_cast<void(*)()>(&abi_copsirens_a), 0x10006310u},
+    {"abi_copsirens_b", reinterpret_cast<void(*)()>(&abi_copsirens_b), 0x10006330u},
+    {"abi_copsirens_check_a", reinterpret_cast<void(*)()>(&abi_copsirens_check_a), 0u},
+    {"abi_copsirens_check_b", reinterpret_cast<void(*)()>(&abi_copsirens_check_b), 0u},
+    {"abi_copsirens_ide", reinterpret_cast<void(*)()>(&abi_copsirens_ide), 0x100040E0u},
+    {"abi_crash_msg_shim", reinterpret_cast<void(*)()>(&abi_crash_msg_shim), 0x10036F00u},
+    {"abi_cutscene_chain_b", reinterpret_cast<void(*)()>(&abi_cutscene_chain_b), 0x100388C0u},
+    {"abi_death_music_enabled", reinterpret_cast<void(*)()>(&abi_death_music_enabled), 0x10050A50u},
+    {"abi_death_music_install", reinterpret_cast<void(*)()>(&abi_death_music_install), 0x10050AD0u},
+    {"abi_driveby_fov_helper", reinterpret_cast<void(*)()>(&abi_driveby_fov_helper), 0u},
+    {"abi_driveby_fov_note", reinterpret_cast<void(*)()>(&abi_driveby_fov_note), 0u},
+    {"abi_driveby_fov_note_impl", reinterpret_cast<void(*)()>(&abi_driveby_fov_note_impl), 0u},
+    {"abi_driveby_fov_shim", reinterpret_cast<void(*)()>(&abi_driveby_fov_shim), 0x100064B0u},
+    {"abi_dual_headlights_init", reinterpret_cast<void(*)()>(&abi_dual_headlights_init), 0u},
+    {"abi_dual_headlights_new", reinterpret_cast<void(*)()>(&abi_dual_headlights_new), 0x100064F0u},
+    {"abi_dual_headlights_old", reinterpret_cast<void(*)()>(&abi_dual_headlights_old), 0x10006630u},
+    {"abi_emissive_lerp_shim", reinterpret_cast<void(*)()>(&abi_emissive_lerp_shim), 0x1001AF60u},
+    {"abi_episode_switch_shim_b", reinterpret_cast<void(*)()>(&abi_episode_switch_shim_b), 0x1001B060u},
+    {"abi_episode_switch_shim_c", reinterpret_cast<void(*)()>(&abi_episode_switch_shim_c), 0x1001B0C0u},
+    {"abi_episode_switch_store_shim", reinterpret_cast<void(*)()>(&abi_episode_switch_store_shim), 0x1001B040u},
+    {"abi_episode_switch_sum", reinterpret_cast<void(*)()>(&abi_episode_switch_sum), 0x1001B080u},
+    {"abi_episode_switch_vcall", reinterpret_cast<void(*)()>(&abi_episode_switch_vcall), 0x1001B0A0u},
+    {"abi_fchs_check", reinterpret_cast<void(*)()>(&abi_fchs_check), 0u},
+    {"abi_fchs_shim", reinterpret_cast<void(*)()>(&abi_fchs_shim), 0x1001ADB0u},
+    {"abi_freeze_gun_shim", reinterpret_cast<void(*)()>(&abi_freeze_gun_shim), 0x10036EB0u},
+    {"abi_game_hash", reinterpret_cast<void(*)()>(&abi_game_hash), 0x10003E50u},
+    {"abi_garage_body_a", reinterpret_cast<void(*)()>(&abi_garage_body_a), 0x10046C80u},
+    {"abi_garage_entry_a", reinterpret_cast<void(*)()>(&abi_garage_entry_a), 0u},
+    {"abi_garage_body_b", reinterpret_cast<void(*)()>(&abi_garage_body_b), 0x10046CA0u},
+    {"abi_gfwl_patch", reinterpret_cast<void(*)()>(&abi_gfwl_patch), 0u},
+    {"abi_gfwl_stub", reinterpret_cast<void(*)()>(&abi_gfwl_stub), 0x100054E0u},
+    {"abi_group_hack_shim", reinterpret_cast<void(*)()>(&abi_group_hack_shim), 0x10036E90u},
+    {"abi_ide_parse", reinterpret_cast<void(*)()>(&abi_ide_parse), 0u},
+    {"abi_improved_shader_streaming_find_hpe", reinterpret_cast<void(*)()>(&abi_improved_shader_streaming_find_hpe), 0x10045A30u},
+    {"abi_improved_shader_streaming_find_v", reinterpret_cast<void(*)()>(&abi_improved_shader_streaming_find_v), 0x10045A80u},
+    {"abi_load_dlcs_dummy", reinterpret_cast<void(*)()>(&abi_load_dlcs_dummy), 0x10023480u},
+    {"abi_load_dlcs_struct_fixup", reinterpret_cast<void(*)()>(&abi_load_dlcs_struct_fixup), 0x10023490u},
+    {"abi_local_settings_detour", reinterpret_cast<void(*)()>(&abi_local_settings_detour), 0x100512F0u},
+    {"abi_local_settings_fallback_detour", reinterpret_cast<void(*)()>(&abi_local_settings_fallback_detour), 0x10051300u},
+    {"abi_mf_angle_step", reinterpret_cast<void(*)()>(&abi_mf_angle_step), 0x10024440u},
+    {"abi_mouse_advance", reinterpret_cast<void(*)()>(&abi_mouse_advance), 0x100243A0u},
+    {"abi_mouse_angle", reinterpret_cast<void(*)()>(&abi_mouse_angle), 0x10024560u},
+    {"abi_mouse_axis_flag", reinterpret_cast<void(*)()>(&abi_mouse_axis_flag), 0x10024170u},
+    {"abi_mouse_axis_float", reinterpret_cast<void(*)()>(&abi_mouse_axis_float), 0x10024060u},
+    {"abi_mouse_axis_int", reinterpret_cast<void(*)()>(&abi_mouse_axis_int), 0x10024120u},
+    {"abi_mouse_axis_neg", reinterpret_cast<void(*)()>(&abi_mouse_axis_neg), 0x100240C0u},
+    {"abi_new_saves_compat", reinterpret_cast<void(*)()>(&abi_new_saves_compat), 0x100521E0u},
+    {"abi_new_saves_convert", reinterpret_cast<void(*)()>(&abi_new_saves_convert), 0u},
+    {"abi_new_saves_p3_hook", reinterpret_cast<void(*)()>(&abi_new_saves_p3_hook), 0u},
+    {"abi_new_saves_prepare", reinterpret_cast<void(*)()>(&abi_new_saves_prepare), 0u},
+    {"abi_new_saves_read_hook", reinterpret_cast<void(*)()>(&abi_new_saves_read_hook), 0u},
+    {"abi_newfiles_call_add", reinterpret_cast<void(*)()>(&abi_newfiles_call_add), 0u},
+    {"abi_newfiles_call_obj", reinterpret_cast<void(*)()>(&abi_newfiles_call_obj), 0u},
+    {"abi_newfiles_cb", reinterpret_cast<void(*)()>(&abi_newfiles_cb), 0u},
+    {"abi_newfiles_find_obj", reinterpret_cast<void(*)()>(&abi_newfiles_find_obj), 0u},
+    {"abi_newfiles_register", reinterpret_cast<void(*)()>(&abi_newfiles_register), 0u},
+    {"abi_newfiles_register_body", reinterpret_cast<void(*)()>(&abi_newfiles_register_body), 0x10051600u},
+    {"abi_newfiles_update_a", reinterpret_cast<void(*)()>(&abi_newfiles_update_a), 0x10051890u},
+    {"abi_newfiles_update_b", reinterpret_cast<void(*)()>(&abi_newfiles_update_b), 0x100518D0u},
+    {"abi_nms_apply", reinterpret_cast<void(*)()>(&abi_nms_apply), 0x10038670u},
+    {"abi_nms_ctor", reinterpret_cast<void(*)()>(&abi_nms_ctor), 0x10038640u},
+    {"abi_nms_noop_arg", reinterpret_cast<void(*)()>(&abi_nms_noop_arg), 0x10038630u},
+    {"abi_nms_noop_pair", reinterpret_cast<void(*)()>(&abi_nms_noop_pair), 0x10038580u},
+    {"abi_nms_noop_ret0", reinterpret_cast<void(*)()>(&abi_nms_noop_ret0), 0x10038560u},
+    {"abi_nms_reject", reinterpret_cast<void(*)()>(&abi_nms_reject), 0x10038590u},
+    {"abi_nms_reject_ptr", reinterpret_cast<void(*)()>(&abi_nms_reject_ptr), 0x10038350u},
+    {"abi_nms_self", reinterpret_cast<void(*)()>(&abi_nms_self), 0x10038540u},
+    {"abi_nms_thunk18", reinterpret_cast<void(*)()>(&abi_nms_thunk18), 0x10038620u},
+    {"abi_nms_zero_ptr", reinterpret_cast<void(*)()>(&abi_nms_zero_ptr), 0x10001950u},
+    {"abi_nolivery_a", reinterpret_cast<void(*)()>(&abi_nolivery_a), 0x1003D310u},
+    {"abi_nolivery_b", reinterpret_cast<void(*)()>(&abi_nolivery_b), 0x1003D340u},
+    {"abi_nolivery_c", reinterpret_cast<void(*)()>(&abi_nolivery_c), 0x1003D370u},
+    {"abi_nolivery_copy_name", reinterpret_cast<void(*)()>(&abi_nolivery_copy_name), 0u},
+    {"abi_nolivery_count_loop", reinterpret_cast<void(*)()>(&abi_nolivery_count_loop), 0u},
+    {"abi_nolivery_d", reinterpret_cast<void(*)()>(&abi_nolivery_d), 0x1003D3A0u},
+    {"abi_nolivery_e", reinterpret_cast<void(*)()>(&abi_nolivery_e), 0x1003D3E0u},
+    {"abi_nolivery_hash_sign", reinterpret_cast<void(*)()>(&abi_nolivery_hash_sign), 0u},
+    {"abi_ooc_branch", reinterpret_cast<void(*)()>(&abi_ooc_branch), 0x1004C3C0u},
+    {"abi_ooc_wrap", reinterpret_cast<void(*)()>(&abi_ooc_wrap), 0x1004C350u},
+    {"abi_path_node_shim", reinterpret_cast<void(*)()>(&abi_path_node_shim), 0x1003D7B0u},
+    {"abi_ped_models_in_cutscenes_check", reinterpret_cast<void(*)()>(&abi_ped_models_in_cutscenes_check), 0x10050870u},
+    {"abi_plane_crash_shim", reinterpret_cast<void(*)()>(&abi_plane_crash_shim), 0x1003D870u},
+    {"abi_player_ped_components_shim", reinterpret_cast<void(*)()>(&abi_player_ped_components_shim), 0x1003D9A0u},
+    {"abi_player_ped_helper", reinterpret_cast<void(*)()>(&abi_player_ped_helper), 0u},
+    {"abi_popup_check", reinterpret_cast<void(*)()>(&abi_popup_check), 0u},
+    {"abi_popup_headlights", reinterpret_cast<void(*)()>(&abi_popup_headlights), 0x10044530u},
+    {"abi_popup_headlights_edx", reinterpret_cast<void(*)()>(&abi_popup_headlights_edx), 0x10044560u},
+    {"abi_rgsc_login_removed", reinterpret_cast<void(*)()>(&abi_rgsc_login_removed), 0x10038550u},
+    {"abi_savegame_fix_close", reinterpret_cast<void(*)()>(&abi_savegame_fix_close), 0x10045580u},
+    {"abi_savegame_fix_copy", reinterpret_cast<void(*)()>(&abi_savegame_fix_copy), 0x100455A0u},
+    {"abi_savegame_fix_mutex", reinterpret_cast<void(*)()>(&abi_savegame_fix_mutex), 0x100455E0u},
+    {"abi_savegame_fix_null", reinterpret_cast<void(*)()>(&abi_savegame_fix_null), 0x10038570u},
+    {"abi_shader_stream_filter_hpe", reinterpret_cast<void(*)()>(&abi_shader_stream_filter_hpe), 0u},
+    {"abi_shader_stream_filter_v", reinterpret_cast<void(*)()>(&abi_shader_stream_filter_v), 0u},
+    {"abi_smpa60_shim", reinterpret_cast<void(*)()>(&abi_smpa60_shim), 0x10046750u},
+    {"abi_smpa60_tail_shim", reinterpret_cast<void(*)()>(&abi_smpa60_tail_shim), 0x10046780u},
+    {"abi_spawns_guard", reinterpret_cast<void(*)()>(&abi_spawns_guard), 0x100372F0u},
+    {"abi_spawns_probe", reinterpret_cast<void(*)()>(&abi_spawns_probe), 0x10037510u},
+    {"abi_spawns_case_0x24", reinterpret_cast<void(*)()>(&abi_spawns_case_0x24), 0x10037330u},
+    {"abi_spawns_case_0x3D", reinterpret_cast<void(*)()>(&abi_spawns_case_0x3D), 0x100373F0u},
+    {"abi_spawns_case_0x56", reinterpret_cast<void(*)()>(&abi_spawns_case_0x56), 0x10037420u},
+    {"abi_spawns_case_0x6F", reinterpret_cast<void(*)()>(&abi_spawns_case_0x6F), 0x10037390u},
+    {"abi_spawns_case_0x88", reinterpret_cast<void(*)()>(&abi_spawns_case_0x88), 0x10037450u},
+    {"abi_spawns_case_0x9E", reinterpret_cast<void(*)()>(&abi_spawns_case_0x9E), 0x10037480u},
+    {"abi_spawns_case_0xB4", reinterpret_cast<void(*)()>(&abi_spawns_case_0xB4), 0x100374E0u},
+    {"abi_spawns_case_0xCA", reinterpret_cast<void(*)()>(&abi_spawns_case_0xCA), 0x10037360u},
+    {"abi_spawns_case_0xE0", reinterpret_cast<void(*)()>(&abi_spawns_case_0xE0), 0x100373C0u},
+    {"abi_spawns_case_0xF6", reinterpret_cast<void(*)()>(&abi_spawns_case_0xF6), 0x100374B0u},
+    {"abi_speedup_body", reinterpret_cast<void(*)()>(&abi_speedup_body), 0x10050540u},
+    {"abi_steer_body", reinterpret_cast<void(*)()>(&abi_steer_body), 0u},
+    {"abi_steer_detour_eax", reinterpret_cast<void(*)()>(&abi_steer_detour_eax), 0x100051B0u},
+    {"abi_steer_detour_edx", reinterpret_cast<void(*)()>(&abi_steer_detour_edx), 0x100051E0u},
+    {"abi_super_lod_fix_shim", reinterpret_cast<void(*)()>(&abi_super_lod_fix_shim), 0x100469E0u},
+    {"abi_super_lod_helper", reinterpret_cast<void(*)()>(&abi_super_lod_helper), 0u},
+    {"abi_vehicle_component", reinterpret_cast<void(*)()>(&abi_vehicle_component), 0u},
+    {"abi_wanted_level_shim", reinterpret_cast<void(*)()>(&abi_wanted_level_shim), 0x10050490u},
 };
 
 uintptr_t ResolveHookBody(uint32_t reference_va, void*) noexcept
 {
-    for (const AbiBody& body : kAbiBodies)
+    if (reference_va == 0u)
+        return 0;
+    for (const AbiEntry& entry : kAbiTable)
     {
-        if (body.reference_va == reference_va) return reinterpret_cast<uintptr_t>(body.address);
+        if (entry.reference_va == reference_va)
+            return reinterpret_cast<uintptr_t>(entry.address);
     }
     return 0;
 }
 
 size_t HookBodyCount() noexcept
 {
-    return sizeof(kAbiBodies) / sizeof(kAbiBodies[0]);
+    // Rows with a reference VA: the count the installer reports as "bodies".
+    size_t count = 0;
+    for (const AbiEntry& entry : kAbiTable)
+    {
+        if (entry.reference_va != 0u)
+            ++count;
+    }
+    return count;
 }
-
-
 
 // Name-based lookup for the installers: they take a body's address and the
 // reference-VA registry uses the same definitions, so neither side needs 130
 // hand-written declarations.
 extern "C" void* AbiByName(const char* name) noexcept
 {
-    static const struct
-    {
-        const char* name;
-        void (*address)();
-    } kAbiNames[] = {
-    {"abi_aim_projectile_crash_fix", reinterpret_cast<void(*)()>(&abi_aim_projectile_crash_fix)},
-    {"abi_bad_player_model", reinterpret_cast<void(*)()>(&abi_bad_player_model)},
-    {"abi_benchmark_a", reinterpret_cast<void(*)()>(&abi_benchmark_a)},
-    {"abi_benchmark_b", reinterpret_cast<void(*)()>(&abi_benchmark_b)},
-    {"abi_better_mp_sync", reinterpret_cast<void(*)()>(&abi_better_mp_sync)},
-    {"abi_bike_physics_detour", reinterpret_cast<void(*)()>(&abi_bike_physics_detour)},
-    {"abi_bike_physics_helper", reinterpret_cast<void(*)()>(&abi_bike_physics_helper)},
-    {"abi_blackscreen_shim", reinterpret_cast<void(*)()>(&abi_blackscreen_shim)},
-    {"abi_borderless_a", reinterpret_cast<void(*)()>(&abi_borderless_a)},
-    {"abi_borderless_w", reinterpret_cast<void(*)()>(&abi_borderless_w)},
-    {"abi_bpm_check", reinterpret_cast<void(*)()>(&abi_bpm_check)},
-    {"abi_building_dynamic_shadows", reinterpret_cast<void(*)()>(&abi_building_dynamic_shadows)},
-    {"abi_car_decals_fix", reinterpret_cast<void(*)()>(&abi_car_decals_fix)},
-    {"abi_carparts_shadow", reinterpret_cast<void(*)()>(&abi_carparts_shadow)},
-    {"abi_carparts_shadow_2", reinterpret_cast<void(*)()>(&abi_carparts_shadow_2)},
-    {"abi_carparts_shadow_2b", reinterpret_cast<void(*)()>(&abi_carparts_shadow_2b)},
-    {"abi_collision_deadlock_walk", reinterpret_cast<void(*)()>(&abi_collision_deadlock_walk)},
-    {"abi_combined_radio_freeze_fix", reinterpret_cast<void(*)()>(&abi_combined_radio_freeze_fix)},
-    {"abi_copsirens_a", reinterpret_cast<void(*)()>(&abi_copsirens_a)},
-    {"abi_copsirens_b", reinterpret_cast<void(*)()>(&abi_copsirens_b)},
-    {"abi_copsirens_check_a", reinterpret_cast<void(*)()>(&abi_copsirens_check_a)},
-    {"abi_copsirens_check_b", reinterpret_cast<void(*)()>(&abi_copsirens_check_b)},
-    {"abi_copsirens_ide", reinterpret_cast<void(*)()>(&abi_copsirens_ide)},
-    {"abi_crash_msg_shim", reinterpret_cast<void(*)()>(&abi_crash_msg_shim)},
-    {"abi_cutscene_chain_b", reinterpret_cast<void(*)()>(&abi_cutscene_chain_b)},
-    {"abi_death_music_enabled", reinterpret_cast<void(*)()>(&abi_death_music_enabled)},
-    {"abi_death_music_install", reinterpret_cast<void(*)()>(&abi_death_music_install)},
-    {"abi_driveby_fov_helper", reinterpret_cast<void(*)()>(&abi_driveby_fov_helper)},
-    {"abi_driveby_fov_note", reinterpret_cast<void(*)()>(&abi_driveby_fov_note)},
-    {"abi_driveby_fov_note_impl", reinterpret_cast<void(*)()>(&abi_driveby_fov_note_impl)},
-    {"abi_driveby_fov_shim", reinterpret_cast<void(*)()>(&abi_driveby_fov_shim)},
-    {"abi_dual_headlights_init", reinterpret_cast<void(*)()>(&abi_dual_headlights_init)},
-    {"abi_dual_headlights_new", reinterpret_cast<void(*)()>(&abi_dual_headlights_new)},
-    {"abi_dual_headlights_old", reinterpret_cast<void(*)()>(&abi_dual_headlights_old)},
-    {"abi_emissive_lerp_shim", reinterpret_cast<void(*)()>(&abi_emissive_lerp_shim)},
-    {"abi_episode_switch_shim_b", reinterpret_cast<void(*)()>(&abi_episode_switch_shim_b)},
-    {"abi_episode_switch_shim_c", reinterpret_cast<void(*)()>(&abi_episode_switch_shim_c)},
-    {"abi_episode_switch_store_shim", reinterpret_cast<void(*)()>(&abi_episode_switch_store_shim)},
-    {"abi_episode_switch_sum", reinterpret_cast<void(*)()>(&abi_episode_switch_sum)},
-    {"abi_episode_switch_vcall", reinterpret_cast<void(*)()>(&abi_episode_switch_vcall)},
-    {"abi_fchs_check", reinterpret_cast<void(*)()>(&abi_fchs_check)},
-    {"abi_fchs_shim", reinterpret_cast<void(*)()>(&abi_fchs_shim)},
-    {"abi_freeze_gun_shim", reinterpret_cast<void(*)()>(&abi_freeze_gun_shim)},
-    {"abi_game_hash", reinterpret_cast<void(*)()>(&abi_game_hash)},
-    {"abi_garage_body_a", reinterpret_cast<void(*)()>(&abi_garage_body_a)},
-    {"abi_garage_entry_a", reinterpret_cast<void(*)()>(&abi_garage_entry_a)},
-    {"abi_garage_body_b", reinterpret_cast<void(*)()>(&abi_garage_body_b)},
-    {"abi_gfwl_patch", reinterpret_cast<void(*)()>(&abi_gfwl_patch)},
-    {"abi_gfwl_stub", reinterpret_cast<void(*)()>(&abi_gfwl_stub)},
-    {"abi_group_hack_shim", reinterpret_cast<void(*)()>(&abi_group_hack_shim)},
-    {"abi_ide_parse", reinterpret_cast<void(*)()>(&abi_ide_parse)},
-    {"abi_improved_shader_streaming_find_hpe", reinterpret_cast<void(*)()>(&abi_improved_shader_streaming_find_hpe)},
-    {"abi_improved_shader_streaming_find_v", reinterpret_cast<void(*)()>(&abi_improved_shader_streaming_find_v)},
-    {"abi_load_dlcs_dummy", reinterpret_cast<void(*)()>(&abi_load_dlcs_dummy)},
-    {"abi_load_dlcs_struct_fixup", reinterpret_cast<void(*)()>(&abi_load_dlcs_struct_fixup)},
-    {"abi_local_settings_detour", reinterpret_cast<void(*)()>(&abi_local_settings_detour)},
-    {"abi_local_settings_fallback_detour", reinterpret_cast<void(*)()>(&abi_local_settings_fallback_detour)},
-    {"abi_mf_angle_step", reinterpret_cast<void(*)()>(&abi_mf_angle_step)},
-    {"abi_mouse_advance", reinterpret_cast<void(*)()>(&abi_mouse_advance)},
-    {"abi_mouse_angle", reinterpret_cast<void(*)()>(&abi_mouse_angle)},
-    {"abi_mouse_axis_flag", reinterpret_cast<void(*)()>(&abi_mouse_axis_flag)},
-    {"abi_mouse_axis_float", reinterpret_cast<void(*)()>(&abi_mouse_axis_float)},
-    {"abi_mouse_axis_int", reinterpret_cast<void(*)()>(&abi_mouse_axis_int)},
-    {"abi_mouse_axis_neg", reinterpret_cast<void(*)()>(&abi_mouse_axis_neg)},
-    {"abi_new_saves_compat", reinterpret_cast<void(*)()>(&abi_new_saves_compat)},
-    {"abi_new_saves_convert", reinterpret_cast<void(*)()>(&abi_new_saves_convert)},
-    {"abi_new_saves_p3_hook", reinterpret_cast<void(*)()>(&abi_new_saves_p3_hook)},
-    {"abi_new_saves_prepare", reinterpret_cast<void(*)()>(&abi_new_saves_prepare)},
-    {"abi_new_saves_read_hook", reinterpret_cast<void(*)()>(&abi_new_saves_read_hook)},
-    {"abi_newfiles_call_add", reinterpret_cast<void(*)()>(&abi_newfiles_call_add)},
-    {"abi_newfiles_call_obj", reinterpret_cast<void(*)()>(&abi_newfiles_call_obj)},
-    {"abi_newfiles_cb", reinterpret_cast<void(*)()>(&abi_newfiles_cb)},
-    {"abi_newfiles_find_obj", reinterpret_cast<void(*)()>(&abi_newfiles_find_obj)},
-    {"abi_newfiles_register", reinterpret_cast<void(*)()>(&abi_newfiles_register)},
-    {"abi_newfiles_register_body", reinterpret_cast<void(*)()>(&abi_newfiles_register_body)},
-    {"abi_newfiles_update_a", reinterpret_cast<void(*)()>(&abi_newfiles_update_a)},
-    {"abi_newfiles_update_b", reinterpret_cast<void(*)()>(&abi_newfiles_update_b)},
-    {"abi_nms_apply", reinterpret_cast<void(*)()>(&abi_nms_apply)},
-
-    {"abi_nms_ctor", reinterpret_cast<void(*)()>(&abi_nms_ctor)},
-    {"abi_nms_noop_arg", reinterpret_cast<void(*)()>(&abi_nms_noop_arg)},
-    {"abi_nms_noop_pair", reinterpret_cast<void(*)()>(&abi_nms_noop_pair)},
-    {"abi_nms_noop_ret0", reinterpret_cast<void(*)()>(&abi_nms_noop_ret0)},
-    {"abi_nms_reject", reinterpret_cast<void(*)()>(&abi_nms_reject)},
-    {"abi_nms_reject_ptr", reinterpret_cast<void(*)()>(&abi_nms_reject_ptr)},
-    {"abi_nms_self", reinterpret_cast<void(*)()>(&abi_nms_self)},
-    {"abi_nms_thunk18", reinterpret_cast<void(*)()>(&abi_nms_thunk18)},
-    {"abi_nms_zero_ptr", reinterpret_cast<void(*)()>(&abi_nms_zero_ptr)},
-    {"abi_nolivery_a", reinterpret_cast<void(*)()>(&abi_nolivery_a)},
-    {"abi_nolivery_b", reinterpret_cast<void(*)()>(&abi_nolivery_b)},
-    {"abi_nolivery_c", reinterpret_cast<void(*)()>(&abi_nolivery_c)},
-    {"abi_nolivery_copy_name", reinterpret_cast<void(*)()>(&abi_nolivery_copy_name)},
-    {"abi_nolivery_count_loop", reinterpret_cast<void(*)()>(&abi_nolivery_count_loop)},
-    {"abi_nolivery_d", reinterpret_cast<void(*)()>(&abi_nolivery_d)},
-    {"abi_nolivery_e", reinterpret_cast<void(*)()>(&abi_nolivery_e)},
-    {"abi_nolivery_hash_sign", reinterpret_cast<void(*)()>(&abi_nolivery_hash_sign)},
-    {"abi_ooc_branch", reinterpret_cast<void(*)()>(&abi_ooc_branch)},
-    {"abi_ooc_wrap", reinterpret_cast<void(*)()>(&abi_ooc_wrap)},
-    {"abi_path_node_shim", reinterpret_cast<void(*)()>(&abi_path_node_shim)},
-    {"abi_ped_models_in_cutscenes_check", reinterpret_cast<void(*)()>(&abi_ped_models_in_cutscenes_check)},
-    {"abi_plane_crash_shim", reinterpret_cast<void(*)()>(&abi_plane_crash_shim)},
-    {"abi_player_ped_components_shim", reinterpret_cast<void(*)()>(&abi_player_ped_components_shim)},
-    {"abi_player_ped_helper", reinterpret_cast<void(*)()>(&abi_player_ped_helper)},
-    {"abi_popup_check", reinterpret_cast<void(*)()>(&abi_popup_check)},
-    {"abi_popup_headlights", reinterpret_cast<void(*)()>(&abi_popup_headlights)},
-    {"abi_popup_headlights_edx", reinterpret_cast<void(*)()>(&abi_popup_headlights_edx)},
-    {"abi_rgsc_login_removed", reinterpret_cast<void(*)()>(&abi_rgsc_login_removed)},
-    {"abi_savegame_fix_close", reinterpret_cast<void(*)()>(&abi_savegame_fix_close)},
-    {"abi_savegame_fix_copy", reinterpret_cast<void(*)()>(&abi_savegame_fix_copy)},
-    {"abi_savegame_fix_mutex", reinterpret_cast<void(*)()>(&abi_savegame_fix_mutex)},
-    {"abi_savegame_fix_null", reinterpret_cast<void(*)()>(&abi_savegame_fix_null)},
-    {"abi_shader_stream_filter_hpe", reinterpret_cast<void(*)()>(&abi_shader_stream_filter_hpe)},
-    {"abi_shader_stream_filter_v", reinterpret_cast<void(*)()>(&abi_shader_stream_filter_v)},
-    {"abi_smpa60_shim", reinterpret_cast<void(*)()>(&abi_smpa60_shim)},
-    {"abi_smpa60_tail_shim", reinterpret_cast<void(*)()>(&abi_smpa60_tail_shim)},
-    {"abi_spawns_guard", reinterpret_cast<void(*)()>(&abi_spawns_guard)},
-    {"abi_spawns_probe", reinterpret_cast<void(*)()>(&abi_spawns_probe)},
-    // The ten spawn-case bodies. They were in kAbiBodies but not in this name
-    // table, so InstallFreezeCarFix's CallToBody("abi_spawns_case_0x..") skipped
-    // all ten on every build (the live log showed ten "no body" lines).
-    {"abi_spawns_case_0x24", reinterpret_cast<void(*)()>(&abi_spawns_case_0x24)},
-    {"abi_spawns_case_0x3D", reinterpret_cast<void(*)()>(&abi_spawns_case_0x3D)},
-    {"abi_spawns_case_0x56", reinterpret_cast<void(*)()>(&abi_spawns_case_0x56)},
-    {"abi_spawns_case_0x6F", reinterpret_cast<void(*)()>(&abi_spawns_case_0x6F)},
-    {"abi_spawns_case_0x88", reinterpret_cast<void(*)()>(&abi_spawns_case_0x88)},
-    {"abi_spawns_case_0x9E", reinterpret_cast<void(*)()>(&abi_spawns_case_0x9E)},
-    {"abi_spawns_case_0xB4", reinterpret_cast<void(*)()>(&abi_spawns_case_0xB4)},
-    {"abi_spawns_case_0xCA", reinterpret_cast<void(*)()>(&abi_spawns_case_0xCA)},
-    {"abi_spawns_case_0xE0", reinterpret_cast<void(*)()>(&abi_spawns_case_0xE0)},
-    {"abi_spawns_case_0xF6", reinterpret_cast<void(*)()>(&abi_spawns_case_0xF6)},
-    {"abi_speedup_body", reinterpret_cast<void(*)()>(&abi_speedup_body)},
-    {"abi_steer_body", reinterpret_cast<void(*)()>(&abi_steer_body)},
-    {"abi_steer_detour_eax", reinterpret_cast<void(*)()>(&abi_steer_detour_eax)},
-    {"abi_steer_detour_edx", reinterpret_cast<void(*)()>(&abi_steer_detour_edx)},
-    {"abi_super_lod_fix_shim", reinterpret_cast<void(*)()>(&abi_super_lod_fix_shim)},
-    {"abi_super_lod_helper", reinterpret_cast<void(*)()>(&abi_super_lod_helper)},
-    {"abi_vehicle_component", reinterpret_cast<void(*)()>(&abi_vehicle_component)},
-    {"abi_wanted_level_shim", reinterpret_cast<void(*)()>(&abi_wanted_level_shim)},
-    };
-
     if (name == nullptr)
         return nullptr;
-    for (const auto& row : kAbiNames)
+    for (const AbiEntry& entry : kAbiTable)
     {
-        if (std::strcmp(row.name, name) == 0)
-            return reinterpret_cast<void*>(row.address);
+        if (std::strcmp(entry.name, name) == 0)
+            return reinterpret_cast<void*>(entry.address);
     }
     return nullptr;
 }

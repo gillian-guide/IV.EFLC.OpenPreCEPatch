@@ -249,11 +249,6 @@ namespace opp
         return "?";
     }
 
-    std::span<const std::string_view> ShippingOrder() noexcept
-    {
-        return kShippingOrder;
-    }
-
     OrderResult BuildOrder(std::span<const FeatureRegistration> features)
     {
         OrderResult result;

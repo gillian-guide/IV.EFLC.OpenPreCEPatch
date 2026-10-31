@@ -68,10 +68,6 @@ namespace opp
         bool valid{};
     };
 
-    // The shipping order, one name per line in the effective run order. Used as
-    // the intra-phase tie-break and by the golden test.
-    std::span<const std::string_view> ShippingOrder() noexcept;
-
     // Deterministic: phase, then schedule position, then name. A cycle, a
     // duplicate name, an unknown name or a phase inversion makes the result
     // invalid and clears `order` (the caller installs nothing).

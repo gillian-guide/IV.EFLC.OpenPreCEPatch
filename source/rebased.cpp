@@ -149,9 +149,9 @@ extern "C"
     uint32_t zpatch_pre_fn_59cdc = 0;
     // Hash salts: the on-disk (probe-hit) values of the original's ten dwords.
     // The ten hash salts the build probe mixes into its fingerprint (the
-// preamble overwrites them per build). They are recovered constants with no
-// derivation: each is a constant of the original's fingerprint table.
-uint32_t zpatch_salt_28 = 0x6A6B4F18u;
+    // preamble overwrites them per build). They are recovered constants with no
+    // derivation: each is a constant of the original's fingerprint table.
+    uint32_t zpatch_salt_28 = 0x6A6B4F18u;
     uint32_t zpatch_salt_3c = 0x022B2DA9u;
     uint32_t zpatch_salt_40 = 0x4BF36A32u;
     uint32_t zpatch_salt_50 = 0x3B0C6738u;
@@ -215,8 +215,8 @@ uint32_t zpatch_salt_28 = 0x6A6B4F18u;
     uint32_t zpatch_local_path_1c = 0;
     // FreezeCarFix / DebugPrintSpawns.
     // -1: "no spawn case recorded yet" (a four-byte kind field, so the sentinel
-// is all ones).
-uint32_t zpatch_spawns_kind = 0xFFFFFFFFu;
+    // is all ones).
+    uint32_t zpatch_spawns_kind = 0xFFFFFFFFu;
     uint32_t zpatch_spawns_class = 0;
     uint32_t zpatch_spawns_skip = 0;
     uint32_t zpatch_spawns_orig_a = 0;
@@ -284,7 +284,7 @@ uint32_t zpatch_spawns_kind = 0xFFFFFFFFu;
     double zpatch_mf_mul_neg1_d = -1.0;
     // MouseFix's timing constants: 0x1.333334015bc21p-4 is 0.075 (the original
 // global's exact double bits), and the two pi values are its angle wrapping.
-double zpatch_mf_time_mul = 0x1.333334015bc21p-4;
+    double zpatch_mf_time_mul = 0x1.333334015bc21p-4;
     double zpatch_mf_time_add = 0.025;
     double zpatch_mf_pi = 0x1.921fb5a7ed197p+1;
     double zpatch_mf_two_pi = 0x1.921fb6134ce3ep+2;
@@ -293,10 +293,10 @@ double zpatch_mf_time_mul = 0x1.333334015bc21p-4;
     // original's .rdata constants are naturally aligned, so the masks are
     // alignas(16) (a misaligned mask faults with #GP/AV).
     // SSE sign-bit masks: 0x80 in the top byte of each 32-bit lane flips the sign.
-alignas(16) unsigned char zpatch_mf_neg_mask[16] = {0, 0, 0, 0x80, 0, 0, 0, 0x80,
+    alignas(16) unsigned char zpatch_mf_neg_mask[16] = {0, 0, 0, 0x80, 0, 0, 0, 0x80,
                                                         0, 0, 0, 0x80, 0, 0, 0, 0x80};
     // The same mask for two 64-bit lanes (the double sign bit is byte 7/15).
-alignas(16) unsigned char zpatch_mf_double_sign[16] = {0, 0, 0, 0, 0, 0, 0, 0x80,
+    alignas(16) unsigned char zpatch_mf_double_sign[16] = {0, 0, 0, 0, 0, 0, 0, 0x80,
                                                            0, 0, 0, 0, 0, 0, 0, 0x80};
     // OutOfCommissionFix (see the hook bodies).
     uint32_t zpatch_ooc_resume = 0;
