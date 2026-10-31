@@ -12,10 +12,11 @@ option(ZP_BUILD_TESTS "Build the native tests" ON)
 option(ZP_BUILD_DUMP "Build the write-set dump tool" OFF)
 option(ZP_BUILD_STATE_DUMP "Build the offline Runtime State driver (Gate 3)" OFF)
 
-# Third-party headers and the scanner are git submodules (see .gitmodules).
-set(ZP_VENDOR_INJECTOR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/injector/include)
-set(ZP_VENDOR_PATTERNS ${CMAKE_CURRENT_SOURCE_DIR}/vendor/Hooking.Patterns)
-foreach(dir ${ZP_VENDOR_INJECTOR} ${ZP_VENDOR_PATTERNS})
+# Third-party headers and the scanner are git submodules (see .gitmodules),
+# checked out under include/.
+set(ZP_INC_INJECTOR ${CMAKE_CURRENT_SOURCE_DIR}/include/injector/include)
+set(ZP_INC_PATTERNS ${CMAKE_CURRENT_SOURCE_DIR}/include/Hooking.Patterns)
+foreach(dir ${ZP_INC_INJECTOR} ${ZP_INC_PATTERNS})
   if(NOT EXISTS ${dir})
     message(FATAL_ERROR
       "${dir} is missing. Check out the submodules first:\n"
@@ -24,7 +25,7 @@ foreach(dir ${ZP_VENDOR_INJECTOR} ${ZP_VENDOR_PATTERNS})
 endforeach()
 
 set(ZP_SOURCES
-  ${ZP_VENDOR_PATTERNS}/Hooking.Patterns.cpp
+  ${ZP_INC_PATTERNS}/Hooking.Patterns.cpp
   src/catalogue_data.cpp
   src/patch_data.cpp
   src/xlive/xliveless.cpp
@@ -32,8 +33,8 @@ set(ZP_SOURCES
 
 add_library(zp STATIC ${ZP_SOURCES})
 target_include_directories(zp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src
-                                     ${ZP_VENDOR_INJECTOR}
-                                     ${ZP_VENDOR_PATTERNS})
+                                     ${ZP_INC_INJECTOR}
+                                     ${ZP_INC_PATTERNS})
 target_compile_features(zp PUBLIC cxx_std_17)
 target_compile_definitions(zp PUBLIC UNICODE _UNICODE NOMINMAX)
 if(WIN32)
@@ -57,7 +58,7 @@ endif()
 # image can be mapped at its preferred base 0x400000.
 if(ZP_BUILD_DUMP)
   add_executable(zp_dump tests/dump_main.cpp
-                 ${ZP_VENDOR_PATTERNS}/Hooking.Patterns.cpp src/catalogue_data.cpp src/dllmain.cpp
+                 ${ZP_INC_PATTERNS}/Hooking.Patterns.cpp src/catalogue_data.cpp src/dllmain.cpp
                  src/patch_data.cpp)
   target_link_libraries(zp_dump PRIVATE version user32 shlwapi)
   target_compile_features(zp_dump PRIVATE cxx_std_17)
@@ -65,8 +66,8 @@ if(ZP_BUILD_DUMP)
   # The dump uses a 64-bit-safe injector shim (the real one is 32-bit only).
   target_include_directories(zp_dump BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/dump_injector)
   target_include_directories(zp_dump PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
-                                             ${ZP_VENDOR_INJECTOR}
-                                             ${ZP_VENDOR_PATTERNS})
+                                             ${ZP_INC_INJECTOR}
+                                             ${ZP_INC_PATTERNS})
   target_compile_definitions(zp_dump PRIVATE UNICODE _UNICODE NOMINMAX ZP_DUMP_TOOL)
 endif()
 

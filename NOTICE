@@ -7,7 +7,7 @@ travel with them and apply to those files, not to the reconstruction.
 
 ## injector
 
-`vendor/injector` - https://github.com/ThirteenAG/injector, pinned to
+`include/injector` - https://github.com/ThirteenAG/injector, pinned to
 `fdd27705` (`include/injector/*.hpp`).
 
 Copyright (C) 2012-2014 LINK/2012 <dma_2012@hotmail.com>
@@ -18,7 +18,7 @@ The full text is at the top of `include/injector/injector.hpp`.
 
 ## Hooking.Patterns
 
-`vendor/Hooking.Patterns` - https://github.com/ThirteenAG/Hooking.Patterns,
+`include/Hooking.Patterns` - https://github.com/ThirteenAG/Hooking.Patterns,
 pinned to `961c83cc`.
 
 Part of the CitizenFX project (https://citizen.re/), MIT licensed. The

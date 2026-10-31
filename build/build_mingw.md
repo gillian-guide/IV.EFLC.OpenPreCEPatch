@@ -15,14 +15,14 @@ inline assembly to compile:
 
 ```sh
 i686-w64-mingw32-g++ -std=c++17 -O2 \
-  -Isrc -Ivendor/injector/include -Ivendor/Hooking.Patterns \
-  vendor/Hooking.Patterns/Hooking.Patterns.cpp src/catalogue_data.cpp \
+  -Isrc -Iinclude/injector/include -Iinclude/Hooking.Patterns \
+  include/Hooking.Patterns/Hooking.Patterns.cpp src/catalogue_data.cpp \
   src/patch_data.cpp src/xlive/xliveless.cpp src/dllmain.cpp \
   tests/test_main.cpp \
   -o build/zp_tests.exe -lversion -luser32 -lshlwapi
 ```
 
-The vendored libraries are git submodules; run
+The vendored libraries are git submodules under `include/`; run
 `git submodule update --init --recursive` first.
 
 ## Packaging

@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 The ZolikaPatch readable reimplementation contributors
+Copyright (c) 2026 Gillian
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,4 +20,21 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Third-party components are distributed under their own licenses; see NOTICE.
+---
+
+This licence covers the code written for this reconstruction. The repository
+is not entirely Gillian's work, and it claims nothing beyond that code:
+
+- The behaviour being reproduced is ZolikaPatch 7.65 by **Zolika1351**; no
+  ZolikaPatch source is copied here, but the feature set, INI keys, addresses
+  and fault behaviour are his design.
+- The SkipLauncher/DFA/ROM lineage is **XLivelessAddon** (GTAmodding), whose
+  19 commits are merged into this repository's history as ancestors.
+- `injector` is **LINK/2012**'s; `Hooking.Patterns` and the `Hooking.*`
+  framework are the **CitizenFX** project's; `jitasm.h` is **Takashi Tosaka**'s.
+  These are git submodules under `include/` and keep their own licences.
+- The extracted game data (`catalogue_data.cpp`, `ooc_payload.h`,
+  `data/finale2.sco`) is the property of **Rockstar Games / Take-Two**.
+
+See NOTICE for the per-component terms. Nothing here grants rights to
+ZolikaPatch, to the vendored libraries, or to the game.

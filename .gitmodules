@@ -1,6 +1,6 @@
-[submodule "vendor/injector"]
-	path = vendor/injector
+[submodule "include/injector"]
+	path = include/injector
 	url = https://github.com/ThirteenAG/injector
-[submodule "vendor/Hooking.Patterns"]
-	path = vendor/Hooking.Patterns
+[submodule "include/Hooking.Patterns"]
+	path = include/Hooking.Patterns
 	url = https://github.com/ThirteenAG/Hooking.Patterns
