@@ -96,3 +96,5 @@ inline constexpr std::uint8_t kMovdXmm1Eax[] = {0x66, 0x0F, 0x6E, 0xC8};
 extern bool bMenuIntegration;
 
 void Trace(const char* name);
+
+constexpr std::uint8_t kZeroByte = 0x00u;                   // clear a byte

@@ -51,7 +51,18 @@ set(ZP_MODULE_UNITS
   source/hook_bodies.ixx
   source/useless_checks.ixx
   source/catalogue.ixx
-  source/launcher.ixx)
+  source/launcher.ixx
+  source/vehicles.ixx
+  source/graphics.ixx
+  source/stability.ixx
+  source/audio.ixx
+  source/input.ixx
+  source/loading.ixx
+  source/mission.ixx
+  source/world.ixx
+  source/multiplayer.ixx
+  source/misc.ixx
+)
 
 set(ZP_SOURCES
   ${ZP_EXT_PATTERNS}/Hooking.Patterns.cpp
