@@ -13,9 +13,11 @@ option(ZP_BUILD_DUMP "Build the write-set dump tool" OFF)
 option(ZP_BUILD_STATE_DUMP "Build the offline Runtime State driver (Gate 3)" OFF)
 option(ZP_LINK_MAP "Emit a linker .map for the ASI (development aid, not shipped)" OFF)
 
-if(ZP_BUILD_TESTS OR ZP_BUILD_DUMP)
+if(ZP_BUILD_TESTS OR ZP_BUILD_DUMP OR ZP_LINK_MAP)
   enable_testing()
 endif()
+
+find_package(Python3 COMPONENTS Interpreter QUIET)
 
 # Third-party headers and the scanner are git submodules (see .gitmodules),
 # checked out under external/.
@@ -63,6 +65,28 @@ if(ZP_BUILD_ASI)
     target_link_options(ZolikaPatch PRIVATE /MAP)
   endif()
   set_target_properties(ZolikaPatch PROPERTIES PREFIX "" SUFFIX ".asi")
+  # Body-byte proof: the write-set dump only calls the installers, so it cannot
+  # see a hook body. With the linker map available, compare every `@exact` body
+  # in kAbiBodies instruction-for-instruction with the original ASI (capstone),
+  # and report the compiled replacements with their documented instruction
+  # ranges. Registered as a test only when the original ASI is present; the ASI
+  # and map are build products of this target.
+  if(ZP_LINK_MAP AND Python3_Interpreter_FOUND
+     AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs/ZolikaPatch_original.asi.off)
+    add_custom_target(verify_bodies
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/verify_bodies.py
+              --candidate $<TARGET_FILE:ZolikaPatch>
+              --map $<TARGET_FILE_DIR:ZolikaPatch>/ZolikaPatch.map
+      DEPENDS ZolikaPatch
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+      COMMENT "Proving the rebuilt hook bodies against the original ASI")
+    add_test(NAME zp_body_proof
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/verify_bodies.py
+                     --candidate $<TARGET_FILE:ZolikaPatch>
+                     --map $<TARGET_FILE_DIR:ZolikaPatch>/ZolikaPatch.map)
+    set_tests_properties(zp_body_proof PROPERTIES
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+  endif()
 endif()
 
 # Write-set dump: applies the installers to a mapped copy of the game image so
@@ -121,7 +145,6 @@ if(ZP_BUILD_TESTS)
   # The RemoveUselessChecks data file is generated from the shipped ASI; this
   # checks the per-array hashes recorded in its provenance header without needing
   # the ASI present (--verify re-extracts when it is).
-  find_package(Python3 COMPONENTS Interpreter QUIET)
   if(Python3_Interpreter_FOUND)
     add_test(NAME zp_useless_checks_data
              COMMAND ${Python3_EXECUTABLE}
