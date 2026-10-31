@@ -36,3 +36,6 @@ __pycache__/
 
 # Session scratch
 .scratch/
+
+# Companion XLivelessAddon checkout lives in its own repository
+xlivelessaddon/
