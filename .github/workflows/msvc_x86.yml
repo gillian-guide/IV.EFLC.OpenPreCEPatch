@@ -119,7 +119,7 @@ jobs:
           if-no-files-found: error
 
   x64:
-    name: x64
+    name: parity check
     runs-on: windows-latest
 
     steps:
