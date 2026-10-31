@@ -3,14 +3,20 @@
 // Shared types and third-party headers for OpenPreCEPatch.
 //
 // The layout follows GTAIV.EFLC.FusionFix: a flat `source/` root, one file per
-// subsystem, `external/` for the submodules and `data/plugins/` for the shipped
-// INI.
+// subsystem, `includes/` for the third-party submodules and `data/plugins/` for
+// the shipped INI.
 
 #pragma once
 
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
+#ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
+#endif
 
 #include <windows.h>
 

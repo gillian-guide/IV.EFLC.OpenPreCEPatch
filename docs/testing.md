@@ -5,13 +5,12 @@ No game files are needed for the native tests.
 ## Native tests
 
 ```bat
-cmake -S . -B build -A Win32
-cmake --build build --config Release --target opcep_tests
-build\Release\opcep_tests.exe
+cmake --preset x86
+cmake --build --preset x86-release --target opcep_tests
+build\x86\Release\opcep_tests.exe
 ```
 
-or, with premake, build the solution and run `bin\opcep_tests.exe` if the test
-project is enabled.
+or run the whole suite through CTest: `ctest --preset x86-release`.
 
 The suite covers:
 
@@ -32,11 +31,8 @@ The suite covers:
   match inside the executable sections, `PatternAll()` returns every match in
   that range.
 
-`xla_tests` (also run by `ctest`, 32-bit like the fork) covers the
-XLivelessAddon successor's recovered SkipLauncher path: CreateFile slot capture
-and forwarding, clearing a stale slot, missing signatures installing nothing, and
-invalid input. The fork has no write-set dump; these tests plus the
-`XLivelessAddon.log` counters are its offline check.
+XLivelessAddon has its own test suite in its own repository; this repository
+does not build or test it.
 
 ## INI write-set matrix
 
@@ -56,9 +52,8 @@ python tools\opcep_matrix.py --check
 python tools\opcep_matrix.py --update
 ```
 
-The committed baseline is `tests/parity/matrix.json` with per-cell files under
-`tests/parity/writesets/` and per-option attribution under
-`tests/parity/deltas/`. The dump canonicalises module-relative operands
+The committed baseline is `tests/parity/matrix.json` (96 cells, 3,874 writes on
+the 1.0.8.0 image). The dump canonicalises module-relative operands
 (`AddressOf`/`FindGlobalValue`/`FindGlobalSymbol`) to site-derived markers, so a
 pure refactor that only moves globals still produces a zero diff. See
 `tests/parity/README.md` for the cell list and the zero-diff policy. `--check`
@@ -96,7 +91,7 @@ matrix, so a tag change that is not reflected in the matrix is a failure.
 installer pass changes, as `RVA byte` lines:
 
 ```bat
-build64\Release\opcep_parity_dump.exe GTAIV.exe IV.EFLC.OpenPreCEPatch.ini out.txt
+build\x64\Release\opcep_parity_dump.exe GTAIV.exe IV.EFLC.OpenPreCEPatch.ini out.txt
 ```
 
 The 64-bit build uses a small injector shim and resolves a body name to the

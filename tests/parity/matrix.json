@@ -89,6 +89,7 @@
     },
     "defaults": {
       "arms": {
+        "InstallAimProjectileCrashFix": 5,
         "InstallAllowHashesForIDE": 5,
         "InstallBadPlayerModelCrashFix": 5,
         "InstallBetterMPSync": 5,
@@ -96,9 +97,11 @@
         "InstallBikePhoneAnimsFix": 6,
         "InstallBlackscreenFix": 4,
         "InstallBuildingAlphaFix": 10,
+        "InstallCarDecalsFix": 5,
         "InstallCarDynamicShadowFix": 12,
         "InstallCarPartsShadowFix": 5,
         "InstallCarPartsShadowFixStandalone": 1,
+        "InstallCollisionDeadlockFix": 5,
         "InstallCombinedRadioFreezeFix": 4,
         "InstallCrashMsgFix": 4,
         "InstallCutsceneFixes": 5,
@@ -125,6 +128,7 @@
         "InstallNoLiveryLimit": 20,
         "InstallNoLoadingSleep": 2,
         "InstallOutOfCommissionFix": 9,
+        "InstallPathNodeCrashFix": 5,
         "InstallPedModelsInCutscenesFix": 5,
         "InstallPlayerAsPedComponentsFix": 5,
         "InstallRemoveAllWeaponsProtection": 12,
@@ -140,8 +144,8 @@
         "InstallWantedLevelCrashFix": 5
       },
       "file": "writesets/defaults.txt",
-      "sha256": "8de199cd02c716b3858f08293af62444d3236c4a0236de6589b0cee261fc31d1",
-      "writes": 482
+      "sha256": "ea562643aff3058f198a86e5d4ab8aca9f5bfccef160bcb3851d9434830f48a3",
+      "writes": 502
     },
     "legacy": {
       "arms": {
@@ -1703,5 +1707,5 @@
   },
   "generated_by": "tools/opcep_matrix.py",
   "schema": 1,
-  "template_sha256": "915a4ae1087f69c4f0c1db6b713dd4c89f665f7ab6f5170113b768f8b6e5a32f"
+  "template_sha256": "2ad7ac5144a38a313b73c864ba3078b1f1ffdeeb1609ea9ca24a62da127230bc"
 }

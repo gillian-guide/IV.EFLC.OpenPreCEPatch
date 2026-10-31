@@ -10,10 +10,10 @@
 > XLivelessAddon, so the 4-byte `SkipIntro` delta below no longer exists in this
 > module. The 2026-10-30 cleanup removed six option cells (`RemoveUselessChecks`,
 > `NoPhysicsSleep`, `HighQualityReflections`, `ForceDynamicShadowsEverywhere`,
-> `RemoveBoundingBoxCulling`, `AddOptionsInMenu`). Current matrix: **98 cells /
-> 4,294 writes**, defaults 819, all-off 0, all-on 873, legacy 810; improved and
-> `OPCEP_PARITY_BASELINE=ON` dumps are byte-identical on every cell. The
-> historical numbers below are kept for the pre-split checkpoint.
+> `RemoveBoundingBoxCulling`, `AddOptionsInMenu`). Current matrix (refreshed
+> 2026-10-31): **96 cells / 3,874 writes**, defaults 502, all-off 0, all-on 844,
+> legacy 799. The historical numbers below are kept for the pre-split
+> checkpoint.
 
 Baseline: `baseline-openprece-20261025` (commit `175cb56`). Harness checkpoint:
 `good-matrix-20261025`. Folded-improvement checkpoint: `good-folded-20261025`.

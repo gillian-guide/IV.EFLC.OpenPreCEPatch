@@ -17,9 +17,10 @@ Copy next to `GTAIV.exe` / `EFLC.exe`:
 
 Optional:
 
-- `XLivelessAddon.asi` is a separate successor module built from
-  `xlivelessaddon/`. Install it only when you need the XLivelessAddon feature
-  set; do not install it as a shim for FusionFix.
+- `XLivelessAddon.asi` belongs to the separate XLivelessAddon companion
+  repository. Install it only when you need the XLivelessAddon feature set; do
+  not install it as a shim for FusionFix. OpenPreCEPatch does not ship or build
+  it.
 
 ## Upgrading from ZolikaPatch
 
@@ -27,7 +28,7 @@ Replace `ZolikaPatch.asi` with `IV.EFLC.OpenPreCEPatch.asi`. Leave
 `ZolikaPatch.ini` in place. On first launch the ASI sees the old file, ports
 every supported option into `IV.EFLC.OpenPreCEPatch.ini`, carries the per-model
 light tables over, and then reads the new file. The old `MiscFixes` bundle is
-not ported; use the separate XLivelessAddon module for it. The old file is not modified.
+not ported; use the separate XLivelessAddon companion for it. The old file is not modified.
 
 If the new INI already exists, it is used as-is; the old file is not merged.
 
@@ -94,7 +95,8 @@ The conflicts are listed in `source/fusionfix_compat.cpp`. The groups are:
 The INI itself marks each of these with `FF`. The `BorderlessWindowed`,
 `DoNotPauseOnMinimize` and `VRAMFix` rows are XLivelessAddon options now: the
 main module keeps the gate entries so a stale key is still reported, but no
-longer installs those features. See `xlivelessaddon/README.md`.
+longer installs those features. They live in the separate XLivelessAddon
+companion repository.
 
 Safety and performance improvements are part of the code, so there are no extra
 keys to set and no switch that selects an original path. See

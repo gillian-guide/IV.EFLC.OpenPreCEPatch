@@ -49,10 +49,11 @@ they stay active alongside FusionFix. The folded improvements ride on their
 original options and are gated with them.
 
 `SkipIntro`, `SkipMenu`, `BorderlessWindowed`, `DoNotPauseOnMinimize` and
-`VRAMFix` are XLivelessAddon options now. Their rows stay in the main table only
-so a stale key in an old INI is still reported as gated; the main module does not
-install those features. The fork applies its own FusionFix-first gating (it
-disables every overlapping feature when a `*FusionFix*.asi` is present).
+`VRAMFix` are XLivelessAddon options now, in the separate companion repository.
+Their rows stay in the main table only so a stale key in an old INI is still
+reported as gated; the main module does not install those features. The
+companion applies its own FusionFix-first gating (it disables every overlapping
+feature when a `*FusionFix*.asi` is present).
 
 Detection checks the module directory for any `*.asi` whose name contains
 `FusionFix`, and also checks whether `GTAIV.EFLC.FusionFix.asi` /

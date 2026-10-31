@@ -35,7 +35,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "data" / "plugins" / "IV.EFLC.OpenPreCEPatch.ini"
 PARITY_DIR = ROOT / "tests" / "parity"
 GOLDEN = PARITY_DIR / "matrix.json"
-DEFAULT_EXE = ROOT / "build64" / "Release" / "opcep_parity_dump.exe"
+DEFAULT_EXE = ROOT / "build" / "x64" / "Release" / "opcep_parity_dump.exe"
 DEFAULT_GAME = ROOT.parent / "game_refs" / "GTAIV.exe"
 DEFAULT_LEGACY = PARITY_DIR / "fixtures" / "ZolikaPatch.legacy.ini"
 

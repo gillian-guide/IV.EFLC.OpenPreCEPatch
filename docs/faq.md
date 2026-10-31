@@ -16,15 +16,15 @@ keep one.
 
 ## What happened to `MiscFixes` / `[XLIVELESS]`?
 
-Those features moved to the separate XLivelessAddon successor module
-(`xlivelessaddon/`, built as `XLivelessAddon.asi`). The main OpenPreCEPatch ASI
-no longer duplicates them.
+Those features moved to the separate **XLivelessAddon** companion repository,
+which builds `XLivelessAddon.asi`. The main OpenPreCEPatch ASI no longer
+duplicates them and does not ship that module.
 
 ## Is there an `XLivelessAddon.asi` here?
 
-Yes, but as a separate module built from `xlivelessaddon/`. Install either the
-main ASI or the XLivelessAddon ASI for the overlapping features, not both as the
-owner of the same patches.
+No. XLivelessAddon is its own repository and distribution. OpenPreCEPatch only
+detects an installed `XLivelessAddon.asi` for compatibility reporting. Install
+either module as the owner of the overlapping patches, not both.
 
 ## Does it work with FusionFix?
 

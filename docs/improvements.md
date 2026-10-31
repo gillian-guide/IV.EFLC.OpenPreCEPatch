@@ -4,9 +4,9 @@ The improvements are **part of the shipped code**, not a mode: every option's
 implementation is the improved one, and there is no environment variable, build
 option or INI key that selects an older branch. `NewSavesCompatibility=1` runs
 the guarded/faster converter, `OutOfCommissionFix=1` the cached/safe archive
-setup, and so on. Options that moved to the XLivelessAddon module (intro/menu,
+setup, and so on. Options that moved to the XLivelessAddon companion (intro/menu,
 window, launcher, VRAM) are no longer in this module's INI; their improvements
-live in `xlivelessaddon/`.
+live in that separate repository.
 
 What used to be test switches (`OPCEP_IMPROVEMENTS`, `OPCEP_PARITY_BASELINE`)
 is gone. The evidence for a change is the write-set matrix and per-arm
@@ -27,14 +27,14 @@ attribution (`tests/parity/`), which is what caught the live-run divergences.
 | `GarageModelFix`, `CutsceneFixes`, `BuildingAlphaFix` | hooked at the better entry point proved on the 1.0.8.0 live run: the garage prologue, one shared camera callee instead of three sites, and the `jnz` alone instead of the `test` + `jnz` pair |
 
 `SkipIntro`, `SkipMenu`, `BorderlessWindowed`, `DoNotPauseOnMinimize` and
-`VRAMFix` are XLivelessAddon features now: their improved bodies live in
-`xlivelessaddon/` and the main module no longer registers those arms.
+`VRAMFix` are XLivelessAddon features now: their improved bodies live in the
+separate companion repository and the main module no longer registers those arms.
 
-There is currently **no** write-set-visible improvement: the improved and the
-parity-baseline dumps are byte-identical on all 104 matrix cells (the formerly
-visible `SkipIntro` rel32 moved to the fork with the option). The scan-range
-change is also a pure implementation fix: the original `hook::pattern(module)`
-never scanned `.rdata`/`.data`/`.rsrc`, so the write set is identical.
+There is currently **no** write-set-visible improvement in this module: a pure
+implementation change must keep the 96-cell matrix byte-identical. The formerly
+visible `SkipIntro` rel32 moved out with the option. The scan-range change is
+also a pure implementation fix: the original `hook::pattern(module)` never
+scanned `.rdata`/`.data`/`.rsrc`, so the write set is identical.
 
 ## Cross-build coverage (audit 2026-10-30)
 
@@ -72,9 +72,8 @@ Findings, against `docs/version-matrix.json` (IDA) and the arms:
 
 ## Compatibility
 
-- **XLivelessAddon.** Its feature set lives in the separate `xlivelessaddon/`
-  successor module; there is no marker shim and no duplicate option in the main
-  ASI.
+- **XLivelessAddon.** Its feature set lives in the separate companion
+  repository; there is no marker shim and no duplicate option in the main ASI.
 - **FusionFix overlap audit.** The automatic gate list is in
   `source/fusionfix_compat.cpp`; re-check it when FusionFix adds a subsystem that
   collides with a still-active option.
@@ -203,19 +202,22 @@ Evidence from the tree at `41167df` (before this pass): the x86 build, `ctest`
 | five multi-hit arms silently depended on all matches | `graphics.ixx` (BuildingDynamicShadows hash pair, NoImpostorHeightCutoff), `stability.ixx` (BenchmarkFix), `vehicles.ixx` (EpisodicVehicleSupport), `performance.ixx` (StartupTimeFix literal loop) | explicit `PatternAll`; the matrix first caught StartupTimeFix as a missed loop consumer |
 | the fork captured the CreateFile IAT slot but never published it | `skip_launcher.cpp` filled `report.createFileSlot` and `skip_launcher.h` documented forwarding, but `SetCreateFileSlot` had no caller; the body always called `CreateFileA` directly | published inside `ApplySkipLauncher`; `xla_tests` (mutation-checked) |
 | the moving-parts guards still dereferenced three runtime pointers | `hooks.cpp` `script_float`, the unconditional tail and the steering lock owner only checked the script context | guarded inside the existing folded path; original path still reachable with `OPCEP_IMPROVEMENTS=none` |
-| the fork logged no build id or per-patch counts | `xlivelessaddon/source/dllmain.cpp` logged only the config line and SkipLauncher counts | build, window/borderless/focus, skip-intro/menu sites, VRAM hooks, registry IAT replacements and the legacy ROM flag are logged |
+| the fork logged no build id or per-patch counts | the companion XLivelessAddon repository's `source/dllmain.cpp` logged only the config line and SkipLauncher counts | build, window/borderless/focus, skip-intro/menu sites, VRAM hooks, registry IAT replacements and the legacy ROM flag are logged |
 
 ### Documented, left unchanged (fault preserved)
 
-- `xlivelessaddon/source/dllmain.cpp:885` — the legacy ROM block calls
+The XLivelessAddon paths in this section refer to the separate companion
+repository, not this tree.
+
+- `XLivelessAddon/source/dllmain.cpp:885` — the legacy ROM block calls
   `hook::pattern(...).get(0)` for two secondary signatures with no size check;
   a missing signature is undefined behaviour, exactly like the original addon.
-- `xlivelessaddon/source/dllmain.cpp:993-996` — the borderless
+- `XLivelessAddon/source/dllmain.cpp:993-996` — the borderless
   `DefWindowProc` shims use `pattern.count(2).get(0/1)` unguarded.
-- `xlivelessaddon/source/dllmain.cpp:404` — the delayed-init path busy-waits
+- `XLivelessAddon/source/dllmain.cpp:404` — the delayed-init path busy-waits
   (`while (!(pattern.size() > 0))`) with no sleep; on a build where the probe
   never matches, that worker thread never exits.
-- `xlivelessaddon/source/dllmain.cpp:67` — `szCustomSavePath.copy(pBuffer, 256)`
+- `XLivelessAddon/source/dllmain.cpp:67` — `szCustomSavePath.copy(pBuffer, 256)`
   followed by `pBuffer[len] = 0` writes past a 256-byte buffer when the custom
   path is longer than 255 characters (original addon code).
 - `source/config.cpp:50` — `std::stoi` throws on a non-numeric value; the
@@ -227,7 +229,7 @@ Evidence from the tree at `41167df` (before this pass): the x86 build, `ctest`
 
 With the shipped `SkipLauncher = 1`, the recovered DFA/ROM stage
 (`skip_launcher.cpp`) and the legacy `CreateROMWindow`/`WM_ROM` block
-(`xlivelessaddon/source/dllmain.cpp:894-902`) both run. The legacy DFA file
+(`XLivelessAddon/source/dllmain.cpp:894-902`) both run. The legacy DFA file
 hooks are already gated by `!bSkipLauncher`; the ROM block is not. Gating it is a
 launcher/GFWL change, so it is only made observable (`legacyRom=` in the log)
 until a live A/B on the user's install confirms which ROM service the game
@@ -289,6 +291,7 @@ unconditional because that option is the only survivor of the pair).
 - The import-descriptor count no longer underflows when the import directory is
   empty.
 
-The matrix is now **98 cells / 4,294 writes** (six option cells removed);
-`--check` passes with the new golden.
+The current matrix is **96 cells / 3,874 writes** (the 2026-10-30 six option
+cells removed; defaults refreshed 2026-10-31); `--check` passes with the new
+golden.
 

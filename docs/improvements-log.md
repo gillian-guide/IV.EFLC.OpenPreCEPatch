@@ -8,6 +8,11 @@ the original INI options; the test switches are documented in
 
 `docs/testing.md`.
 
+> Historical note (2026-10-31): the XLivelessAddon successor is now a separate
+> repository and is not built or shipped from this tree. Entries below that name
+> `xlivelessaddon/` paths describe the pre-split in-tree folder; the current
+> companion location is its own repository.
+
 
 
 ## 2026-10-25 — safety net and folded improvements

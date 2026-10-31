@@ -1,10 +1,9 @@
 # Build output
 build/
-build64/
-build-parity/
-build-parity-x86/
+build*/
 bin/
 release/
+out/
 obj/
 *.obj
 *.pdb
@@ -20,8 +19,10 @@ obj/
 *.user
 *.suo
 *.sln
+*.slnx
 *.vcxproj
 *.vcxproj.filters
+CMakeUserPresets.json
 
 # Logs and local config
 *.log
@@ -34,4 +35,3 @@ __pycache__/
 
 # Session scratch
 .scratch/
-

@@ -36,7 +36,8 @@ There is no separate improved/legacy mode: the improvements are the code, and
 the matrix is the record of what the installer writes. Changing an
 implementation shows up as a cell diff, which is exactly the review signal.
 
-The tool needs `build64\Release\opcep_parity_dump.exe` and a game executable
+The tool needs `build\x64\Release\opcep_parity_dump.exe` (created by
+`cmake --preset x64 && cmake --build --preset x64-release`) and a game executable
 (default `..\game_refs\GTAIV.exe`); no game files are committed. The game image
 hash is part of the baseline, so a different executable is reported as a
 mismatch instead of silently changing the numbers.

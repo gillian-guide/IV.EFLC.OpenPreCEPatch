@@ -25,7 +25,7 @@ namespace opp::features
 {
 
     // BorderlessWindowed / DoNotPauseOnMinimize live in the separate
-    // XLivelessAddon successor module (xlivelessaddon/).
+    // XLivelessAddon companion repository.
 
 
     // publish DrivebyFOVFix

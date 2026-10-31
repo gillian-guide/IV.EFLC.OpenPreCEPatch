@@ -4,14 +4,15 @@
 
 OpenPreCEPatch is the community successor to **ZolikaPatch**, the GTA IV / Episodes
 from Liberty City quality-of-life and crash-fix plugin. It keeps the original
-mod's fixes and features, rewrites them as readable, maintainable C++20, and
+mod's fixes and features, rewrites them as readable, maintainable C++23, and
 modernises the loader, hooking and configuration layers around the same
 signature data.
 
-The project is built on the same foundation as
+The project follows the structure of
 [GTAIV.EFLC.FusionFix](https://github.com/ThirteenAG/GTAIV.EFLC.FusionFix):
-`source/` holds one file per subsystem, `external/` holds the injector and
-pattern libraries as submodules, and `data/plugins/` holds the shipped INI.
+`source/` holds one file per subsystem, `includes/` holds the vendored injector
+and pattern libraries as submodules, and `data/plugins/` holds the shipped INI.
+The repository builds on its own; no game files are needed to compile.
 
 ## What it does
 
@@ -33,12 +34,14 @@ Eighty-five independent options. The highlights:
   teleport protection, livery limits, spawn diagnostics and the GFWL CD-key
   kick fix.
 - **Loading / compatibility** — local settings, DLC loading, new save/file
-  compatibility and the ZMenuIV guard. XLivelessAddon's
-  launcher/intro/menu/window/VRAM features live in the separate
-  [XLivelessAddon successor](xlivelessaddon/README.md).
+  compatibility and the ZMenuIV guard.
 
 Every option is documented in [docs/features.md](docs/features.md), and the full
 key table lives in [docs/ini.md](docs/ini.md).
+
+The intro/menu, windowed, launcher/DRM and VRAM features belong to the separate
+**XLivelessAddon** companion repository. They are not part of this repository and
+are not built by it; OpenPreCEPatch only detects an installed companion module.
 
 ## Improvements
 
@@ -49,8 +52,7 @@ caches the archive, the moving-parts options guard their vehicle walk, and the
 installer scans stay inside the executable sections and stop at the first match
 (which is what the original loader did; the startup pass is about 3x faster).
 `GarageModelFix`, `CutsceneFixes` and `BuildingAlphaFix` hook the better entry
-point (prologue, shared callee, the branch alone). Intro/window behaviour
-belongs to the separate XLivelessAddon successor.
+point (prologue, shared callee, the branch alone).
 
 The write-set effect of every option is recorded in
 [docs/improvements-log.md](docs/improvements-log.md) and checked by
@@ -71,20 +73,13 @@ is involved.
 Options are grouped into `[STABILITY]`, `[FIXES]`, `[PERFORMANCE]`, `[GRAPHICS]`,
 `[EPISODIC]`, `[COMPATIBILITY]`, `[MULTIPLAYER]`, `[VEHICLES]` and `[MISC]`.
 
-XLivelessAddon is a **separate module** now. Build it from
-`xlivelessaddon/` (output `XLivelessAddon.asi` plus `XLivelessAddon.ini`) when
-FusionFix or another plugin needs those features. OpenPreCEPatch no longer
-carries an inert shim or any XLivelessAddon-only option.
-
 ## Installation
 
 1. Install an ASI loader (`dinput8.dll` or `xlive.dll`).
 2. Copy `IV.EFLC.OpenPreCEPatch.asi` next to `GTAIV.exe` and `EFLC.exe`.
 3. Copy `IV.EFLC.OpenPreCEPatch.ini` next to it, or let the ASI create it on
    first launch.
-4. Optional: copy the separately built `XLivelessAddon.asi` and its
-   `XLivelessAddon.ini` only if you need the XLivelessAddon feature set.
-5. Start the game through `PlayGTAIV.exe`.
+4. Start the game through `PlayGTAIV.exe`.
 
 If an old `ZolikaPatch.ini` is present and `IV.EFLC.OpenPreCEPatch.ini` is not,
 the ASI imports the old values on first run and writes the grouped file. The old
@@ -112,30 +107,29 @@ See [docs/builds.md](docs/builds.md).
 
 ## Building
 
-Requirements: Windows 10/11, Visual Studio 2022 or newer with the **x86** C++
-toolchain, and the submodules checked out.
+Requirements: Windows 10/11, Visual Studio 2022 17.10+ (or newer) with the
+**x86** C++ toolchain, CMake 3.31+, and the submodules checked out.
 
 ```bat
-git submodule update --init --recursive
-premake5 vs2022
-msbuild build\OpenPreCEPatch.sln /p:Configuration=Release /p:Platform=Win32
+git clone --recursive https://github.com/OpenZDecomp/OpenPreCEPatch
+cd OpenPreCEPatch
+cmake --preset x86
+cmake --build --preset x86-release
+ctest --preset x86-release
 ```
 
-The output is `bin/IV.EFLC.OpenPreCEPatch.asi`, the separate
-`bin/XLivelessAddon.asi` and a linker `.map`. CMake is also supported:
+The output is `bin/IV.EFLC.OpenPreCEPatch.asi` and its INI.
+
+The 64-bit parity dump is a separate configure:
 
 ```bat
-build.bat
+cmake --preset x64
+cmake --build --preset x64-release
 ```
 
-or manually:
-
-```bat
-cmake -S . -B build -A Win32
-cmake --build build --config Release
-```
-
-See [docs/building.md](docs/building.md) for details.
+`build.bat` wraps the x86 configure/build/test sequence. See
+[docs/building.md](docs/building.md) for the target list, the MSVC settings that
+matter and the submodule layout.
 
 ## INI
 
@@ -158,18 +152,18 @@ original default; a value must parse to exactly `1` to enable the option.
 ## Accuracy
 
 The shipped binary and the proven reconstruction are the specification. The
-first release keeps the original behaviour, including its rough edges. Known
+behaviour follows the original, including its documented rough edges. Known
 upstream instabilities and the improvements planned for later releases are
 listed in [docs/improvements.md](docs/improvements.md); the preserved behaviour
 is recorded in [docs/origins.md](docs/origins.md).
 
 ## Credits and license
 
-Original mod by **Zolika1351**; launcher bypass descended from
-**XLivelessAddon**. The loader and modernisation follow
+Original mod by **Zolika1351**. The loader and modernisation follow
 **GTAIV.EFLC.FusionFix** by ThirteenAG and contributors. `injector` by LINK/2012
 and ThirteenAG, `Hooking.Patterns` by CitizenFX and ThirteenAG, `IniReader` by
-ThirteenAG. See [CREDITS.md](CREDITS.md) and [NOTICE](NOTICE).
+ThirteenAG. The separate XLivelessAddon companion descends from
+**GTAmodding/XLivelessAddon**. See [CREDITS.md](CREDITS.md) and [NOTICE](NOTICE).
 
 The project is licensed under the **GNU General Public License v3.0 or later**,
 the same license as FusionFix. GTA IV and EFLC are property of Rockstar Games /

@@ -42,12 +42,14 @@ DllMain / InitializeASI
 | `source/loading.ixx` | files, saves, DLC |
 | `source/compatibility.ixx` | other mods, game builds, packaging |
 | `source/interface.ixx` | HUD and audio toggles |
-| `xlivelessaddon/` | separate XLivelessAddon successor ASI (own source/INI/CMake) |
 | `source/data/` | the 38,455-entry model catalogue |
 
-The per-subsystem files are C++20 modules (`.ixx`), in the same style as
+The per-subsystem files are C++23 modules (`.ixx`), in the same style as
 FusionFix: a `module;` global fragment includes the shared headers, then
-`export module stability;` and the group class with its static instance.
+`export module stability;` and the group class with its static instance. The
+vendored libraries live under `includes/` and are attached with a
+`CXX_MODULES` file set, so consumers see the module graph without listing the
+`.ixx` files twice.
 
 ## Configuration
 
@@ -71,12 +73,21 @@ When one is present, `Config::Option` returns false for every key in its conflic
 table. The table names the FusionFix module/setting behind each gate; the INI
 marks the same options with `FF`.
 
-## XLivelessAddon
+## XLivelessAddon companion
 
-The XLivelessAddon feature set is a **separate subproject** in
-`xlivelessaddon/`. It builds `XLivelessAddon.asi` and reads
-`XLivelessAddon.ini`; it is not linked into the OpenPreCEPatch module. Do not
-load both modules as the owner of the same patches.
+The XLivelessAddon feature set is **not part of this repository**. It is a
+separate companion repository that builds `XLivelessAddon.asi` and reads
+`XLivelessAddon.ini`; it is not linked into the OpenPreCEPatch module. The
+loader in `source/dllmain.cpp` only detects an installed
+`XLivelessAddon.asi` and records it, so the two modules can report each other.
+Do not load both modules as the owner of the same patches.
+
+## Vendor tree
+
+Third-party code is checked out under `includes/` as git submodules:
+`includes/injector` (header-only memory hooks), `includes/hooking`
+(Hooking.Patterns) and `includes/inireader` (IniReader). The nested submodules of
+`includes/injector` are not linked into the ASI.
 
 ## Install order
 

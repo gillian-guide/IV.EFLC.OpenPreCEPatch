@@ -28,7 +28,7 @@ body:
     attributes:
       label: Identity
       description: The [MAIN] Identity value and the ASI file name.
-      placeholder: XLivelessAddon / IV.EFLC.OpenPreCEPatch.asi
+      placeholder: IV.EFLC.OpenPreCEPatch.asi
   - type: textarea
     id: mods
     attributes:

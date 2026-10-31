@@ -11,7 +11,16 @@
 namespace opp
 {
 	inline constexpr char kDefaultIni[] =
-R"OPCEP(
+R"OPCEP(; IV.EFLC.OpenPreCEPatch.ini
+;
+; Grouped by subsystem. If an old ZolikaPatch.ini is present, the ASI ports
+; its values into this file on first run.
+;
+; Tags: [1060+] / [1000,1004] ... = game versions the option applies to;
+;       if not present - all versions are supported;
+;       FF = automatically disabled when a FusionFix ASI is next to the game.
+;
+
 [STABILITY]
 BenchmarkFix = 1                                     // fix crash after benchmark ends [all-1080,1130]
 CombinedRadioFreezeFix = 1                           // fix freeze after Concrete Jungle with the 3 EFLC exclusive radio stations installed
@@ -58,7 +67,7 @@ InfiniteCarBottomDistance = 0                        // remove the draw distance
 
 [EPISODIC]
 LoadDLCs = 1                                         // load TBoGT and TLAD from EFLC or CE folders, plus any more addon episodes in the same format (extra DLC folders should be named Episode3, Episode4, etc. and their ids in setup2.xml be the episode id multiplied by 2) [1060,1070,1080]
-SCOSignatureFix = 1                                  // allow loading of any .sco file regardless of which episode it came from (or which platform it came from, in case of patch 4 and below) this is required for trainer IV parachute support to work [all; FF]
+SCOSignatureFix = 1                                  // allow loading of any .sco file regardless of which episode it came from (or which platform it came from, in case of patch 4 and below) this is required for trainer IV parachute support to work [FF]
 EpisodicVehicleSupport = 0                           // APC and buzzard support for all episodes [1004,1060-1130,1061,12043; FF]
 EpisodicWeaponSupport = 0                            // explosive shotgun, stickybomb and DSR1 sniper support for all episodes [1004,1060-1130,1061,12043; FF]
 PoliceEpisodicWeaponSupport = 0                      // makes cops use P90s and assault shotguns - only enable this if those weapons exist, or NOOSE and FIB will spawn unarmed [1004,1060-1130,1061,12043; FF]
@@ -85,19 +94,19 @@ GroupHackFix = 1                                     // fix a modmenu crash meth
 RemoveAllWeaponsProtection = 1                       // make other players no longer able to remove all your weapons
 TeleportProtection = 1                               // make other players no longer able to to teleport you
 SuperLODFix = 1                                      // fix crash if SuperLOD is spawned [1070,1080]
-AimProjectileCrashFix = 0                            // crash fix, usually happens in GTAC
-PathNodeCrashFix = 0                                 // crash fix, usually happens in GTAC
-CollisionDeadlockFix = 0                             // freeze fix, usually happens in GTAC
+AimProjectileCrashFix = 1                            // crash fix, usually happens in GTAC
+PathNodeCrashFix = 1                                 // crash fix, usually happens in GTAC
+CollisionDeadlockFix = 1                             // freeze fix, usually happens in GTAC
 DebugPrintSpawns = 0                                 // log all entities as they sync in into GTAC console (GTAC only, requires FreezeCarFix to be on) this doesn't actually log which player spawned the entity but who's currently syncing it which 99% of the time is the person who spawned it ONLY if they spawned it while they were in sync range
 RemoveModChecks = 1                                  // remove modded-file checks (patch 4 = 1.0.4.0, 1060 and 1070) [1040,1060,1070]
-RemoveRGSCLoginRequirement = 1                       // remove Social Club login requirement for MP (all builds; 1.0.8.0 uses an RVA fallback) [all]
+RemoveRGSCLoginRequirement = 1                       // remove Social Club login requirement for MP
 RemoveGFWLUpdatePopup = 1                            // remove "update or sign out of LIVE" popup for GFWL (patch 5 and below) [1000-1040]
 
 [VEHICLES]
 GarageModelFix = 1                                   // fixes cars being randomly changed in parking spots if addons models are added
 IncreaseVehicleStructLimit = 1                       // increase the amount of vehicles with different models that can be loaded at one time [FF]
 IncreaseVehicleModelLimit = 1                        // increase the amount of possible vehicles.ide entries to 1024 [FF]
-CarDecalsFix = 0                                     // fix bulletholes not appearing on some modded cars outside TBoGT
+CarDecalsFix = 1                                     // fix bulletholes not appearing on some modded cars outside TBoGT
 NoLiveryLimit = 1                                    // removes the 4 livery limit, allowing up to 255 unique livery textures for any car [FF]
 PopupHeadlightsFlag = 0                              // vehicles.ide flag for Hakumai's popup headlights on any car that supports it (+popuplights)
 CopSirensFlag = 0                                    // add +siren vehicles.ide flag to cars to make them use sirens
@@ -107,7 +116,6 @@ ShakingEngineBlock = 0                               // make the engineblock par
 MovingSteeringWheelSupport = 0                       // make the "steeringwheel" car bone rotate properly if it exists (Example of a car with proper steering wheel setup: https://mega.nz/file/vcAAib6Z#bsbJaseAbdxleRwr1XGL-d_it_P9DyjsPoXP-pnMoq8 ) use the new +wheelangle: vehicles.ide flag to specify an angle the steering wheel should be tilted forward or backwards by (in degrees) while porting a car from V, write the angle down into this flag and set the actual wheel's angle to 0, 0, 0 to make it work properly
 
 [MISC]
-
 RestoreDeathMusic = 0                                // restores the unused music on death [FF]
 OverrideGTADatPath = 0                               // load gta.dat from another path
 OverrideGTADatPathTo = common:/data/gta.dat          // the path to load gta.dat from if the above is enabled
@@ -116,12 +124,15 @@ PlayerAsPedComponentsFix = 1                         // fix Niko peds' clothes n
 PedModelsInCutscenesFix = 1                          // fixes crash when starting cutscenes as a ped
 
 [PopupLightAngles]                               // per-model popup headlight angle, in degrees
+; Car1Name = police
+; Car1Angle = 90
 
 [HeadlightConeOffsets]                           // per-model headlight cone offset
 Car1Name = admiral
 Car1Offset = -5
 Car2Name = airtug
-Car2Offset = 5
+)OPCEP"
+R"OPCEP(Car2Offset = 5
 Car3Name = benson
 Car3Offset = -4
 Car4Name = biff
@@ -141,8 +152,7 @@ Car10Offset = -6
 Car11Name = cavalcade
 Car11Offset = 4
 Car12Name = chavos
-)OPCEP"
-R"OPCEP(Car12Offset = 3
+Car12Offset = 3
 Car13Name = cognoscenti
 Car13Offset = 7
 Car14Name = comet

@@ -19,7 +19,7 @@ One config-surface change is intentional and not behavioural: the INI is
 grouped by subsystem, and the old flat `[Options]` layout is still read. The
 folded improvements (selected by the original options) are an additional
 documented behaviour surface; see `docs/improvements.md`. XLivelessAddon's
-features are a separate module (`xlivelessaddon/`), not part of this ASI.
+features live in the separate companion repository, not in this ASI.
 
 ## Preserved behaviour
 
@@ -58,8 +58,8 @@ selected by the original option itself, so there are no per-fix keys:
 - `BadPlayerModelCrashFix` / `DebugPrintSpawns` use the model-name index.
 
 `SkipIntro`, `SkipMenu`, `BorderlessWindowed`, `DoNotPauseOnMinimize` and
-`VRAMFix` moved to the XLivelessAddon module; their 300 ms intro body and
-FusionFix-style window manager are in `xlivelessaddon/`, not here.
+`VRAMFix` moved to the XLivelessAddon companion repository; their 300 ms intro
+body and FusionFix-style window manager are not part of this tree.
 
 The original branches are gone: the improved code is the only implementation.
 The shared model-name table and OOC payload are unchanged. The model index only
@@ -68,9 +68,10 @@ order is preserved.
 
 ## XLivelessAddon
 
-The XLivelessAddon feature set is not included here. It has its own successor
-subproject in `xlivelessaddon/` (`XLivelessAddon.asi`). The main module only
-keeps features that belong to ZolikaPatch itself.
+The XLivelessAddon feature set is not included here. It is its own companion
+repository and builds `XLivelessAddon.asi`. The main module only keeps features
+that belong to ZolikaPatch itself and detects an installed companion for
+compatibility reporting.
 
 ## Extracted data
 

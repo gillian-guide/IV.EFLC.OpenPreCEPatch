@@ -728,10 +728,10 @@ namespace opp::features
                 zpatch_popup_resume_b = MatchAddress(pattern, 10);
                 zpatch_popup_resume_a = MatchAddress(pattern, 12);
             }
-            else if (auto pattern = Pattern(image, "0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1"); pattern.size() > 0)
+            else if (auto patternB = Pattern(image, "0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1"); patternB.size() > 0)
             {
-                zpatch_popup_resume_b = MatchAddress(pattern, 10);
-                zpatch_popup_resume_a = MatchAddress(pattern, 12);
+                zpatch_popup_resume_b = MatchAddress(patternB, 10);
+                zpatch_popup_resume_a = MatchAddress(patternB, 12);
             }
 
             // The IDE parser hook is independent of the two model tests and is
@@ -766,9 +766,9 @@ namespace opp::features
                 WriteValue<uint8_t>(ctx, match + 10, static_cast<uint8_t>(0xEBu));
                 WriteValue<uint32_t>(ctx, match + 82, AddressOf(&zpatch_popup_angle));
             }
-            else if (auto pattern = Pattern(image, "0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1"); pattern.size() > 0)
+            else if (auto patternB = Pattern(image, "0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1"); patternB.size() > 0)
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                auto* match = patternB.get(0).get<uint8_t>();
 
                 JumpToBody(ctx, match, "abi_popup_headlights_edx");
                 WriteValue<uint8_t>(ctx, match + 10, static_cast<uint8_t>(0xEBu));

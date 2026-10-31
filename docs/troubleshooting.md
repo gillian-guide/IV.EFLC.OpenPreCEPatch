@@ -32,8 +32,8 @@ records how many options were gated.
 
 ## FusionFix reports a missing/incompatible XLivelessAddon
 
-Build and install the separate `xlivelessaddon` successor module
-(`XLivelessAddon.asi` + `XLivelessAddon.ini`). The main ASI no longer carries
+Install the separate XLivelessAddon companion (`XLivelessAddon.asi` +
+`XLivelessAddon.ini`) from its own repository. The main ASI no longer carries
 those features or an inert marker shim.
 
 ## The old INI is not being used
