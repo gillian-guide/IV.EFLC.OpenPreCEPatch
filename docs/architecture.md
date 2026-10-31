@@ -51,7 +51,7 @@ The original compares the build id at `dword_1015BE04` before it reads the INI f
 | --- | --- |
 | `BenchmarkFix` | `!BuildIs(build, {v1080, v1130})` in the publish block and the recovered list in the install block (the handler's `cmp 9` / `cmp 0Dh`) |
 | `VSyncFix` | `BuildIs(build, {v1004, v1060, v1070, v1061, v1100, v1110, v1120, v12043})` — the handler excludes 1.0.0.0, 1.0.4.0, 1.0.8.0 and 1.1.3.0 |
-| `LaunchWithPlayGTAIV` | the per-build RVA table holds exactly the handler's switch cases (1.0.0.0, 1.0.4.0, 1.0.6.0, 1.0.7.0, 1.0.8.0); any other build finds no row and returns |
+| `LaunchWithPlayGTAIV` | an explicit five-build switch (the handler's switch cases 1.0.0.0, 1.0.4.0, 1.0.6.0, 1.0.7.0, 1.0.8.0); the scan for `LaunchGTAIV.exe\0` also hits 1.0.0.4/1.0.1.0 and EFLC, so the gate is load-bearing |
 | `LoadDLCs`, `Patch6and7RemoveModChecks`, `Patch7RemoveModChecks`, `RemoveUselessChecks`, `SuperLODFix` | per-build `if (build == ...)` blocks (rows 7/8/9, 7/8, 7/8, 5/8/9 and 8/9 respectively), matching the handler's per-build RVA rows |
 | `EpisodicVehicleSupport`, `EpisodicWeaponSupport`, `PoliceEpisodicWeaponSupport`, `TBoGTHeliHeightLimit`, `PipeBombDropIconSupport` | `BuildIs(build, {v1004, v1060, v1070, v1080, v1061, v1100, v1110, v1120, v1130, v12043})` — the handler's `cmp [build],6; jl`, which includes 1.0.6.1 |
 
@@ -77,7 +77,11 @@ The cross-option rules are ordinary `if` conditions in the blocks that need them
 
 ## Hooks
 
-`dllmain.cpp` registers every body in `kAbiBodies`, keyed by the original destination VA. `ResolveHookBody` maps a reference VA to the live body. The install blocks never point at a missing body: a row with an unresolved companion is skipped as a unit, matching the handler's behaviour.
+`dllmain.cpp` registers every body in `kAbiBodies`, keyed by a `BodyId`: the enum's value is the original destination VA (the resolver's key), and `OriginalHandlerVa` is the only conversion. Each enum entry names the original function and what the body does. `ResolveHookBody` maps a reference VA to the live body. The install blocks never point at a missing body: a row with an unresolved companion is skipped as a unit, matching the handler's behaviour.
+
+`tools/verify_bodies.py` proves the bodies offline. A body carries `@exact 0xVA` when it is a byte-level transcription; the tool finds it in the linker map (build the ASI with `ZP_LINK_MAP=ON`), disassembles it and compares it instruction-for-instruction with the original ASI at the reference VA. Module addresses are not blanked out blindly: internal branch targets are compared as body-relative deltas, every other module operand is bound original↔port with a required bijection, and the bindings `src/rebased.h` documents must agree by symbol name. Compiled C++ replacements are reported as INFO with the original function's disassembled extent and the source comment that documents them, never as byte-equal. It runs as the `zp_body_proof` CTest and as the `verify_bodies` target.
+
+Recovered game-image offsets that no safe signature covers are typed as `GameRva` (`value` plus `site()`), with the build, original function and instruction in the constant's provenance comment. `tools/magic_numbers.py` classifies every hex literal in the hand-written sources (named / documented / transcribed-asm) and fails on anything unclassified.
 
 ## Hash salts
 
