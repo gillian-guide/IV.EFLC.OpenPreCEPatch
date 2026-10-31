@@ -45,7 +45,7 @@ add_library(zp STATIC EXCLUDE_FROM_ALL ${ZP_SOURCES})
 target_include_directories(zp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src
                                      ${ZP_EXT_INJECTOR}
                                      ${ZP_EXT_PATTERNS})
-target_compile_features(zp PUBLIC cxx_std_17)
+target_compile_features(zp PUBLIC cxx_std_23)
 target_compile_definitions(zp PUBLIC UNICODE _UNICODE NOMINMAX)
 if(WIN32)
   target_link_libraries(zp PUBLIC version user32 shlwapi)
@@ -107,7 +107,7 @@ if(ZP_BUILD_DUMP)
                  ${ZP_EXT_PATTERNS}/Hooking.Patterns.cpp src/catalogue_data.cpp src/dllmain.cpp
                  src/useless_checks.cpp)
   target_link_libraries(zp_dump PRIVATE version user32 shlwapi psapi)
-  target_compile_features(zp_dump PRIVATE cxx_std_17)
+  target_compile_features(zp_dump PRIVATE cxx_std_23)
   # /MAP is a development aid; ASLR stays on, because a fixed base would make the
   # loader place other mappings over 0x400000 (observed: a 72 KB anonymous mapping
   # at 0x400000, VirtualAlloc fails 487). The dump is layout-independent anyway:
@@ -171,7 +171,7 @@ if(ZP_BUILD_STATE_DUMP)
     COMMENT "Generating the parity globals table from src/rebased.h")
   add_executable(zp_state_dump tests/state_dump.cpp src/dllmain.cpp ${ZP_PARITY_GLOBALS})
   target_link_libraries(zp_state_dump PRIVATE zp)
-  target_compile_features(zp_state_dump PRIVATE cxx_std_17)
+  target_compile_features(zp_state_dump PRIVATE cxx_std_23)
   target_compile_definitions(zp_state_dump PRIVATE ZP_PARITY_DRIVER)
   target_include_directories(zp_state_dump PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
                                                   ${CMAKE_CURRENT_BINARY_DIR})

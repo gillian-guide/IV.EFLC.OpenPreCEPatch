@@ -16,7 +16,7 @@ call "%VC%" >nul || (echo error: vcvars32 failed 1>&2 & exit /b 2)
 set "SRC=%ROOT%\readable\src"
 set "OUT=%ROOT%\.parity-verify\build\style-check"
 if not exist "%OUT%" mkdir "%OUT%"
-cl /nologo /std:c++17 /O2 /EHsc /W3 /DUNICODE /D_UNICODE /DNDEBUG /DNOMINMAX %ZP_EXTRA% /I"%SRC%" /c "%~1" /Fo"%OUT%\%~n1.obj"
+cl /nologo /std:c++latest /O2 /EHsc /W3 /DUNICODE /D_UNICODE /DNDEBUG /DNOMINMAX %ZP_EXTRA% /I"%SRC%" /c "%~1" /Fo"%OUT%\%~n1.obj"
 if errorlevel 1 exit /b 1
 echo compiled: %~n1
 endlocal

@@ -2,7 +2,7 @@
 
 This project is an open-source reconstruction of **ZolikaPatch 7.65** for Grand Theft Auto IV. This project has been done primarily by LLM agents. The compiled version can be used as a replacement for the original binary.
 
-The code is recovered from the shipped 32-bit ASI by disassembly and decompilation, then written back as ordinary C++17: the loader, the per-option install blocks, the hook bodies and the launcher bypass.
+The code is recovered from the shipped 32-bit ASI by disassembly and decompilation, then written back as ordinary C++23: the loader, the per-option install blocks, the hook bodies and the launcher bypass.
 
 It is not Zolika1351's original source. It is a study of what the shipped plugin does and how, with the addresses, signatures, defaults and behaviour taken from the 7.65 binary.
 

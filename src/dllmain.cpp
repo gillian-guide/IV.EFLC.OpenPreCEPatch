@@ -16,6 +16,7 @@
 #include <tlhelp32.h>
 #include <winver.h>
 
+#include <bit>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -112,22 +113,32 @@ constexpr DWORD kUnsupportedSleepMs = 500;
 constexpr UINT kUnsupportedExitCode = E_UNEXPECTED;  // 0x8000FFFF
 static_assert(kUnsupportedExitCode == 0x8000FFFFu);
 
-// Float values the mod stores into the game as raw bit patterns (the globals
-// that carry them are uint32_t because the bodies read/write the bits). C++17
-// has no constexpr std::bit_cast, so the recovered pattern is the constant and
-// the float it spells is the provenance comment.
-constexpr std::uint32_t kFloatOneBits = 0x3F800000u;            // 1.0f
-constexpr std::uint32_t kFloatQuarterBits = 0x3E800000u;        // 0.25f
-constexpr std::uint32_t kFloatHalfBits = 0x3F000000u;           // 0.5f
-constexpr std::uint32_t kDrivebyFovBits = 0x42340000u;          // 45.0f
-constexpr std::uint32_t kPiOver2Bits = 0x3FC90FDBu;             // 1.5707964f
-constexpr std::uint32_t kFchsOffsetBits = 0x40000000u;          // 2.0f
-constexpr std::uint32_t kBikeSpeedThresholdBits = 0x3BDA740Eu;  // 0.0066666668f
-constexpr std::uint32_t kCutsceneEpsBits = 0x3D4CCCCDu;         // 0.05f
-constexpr std::uint32_t kCutsceneSpeedLimitBits = 0x3F000000u;  // 0.5f
-// 0.3333 exactly (the constant the original's .rdata holds; 1.0/3.0 would be
-// 0x3FD5555555555555).
-constexpr std::uint64_t kCutsceneLimitBits = 0x3FD554C985F06F69ull;
+// Recovered float values. The value is the source of truth: a float target
+// takes it directly, and a uint32_t global/table (the bodies read/write those
+// dwords) takes std::bit_cast. The static_asserts pin the recovered bit
+// patterns, so a changed constant is a compile error.
+constexpr float kFloatOne = 1.0f;
+constexpr float kFloatQuarter = 0.25f;
+constexpr float kFloatHalf = 0.5f;
+constexpr float kDrivebyFov = 45.0f;
+constexpr float kPiOver2 = 1.5707964f;  // the original's rounded pi/2
+constexpr float kFchsOffset = 2.0f;
+constexpr float kBikeSpeedThreshold = 0.0066666668f;
+constexpr float kCutsceneEps = 0.05f;
+constexpr float kCutsceneSpeedLimit = 0.5f;
+constexpr double kCutsceneLimit = 0.3333;  // the original's stored double
+constexpr double kCutsceneZero = 0.0;
+static_assert(std::bit_cast<std::uint32_t>(kFloatOne) == 0x3F800000u);
+static_assert(std::bit_cast<std::uint32_t>(kFloatQuarter) == 0x3E800000u);
+static_assert(std::bit_cast<std::uint32_t>(kFloatHalf) == 0x3F000000u);
+static_assert(std::bit_cast<std::uint32_t>(kDrivebyFov) == 0x42340000u);
+static_assert(std::bit_cast<std::uint32_t>(kPiOver2) == 0x3FC90FDBu);
+static_assert(std::bit_cast<std::uint32_t>(kFchsOffset) == 0x40000000u);
+static_assert(std::bit_cast<std::uint32_t>(kBikeSpeedThreshold) == 0x3BDA740Eu);
+static_assert(std::bit_cast<std::uint32_t>(kCutsceneEps) == 0x3D4CCCCDu);
+static_assert(std::bit_cast<std::uint32_t>(kCutsceneSpeedLimit) == 0x3F000000u);
+static_assert(std::bit_cast<std::uint64_t>(kCutsceneLimit) == 0x3FD554C985F06F69ull);
+static_assert(std::bit_cast<std::uint64_t>(kCutsceneZero) == 0x0ull);
 constexpr std::uint32_t kFloatAbsMask = 0x7FFFFFFFu;  // clears a float's sign bit
 constexpr std::uint32_t kFloatSignBit = 0x80000000u;  // 1u << 31
 static_assert(kFloatSignBit == (1u << 31));
@@ -1985,7 +1996,8 @@ extern "C"
 	std::uint8_t zpatch_vram_flag = 0;                       // byte_1015D638
 	std::uint32_t zpatch_driveby_resolver = 0;               // dword_1015BDE0
 	std::uint32_t zpatch_driveby_resume = 0;                 // dword_1015BDF4
-	std::uint32_t zpatch_driveby_fov = kDrivebyFovBits;    // dword_101580C4 (45.0f, original on-disk)
+	// dword_101580C4 (45.0f, original on-disk)
+	std::uint32_t zpatch_driveby_fov = std::bit_cast<std::uint32_t>(kDrivebyFov);
 	std::uint32_t zpatch_driveby_cached = 0;           // dword_1015BDF8
 	std::uint8_t zpatch_driveby_done = 0;              // byte_1015AD4A
 	std::uint32_t zpatch_driveby_last_result = 0;      // resolver result (diagnostic)
@@ -2038,7 +2050,7 @@ extern "C"
 	std::uint32_t zpatch_popup_model = 0;
 	std::uint32_t zpatch_popup_flag = 0;
 	std::uint32_t zpatch_popup_index = 0;
-	std::uint32_t zpatch_popup_angle = kPiOver2Bits;
+	std::uint32_t zpatch_popup_angle = std::bit_cast<std::uint32_t>(kPiOver2);
 	std::uint32_t zpatch_popup_resume_a = 0;
 	std::uint32_t zpatch_popup_resume_b = 0;
 	std::uint32_t zpatch_popup_hashes[512] = {};
@@ -2046,7 +2058,7 @@ extern "C"
 	// ForceCarHeadlightShadows: dword_101580C0 is pre-set to 2.0f on disk.
 	std::uint32_t zpatch_fchs_param = 0;
 	std::uint32_t zpatch_fchs_resume = 0;
-	std::uint32_t zpatch_fchs_offset = kFchsOffsetBits;
+	std::uint32_t zpatch_fchs_offset = std::bit_cast<std::uint32_t>(kFchsOffset);
 	std::uint32_t zpatch_fchs_hashes[512] = {};
 	float zpatch_fchs_offsets[512] = {};
 	// BadPlayerModelCrashFix scratch.
@@ -2235,11 +2247,11 @@ extern "C"
 	std::uint32_t zpatch_cutscene_target = 0;                    // dword_1015BDE4
 	std::uint32_t zpatch_cutscene_poke = 0;                      // dword_1015BDF0
 	std::uint64_t zpatch_cutscene_accum = 0;                     // qword_1015BDE8 (BSS: starts 0)
-	std::uint64_t zpatch_cutscene_zero = 0x0ull;                 // 0.0
-	std::uint64_t zpatch_cutscene_limit = kCutsceneLimitBits;  // 1.0 / 3.0
+	std::uint64_t zpatch_cutscene_zero = std::bit_cast<std::uint64_t>(kCutsceneZero);
+	std::uint64_t zpatch_cutscene_limit = std::bit_cast<std::uint64_t>(kCutsceneLimit);
 	std::uint32_t zpatch_cutscene_abs_mask = kFloatAbsMask;           // 0x101523D0
-	std::uint32_t zpatch_cutscene_eps_a = kCutsceneEpsBits;           // 0.05f
-	std::uint32_t zpatch_cutscene_eps_b = kCutsceneSpeedLimitBits;    // 0.5f
+	std::uint32_t zpatch_cutscene_eps_a = std::bit_cast<std::uint32_t>(kCutsceneEps);
+	std::uint32_t zpatch_cutscene_eps_b = std::bit_cast<std::uint32_t>(kCutsceneSpeedLimit);
 	// NewMemorySystem: the allocator singleton the handler's second scan publishes
 	// (the immediate of `mov esi, 0x19cf9f0`); the E8 body writes our vtable there.
 	std::uint32_t zpatch_nms_object = 0; // dword_10159CD8
@@ -2664,7 +2676,7 @@ void abi_bike_physics_helper() noexcept
 	float value = 0.0f;
 	std::memcpy(&value, &zpatch_bike_value, sizeof(value));
 	if (0.006666666665 > static_cast<double>(value))
-		zpatch_bike_value = kBikeSpeedThresholdBits;
+		zpatch_bike_value = std::bit_cast<std::uint32_t>(kBikeSpeedThreshold);
 }
 
 // PopupHeadlightsFlag checker (original sub_10044310), called between
@@ -2675,7 +2687,7 @@ void abi_popup_check() noexcept
 {
 	const auto lookup = reinterpret_cast<int(__cdecl*)(std::uint32_t, std::int32_t*)>(
 	    static_cast<std::uintptr_t>(zpatch_model_lookup));
-	zpatch_popup_angle = kPiOver2Bits;  // dword_101580CC: pi/2 float bits
+	zpatch_popup_angle = std::bit_cast<std::uint32_t>(kPiOver2);  // dword_101580CC: pi/2
 	zpatch_popup_flag = 0;             // dword_1015BE24
 	std::int32_t out = -1;
 	lookup(kPopupLightsHash, &out);  // sub_10044310's call is unguarded
@@ -2715,7 +2727,7 @@ void abi_fchs_check() noexcept
 {
 	const std::uint32_t* const hashes = zpatch_fchs_hashes;
 	std::uint32_t hash = hashes[0];
-	zpatch_fchs_offset = kFchsOffsetBits;  // 2.0f, as the original
+	zpatch_fchs_offset = std::bit_cast<std::uint32_t>(kFchsOffset);  // 2.0f
 	if (hash == 0u) return;
 	const auto lookup = reinterpret_cast<int(__cdecl*)(std::uint32_t, std::int32_t*)>(
 	    static_cast<std::uintptr_t>(zpatch_model_lookup));
@@ -3425,15 +3437,15 @@ extern "C" std::uint32_t abi_steer_body() noexcept
 	};
 	const auto identity = [](std::uint32_t* m)
 	{
-		m[0] = kFloatOneBits;
+		m[0] = std::bit_cast<std::uint32_t>(kFloatOne);
 		m[1] = 0;
 		m[2] = 0;
 		m[4] = 0;
-		m[5] = kFloatOneBits;
+		m[5] = std::bit_cast<std::uint32_t>(kFloatOne);
 		m[6] = 0;
 		m[8] = 0;
 		m[9] = 0;
-		m[10] = kFloatOneBits;
+		m[10] = std::bit_cast<std::uint32_t>(kFloatOne);
 	};
 	const auto bone_matrix = [&](std::int16_t model, const char* name) -> std::uint32_t*
 	{
@@ -5222,7 +5234,9 @@ extern "C" void abi_vram_fix_helper() noexcept
 {
 	const auto argB = static_cast<std::int32_t>(zpatch_vram_arg_b);
 	zpatch_vram_flag = 0;
-	if (argB < 0 || zpatch_vram_arg_a != 0 || argB < static_cast<std::int32_t>(kFloatQuarterBits))
+	// The original compares the dword's value as a signed int (the float bits).
+	const auto quarter_bits = static_cast<std::int32_t>(std::bit_cast<std::uint32_t>(kFloatQuarter));
+	if (argB < 0 || zpatch_vram_arg_a != 0 || argB < quarter_bits)
 		zpatch_vram_flag = 1;
 }
 // @orig 0x1004aab0 VRAMFix: stashes two of the game function's arguments, calls the
