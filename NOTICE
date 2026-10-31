@@ -1,19 +1,18 @@
 # NOTICE
 
 OpenPreCEPatch is licensed under the GNU General Public License, version 3 or
-later (see `license`). It is a derivative of the following work.
+later (see `LICENSE`). It is a derivative of the following work.
 
 ## GTAIV.EFLC.FusionFix
 
 The repository layout, the module/event conventions, the build files, the
 submodule choices and parts of the compatibility approach follow
 GTAIV.EFLC.FusionFix, Copyright (C) ThirteenAG and contributors, licensed under
-GPL-3.0. The 300 ms intro variant used by `SkipIntro` follows FusionFix's
-`skipintro.ixx`; the borderless/focus-loss logic in `BorderlessWindowed` and
-`DoNotPauseOnMinimize` follows `windowed.ixx`. The original ZolikaPatch bodies
-remain compiled and are available through the test-only parity switch. Any other
-code later borrowed from FusionFix stays under GPL-3.0 and is attributed in the
-file header.
+GPL-3.0. The intro/windowed logic used by the separate XLivelessAddon companion
+follows FusionFix's `skipintro.ixx` and `windowed.ixx`. The improvements in this
+module are the shipped code: there is no test-only parity switch or older branch
+compiled alongside them. Any other code later borrowed from FusionFix stays under
+GPL-3.0 and is attributed in the file header.
 
 ## ZolikaPatch
 
@@ -25,14 +24,15 @@ readable rewrite of that binary, not the original source.
 ## XLivelessAddon
 
 The launcher/SecuROM bypass and the xliveless file layer descend from
-XLivelessAddon by the GTAmodding community (public domain). The reimplemented
-code is attributed in `source/skip_launcher.*`.
+XLivelessAddon by the GTAmodding community (public domain). They are not part of
+this repository; the reimplemented code lives in the separate XLivelessAddon
+companion repository and is attributed there.
 
 ## Vendored libraries (git submodules)
 
-- `external/injector` — LINK/2012 and ThirteenAG, zlib license.
-- `external/hooking` — CitizenFX and ThirteenAG, MIT license.
-- `external/inireader` — ThirteenAG, MIT license.
+- `includes/injector` — LINK/2012 and ThirteenAG, zlib license.
+- `includes/hooking` — CitizenFX and ThirteenAG, MIT license.
+- `includes/inireader` — ThirteenAG, MIT license.
 
 Their license texts are kept in their own submodule trees.
 

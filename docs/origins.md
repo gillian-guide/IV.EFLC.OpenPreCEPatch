@@ -83,4 +83,4 @@ regenerate them; the repository does not ship game executables or archives.
 ## License
 
 GPL-3.0-or-later, the same license as FusionFix, so fixes borrowed from
-FusionFix remain compatible. See `license`, `NOTICE` and `CREDITS.md`.
+FusionFix remain compatible. See `LICENSE`, `NOTICE` and `CREDITS.md`.
