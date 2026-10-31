@@ -28,13 +28,14 @@ The same file holds the small support modules the loader needs (INI reader, game
 | file | responsibility |
 | --- | --- |
 | `src/dllmain.cpp` | loader, INI feature blocks, build classification, config parser, model hash, signature scanner, map writes, catalogue, vehicle lights, IVMenuAPI/ZMenuIV, re-created globals, hook bodies and their VA table, and the inline option blocks in loader order |
-| `src/patch_data.cpp` | the RemoveUselessChecks NOP list (data) |
+| `src/useless_checks.cpp`, `src/useless_checks.h` | RemoveUselessChecks: the original handler's three write shapes over its five RVA tables and 23 singles |
+| `src/useless_checks_data.inc` | generated: the five original RVA arrays and the single-write rows (`tools/extract_useless_checks.py`) |
 | `src/xlive/xliveless.cpp` | SkipLauncher/DFA/ROM stages and file-API hooks |
 | `src/catalogue_data.cpp` | the 38,455-entry model catalogue (data) |
 | `external/Hooking.Patterns/Hooking.Patterns.cpp` | vendored signature scanner (submodule) |
 | `src/ooc_payload.h` | original compressed OutOfCommission resource (static data) |
 | `data/finale2.sco` | decoded OutOfCommission script table for research |
-| `src/INI.h`, `src/common.h`, `src/hooks.h`, `src/patches.h`, `src/patch_data.h`, `src/rebased.h`, `src/xlive/xliveless.h` | declarations shared by those units |
+| `src/INI.h`, `src/common.h`, `src/hooks.h`, `src/patches.h`, `src/useless_checks.h`, `src/rebased.h`, `src/xlive/xliveless.h` | declarations shared by those units |
 | `external/injector/include/injector/` | LINK/2012's memory-write library (submodule) |
 | `src/jitasm.h`, `src/Hooking.h`, `src/Hooking.cpp`, `src/Pool.h`, `src/StdInc.h` | carried from the original tree; not used by the recovered bodies |
 | `tests/test_main.cpp` | native assertions; no game files needed |
@@ -61,7 +62,7 @@ The original compares the build id at `dword_1015BE04` before it reads the INI f
 
 `PatchGame` is the original loader's option pass: every INI option appears as an inline `if (ctx.Option(...)) { ... }` block, in the original loader's order. Each block gates on its key (and its build), scans the site and calls `injector::` directly; resume slots are assigned before the site they describe is overwritten, because the original reads them out of the site first. That is also why the slot phase runs before the write phase.
 
-`RemoveUselessChecks` runs before all of them: its NOPs change what the later scans see.
+`RemoveUselessChecks` is applied in two parts: its RVA tables first thing in `PatchGame`, its 23 singles after `RemoveStaticCutsceneCarShadows`. The original applies both in one handler at the loader's 27th option; the port's split is byte-neutral (no arm scans or writes a single) but it is load-bearing in one respect: the tables are already written when `MiscFixes` and `RestoreDeathMusic` scan, so their signatures are destroyed and those two installs are suppressed exactly as in the original. Moving the tables later re-enables both installs, and `tests/dump_main.cpp --ordering` fails if that happens.
 
 The blocks were recovered from the shipped ASI as row tables and emitted once by `tools/gen_installers.py`; they are ordinary source now and no longer depend on those tables.
 

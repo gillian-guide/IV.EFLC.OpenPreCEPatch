@@ -41,7 +41,7 @@
 #include "hooks.h"
 #include "patches.h"
 #include "rebased.h"
-#include "patch_data.h"
+#include "useless_checks.h"
 #include <initializer_list>
 #include "xlive/xliveless.h"
 
@@ -7666,25 +7666,6 @@ namespace
 		       GetModuleHandleA("JacksIVFixes.asi") != nullptr;
 	}
 
-	// RemoveUselessChecks: the per-build NOP list, written before any scan so the
-	// later arms see the same bytes the original did.
-	void ApplyUselessChecks(const PatchContext& ctx)
-	{
-		if (!ctx.Option("RemoveUselessChecks", "0"))
-			return;
-
-		for (std::size_t i = 0; i < kUselessCheckCount; ++i)
-		{
-			const UselessCheck& check = kUselessChecks[i];
-			if (check.build != static_cast<std::uint8_t>(ctx.build))
-				continue;
-			if (static_cast<std::size_t>(check.rva) + check.length > ctx.image.size)
-				continue;
-			injector::WriteMemoryRaw(ctx.image.base + check.rva,
-				                        const_cast<std::uint8_t*>(check.bytes), check.length, true); //write
-		}
-	}
-
 } // namespace
 
 // One pass over every arm, in the original loader's order.
@@ -7720,8 +7701,13 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 	PatchContext ctx{image, reinterpret_cast<std::uintptr_t>(image.base), build,
 	                  config};
 
-	Trace("RemoveUselessChecks");
-	ApplyUselessChecks(ctx);
+	// RemoveUselessChecks' RVA tables run before every scan: the original applies
+	// them early too, and two later signatures only stay broken because these
+	// bytes are already NOPs when those arms scan (tests/dump_main.cpp guards the
+	// order).
+	Trace("RemoveUselessChecks tables");
+	if (ctx.Option("RemoveUselessChecks", "0"))
+		ApplyUselessCheckTables(ctx.build, ctx.image);
 
 	// Publish every slot before any arm writes a site: a site write can
 	// overwrite the signature a later arm's slot publish scans for.
@@ -9595,47 +9581,12 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			injector::WriteMemory<std::uint8_t>(match + 6, 0xEBu, true); //jmp
 		}
 	}
-	Trace("RemoveUselessChecks");
-	// RemoveUselessChecks: 14 literals, 9 rvas
+	// RemoveUselessChecks' singles: the original applies them with the tables,
+	// the port currently keeps them at this later point. Byte-neutral (the audit
+	// proved no arm scans or writes a single) and re-proved by the dump.
+	Trace("RemoveUselessChecks singles");
 	if (ctx.Option("RemoveUselessChecks", "0"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (ctx.build == GameBuild::v1040)
-		{
-			injector::MakeNOP(image.base + 0x46CCE7, 38, true); //nop
-			injector::MakeNOP(image.base + 0x46CE67, 38, true); //nop
-		}
-
-		if (ctx.build == GameBuild::v1070)
-		{
-			injector::MakeNOP(image.base + 0x3DA1B7, 38, true); //nop
-			injector::MakeNOP(image.base + 0x3DA337, 38, true); //nop
-		}
-
-		if (ctx.build == GameBuild::v1080)
-		{
-			injector::MakeNOP(image.base + 0x559127, 38, true); //nop
-			injector::MakeNOP(image.base + 0x5592A7, 38, true); //nop
-			injector::MakeNOP(image.base + 0x559CC0, 9, true); //nop
-			injector::MakeNOP(image.base + 0x55EB83, 13, true); //nop
-			injector::MakeNOP(image.base + 0x77027A, 9, true); //nop
-			injector::WriteMemory<std::uint8_t>(image.base + 0x559598, 0xEBu, true); //jmp
-			injector::WriteMemory<std::uint8_t>(image.base + 0x62555D, 0xEBu, true); //jmp
-			injector::MakeNOP(image.base + 0x5594B7, 2, true); //nop
-			injector::MakeNOP(image.base + 0x559013, 6, true); //nop
-			injector::MakeNOP(image.base + 0x55EADF, 6, true); //nop
-			injector::MakeNOP(image.base + 0x55F5BD, 6, true); //nop
-			injector::MakeNOP(image.base + 0x55FC2E, 6, true); //nop
-			injector::MakeNOP(image.base + 0x5594A2, 7, true); //nop
-			injector::MakeNOP(image.base + 0x5594CA, 7, true); //nop
-			injector::MakeNOP(image.base + 0x559591, 7, true); //nop
-			injector::MakeNOP(image.base + 0x55EACA, 7, true); //nop
-			injector::MakeNOP(image.base + 0x55F5B5, 7, true); //nop
-			injector::MakeNOP(image.base + 0x55FC21, 7, true); //nop
-			injector::MakeNOP(image.base + 0x625556, 7, true); //nop
-		}
-	}
+		ApplyUselessCheckSingles(ctx.build, ctx.image);
 	Trace("ReversingLightFix");
 	// ReversingLightFix: 1 literal
 	if (ctx.Option("ReversingLightFix", "1"))

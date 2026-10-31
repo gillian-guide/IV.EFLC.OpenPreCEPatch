@@ -17,8 +17,8 @@
 
 #include "common.h"
 
-#include "patch_data.h"
 #include "patches.h"
+#include "useless_checks.h"
 #include "xlive/xliveless.h"
 
 namespace
@@ -213,8 +213,61 @@ int Run()
 	CHECK(zpatch_ooc_selftest());
 
 	// ---- tables ------------------------------------------------------------
-	// The install rows are code now, not data; only the NOP list stayed a table.
-	CHECK(kUselessCheckCount == 7489u);
+	// RemoveUselessChecks is five RVA arrays + 23 singles now. Drive both write
+	// phases over a blank image and compare with the expanded 7,489-row table it
+	// replaced: same positions, same bytes, nothing on the other builds. The
+	// hash is FNV-1a 64 over (rva LE32, byte) for every changed position in
+	// ascending RVA order.
+	{
+		struct Expected
+		{
+			GameBuild build;
+			std::size_t positions;
+			std::uint64_t hash;
+		};
+		const Expected expected[] = {
+		    {GameBuild::v1040, 12406u, 0xCDD7889E5733E709ull},
+		    {GameBuild::v1070, 11516u, 0x34C4403380C387CAull},
+		    {GameBuild::v1080, 11839u, 0x4220A6D0FAD4C6C9ull},
+		};
+		for (const Expected& want : expected)
+		{
+			std::vector<std::uint8_t> buffer(0x1000000u, 0); // above the largest RVA
+			const GameImage image{buffer.data(), buffer.size()};
+			ApplyUselessCheckTables(want.build, image);
+			ApplyUselessCheckSingles(want.build, image);
+
+			std::size_t positions = 0;
+			std::uint64_t hash = 0xcbf29ce484222325ull;
+			for (std::size_t i = 0; i < buffer.size(); ++i)
+			{
+				if (buffer[i] == 0)
+					continue;
+				++positions;
+				const auto rva = static_cast<std::uint32_t>(i);
+				for (unsigned shift = 0; shift < 32; shift += 8)
+					hash = (hash ^ ((rva >> shift) & 0xFFu)) * 0x100000001b3ull;
+				hash = (hash ^ buffer[i]) * 0x100000001b3ull;
+			}
+			CHECK(positions == want.positions);
+			CHECK(hash == want.hash);
+		}
+
+		const GameBuild other[] = {
+		    GameBuild::unknown, GameBuild::v1000, GameBuild::v1004, GameBuild::v1060,
+		    GameBuild::v1061,  GameBuild::v1100, GameBuild::v1110, GameBuild::v1120,
+		    GameBuild::v1130,  GameBuild::v12043,
+		};
+		for (GameBuild build : other)
+		{
+			std::vector<std::uint8_t> buffer(0x1000000u, 0);
+			const GameImage image{buffer.data(), buffer.size()};
+			ApplyUselessCheckTables(build, image);
+			ApplyUselessCheckSingles(build, image);
+			for (std::uint8_t byte : buffer)
+				CHECK(byte == 0);
+		}
+	}
 
 	// ---- game hash and build classification --------------------------------
 	CHECK(GameHash("police") == 0x79fbb0c5u);

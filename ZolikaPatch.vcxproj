@@ -117,9 +117,10 @@
     <ClInclude Include="src\driveby_seh.h" />
     <ClInclude Include="src\hooks.h" />
     <ClInclude Include="src\ooc_payload.h" />
-    <ClInclude Include="src\patch_data.h" />
     <ClInclude Include="src\patches.h" />
     <ClInclude Include="src\rebased.h" />
+    <ClInclude Include="src\useless_checks.h" />
+    <ClInclude Include="src\useless_checks_data.inc" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\dllmain.cpp" />
@@ -127,7 +128,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="src\catalogue_data.cpp" />
-    <ClCompile Include="src\patch_data.cpp" />
+    <ClCompile Include="src\useless_checks.cpp" />
     <ClCompile Include="src\xlive\xliveless.cpp" />
     <ClCompile Include="src\pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>

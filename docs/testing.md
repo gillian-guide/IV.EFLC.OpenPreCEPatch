@@ -3,7 +3,9 @@
 The native suite needs no game files. It covers the parts of the loader that can
 be checked offline:
 
-- the RemoveUselessChecks row count (7,489);
+- RemoveUselessChecks' write set (the compact tables + singles reproduce the
+  expanded 7,489-row list: 12,406 / 11,516 / 11,839 byte positions on builds
+  5 / 8 / 9, nothing on any other build) and the generated data file's hashes;
 - the model hash (including `hash:` input, case folding and slash folding);
 - build classification and the per-block build gates (the original's head
   compares, its LaunchWithPlayGTAIV switch and the per-build RVA rows);

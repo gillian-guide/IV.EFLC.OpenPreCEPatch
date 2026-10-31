@@ -86,7 +86,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="src\catalogue_data.cpp" />
-    <ClCompile Include="src\patch_data.cpp" />
+    <ClCompile Include="src\useless_checks.cpp" />
     <ClCompile Include="src\xlive\xliveless.cpp" />
     <ClCompile Include="src\pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>

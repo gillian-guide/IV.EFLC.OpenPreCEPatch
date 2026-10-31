@@ -32,7 +32,7 @@ endforeach()
 set(ZP_SOURCES
   ${ZP_EXT_PATTERNS}/Hooking.Patterns.cpp
   src/catalogue_data.cpp
-  src/patch_data.cpp
+  src/useless_checks.cpp
   src/xlive/xliveless.cpp
 )
 
@@ -81,7 +81,7 @@ if(ZP_BUILD_DUMP)
   endif()
   add_executable(zp_dump tests/dump_main.cpp tests/stub_bodies.cpp
                  ${ZP_EXT_PATTERNS}/Hooking.Patterns.cpp src/catalogue_data.cpp src/dllmain.cpp
-                 src/patch_data.cpp)
+                 src/useless_checks.cpp)
   target_link_libraries(zp_dump PRIVATE version user32 shlwapi psapi)
   target_compile_features(zp_dump PRIVATE cxx_std_17)
   # /MAP is a development aid; ASLR stays on, because a fixed base would make the
@@ -114,6 +114,15 @@ if(ZP_BUILD_TESTS)
   # executable must not occupy it.
   target_link_options(zp_tests PRIVATE /BASE:0x60000000)
   add_test(NAME zp_tests COMMAND zp_tests)
+  # The RemoveUselessChecks data file is generated from the shipped ASI; this
+  # checks the per-array hashes recorded in its provenance header without needing
+  # the ASI present (--verify re-extracts when it is).
+  find_package(Python3 COMPONENTS Interpreter QUIET)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME zp_useless_checks_data
+             COMMAND ${Python3_EXECUTABLE}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tools/extract_useless_checks.py --print-sha)
+  endif()
 endif()
 
 # Runtime State driver (Gate 3): maps game_refs/GTAIV.exe, runs the same

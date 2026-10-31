@@ -1,0 +1,211 @@
+{
+  "source": "game_refs/ZolikaPatch_original.asi.off",
+  "source_sha256": "720fbcebfd563616151560020eea12168115a9183d6813b432b0367d2b702fc5",
+  "image_base": "0x10000000",
+  "generator": "tools/extract_useless_checks.py",
+  "arrays": [
+    {
+      "name": "kUselessBuild9Nop5",
+      "build": 9,
+      "va": "0x10104090",
+      "count": 2230,
+      "shape": "NOP5",
+      "sha256": "e92eb0c352daee36f255a52d946f99de43d6a9a3dd584be2af54b496c035373e"
+    },
+    {
+      "name": "kUselessBuild9MovAl1",
+      "build": 9,
+      "va": "0x10106448",
+      "count": 45,
+      "shape": "MOV_AL_1",
+      "sha256": "9844fbfa3318acaa07080a9585893d32768f45cac4743e3a593fe9112f65af68"
+    },
+    {
+      "name": "kUselessBuild9XorAlAl",
+      "build": 9,
+      "va": "0x10106368",
+      "count": 56,
+      "shape": "XOR_AL_AL",
+      "sha256": "aa7f4bfd10d299ec10a1e286fb3a49110b833afd0b099ce5accbd7a290414221"
+    },
+    {
+      "name": "kUselessBuild8Nop5",
+      "build": 8,
+      "va": "0x10108b88",
+      "count": 2288,
+      "shape": "NOP5",
+      "sha256": "33b5a773610baf43e0f7599b2c4526b929a089274087441b924c1f8aaa558c3e"
+    },
+    {
+      "name": "kUselessBuild5Nop5",
+      "build": 5,
+      "va": "0x10106500",
+      "count": 2466,
+      "shape": "NOP5",
+      "sha256": "a7c1e7341541b0a11f2220e2519d445ada66c3dfed46350186e14a6a0d2f12cb"
+    }
+  ],
+  "singles": [
+    {
+      "build": 9,
+      "rva": "0x559127",
+      "length": 38,
+      "byte": "0x90",
+      "handler_va": "0x10044c05"
+    },
+    {
+      "build": 9,
+      "rva": "0x5592a7",
+      "length": 38,
+      "byte": "0x90",
+      "handler_va": "0x10044c43"
+    },
+    {
+      "build": 9,
+      "rva": "0x559013",
+      "length": 6,
+      "byte": "0x90",
+      "handler_va": "0x10044c81"
+    },
+    {
+      "build": 9,
+      "rva": "0x55f5b5",
+      "length": 7,
+      "byte": "0x90",
+      "handler_va": "0x10044caf"
+    },
+    {
+      "build": 9,
+      "rva": "0x55f5bd",
+      "length": 6,
+      "byte": "0x90",
+      "handler_va": "0x10044cde"
+    },
+    {
+      "build": 9,
+      "rva": "0x55fc21",
+      "length": 7,
+      "byte": "0x90",
+      "handler_va": "0x10044d0e"
+    },
+    {
+      "build": 9,
+      "rva": "0x55fc2e",
+      "length": 6,
+      "byte": "0x90",
+      "handler_va": "0x10044d3f"
+    },
+    {
+      "build": 9,
+      "rva": "0x55eaca",
+      "length": 7,
+      "byte": "0x90",
+      "handler_va": "0x10044d6d"
+    },
+    {
+      "build": 9,
+      "rva": "0x55eadf",
+      "length": 6,
+      "byte": "0x90",
+      "handler_va": "0x10044d9e"
+    },
+    {
+      "build": 9,
+      "rva": "0x55eb83",
+      "length": 13,
+      "byte": "0x90",
+      "handler_va": "0x10044dc4"
+    },
+    {
+      "build": 9,
+      "rva": "0x5594ca",
+      "length": 7,
+      "byte": "0x90",
+      "handler_va": "0x10044e07"
+    },
+    {
+      "build": 9,
+      "rva": "0x5594a2",
+      "length": 7,
+      "byte": "0x90",
+      "handler_va": "0x10044e38"
+    },
+    {
+      "build": 9,
+      "rva": "0x5594b7",
+      "length": 2,
+      "byte": "0x90",
+      "handler_va": "0x10044e69"
+    },
+    {
+      "build": 9,
+      "rva": "0x559cc0",
+      "length": 9,
+      "byte": "0x90",
+      "handler_va": "0x10044e92"
+    },
+    {
+      "build": 9,
+      "rva": "0x77027a",
+      "length": 9,
+      "byte": "0x90",
+      "handler_va": "0x10044ec8"
+    },
+    {
+      "build": 9,
+      "rva": "0x559591",
+      "length": 7,
+      "byte": "0x90",
+      "handler_va": "0x10044efc"
+    },
+    {
+      "build": 9,
+      "rva": "0x559598",
+      "length": 1,
+      "byte": "0xeb",
+      "handler_va": "0x10044f2d"
+    },
+    {
+      "build": 9,
+      "rva": "0x625556",
+      "length": 7,
+      "byte": "0x90",
+      "handler_va": "0x10044f53"
+    },
+    {
+      "build": 9,
+      "rva": "0x62555d",
+      "length": 1,
+      "byte": "0xeb",
+      "handler_va": "0x10044f82"
+    },
+    {
+      "build": 8,
+      "rva": "0x3da1b7",
+      "length": 38,
+      "byte": "0x90",
+      "handler_va": "0x100451b3"
+    },
+    {
+      "build": 8,
+      "rva": "0x3da337",
+      "length": 38,
+      "byte": "0x90",
+      "handler_va": "0x100451f1"
+    },
+    {
+      "build": 5,
+      "rva": "0x46cce7",
+      "length": 38,
+      "byte": "0x90",
+      "handler_va": "0x10045284"
+    },
+    {
+      "build": 5,
+      "rva": "0x46ce67",
+      "length": 38,
+      "byte": "0x90",
+      "handler_va": "0x100452c2"
+    }
+  ]
+}

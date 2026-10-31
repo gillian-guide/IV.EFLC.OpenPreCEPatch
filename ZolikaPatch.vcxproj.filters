@@ -51,13 +51,16 @@
     <ClInclude Include="src\ooc_payload.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\patch_data.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\patches.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\rebased.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\useless_checks.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\useless_checks_data.inc">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\xlive\xliveless.h">
@@ -98,7 +101,7 @@
     <ClCompile Include="src\catalogue_data.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\patch_data.cpp">
+    <ClCompile Include="src\useless_checks.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\xlive\xliveless.cpp">
