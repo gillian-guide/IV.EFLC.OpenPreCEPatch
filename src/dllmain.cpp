@@ -8975,16 +8975,35 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 	{
 		const GameImage& image = ctx.image;
 
+		// The original wrote these four slots by RVA (0x021500/0x7D91AE on 1.0.7.0,
+		// 0x095040/0x684ABE on 1.0.8.0). The recovered signatures are unique on
+		// every gated build (research 08), so scan instead: same site, same bytes.
 		if (ctx.build == GameBuild::v1070)
 		{
-			injector::WriteMemory<std::uint32_t>(image.base + 0x021500, AddressOf(&zpatch_episode_flag), true); //patch
-			injector::WriteMemory<std::uint32_t>(image.base + 0x7D91AE, AddressOf(&zpatch_episode_flag), true); //patch
+			if (auto pattern = Pattern(image, "44 80 0F ?? 02 75 ?? E8 ?? ?? ?? ?? 3B C3 74 ?? 8D"); pattern.size() > 0)
+			{
+				injector::WriteMemory<std::uint32_t>(pattern.get(0).get<std::uint8_t>(),
+				                                     AddressOf(&zpatch_episode_flag), true); //patch
+			}
+			if (auto pattern = Pattern(image, "44 80 0F ?? 02 0F 85 94 00 ?? ?? ?? ?? 24 ?? 85 D2 0F 84 ?? ?? ?? ?? 8B"); pattern.size() > 0)
+			{
+				injector::WriteMemory<std::uint32_t>(pattern.get(0).get<std::uint8_t>(),
+				                                     AddressOf(&zpatch_episode_flag), true); //patch
+			}
 		}
 
 		if (ctx.build == GameBuild::v1080)
 		{
-			injector::WriteMemory<std::uint32_t>(image.base + 0x095040, AddressOf(&zpatch_episode_flag), true); //patch
-			injector::WriteMemory<std::uint32_t>(image.base + 0x684ABE, AddressOf(&zpatch_episode_flag), true); //patch
+			if (auto pattern = Pattern(image, "54 D7 12 01 02 75 ?? E8 ?? ?? ?? ?? 3B C3 74 ?? 8D"); pattern.size() > 0)
+			{
+				injector::WriteMemory<std::uint32_t>(pattern.get(0).get<std::uint8_t>(),
+				                                     AddressOf(&zpatch_episode_flag), true); //patch
+			}
+			if (auto pattern = Pattern(image, "54 D7 12 01 02 0F 85 94 00 ?? ?? ?? ?? 24 ?? 85 D2 0F 84 ?? ?? ?? ?? 8B"); pattern.size() > 0)
+			{
+				injector::WriteMemory<std::uint32_t>(pattern.get(0).get<std::uint8_t>(),
+				                                     AddressOf(&zpatch_episode_flag), true); //patch
+			}
 		}
 
 		if (BuildIs(ctx.build,
@@ -10147,16 +10166,25 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 	{
 		const GameImage& image = ctx.image;
 
+		// The original jumped at 0x4A3CE9 (1.0.7.0) / 0x540E19 (1.0.8.0). The
+		// recovered signature is the same on both and unique per gated build
+		// (research 08), so scan inside the gate instead of naming the RVA.
 		if (ctx.build == GameBuild::v1070)
 		{
-			injector::MakeJMP(image.base + 0x4A3CE9,
-				reinterpret_cast<void*>(&abi_super_lod_fix_shim), true); //jmp
+			if (auto pattern = Pattern(image, "F6 40 ?? ?? 74 ?? 85 ED 0F 85 ?? ?? ?? ?? 55 6A ?? E8 ?? ?? ?? ?? 8B F8"); pattern.size() > 0)
+			{
+				injector::MakeJMP(pattern.get(0).get<std::uint8_t>(),
+				                  reinterpret_cast<void*>(&abi_super_lod_fix_shim), true); //jmp
+			}
 		}
 
 		if (ctx.build == GameBuild::v1080)
 		{
-			injector::MakeJMP(image.base + 0x540E19,
-				reinterpret_cast<void*>(&abi_super_lod_fix_shim), true); //jmp
+			if (auto pattern = Pattern(image, "F6 40 ?? ?? 74 ?? 85 ED 0F 85 ?? ?? ?? ?? 55 6A ?? E8 ?? ?? ?? ?? 8B F8"); pattern.size() > 0)
+			{
+				injector::MakeJMP(pattern.get(0).get<std::uint8_t>(),
+				                  reinterpret_cast<void*>(&abi_super_lod_fix_shim), true); //jmp
+			}
 		}
 	}
 	Trace("DrivebyFOVFix");
