@@ -145,21 +145,38 @@ namespace opp::features
 
         TraceArm("EpisodicVehicleSupport");
 
-        // EpisodicVehicleSupport: 23 literals, 4 rvas, 4 sigwrites
+        // EpisodicVehicleSupport: 23 literals, 4 sigwrites. The four pointer
+        // stores point at the episode flag; each site was a per-build RVA
+        // (0x021500/0x7D91AE on 1.0.7.0, 0x095040/0x684ABE on 1.0.8.0) and is
+        // now the pre-store instruction sequence at the site. The build gates
+        // stay: each signature also resolves on other builds, where the original
+        // did not install this option.
         if (ctx.Option("EpisodicVehicleSupport", "1"))
         {
             const GameImage& image = ctx.image;
 
+            const auto storeEpisodeFlag = [&ctx](hook::pattern& pattern) {
+                if (pattern.size() > 0)
+                {
+                    WriteValue<uint32_t>(ctx, pattern.get(0).get<uint8_t>(),
+                                         AddressOf(&zpatch_episode_flag));
+                }
+            };
+
             if (ctx.build == GameBuild::v1070)
             {
-                WriteValue<uint32_t>(ctx, image.base + 0x021500, AddressOf(&zpatch_episode_flag));
-                WriteValue<uint32_t>(ctx, image.base + 0x7D91AE, AddressOf(&zpatch_episode_flag));
+                if (auto pattern = Pattern(image, "44 80 0F ?? 02 75 ?? E8 ?? ?? ?? ?? 3B C3 74 ?? 8D"); pattern.size() > 0)
+                    storeEpisodeFlag(pattern);
+                if (auto pattern = Pattern(image, "44 80 0F ?? 02 0F 85 94 00 ?? ?? ?? ?? 24 ?? 85 D2 0F 84 ?? ?? ?? ?? 8B"); pattern.size() > 0)
+                    storeEpisodeFlag(pattern);
             }
 
             if (ctx.build == GameBuild::v1080)
             {
-                WriteValue<uint32_t>(ctx, image.base + 0x095040, AddressOf(&zpatch_episode_flag));
-                WriteValue<uint32_t>(ctx, image.base + 0x684ABE, AddressOf(&zpatch_episode_flag));
+                if (auto pattern = Pattern(image, "54 D7 12 01 02 75 ?? E8 ?? ?? ?? ?? 3B C3 74 ?? 8D"); pattern.size() > 0)
+                    storeEpisodeFlag(pattern);
+                if (auto pattern = Pattern(image, "54 D7 12 01 02 0F 85 94 00 ?? ?? ?? ?? 24 ?? 85 D2 0F 84 ?? ?? ?? ?? 8B"); pattern.size() > 0)
+                    storeEpisodeFlag(pattern);
             }
 
             if (BuildIs(ctx.build,

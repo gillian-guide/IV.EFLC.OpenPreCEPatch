@@ -117,39 +117,95 @@ namespace opp::features
 
         const GameImage& image = ctx.image;
 
-        // Patch 6 (1060) modded-file checks.
+        // The recovered handler wrote per-build RVAs. Each site is now the
+        // pre-write instruction window at that RVA (research 08 §3.2), so a build
+        // whose bytes do not match installs nothing instead of writing a stale
+        // address. The build gate stays because several windows also resolve on
+        // builds the original did not patch here.
+        //
+        // Every site is matched before the first write: the seven adjacent
+        // one-byte NOPs live inside each other's windows, so a scan after a write
+        // would silently lose the neighbours (the double-scan defect).
+        // The modded-file check instruction run carries seven one-byte stores.
+        constexpr size_t kModCheckNopCount = 7;
+        const auto findSite = [&image](const char* signature) -> uint8_t* {
+            auto pattern = Pattern(image, signature);
+            return pattern.size() > 0 ? pattern.get(0).get<uint8_t>() : nullptr;
+        };
+
+        // Patch 6 (1060) modded-file checks: one jump over the check, two flag
+        // bytes cleared, seven operand bytes NOPed, two short jumps forced.
         if (ctx.build == GameBuild::v1060)
         {
-            JumpTo(ctx, image.base + 0x003982, reinterpret_cast<void*>(ctx.gameBase + 0x003A09));
-            WriteValue<uint8_t>(ctx, image.base + 0x0038AC, 0x00u);
-            WriteValue<uint8_t>(ctx, image.base + 0x00397E, 0x00u);
-            NopAt(ctx, image.base + 0x0042E7, 1);
-            NopAt(ctx, image.base + 0x0042E8, 1);
-            NopAt(ctx, image.base + 0x0042E9, 1);
-            NopAt(ctx, image.base + 0x0042EA, 1);
-            NopAt(ctx, image.base + 0x0042EB, 1);
-            NopAt(ctx, image.base + 0x0042EC, 1);
-            NopAt(ctx, image.base + 0x0042ED, 1);
-            WriteValue<uint8_t>(ctx, image.base + 0x00392E, 0xEBu);
-            WriteValue<uint8_t>(ctx, image.base + 0x003A14, 0xEBu);
+            uint8_t* const jumpOverCheck =
+                findSite("75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8");
+            uint8_t* const clearA =
+                findSite("01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74");
+            uint8_t* const clearB =
+                findSite("01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8");
+            // The seven NOPs are consecutive bytes of one instruction run; the
+            // first byte is the anchor and the run is match+0..match+6.
+            uint8_t* const nopRun =
+                findSite("C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8");
+            uint8_t* const shortJumpA =
+                findSite("74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? 83 C4 ?? 68");
+            uint8_t* const shortJumpB =
+                findSite("74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F");
+
+            if (jumpOverCheck != nullptr)
+                JumpTo(ctx, jumpOverCheck, jumpOverCheck + 0x87);
+            if (clearA != nullptr)
+                WriteValue<uint8_t>(ctx, clearA, 0x00u);
+            if (clearB != nullptr)
+                WriteValue<uint8_t>(ctx, clearB, 0x00u);
+            if (nopRun != nullptr)
+            {
+                for (size_t i = 0; i < kModCheckNopCount; ++i)
+                    NopAt(ctx, nopRun + i, 1);
+            }
+            if (shortJumpA != nullptr)
+                WriteValue<uint8_t>(ctx, shortJumpA, 0xEBu);
+            if (shortJumpB != nullptr)
+                WriteValue<uint8_t>(ctx, shortJumpB, 0xEBu);
         }
 
-        // Patch 7 (1070) modded-file checks.
+        // Patch 7 (1070) modded-file checks: the same shape with two jumps, and
+        // its own RVAs/signatures.
         if (ctx.build == GameBuild::v1070)
         {
-            JumpTo(ctx, image.base + 0x00389C, reinterpret_cast<void*>(ctx.gameBase + 0x0038AE));
-            JumpTo(ctx, image.base + 0x003962, reinterpret_cast<void*>(ctx.gameBase + 0x0039E9));
-            WriteValue<uint8_t>(ctx, image.base + 0x00388C, 0x00u);
-            WriteValue<uint8_t>(ctx, image.base + 0x00395E, 0x00u);
-            NopAt(ctx, image.base + 0x0042C7, 1);
-            NopAt(ctx, image.base + 0x0042C8, 1);
-            NopAt(ctx, image.base + 0x0042C9, 1);
-            NopAt(ctx, image.base + 0x0042CA, 1);
-            NopAt(ctx, image.base + 0x0042CB, 1);
-            NopAt(ctx, image.base + 0x0042CC, 1);
-            NopAt(ctx, image.base + 0x0042CD, 1);
-            WriteValue<uint8_t>(ctx, image.base + 0x00390E, 0xEBu);
-            WriteValue<uint8_t>(ctx, image.base + 0x0039F4, 0xEBu);
+            uint8_t* const jumpOverCheckA =
+                findSite("75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D");
+            uint8_t* const jumpOverCheckB =
+                findSite("75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8");
+            uint8_t* const clearA =
+                findSite("01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74");
+            uint8_t* const clearB =
+                findSite("01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8");
+            // Same run shape as 1.0.6.0, one build-earlier RVA.
+            uint8_t* const nopRun =
+                findSite("C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8");
+            uint8_t* const shortJumpA =
+                findSite("74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? ?? ?? ?? 68");
+            uint8_t* const shortJumpB =
+                findSite("74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F");
+
+            if (jumpOverCheckA != nullptr)
+                JumpTo(ctx, jumpOverCheckA, jumpOverCheckA + 0x12);
+            if (jumpOverCheckB != nullptr)
+                JumpTo(ctx, jumpOverCheckB, jumpOverCheckB + 0x87);
+            if (clearA != nullptr)
+                WriteValue<uint8_t>(ctx, clearA, 0x00u);
+            if (clearB != nullptr)
+                WriteValue<uint8_t>(ctx, clearB, 0x00u);
+            if (nopRun != nullptr)
+            {
+                for (size_t i = 0; i < kModCheckNopCount; ++i)
+                    NopAt(ctx, nopRun + i, 1);
+            }
+            if (shortJumpA != nullptr)
+                WriteValue<uint8_t>(ctx, shortJumpA, 0xEBu);
+            if (shortJumpB != nullptr)
+                WriteValue<uint8_t>(ctx, shortJumpB, 0xEBu);
         }
     }
 
@@ -176,7 +232,13 @@ namespace opp::features
             }
             else if (ctx.build == GameBuild::v1080)
             {
-                JumpToBody(ctx, image.base + 0x498460, "abi_rgsc_login_removed");
+                // The 1.0.8.0 site (RVA 0x498460) has its own instruction
+                // sequence; scanning it keeps the same fail-safe (a build that
+                // does not match installs nothing) instead of writing a bare RVA.
+                if (auto fallback = Pattern(image, "8B 44 24 ?? 85 C0 74 ?? F3 0F 7E 05 ?? ?? ?? ?? 66 0F D6 ?? ?? 8B 0D"); fallback.size() > 0)
+                {
+                    JumpToBody(ctx, fallback.get(0).get<uint8_t>(), "abi_rgsc_login_removed");
+                }
             }
         }
 

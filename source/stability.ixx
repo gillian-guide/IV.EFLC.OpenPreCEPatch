@@ -915,19 +915,19 @@ namespace opp::features
 
         TraceArm("SuperLODFix");
 
-        // SuperLODFix: 2 rvajumps
-        if (ctx.Option("SuperLODFix", "1"))
+        // SuperLODFix: 1 sigjump. The recovered handler writes the same site on
+        // 1.0.7.0 (RVA 0x4A3CE9) and 1.0.8.0 (RVA 0x540E19); the scan is the
+        // instruction pair at the site and resolves on both, so the RVA table is
+        // gone. The build gate stays: the same bytes exist on other builds and
+        // the original only installed it on these two.
+        if (ctx.Option("SuperLODFix", "1") &&
+            BuildIs(ctx.build, {GameBuild::v1070, GameBuild::v1080}))
         {
             const GameImage& image = ctx.image;
 
-            if (ctx.build == GameBuild::v1070)
+            if (auto pattern = Pattern(image, "F6 40 ?? ?? 74 ?? 85 ED 0F 85 ?? ?? ?? ?? 55 6A ?? E8 ?? ?? ?? ?? 8B F8"); pattern.size() > 0)
             {
-                JumpToBody(ctx, image.base + 0x4A3CE9, "abi_super_lod_fix_shim");
-            }
-
-            if (ctx.build == GameBuild::v1080)
-            {
-                JumpToBody(ctx, image.base + 0x540E19, "abi_super_lod_fix_shim");
+                JumpToBody(ctx, pattern.get(0).get<uint8_t>(), "abi_super_lod_fix_shim");
             }
         }
 

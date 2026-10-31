@@ -31,28 +31,51 @@ namespace opp::features
 
         TraceArm("publish LoadDLCs");
 
-        // LoadDLCs: 9 rvas
+        // LoadDLCs. The loader callback the struct-fixup body calls sits 0x8C
+        // bytes past the fixup site on every gated build (0x4144D4+0x8C on
+        // 1.0.6.0, 0x414274+0x8C on 1.0.7.0, 0x4903D4+0x8C on 1.0.8.0), so the
+        // publish scans the same instruction window the install does instead of
+        // carrying three RVAs.
+        //
+        // The two helpers the discovery loop calls (DlcRegisterRva/DlcApplyRva)
+        // are separate functions; their per-build RVAs are recovered data and no
+        // unique prologue has been verified for them yet.
         if (ctx.Option("LoadDLCs", "1"))
         {
+            // Distance from the struct-fixup site to the loader callback entry.
+            constexpr uintptr_t kDlcCallbackDelta = 0x8C;
+            const GameImage& image = ctx.image;
+
+            const auto publishCallback = [&ctx](hook::pattern& pattern) {
+                if (pattern.size() == 0)
+                    return;
+                zpatch_dlc_load_callback = static_cast<uint32_t>(
+                    reinterpret_cast<uintptr_t>(pattern.get(0).get<uint8_t>()) +
+                    kDlcCallbackDelta);
+            };
+
             if (ctx.build == GameBuild::v1060)
             {
-                zpatch_dlc_load_callback = static_cast<uint32_t>(ctx.gameBase + 0x414560);
-                DlcRegisterRva() = 0x004136E0u;
-                DlcApplyRva() = 0x00414080u;
+                if (auto pattern = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8"); pattern.size() > 0)
+                    publishCallback(pattern);
+                DlcRegisterRva() = 0x004136E0u;  // 1.0.6.0 register helper
+                DlcApplyRva() = 0x00414080u;     // 1.0.6.0 apply helper
             }
 
             if (ctx.build == GameBuild::v1070)
             {
-                zpatch_dlc_load_callback = static_cast<uint32_t>(ctx.gameBase + 0x414300);
-                DlcRegisterRva() = 0x00413480u;
-                DlcApplyRva() = 0x00413E20u;
+                if (auto pattern = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E 5B"); pattern.size() > 0)
+                    publishCallback(pattern);
+                DlcRegisterRva() = 0x00413480u;  // 1.0.7.0 register helper
+                DlcApplyRva() = 0x00413E20u;     // 1.0.7.0 apply helper
             }
 
             if (ctx.build == GameBuild::v1080)
             {
-                zpatch_dlc_load_callback = static_cast<uint32_t>(ctx.gameBase + 0x490460);
-                DlcApplyRva() = 0x0048FE00u;
-                DlcRegisterRva() = 0x0048F440u;
+                if (auto pattern = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6"); pattern.size() > 0)
+                    publishCallback(pattern);
+                DlcRegisterRva() = 0x0048F440u;  // 1.0.8.0 register helper
+                DlcApplyRva() = 0x0048FE00u;     // 1.0.8.0 apply helper
             }
         }
 
@@ -66,39 +89,86 @@ namespace opp::features
 
         TraceArm("LoadDLCs");
 
-        // LoadDLCs: 18 rvas, 6 rvajumps
+        // LoadDLCs: 6 sites per build, each the pre-write instruction window at
+        // the recovered RVA. The three destination deltas are recovered facts and
+        // are the same on both 1.0.6.0/1.0.7.0 (jump +0x5C, jump +0x1E, call
+        // -0x70A); 1.0.8.0's helper call is at -0x88A. Keeping them relative to
+        // the match is what lets the sites be scans.
+        //
+        // Order: the call site is written before the twelve-byte NOP after it,
+        // because the call's window contains the NOP'd bytes. Later blocks keep
+        // the original statement order for the same reason.
         if (ctx.Option("LoadDLCs", "1"))
         {
             const GameImage& image = ctx.image;
 
-            if (ctx.build == GameBuild::v1060)
-            {
-                CallToBody(ctx, image.base + 0x4137CD, "abi_load_dlcs_dummy");
-                JumpTo(ctx, image.base + 0x41445C, reinterpret_cast<void*>(ctx.gameBase + 0x4144B8));
-                JumpToBody(ctx, image.base + 0x4144D4, "abi_load_dlcs_struct_fixup");
-                JumpTo(ctx, image.base + 0x41450E, reinterpret_cast<void*>(ctx.gameBase + 0x41452C));
-                CallTo(ctx, image.base + 0x41453A, reinterpret_cast<void*>(ctx.gameBase + 0x413E30));
-                NopAt(ctx, image.base + 0x41453F, 12);
-            }
+            const auto findSite = [&image](const char* signature) -> uint8_t* {
+                auto pattern = Pattern(image, signature);
+                return pattern.size() > 0 ? pattern.get(0).get<uint8_t>() : nullptr;
+            };
 
-            if (ctx.build == GameBuild::v1070)
+            // The two jumps and the trailing NOP share their shape on 1.0.6.0
+            // and 1.0.7.0, so the block is written once per build with the
+            // build's own windows.
+            if (ctx.build == GameBuild::v1060 || ctx.build == GameBuild::v1070)
             {
-                CallToBody(ctx, image.base + 0x41356D, "abi_load_dlcs_dummy");
-                JumpTo(ctx, image.base + 0x4141FC, reinterpret_cast<void*>(ctx.gameBase + 0x414258));
-                JumpToBody(ctx, image.base + 0x414274, "abi_load_dlcs_struct_fixup");
-                JumpTo(ctx, image.base + 0x4142AE, reinterpret_cast<void*>(ctx.gameBase + 0x4142CC));
-                CallTo(ctx, image.base + 0x4142DA, reinterpret_cast<void*>(ctx.gameBase + 0x413BD0));
-                NopAt(ctx, image.base + 0x4142DF, 12);
+                const bool first = ctx.build == GameBuild::v1060;
+
+                uint8_t* const dummyCall = findSite(
+                    "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52");
+                uint8_t* const earlyJump = findSite(
+                    "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24");
+                uint8_t* const structFixup = findSite(
+                    first ? "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8"
+                          : "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E 5B");
+                uint8_t* const skipFixupJump = findSite(
+                    "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E");
+                uint8_t* const helperCall = findSite(
+                    "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E");
+                uint8_t* const tail = findSite(
+                    "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC");
+
+                if (dummyCall != nullptr)
+                    CallToBody(ctx, dummyCall, "abi_load_dlcs_dummy");
+                if (earlyJump != nullptr)
+                    JumpTo(ctx, earlyJump, earlyJump + 0x5C);
+                if (structFixup != nullptr)
+                    JumpToBody(ctx, structFixup, "abi_load_dlcs_struct_fixup");
+                if (skipFixupJump != nullptr)
+                    JumpTo(ctx, skipFixupJump, skipFixupJump + 0x1E);
+                if (helperCall != nullptr)
+                    CallTo(ctx, helperCall, helperCall - 0x70A);
+                if (tail != nullptr)
+                    NopAt(ctx, tail, 12);
             }
 
             if (ctx.build == GameBuild::v1080)
             {
-                CallToBody(ctx, image.base + 0x48F558, "abi_load_dlcs_dummy");
-                JumpTo(ctx, image.base + 0x49035C, reinterpret_cast<void*>(ctx.gameBase + 0x4903B8));
-                JumpToBody(ctx, image.base + 0x4903D4, "abi_load_dlcs_struct_fixup");
-                JumpTo(ctx, image.base + 0x49040E, reinterpret_cast<void*>(ctx.gameBase + 0x49042C));
-                CallTo(ctx, image.base + 0x49043A, reinterpret_cast<void*>(ctx.gameBase + 0x48FBB0));
-                NopAt(ctx, image.base + 0x49043F, 12);
+                uint8_t* const dummyCall = findSite(
+                    "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 4C 24 ?? 51 8D 94 24 ?? ?? ?? ?? 52 E8");
+                uint8_t* const earlyJump = findSite(
+                    "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24");
+                uint8_t* const structFixup = findSite(
+                    "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6");
+                uint8_t* const skipFixupJump = findSite(
+                    "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E");
+                uint8_t* const helperCall = findSite(
+                    "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E");
+                uint8_t* const tail = findSite(
+                    "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC");
+
+                if (dummyCall != nullptr)
+                    CallToBody(ctx, dummyCall, "abi_load_dlcs_dummy");
+                if (earlyJump != nullptr)
+                    JumpTo(ctx, earlyJump, earlyJump + 0x5C);
+                if (structFixup != nullptr)
+                    JumpToBody(ctx, structFixup, "abi_load_dlcs_struct_fixup");
+                if (skipFixupJump != nullptr)
+                    JumpTo(ctx, skipFixupJump, skipFixupJump + 0x1E);
+                if (helperCall != nullptr)
+                    CallTo(ctx, helperCall, helperCall - 0x88A);
+                if (tail != nullptr)
+                    NopAt(ctx, tail, 12);
             }
         }
 

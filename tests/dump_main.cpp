@@ -6,11 +6,13 @@
 
 #include "common.hxx"
 #include "feature_registry.hxx"
+#include "game.hxx"
 #include "patches.hxx"
 #include "ini_import.hxx"
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -290,10 +292,13 @@ int main(int argc, char** argv)
     }
 
     const char* attributionPath = nullptr;
-    for (int i = 4; i + 1 < argc; ++i)
+    uint32_t buildOverride = 0;
+    for (int i = 4; i < argc; ++i)
     {
-        if (std::strcmp(argv[i], "--attribution") == 0)
-            attributionPath = argv[i + 1];
+        if (std::strcmp(argv[i], "--attribution") == 0 && i + 1 < argc)
+            attributionPath = argv[++i];
+        else if (std::strcmp(argv[i], "--build") == 0 && i + 1 < argc)
+            buildOverride = static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
     }
 
     std::vector<uint8_t> file_image;
@@ -350,7 +355,22 @@ int main(int argc, char** argv)
     // SkipLauncher belongs to the separate XLivelessAddon successor module; the
     // OpenPreCEPatch write set starts at the option pass.
 
-    opp::PatchGame(opp::GameBuild::v1080, opp::GameImage{image, size}, config, observer);
+    // The real ASI classifies the build from the running executable. The dump
+    // maps an image without executing it, so a cross-build write set needs the
+    // build named; --build 1060 etc. selects the same arm set the ASI would run.
+    opp::GameBuild build = opp::GameBuild::v1080;
+    if (buildOverride != 0)
+    {
+        build = opp::ClassifyGameBuild(buildOverride);
+        if (build == opp::GameBuild::unknown)
+        {
+            std::fprintf(stderr, "opcep_dump: unsupported --build %u\n", buildOverride);
+            return 7;
+        }
+        std::fprintf(stderr, "opcep_dump: build forced to %s\n", opp::GameBuildName(build));
+    }
+
+    opp::PatchGame(build, opp::GameImage{image, size}, config, observer);
 
     CanonicaliseModulePointers(attribution, pristine,
                                reinterpret_cast<uintptr_t>(image), size);
