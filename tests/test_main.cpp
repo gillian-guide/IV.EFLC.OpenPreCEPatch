@@ -8,13 +8,12 @@
 #include "common.hxx"
 #include "config.hxx"
 #include "feature_registry.hxx"
+import opp.patch;
 import opp.game;
-#include "helpers.hxx"
 #include "hooks.h"
 import opp.log;
 #include "menu.hxx"
 #include "patches.hxx"
-#include "pattern.hxx"
 #include "vehicle_lights.hxx"
 
 #include <cmath>

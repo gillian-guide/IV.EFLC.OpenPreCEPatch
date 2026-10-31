@@ -2,8 +2,9 @@
 
 #include "patches.hxx"
 
-#include "pattern.hxx"
 #include "rebased.h"
+
+import opp.patch;
 
 namespace opp
 {
@@ -15,14 +16,14 @@ namespace opp
         constexpr uint32_t kPreFn5D63COffset = 48u;
         constexpr uint32_t kPreFn59CDCOffset = 48u;
 
-        uint32_t ReadDword(const uint8_t* address)
+        uint32_t ReadU32(const uint8_t* address)
         {
             uint32_t value = 0;
             std::memcpy(&value, address, sizeof(value));
             return value;
         }
 
-        uint32_t AddressOf(const void* pointer)
+        uint32_t PointerValue(const void* pointer)
         {
             return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(pointer));
         }
@@ -53,30 +54,30 @@ namespace opp
         if (const uint8_t* hit = scan("08 0B C2 8B F0 E8"))
         {
             zpatch_driveby_resolver =
-                ReadDword(hit + kCallOperandOffset) + AddressOf(hit) + kResolverSignatureLength;
+                ReadU32(hit + kCallOperandOffset) + PointerValue(hit) + kResolverSignatureLength;
         }
 
         if (const uint8_t* hit = scan("85 F6 74 30 8B 16 8B 42 0C 8B CE FF D0 3C 02 75 23"))
-            zpatch_pre_fn_59c74 = AddressOf(hit) - kPreFn59C74Offset;
+            zpatch_pre_fn_59c74 = PointerValue(hit) - kPreFn59C74Offset;
 
         if (const uint8_t* hit =
                 scan("8B 44 24 04 89 44 24 04 66 A1 ? ? ? ? 66 85 C0 76 3E"))
-            zpatch_model_lookup = AddressOf(hit);
+            zpatch_model_lookup = PointerValue(hit);
 
         if (const uint8_t* hit = scan("85 C0 C6 44 24 0C 00 C6 44 24 0D 00 75 07"))
-            zpatch_pre_ped_array = ReadDword(hit - sizeof(uint32_t));
+            zpatch_pre_ped_array = ReadU32(hit - sizeof(uint32_t));
 
         if (const uint8_t* hit =
                 scan("56 8B F1 8B 06 8B 90 A0 00 00 00 57 FF D2 85 C0 74 1C"))
-            zpatch_pre_fn_59b88 = AddressOf(hit);
+            zpatch_pre_fn_59b88 = PointerValue(hit);
 
         if (const uint8_t* hit =
                 scan("0F 10 5E 14 F3 0F 10 66 18 F3 0F 10 4C 24 0C F3"))
-            zpatch_pre_fn_5d63c = AddressOf(hit) - kPreFn5D63COffset;
+            zpatch_pre_fn_5d63c = PointerValue(hit) - kPreFn5D63COffset;
 
         if (const uint8_t* hit =
                 scan("0F 10 16 F3 0F 10 5E 04 F3 0F 10 4C 24 0C F3 0F 10 66 08 F2 0F 5A C0"))
-            zpatch_pre_fn_59cdc = AddressOf(hit) - kPreFn59CDCOffset;
+            zpatch_pre_fn_59cdc = PointerValue(hit) - kPreFn59CDCOffset;
 
         // Build-probe signature: absent on an unknown build, so all ten hash salts
         // fall back to these values.

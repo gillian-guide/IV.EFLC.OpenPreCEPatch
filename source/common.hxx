@@ -123,5 +123,11 @@ namespace opp
         size_t size{};
     };
 
-    bool InImage(GameImage image, uintptr_t address) noexcept;
+#if defined(OPCEP_DUMP_TOOL)
+    // The dump records every module-relative address an installer emits, so the
+    // write-set baseline can canonicalise those operands. Declared in this
+    // shared header so both opp.game (rebased lookups) and opp.patch (arm
+    // writes) can call the one definition in the dump tool.
+    void RecordDumpPointer(uint32_t value);
+#endif
 } // namespace opp

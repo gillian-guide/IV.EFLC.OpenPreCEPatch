@@ -6,12 +6,12 @@
 // original destination VA. Resumes are tail-jumped, never called.
 
 #include "common.hxx"
+import opp.patch;
 import opp.game;
 #include "hooks.h"
 #include "catalogue.hxx"
 import opp.log;
 #include "opcodes.hxx"
-#include "pattern.hxx"
 #include "rebased.h"
 #include "driveby_seh.h"
 #include "data/ooc_payload.h"

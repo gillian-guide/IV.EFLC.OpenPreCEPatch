@@ -7,10 +7,9 @@
 #include "patches.hxx"
 
 #include "feature_registry.hxx"
+import opp.patch;
 import opp.game;
-#include "helpers.hxx"
 import opp.log;
-#include "pattern.hxx"
 #include "rebased.h"
 
 #include <cstring>

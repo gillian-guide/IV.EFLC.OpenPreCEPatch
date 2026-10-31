@@ -13,12 +13,12 @@ module;
 #include "patches.hxx"
 #include "rebased.h"
 #include "feature_registry.hxx"
-#include "helpers.hxx"
 #include "opcodes.hxx"
 #include "steam_achievements.hxx"
 
 export module opp.compatibility;
 
+import opp.patch;
 import opp.game;
 import opp.common;
 import opp.settings;

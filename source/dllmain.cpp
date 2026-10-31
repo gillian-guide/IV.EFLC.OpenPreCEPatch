@@ -5,12 +5,12 @@
 // deferred worker would get to scan, so signatures have to be matched now.
 
 #include "common.hxx"
+import opp.patch;
 import opp.game;
 #include "hooks.h"
 import opp.log;
 #include "menu.hxx"
 #include "patches.hxx"
-#include "pattern.hxx"
 #include "rebased.h"
 #include "vehicle_lights.hxx"
 

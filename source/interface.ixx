@@ -13,10 +13,10 @@ module;
 #include "patches.hxx"
 #include "rebased.h"
 #include "feature_registry.hxx"
-#include "helpers.hxx"
 
 export module opp.interface;
 
+import opp.patch;
 import opp.game;
 import opp.common;
 import opp.settings;
