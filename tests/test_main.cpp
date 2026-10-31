@@ -451,10 +451,18 @@ int Run()
 		CHECK(tables.popupAngles[511].modelHash == 123);
 		CHECK(!tables.popupAngles[1].populated);
 		CHECK(tables.headlightOffsets[1].value == 3.5f);
+		// A malformed row is skipped, not fatal: one typo must not disable every
+		// unrelated installer (the original's 512-slot loop keeps going). The rest
+		// of the tables is rebuilt from this document.
 		ConfigDocument broken;
 		CHECK(ParseConfig("[PopupLightAngles]\nCar1Name=police\nCar1Angle=invalid\n", broken));
-		CHECK(!LoadVehicleLightTables(broken, tables));
-		CHECK(tables.headlightOffsets[1].value == 3.5f); // atomic rejection
+		CHECK(LoadVehicleLightTables(broken, tables));
+		CHECK(!tables.popupAngles[0].populated);
+		CHECK(!tables.headlightOffsets[1].populated);
+		ConfigDocument missingValue;
+		CHECK(ParseConfig("[PopupLightAngles]\nCar2Name=police\n", missingValue));
+		CHECK(LoadVehicleLightTables(missingValue, tables));
+		CHECK(!tables.popupAngles[1].populated);
 	}
 
 	// ---- pattern parser ----------------------------------------------------

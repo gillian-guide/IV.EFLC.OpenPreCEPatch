@@ -1578,15 +1578,19 @@ PatchResult LoadVehicleLightTables(const ConfigDocument& config,
 				if (name == nullptr || name->value.empty())
 					continue; // no row (an empty name is not a row, as before)
 
+				// A row without its value, or with an unparseable one, is skipped:
+				// the original's 512-slot loop keeps going (it has no way to reject
+				// the whole file from inside the loader), so a single typo must not
+				// disable every unrelated installer.
 				const ConfigEntry* value = values[table][i];
 				if (value == nullptr)
-					return {PatchResultCode::parse_error, "missing vehicle light value"};
+					continue;
 
 				char* end = nullptr;
 				errno = 0;
 				const float numeric = std::strtof(value->value.c_str(), &end);
 				if (end == value->value.c_str() || errno == ERANGE)
-					return {PatchResultCode::parse_error, "invalid vehicle light value"};
+					continue;
 
 				// The popup table is written in degrees and read in radians.
 				VehicleLightValue& slot = slots[i];
