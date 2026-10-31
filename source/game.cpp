@@ -12,14 +12,18 @@ namespace opp
 {
     namespace
     {
+        // The game's name-hash step multipliers (recovered constants: the
+        // incremental hash multiplies by 0x401 and finishes by 0x8001).
         constexpr uint32_t kHashMultiplier = 0x401u;
         constexpr uint32_t kHashFinalMultiplier = 0x8001u;
         constexpr unsigned kHashShiftA = 6;
         constexpr unsigned kHashShiftB = 11;
         constexpr uint32_t kHashBias = 2;
+        // The two dwords FusionFix's version probe compares at
+        // module+0x20D3/+0x20D7; opaque recovered values (no derivation).
         constexpr uint32_t kCompatibilityFirstValue = 0xC7C47589u;
         constexpr uint32_t kCompatibilitySecondValue = 0x00002446u;
-        constexpr uint32_t kVsFixedFileInfoSignature = 0xfeef04bdu;
+        constexpr uint32_t kVsFixedFileInfoSignature = VS_FFI_SIGNATURE;
         constexpr size_t kDwordLength = sizeof(uint32_t);
 
         bool IsWhite(char c) noexcept
@@ -250,6 +254,7 @@ namespace opp
         // 32-bit:
         //   cmp DWORD PTR [eax+0x20d3], 0xC7C47589
         //   cmp DWORD PTR [eax+0x20d7], 0x00002446
+        // Offsets of the two probe dwords inside the FusionFix module.
         constexpr size_t kFirst = 0x20d3;
         constexpr size_t kSecond = 0x20d7;
 

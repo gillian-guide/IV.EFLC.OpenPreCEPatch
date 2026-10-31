@@ -15,6 +15,7 @@ module;
 #include "rebased.h"
 #include "feature_registry.hxx"
 #include "helpers.hxx"
+#include "opcodes.hxx"
 
 export module multiplayer;
 
@@ -121,16 +122,28 @@ namespace opp::features
 
                 // Each offset is the call instruction of one jump-table case;
                 // the body name carries that case's value.
-                CallToBody(ctx, match + 36, "abi_spawns_case_0x24");
-                CallToBody(ctx, match + 61, "abi_spawns_case_0x3D");
-                CallToBody(ctx, match + 86, "abi_spawns_case_0x56");
-                CallToBody(ctx, match + 111, "abi_spawns_case_0x6F");
-                CallToBody(ctx, match + 136, "abi_spawns_case_0x88");
-                CallToBody(ctx, match + 158, "abi_spawns_case_0x9E");
-                CallToBody(ctx, match + 180, "abi_spawns_case_0xB4");
-                CallToBody(ctx, match + 202, "abi_spawns_case_0xCA");
-                CallToBody(ctx, match + 224, "abi_spawns_case_0xE0");
-                CallToBody(ctx, match + 246, "abi_spawns_case_0xF6");
+                // Each offset is the call instruction of one jump-table case;
+                // the body name carries that case's value (0x24..0xF6 are the
+                // case ids the original's dispatch compares).
+                struct SpawnCase final
+                {
+                    uintptr_t call_offset;
+                    const char* body;
+                };
+                constexpr SpawnCase kSpawnCases[] = {
+                    {36, "abi_spawns_case_0x24"},
+                    {61, "abi_spawns_case_0x3D"},
+                    {86, "abi_spawns_case_0x56"},
+                    {111, "abi_spawns_case_0x6F"},
+                    {136, "abi_spawns_case_0x88"},
+                    {158, "abi_spawns_case_0x9E"},
+                    {180, "abi_spawns_case_0xB4"},
+                    {202, "abi_spawns_case_0xCA"},
+                    {224, "abi_spawns_case_0xE0"},
+                    {246, "abi_spawns_case_0xF6"},
+                };
+                for (const SpawnCase& spawn : kSpawnCases)
+                    CallToBody(ctx, match + spawn.call_offset, spawn.body);
             }
 
             if (auto pattern = Pattern(image, "88 87 40 01 00 00 E8"); pattern.size() > 0)
@@ -249,8 +262,13 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                WriteValue<uint16_t>(ctx, match, 0x08C2u); //ret 8
-                WriteValue<uint8_t>(ctx, match + 2, 0x00u); //ret 8
+                // `ret 8`: C2 08 00. injector::MakeRET is not used here: its
+                // opcode store deduces a 4-byte int and would zero the fourth
+                // byte (a vendored-header defect, recorded in findings.md).
+                constexpr opp::ops::InstructionWindow<3> kReturnPop8{
+                    {0xC2, 0x08, 0x00}};
+                static_assert(opp::ops::PackedLowWord(kReturnPop8) == 0x08C2u);
+                WriteRaw(ctx, match, kReturnPop8.bytes.data(), kReturnPop8.Size());
             }
         }
 

@@ -68,6 +68,8 @@ namespace opp
         if (!resolve || modelIndex < 0)
             return result;
 
+        // The special-script model hash FUN_1001ad20 resolves first; it is the
+        // one hash the original compares against the model index.
         constexpr uint32_t kSpecialScriptHash = 0xEB9F21D3u;
         const int specialIndex = resolve(kSpecialScriptHash, context);
         if (specialIndex >= 0 && specialIndex == modelIndex)

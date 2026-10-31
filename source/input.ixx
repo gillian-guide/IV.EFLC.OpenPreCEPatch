@@ -15,6 +15,7 @@ module;
 #include "rebased.h"
 #include "feature_registry.hxx"
 #include "helpers.hxx"
+#include "opcodes.hxx"
 
 export module input;
 
@@ -145,8 +146,15 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                WriteValue<uint32_t>(ctx, match + 5, 0xC06E0F66u);
-                WriteValue<uint32_t>(ctx, match + 33, 0xC06E0F66u);
+                // 66 0F 6E C0 = `movd xmm0, eax`: the SSE form the fix puts
+                // where the x87 load was (the NOPs at +3/+31 remove the old one).
+                constexpr opp::ops::InstructionWindow<4> kMovdXmm0Eax{
+                    {0x66, 0x0F, 0x6E, 0xC0}};
+                static_assert(opp::ops::PackedLowDword(kMovdXmm0Eax) == 0xC06E0F66u);
+                WriteValue<uint32_t>(ctx, match + 5,
+                                     opp::ops::PackedLowDword(kMovdXmm0Eax));
+                WriteValue<uint32_t>(ctx, match + 33,
+                                     opp::ops::PackedLowDword(kMovdXmm0Eax));
                 NopAt(ctx, match + 3, 2);
                 NopAt(ctx, match + 31, 2);
             }
@@ -155,8 +163,15 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                WriteValue<uint32_t>(ctx, match + 5, 0xC06E0F66u);
-                WriteValue<uint32_t>(ctx, match + 33, 0xC06E0F66u);
+                // 66 0F 6E C0 = `movd xmm0, eax`: the SSE form the fix puts
+                // where the x87 load was (the NOPs at +3/+31 remove the old one).
+                constexpr opp::ops::InstructionWindow<4> kMovdXmm0Eax{
+                    {0x66, 0x0F, 0x6E, 0xC0}};
+                static_assert(opp::ops::PackedLowDword(kMovdXmm0Eax) == 0xC06E0F66u);
+                WriteValue<uint32_t>(ctx, match + 5,
+                                     opp::ops::PackedLowDword(kMovdXmm0Eax));
+                WriteValue<uint32_t>(ctx, match + 33,
+                                     opp::ops::PackedLowDword(kMovdXmm0Eax));
                 NopAt(ctx, match + 3, 2);
                 NopAt(ctx, match + 31, 2);
             }
@@ -165,7 +180,12 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                WriteValue<uint32_t>(ctx, match + 5, 0xC86E0F66u);
+                // 66 0F 6E C8 = `movd xmm1, eax` (the second axis).
+                constexpr opp::ops::InstructionWindow<4> kMovdXmm1Eax{
+                    {0x66, 0x0F, 0x6E, 0xC8}};
+                static_assert(opp::ops::PackedLowDword(kMovdXmm1Eax) == 0xC86E0F66u);
+                WriteValue<uint32_t>(ctx, match + 5,
+                                     opp::ops::PackedLowDword(kMovdXmm1Eax));
                 NopAt(ctx, match + 3, 2);
             }
 

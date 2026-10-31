@@ -18,6 +18,7 @@
 
 #include <shlwapi.h>
 
+#include <bit>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -33,6 +34,10 @@
 #if defined(_WIN32)
 
 using namespace opp;
+
+// The game's string-print script command hash: the original calls the script
+// resolver with it to report a non-ped model (sub_10037AC0) and to print spawns.
+constexpr uint32_t kPrintScriptHash = 0x79023CFCu;
 
 // ---------------------------------------------------------------------------
 // Runtime-pointer failsafes
@@ -131,7 +136,12 @@ void abi_bike_physics_helper() noexcept
     float value = 0.0f;
     std::memcpy(&value, &zpatch_bike_value, sizeof(value));
     if (0.006666666665 > static_cast<double>(value))
-        zpatch_bike_value = 0x3BDA740Eu;
+    {
+        // 0x3BDA740E is the float 0.0066666667: the floor the original clamps
+        // the bike physics scale to (its own literal bit pattern).
+        constexpr uint32_t kBikeFloorBits = 0x3BDA740Eu;
+        zpatch_bike_value = kBikeFloorBits;
+    }
 }
 
 // PopupHeadlightsFlag checker (original sub_10044310), called between
@@ -194,7 +204,10 @@ void abi_popup_check() noexcept
         cache_valid[slot] = 1;
         return resolved;
     };
-    int32_t out = resolve(0xEB9F21D3u);
+    // The special-script model hash the popup table resolves first
+    // (FUN_1001ad20); it is the one hash whose index the original compares.
+    constexpr uint32_t kSpecialScriptModelHash = 0xEB9F21D3u;
+    int32_t out = resolve(kSpecialScriptModelHash);
     zpatch_popup_index = static_cast<uint32_t>(out);  // dword_1015BE1C
     if (out == static_cast<int32_t>(zpatch_popup_model))
     {
@@ -362,7 +375,11 @@ extern "C" uint32_t zpatch_script_call(uint32_t hash, uint32_t nargs,
                                             const uint32_t* args) noexcept
 {
     zpatch_native_block block;
-    std::memset(&block, 0, 0xA0);
+    // The original clears the block up to (not including) the last argument:
+    // 0xA0 is offsetof(args[16]) and sizeof(block) is 0xA4.
+    static_assert(offsetof(zpatch_native_block, args[16]) == 0xA0);
+    static_assert(sizeof(zpatch_native_block) == 0xA4);
+    std::memset(&block, 0, offsetof(zpatch_native_block, args[16]));
     for (auto& record : block.m_records)
     {
         record.v[0] = 0;
@@ -445,7 +462,7 @@ void zpatch_spawns_print_c(const char* text) noexcept
 {
     const uint32_t arg = static_cast<uint32_t>(
         reinterpret_cast<uintptr_t>(text));
-    zpatch_script_call(0x79023CFCu, 1, &arg);
+    zpatch_script_call(kPrintScriptHash, 1, &arg);
 }
 }  // namespace
 __declspec(naked) void zpatch_spawns_print_edx()
@@ -517,9 +534,12 @@ extern "C" void abi_bpm_check() noexcept
     if (class_id == 6) return;
     if (GetModuleHandleW(L"GTAC.dll") != nullptr)
     {
+        // The model info dword at object+0x3C is the model's name hash
+        // (sub_10037AC0 passes it to the name resolver).
+        constexpr size_t kBpmModelHashOffset = 0x3C;
         const uint32_t modelHash =
             *reinterpret_cast<const uint32_t*>(
-                static_cast<const uint8_t*>(object) + 0x3C);
+                static_cast<const uint8_t*>(object) + kBpmModelHashOffset);
         const char* model_name = zpatch_bpm_model_name(modelHash);
         uint32_t entity = zpatch_bpm_obj;
         const char* who = reinterpret_cast<const char*>(static_cast<uintptr_t>(
@@ -529,7 +549,7 @@ extern "C" void abi_bpm_check() noexcept
                       model_name);
         const uint32_t text = static_cast<uint32_t>(
             reinterpret_cast<uintptr_t>(buffer));
-        zpatch_script_call(0x79023CFCu, 1, &text);
+        zpatch_script_call(kPrintScriptHash, 1, &text);
     }
     const uint32_t hash = GameHash("m_y_multiplayer");
     if (zpatch_script_call_bool(zpatch_salt_b8, 1, &hash) == 0)
@@ -843,7 +863,10 @@ int32_t zpatch_garage_lookup_c(uint8_t* object) noexcept
             lookup(kFallbackHash, &fallback_index);
         out = fallback_index > 0 ? fallback_index : -1;
         *reinterpret_cast<int16_t*>(object + 16) = static_cast<int16_t>(out);
-        *reinterpret_cast<uint16_t*>(object + 48) &= 0xFFFEu;
+        // Clear bit 0 of the flags word at +48: the original's "model was
+        // already replaced" marker.
+        constexpr uint16_t kModelReplacedMask = 0xFFFEu;
+        *reinterpret_cast<uint16_t*>(object + 48) &= kModelReplacedMask;
         return 65534;
     }
     *reinterpret_cast<int16_t*>(object + 16) = static_cast<int16_t>(out);
@@ -851,6 +874,13 @@ int32_t zpatch_garage_lookup_c(uint8_t* object) noexcept
 }
 }  // namespace
 extern "C" void zpatch_garage_store_model();
+// Field map (offsets recovered from the original sub_10046C80):
+//   [edx+0x2E]  the model index (int16)
+//   [eax+0x3C]  the model info dword unpacked into the four id bytes
+//   [esi+0x13]  id byte 0 (low)
+//   [esi+0x40]  id byte 1 (bits 8..15)
+//   [esi+0x41]  id byte 2 (bits 16..23)
+//   [esi+0x46]  id byte 3 (bits 24..31)
 __declspec(naked) void zpatch_garage_store_model()
 {
     __asm {
@@ -906,11 +936,17 @@ extern "C" const void* abi_vehicle_component(const void* registry,
     if (guarded && registry == nullptr) return nullptr;
     const auto* entries = *reinterpret_cast<const uint8_t* const*>(registry);
     if (guarded && entries == nullptr) return nullptr;
+    // The registry's component count is its uint16 at +0x14; the array itself
+    // starts immediately after it.
+    constexpr size_t kComponentCountOffset = 0x14;
     const auto count = *reinterpret_cast<const uint16_t*>(
-        static_cast<const uint8_t*>(registry) + 0x14);
+        static_cast<const uint8_t*>(registry) + kComponentCountOffset);
     for (uint16_t i = 0; i < count; ++i)
     {
-        const auto* entry = entries + static_cast<size_t>(i) * 0xE0u;
+        // A component entry is 0xE0 bytes; the registry's array starts at +0x14.
+    constexpr size_t kComponentEntrySize = 0xE0;
+    constexpr size_t kComponentArrayOffset = 0x14;
+    const auto* entry = entries + static_cast<size_t>(i) * kComponentEntrySize;
         const char* candidate = *reinterpret_cast<const char* const*>(entry);
         if (guarded && candidate == nullptr) continue;
         if (_stricmp(candidate, name) == 0) return entry;
@@ -976,17 +1012,20 @@ extern "C" uint32_t abi_steer_body() noexcept
     {
         return *reinterpret_cast<const int16_t*>(vehicle + kModelIndexOffset);
     };
+    // 4x4 identity: the three diagonal entries are the float 1.0.
+    constexpr uint32_t kIdentityOne = std::bit_cast<uint32_t>(1.0f);
+    static_assert(kIdentityOne == 0x3F800000u);
     const auto identity = [](uint32_t* m)
     {
-        m[0] = 0x3F800000u;
+        m[0] = kIdentityOne;
         m[1] = 0;
         m[2] = 0;
         m[4] = 0;
-        m[5] = 0x3F800000u;
+        m[5] = kIdentityOne;
         m[6] = 0;
         m[8] = 0;
         m[9] = 0;
-        m[10] = 0x3F800000u;
+        m[10] = kIdentityOne;
     };
     const auto bone_matrix = [&](int16_t model, const char* name) -> uint32_t*
     {
@@ -995,22 +1034,29 @@ extern "C" uint32_t abi_steer_body() noexcept
         const uint32_t ped = *reinterpret_cast<const uint32_t*>(
             base + 4u * static_cast<uint32_t>(model));
         if (guarded && ped == 0u) return nullptr;
+    // The chain is ped+0x0 -> [ped+0x8] -> [+0xB4] -> [+0xC]; each link is a
+    // pointer the original dereferences unguarded when the folded guard is off.
+    constexpr size_t kVehicleChainFirstOffset = 8;
+    constexpr size_t kVehicleChainSecondOffset = 0xB4;
+    constexpr size_t kVehicleChainRegistryOffset = 0xC;
         const uint32_t p1 = *reinterpret_cast<const uint32_t*>(
             static_cast<uintptr_t>(ped) + 8);
         if (guarded && p1 == 0u) return nullptr;
         const uint32_t p2 = *reinterpret_cast<const uint32_t*>(
-            static_cast<uintptr_t>(p1) + 0xB4);
+            static_cast<uintptr_t>(p1) + kVehicleChainSecondOffset);
         if (guarded && p2 == 0u) return nullptr;
         const uint32_t registry = *reinterpret_cast<const uint32_t*>(
-            static_cast<uintptr_t>(p2) + 0xC);
+            static_cast<uintptr_t>(p2) + kVehicleChainRegistryOffset);
         if (guarded && registry == 0u) return nullptr;
         const auto* entry = static_cast<const uint8_t*>(abi_vehicle_component(
             reinterpret_cast<const void*>(static_cast<uintptr_t>(registry)), name));
         if (entry == nullptr) return nullptr;  // the original's own `if (v6)` check
         // sub_10004C70 0x10004D4A calls get_bone unguarded (it is null only when
         // the loader's preamble missed).
+        // The component entry's bone id is its uint16 at +0x14.
+        constexpr size_t kComponentBoneIdOffset = 0x14;
         const uint32_t bone =
-            *reinterpret_cast<const uint16_t*>(entry + 0x14);
+            *reinterpret_cast<const uint16_t*>(entry + kComponentBoneIdOffset);
         return get_bone(vehicle, bone);
     };
 
@@ -1106,7 +1152,10 @@ extern "C" uint32_t abi_steer_body() noexcept
                     const float rpm = *reinterpret_cast<const float*>(vehicle + kVehicleRpmOffset);
                     scale = static_cast<float>(static_cast<double>(rpm) * 0.75 + 0.25);
                 }
-                if ((flags & 0x10u) != 0u) scale = 1.0f;
+                // Bit 4 of the engine-state dword: the original forces the
+                // scale to 1.0 when the engine is running (bit 3 is "started").
+                constexpr uint32_t kEngineRunningFlag = 0x10u;
+                if ((flags & kEngineRunningFlag) != 0u) scale = 1.0f;
                 if (set_b) set_b(matrix, scale * zpatch_engine_phase);
             }
         }
@@ -1195,6 +1244,7 @@ namespace
 // The GFWL update-window flags in xlive.dll. `83 0E 00 10` is
 // `or dword ptr [esi], 0x10000000`, the value the original stores at all four
 // sites (0x10000E83 little-endian). RVAs recovered from its writer.
+// `or dword ptr [esi], 0x10000000`, the window value the original stores.
 constexpr opp::ops::InstructionWindow<4> kGfwlWindowDisable{{0x83, 0x0E, 0x00, 0x10}};
 constexpr uint32_t kGfwlWindowDisableValue = opp::ops::PackedLowDword(kGfwlWindowDisable);
 static_assert(kGfwlWindowDisableValue == 0x10000E83u);
@@ -1286,20 +1336,27 @@ extern "C" bool zpatch_new_saves_scan(void* handle, int guarded, int seek,
 {
     auto* file = static_cast<std::FILE*>(handle);
     if (file == nullptr) return false;
-    uint8_t header[0x110];
+    // The save header is 0x110 bytes; the format magic "SAVE" sits at +0xC and
+    // each of the 18 chunks starts with a 9-byte header whose dword at +5 is the
+    // chunk's total size.
+    constexpr size_t kSaveHeaderSize = 0x110;
+    constexpr size_t kSaveChunkHeaderSize = 9;
+    constexpr size_t kSaveMagicOffset = 0x0C;
+    constexpr uint32_t kSaveMagic = 0x45564153u;  // "SAVE"
+    uint8_t header[kSaveHeaderSize];
     if (guarded != 0)
     {
         // Opt-in guard: a short header cannot carry a magic/chunk table.
-        if (std::fread(header, 0x110, 1, file) != 1)
+        if (std::fread(header, kSaveHeaderSize, 1, file) != 1)
             return false;
     }
     else
     {
-        std::fread(header, 0x110, 1, file);  // return ignored, like the original
+        std::fread(header, kSaveHeaderSize, 1, file);  // return ignored, like the original
     }
     uint32_t magic = 0;
-    std::memcpy(&magic, header + 0x0C, 4);
-    if (magic != 0x45564153u)  // "SAVE"
+    std::memcpy(&magic, header + kSaveMagicOffset, 4);
+    if (magic != kSaveMagic)
         return false;
 
     uint32_t local9 = 0;
@@ -1321,7 +1378,10 @@ extern "C" bool zpatch_new_saves_scan(void* handle, int guarded, int seek,
         zpatch_new_saves_chunk_len = size;                  // dword_1015AD90
         zpatch_new_saves_element_count = size - 9u;         // dword_1015ADA0
         bool skipped = false;
-        if (seek != 0 && size >= 9u && zpatch_new_saves_element_count <= 0x7FFFFFFFu)
+        // fseek takes a long: only seek when the element count fits one.
+        constexpr uint32_t kSeekCountLimit = 0x7FFFFFFFu;
+        if (seek != 0 && size >= kSaveChunkHeaderSize &&
+            zpatch_new_saves_element_count <= kSeekCountLimit)
         {
             // Only the 9-byte chunk headers are needed; seek over the payload.
             skipped = std::fseek(file,
@@ -1410,7 +1470,8 @@ extern "C" void abi_new_saves_convert(const char* path) noexcept
 
         // The `jnz rel8` five bytes before the call skips the load; for a new
         // save it is a two-byte NOP instead (75 26 = jnz +0x26).
-        constexpr opp::ops::InstructionWindow<2> kSkipLoadBranch{{0x75, 0x26}};
+        // `jnz +0x26`: the branch that skips the load for an old-format save.
+constexpr opp::ops::InstructionWindow<2> kSkipLoadBranch{{0x75, 0x26}};
         static_assert(opp::ops::PackedLowWord(kSkipLoadBranch) == 0x2675u);
         if (zpatch_new_saves_flag16 != 0)
             injector::MakeNOP(injector::raw_ptr(site - 5), kSkipLoadBranch.Size(), true);
@@ -1500,6 +1561,9 @@ using DlcApplyFn = void(__thiscall*)(void* object, char* request);
 // @exact 0x10005590 AimProjectileCrashFix: __thiscall (this in ECX), three
 // stack arguments, callee pops 12 bytes; MSVC rejects __thiscall on free
 // functions, so the original instruction sequence is reproduced directly.
+// Field map: [ecx+0x20] = arg2, [ecx+0x24] = arg3, [ecx+0x1c] = arg1 masked by
+// the sign of arg3 (the original's `neg/sbb/and`); [esp+8]/[esp+0xC]/[esp+4]
+// are those three stack arguments.
 __declspec(naked) void abi_aim_projectile_crash_fix()
 {
     __asm {
@@ -1696,7 +1760,8 @@ __declspec(naked) void abi_wanted_level_shim()
 }
 
 // @exact 0x10036e90 GroupHackFix: eax = 0, ecx += 4, edx = 7, then the resume
-// tests the flags of [ecx] against 0.
+// tests the flags of [ecx] against 0. The 0xC bound is the group table's
+// twelve-byte stride check the original performs before that test.
 __declspec(naked) void abi_group_hack_shim()
 {
     __asm {
@@ -1712,9 +1777,10 @@ __declspec(naked) void abi_group_hack_shim()
     }
 }
 
-// @exact 0x10046750 SMPA60Fix: ecx = this; the sentinel 0xDDDDDDDD tails into
-// the match+28 resume. The normal path pushes five arguments for the match+14
-// resume before tailing into it.
+// @exact 0x10046750 SMPA60Fix: ecx = this; the sentinel 0xDDDDDDDD (the MSVC
+// debug-CRT poison value the original compares against) tails into the match+28
+// resume. The normal path pushes five arguments for the match+14 resume:
+// [eax+0x70] (a pointer), eax+0x40 (the sub-object), [ecx+0x10], ecx, ecx.
 __declspec(naked) void abi_smpa60_shim()
 {
     __asm {
@@ -1737,6 +1803,9 @@ __declspec(naked) void abi_smpa60_shim()
 // @exact 0x10046780 SMPA60Fix tail shim: if [eax+0x14] is a valid pointer (not
 // null, not the 0xCDCDCDCD heap marker) copy [eax+0x10] into [ptr+0x10], then
 // tail-jump to the resume the handler publishes (match+136, dword_10159C6C).
+// @exact 0x10046780 SMPA60Fix tail: copies the dword at [eax+0x10] into
+// [[eax+0x14]+0x10] unless either pointer is null or the 0xCDCDCDCD debug-heap
+// poison value.
 __declspec(naked) void abi_smpa60_tail_shim()
 {
     __asm {
@@ -1752,8 +1821,9 @@ __declspec(naked) void abi_smpa60_tail_shim()
     }
 }
 
-// @exact 0x10036eb0 FreezeGunFix: eax = object; if [eax+0x40] is a valid handle
-// (not 0xCDCDCDCD, not -1, not 0) push edi and tail-jump into the original
+// @exact 0x10036eb0 FreezeGunFix: eax = object; [eax+0x38] is the ammo/clip
+// pointer and [eax+0x40] the handle. If the handle is valid (not the debug-heap
+// poison 0xCDCDCDCD, not -1, not 0) push edi and tail-jump into the original
 // path, else return 0. The null path pops esi and does ret 8 because the site
 // sits just after the enclosing function's push esi.
 __declspec(naked) void abi_freeze_gun_shim()
@@ -2377,6 +2447,9 @@ __declspec(naked) void abi_spawns_guard()
         __asm jmp dword ptr [resume]                \
     }
 
+// The macro's second argument is the selector value the case stores in
+// [zpatch_spawns_kind] (the body-name suffix is the jump-table index; cases 1
+// and 2 both write 3 in the original bytes, kept 1:1).
 SPAWNS_CASE(abi_spawns_case_0x24, 5, zpatch_spawns_case0_resume)
 SPAWNS_CASE(abi_spawns_case_0x3D, 3, zpatch_spawns_case1_resume)
 SPAWNS_CASE(abi_spawns_case_0x56, 3, zpatch_spawns_case2_resume)
@@ -2936,7 +3009,7 @@ __declspec(naked) void abi_super_lod_fix_shim()
         test al, al
         pop eax
         jne slod_ok
-        test byte ptr [eax + 0x72], 0x10
+        test byte ptr [eax + 0x72], 0x10  ; bit 4 of the byte at +0x72 = has LOD
         je slod_fail
     slod_ok:
         jmp DWORD PTR [zpatch_super_lod_ok]
@@ -2955,17 +3028,27 @@ extern "C" void abi_driveby_fov_note_impl()
         static_cast<uintptr_t>(zpatch_driveby_resume) - 5u - 0x85031Fu;  // build-9 sig RVA
     uint32_t count = 0;
     uint32_t table = 0;
-    if (game_base > 0x10000u && game_base < 0x80000000u)
+    // Sanity bounds for a mapped 32-bit image base: above the DOS header area
+    // and below the user-mode limit.
+    constexpr uintptr_t kImageBaseMin = 0x10000u;
+    constexpr uintptr_t kImageBaseMax = 0x80000000u;
+    if (game_base > kImageBaseMin && game_base < kImageBaseMax)
     {
         count = *reinterpret_cast<const uint32_t*>(game_base + kModelTableCountRva);
         table = *reinterpret_cast<const uint32_t*>(game_base + kModelTablePointerRva);
-        if (table > 0x10000u && count > 0u && count < 0x100000u)
+        // The resolver registry is a pointer plus a count; the caps reject a
+        // half-initialised table (the original scans it unguarded).
+        constexpr uint32_t kModelTableMin = 0x10000u;
+        constexpr uint32_t kModelTableCountMax = 0x100000u;
+        if (table > kModelTableMin && count > 0u && count < kModelTableCountMax)
         {
             for (uint32_t i = 0; i < count; ++i)
             {
                 const uint32_t key = *reinterpret_cast<const uint32_t*>(
                     static_cast<uintptr_t>(table) + i * 8u);
-                if (key == 0x9399528u) break;
+                // The model the diagnostic looks for (the drive-by pose model).
+                constexpr uint32_t kDrivebyModelHash = 0x9399528u;
+                if (key == kDrivebyModelHash) break;
             }
         }
     }
@@ -3145,7 +3228,10 @@ extern "C" void abi_nolivery_copy_name()  // sub_1003D2F0
     char* const dst = reinterpret_cast<char*>(static_cast<uintptr_t>(zpatch_nolivery_dest));
     const char* const src =
         reinterpret_cast<const char*>(static_cast<uintptr_t>(zpatch_nolivery_bufptr));
-    zpatch_secure_strcpy_s(dst, 0x10u, src);
+    // The original copies into a 16-byte name buffer (sub_1003D2F0 pushes 0x10
+    // as the strcpy_s destination size).
+    constexpr size_t kNoLiveryNameBytes = 0x10;
+    zpatch_secure_strcpy_s(dst, kNoLiveryNameBytes, src);
 }
 extern "C" void abi_nolivery_count_loop()  // sub_1003D270
 {
@@ -3325,7 +3411,10 @@ extern "C" void __cdecl abi_newfiles_register()
     // arguments after the call.
     const auto register_file = reinterpret_cast<void(__cdecl*)(uint32_t, void*)>(
         static_cast<uintptr_t>(zpatch_newfiles_register_slot));
-    register_file(0x2C89A1F9u, reinterpret_cast<void*>(&abi_newfiles_cb));
+    // The script-handler hash the original registers the callback under
+    // (sub_10051600's `register_file` argument).
+    constexpr uint32_t kNewFilesHandlerHash = 0x2C89A1F9u;
+    register_file(kNewFilesHandlerHash, reinterpret_cast<void*>(&abi_newfiles_cb));
 }
 extern "C" void* abi_newfiles_find_obj()  // 0x10051730
 {
@@ -3386,22 +3475,27 @@ extern "C" __declspec(naked) void abi_newfiles_register_body()  // 0x10051600
         ret
     }
 }
+// The update object holds the name string at +0x10 (version A) / +0x10F
+// (version B) and the callback's first/second arguments at +8 / +4; 0x10051890
+// and 0x100518D0 differ only in those offsets.
 extern "C" char __fastcall abi_newfiles_update_a(void* self, int)  // 0x10051890
 {
+    constexpr size_t kUpdateNameOffsetA = 0x10;
     auto* base = static_cast<unsigned char*>(self);
-    if (base[0x10] == 0) return 0;
+    if (base[kUpdateNameOffsetA] == 0) return 0;
     if (abi_newfiles_call_obj(abi_newfiles_find_obj(),
-                              GameHash(reinterpret_cast<const char*>(base + 0x10))))
-        abi_newfiles_call_add(base + 8, base + 0x10);
+                              GameHash(reinterpret_cast<const char*>(base + kUpdateNameOffsetA))))
+        abi_newfiles_call_add(base + 8, base + kUpdateNameOffsetA);
     return 1;
 }
 extern "C" char __fastcall abi_newfiles_update_b(void* self, int)  // 0x100518D0
 {
+    constexpr size_t kUpdateNameOffsetB = 0x10F;
     auto* base = static_cast<unsigned char*>(self);
-    if (base[0x10F] == 0) return 0;
+    if (base[kUpdateNameOffsetB] == 0) return 0;
     if (abi_newfiles_call_obj(abi_newfiles_find_obj(),
-                              GameHash(reinterpret_cast<const char*>(base + 0x10F))))
-        abi_newfiles_call_add(base + 4, base + 0x10F);
+                              GameHash(reinterpret_cast<const char*>(base + kUpdateNameOffsetB))))
+        abi_newfiles_call_add(base + 4, base + kUpdateNameOffsetB);
     return 1;
 }
 
@@ -3670,9 +3764,16 @@ extern "C" LRESULT __stdcall abi_borderless_w(HWND hwnd, UINT msg, WPARAM wparam
     if (!zpatch_borderless_w_done)
     {
         SetWindowPos(hwnd, reinterpret_cast<HWND>(static_cast<INT_PTR>(-2)), 0, 0, 0, 0, 3);
+        // Clear caption/sysmenu/thickframe/minimise/maximise (0xFF30FFFF) and
+        // the topmost extended bit; both are the original's style masks.
+        constexpr LONG kBorderlessStyleMask = static_cast<LONG>(0xFF30FFFFu);
+        static_assert(kBorderlessStyleMask ==
+                      ~static_cast<LONG>(WS_CAPTION | WS_SYSMENU | WS_THICKFRAME |
+                                         WS_MINIMIZEBOX | WS_MAXIMIZEBOX));
         SetWindowLongA(hwnd, GWL_STYLE,
-                       GetWindowLongA(hwnd, GWL_STYLE) & static_cast<LONG>(0xff30ffffu));
-        SetWindowLongA(hwnd, GWL_EXSTYLE, GetWindowLongA(hwnd, GWL_EXSTYLE) & ~static_cast<LONG>(8));
+                       GetWindowLongA(hwnd, GWL_STYLE) & kBorderlessStyleMask);
+        SetWindowLongA(hwnd, GWL_EXSTYLE,
+                       GetWindowLongA(hwnd, GWL_EXSTYLE) & ~static_cast<LONG>(WS_EX_TOPMOST));
         zpatch_borderless_w_done = 1;
     }
     return DefWindowProcW(hwnd, msg, wparam, lparam);
@@ -3683,9 +3784,16 @@ extern "C" LRESULT __stdcall abi_borderless_a(HWND hwnd, UINT msg, WPARAM wparam
     if (!zpatch_borderless_a_done)
     {
         SetWindowPos(hwnd, reinterpret_cast<HWND>(static_cast<INT_PTR>(-2)), 0, 0, 0, 0, 3);
+        // Clear caption/sysmenu/thickframe/minimise/maximise (0xFF30FFFF) and
+        // the topmost extended bit; both are the original's style masks.
+        constexpr LONG kBorderlessStyleMask = static_cast<LONG>(0xFF30FFFFu);
+        static_assert(kBorderlessStyleMask ==
+                      ~static_cast<LONG>(WS_CAPTION | WS_SYSMENU | WS_THICKFRAME |
+                                         WS_MINIMIZEBOX | WS_MAXIMIZEBOX));
         SetWindowLongA(hwnd, GWL_STYLE,
-                       GetWindowLongA(hwnd, GWL_STYLE) & static_cast<LONG>(0xff30ffffu));
-        SetWindowLongA(hwnd, GWL_EXSTYLE, GetWindowLongA(hwnd, GWL_EXSTYLE) & ~static_cast<LONG>(8));
+                       GetWindowLongA(hwnd, GWL_STYLE) & kBorderlessStyleMask);
+        SetWindowLongA(hwnd, GWL_EXSTYLE,
+                       GetWindowLongA(hwnd, GWL_EXSTYLE) & ~static_cast<LONG>(WS_EX_TOPMOST));
         zpatch_borderless_a_done = 1;
     }
     return DefWindowProcA(hwnd, msg, wparam, lparam);
@@ -3738,8 +3846,9 @@ extern "C" void* __fastcall abi_speedup_body(void* self, int)
     return self;
 }
 
-// @exact 0x1001b040 EpisodeSwitchFreezeFix: stores eax into [ebx+0x20]; null
-// returns 0 (pop edi/esi/ebx, ret 0x10), else tail-jumps to match+5.
+// @exact 0x1001b040 EpisodeSwitchFreezeFix: [ebx+0x20] is the episode-load
+// object slot; stores eax there, null returns 0 (pop edi/esi/ebx, ret 0x10),
+// else tails to match+5.
 __declspec(naked) void abi_episode_switch_store_shim()
 {
     __asm {
@@ -3758,7 +3867,8 @@ __declspec(naked) void abi_episode_switch_store_shim()
         ret 16
     }
 }
-// @exact 0x1001b060
+// @exact 0x1001b060: [ebx+0x10] and [ebx+0x14] are the load object's
+// begin/end pointers the original compares.
 __declspec(naked) void abi_episode_switch_shim_b()
 {
     __asm {
@@ -3778,7 +3888,8 @@ __declspec(naked) void abi_episode_switch_shim_b()
         ret
     }
 }
-// @exact 0x1001b0a0
+// @exact 0x1001b0a0: [eax] is the vtable, [eax+4] the first argument, and
+// vtable+0x30 the virtual the original calls.
 __declspec(naked) void abi_episode_switch_vcall()
 {
     __asm {
@@ -3797,7 +3908,7 @@ __declspec(naked) void abi_episode_switch_vcall()
         ret
     }
 }
-// @exact 0x1001b0c0
+// @exact 0x1001b0c0: [esi+0x14] is the pointer the resume tests for null.
 __declspec(naked) void abi_episode_switch_shim_c()
 {
     __asm {
@@ -3844,6 +3955,11 @@ __declspec(naked) void abi_bike_physics_detour()
 // restores esp from ebp, discarding the predicate's cleanup. The iteration
 // counter (dword_1015BDD8, zpatch_collision_deadlock_iterations) bounds the walk
 // at 10000 steps.
+// Field map: [ebp+0x8] = the graph, [ebp+0xC] = the start entry (its uint16
+// index at +0x66), [graph+0x70] = the node table; a node is 8 bytes (uint16
+// next at +0, pointer at +4 with its low 4 bits as flags); 0xFFFF is the
+// end-of-chain index and 0xFFFFFFF0 the pointer mask. The 0x2710 comparison is
+// the recovered 10 000-step iteration bound.
 __declspec(naked) void abi_collision_deadlock_walk()
 {
     __asm {
@@ -3887,7 +4003,7 @@ __declspec(naked) void abi_collision_deadlock_walk()
         jne coll_return_di
         movzx edi, WORD PTR [esi]
         add DWORD PTR [zpatch_collision_deadlock_iterations], 1
-        cmp DWORD PTR [zpatch_collision_deadlock_iterations], 0x2710
+        cmp DWORD PTR [zpatch_collision_deadlock_iterations], 10000  ; the recovered 10 000-step bound
         je coll_return_minus1
         cmp di, 0xFFFF
         jne coll_loop
@@ -3942,7 +4058,9 @@ int __stdcall abi_savegame_fix_copy(const void* src, uint32_t size, void* dst,
         return 0;
     }
     *out_size = size;
-    return static_cast<int>(0x8007007Au);
+    // 0x8007007A is HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER), the value
+    // the original's copy helper returns.
+    return static_cast<int>(HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER));
 }
 
 // @exact 0x1001b080 EpisodeSwitchFreezeFix sum: __thiscall, no stack arguments,
@@ -4034,7 +4152,9 @@ void* dlc_discovery_post(void* object)
     try_paths("\\dlc\\TBoGT\\content\\", "\\TBoGT\\", 4);
     for (int i = 3; i < 255; ++i)
     {
-        char suffix[0x40];
+        // The original formats "\EpisodeN\" into a 64-byte stack buffer.
+        constexpr size_t kEpisodeSuffixCapacity = 0x40;
+        char suffix[kEpisodeSuffixCapacity];
         zpatch_spawns_sprintf(suffix, sizeof(suffix), "\\Episode%d\\", i);
         try_paths(suffix, suffix, 2 * i);
     }
@@ -4057,6 +4177,10 @@ void* dlc_discovery_post(void* object)
 // @exact 0x10023490 LoadDLCs struct fixup: the object arrives in ESI and the
 // epilogue pops esi/ebx and cleans 0x14 stack bytes; the original instruction
 // sequence is reproduced (with our own callback slot and post step).
+// Field map of the DLC entry in ESI: +0x00/+0x40/+0x80/+0xC0/+0x100 are the five
+// per-episode flag bytes the fixup clears, +0x167 is "already loaded",
+// +0x168 the forced flag, +0xA4 the post-step marker; 0x14 is the epilogue's
+// stack cleanup.
 __declspec(naked) void abi_load_dlcs_struct_fixup()
 {
     __asm {
@@ -4141,12 +4265,14 @@ void zpatch_mf_advance_c() noexcept
 
     // fstp dword ptr [esi+yaw] followed by the first two bytes of the next
     // instruction (8B 5C = mov ebx, [esp+...]).
+    // `fstp dword ptr [esi+0x148]` followed by the next instruction's bytes.
     constexpr opp::ops::InstructionWindow<8> kStoreYaw{
         {0xD9, 0x9E, 0x48, 0x01, 0x00, 0x00, 0x8B, 0x5C}};
     static_assert(opp::ops::PackedLowDword(kStoreYaw) == 0x01489ED9u);
     static_assert(opp::ops::PackedHighDword(kStoreYaw) == 0x5C8B0000u);
 
     // fstp st(0) + four NOPs + the same next-instruction bytes.
+    // `fstp st(0)` + four NOPs + the same next-instruction bytes.
     constexpr opp::ops::InstructionWindow<8> kDiscardYaw{
         {0xDD, 0xD8, 0x90, 0x90, 0x90, 0x90, 0x8B, 0x5C}};
     static_assert(opp::ops::PackedLowDword(kDiscardYaw) == 0x9090D8DDu);
@@ -4726,6 +4852,8 @@ bool zpatch_ooc_decode(unsigned char* table) noexcept
         if (pc == previous) terminated = true;
     }
     if (!terminated || stream.cursor != kOocTableSize) return false;
+    // The pak trailer is the 5 (end-of-stream opcode) and 0xFA (pack marker)
+    // byte pair, followed by the big-endian Adler-32 the fixture stores.
     if (kOocPakBlob[pc] != 5u || kOocPakBlob[pc + 1] != 0xFAu) return false;
     const uint32_t trailer = (static_cast<uint32_t>(kOocPakBlob[pc + 2]) << 24) |
                                   (static_cast<uint32_t>(kOocPakBlob[pc + 3]) << 16) |
@@ -4774,6 +4902,8 @@ unsigned char* zpatch_ooc_build_archive(unsigned char* table,
         uint16_t words[2];
     };
     static_assert(sizeof(OocHeader) == 20);
+    // The builder's header: pak magic 0x86723DFF, version 3, one entry, header
+    // size 0x10 and the 0xE9 flag word (the format's fixed layout).
     const OocHeader header{{0x86723DFFu, 3u, 1u, name_bytes + 16u},
                            {0x10u, 0xE9u}};
     append(&header, sizeof(header));
@@ -4787,8 +4917,11 @@ unsigned char* zpatch_ooc_build_archive(unsigned char* table,
     {
         const uint16_t padding =
             static_cast<uint16_t>(kOocPageSize - remainder);
+        // Bits 0..10 hold the padding; bits 11..15 are zero in this format
+        // (the mask documents the field width the original packs).
+        constexpr uint16_t kPaddingMask = 0xF800u;
         const uint16_t packed =
-            static_cast<uint16_t>((static_cast<uint16_t>(0u) & 0xF800u) | padding);
+            static_cast<uint16_t>((static_cast<uint16_t>(0u) & kPaddingMask) | padding);
         std::memcpy(record + 14, &packed, 2);        // sub_1004AB90
     }
     append(record, 16);
@@ -4875,6 +5008,7 @@ extern "C" bool zpatch_ooc_selftest() noexcept
     bool header_ok = true;
     for (int i = 0; i < 4; ++i)
         header_ok = header_ok && std::memcmp(archive + 4 * i, &header[i], 4) == 0;
+    // The fixture's expected bytes: header size 0x10, then the 0xE9 flag word.
     header_ok = header_ok && archive[16] == 0x10u && archive[17] == 0u &&
                 archive[18] == 0xE9u && archive[19] == 0u;
     const uint32_t record_size = 0x2BD50u;
@@ -4883,16 +5017,23 @@ extern "C" bool zpatch_ooc_selftest() noexcept
     const uint32_t zero = 0u;
     record_ok = record_ok && std::memcmp(archive + 24, &zero, 4) == 0 &&
                 std::memcmp(archive + 28, &record_index, 4) == 0;
+    // The fixture's packed page count (88 = 0x58) and the 0x02B0 tail word.
     record_ok = record_ok && archive[32] == 88u && archive[33] == 0u &&
                 archive[34] == 0xB0u && archive[35] == 0x02u;
     const bool name_ok = std::memcmp(archive + 36, "finale2.sco", 12) == 0;
     const bool ok = decoded && final_offset == 182272u && table_adler == 0x41E794ABu &&
                     header_ok && record_ok && name_ok &&
+                    // The fixture's archive FNV-1a and packed length.
                     zpatch_ooc_fnv1a(archive, final_offset) == 0xB5AF7B10u;
     std::free(archive);
     return ok;
 }
 
+// The fake SCO pak the fix registers: magic 0x86723DFF, version 3, one entry,
+// header size 0x10 with the 0xE9 flag word; the recorded entry keeps the packed
+// size 0x2BD50 and the 12-byte name "finale2.sco". The two checksums
+// (0x41E794AB table Adler, 0xB5AF7B10 archive FNV-1a) are the fixture's own
+// values, produced by this builder.
 // @exact 0x1004C3C0 OutOfCommissionFix branch body (E9 target of game
 // 0xA22E97): replay `cmp [esp+0x30], eax` + `movq xmm0, [esp+0x30]`; when the
 // comparison was unequal, re-compare against the original's 0x86723DFF magic so
@@ -4921,7 +5062,11 @@ extern "C" uint32_t abi_ooc_wrap(uint32_t arg0, uint32_t arg1) noexcept
     const uint32_t lookup = zpatch_ooc_lookup();
     if (lookup != 0u)
     {
-        char buffer[0x44];
+        // The original formats into a 68-byte stack buffer with a 0x40 size
+        // argument; 0x3A/0x24/0x30 are the literal ':', '$' and '0' characters
+        // its format string consumes (recovered logger call).
+        constexpr size_t kOocLogBufferBytes = 0x44;
+        char buffer[kOocLogBufferBytes];
         zpatch_spawns_sprintf(buffer, 0x40, zpatch_ooc_fmt_b, zpatch_ooc_fmt_a, 0x3A, 0x24,
                               static_cast<int>(lookup), static_cast<int>(zpatch_ooc_state),
                               0x30, 0x3A, 0);
@@ -5414,7 +5559,10 @@ extern "C" void* __stdcall zpatch_nms_alloc(uint32_t size, uint32_t align,
     *reinterpret_cast<uint32_t*>(aligned - 4u) =
         static_cast<uint32_t>(aligned - raw);
     auto* result = reinterpret_cast<void*>(aligned);
-    std::memset(result, 0xCD, want);
+    // 0xCD is the MSVC debug-heap free-fill byte; the original's allocator
+    // leaves the block with it, so the fill is kept 1:1.
+    constexpr int kDebugHeapFill = 0xCD;
+    std::memset(result, kDebugHeapFill, want);
     EnterCriticalSection(&g_nms_lock);
     g_nms_allocations.insert(static_cast<uint32_t>(aligned));
     LeaveCriticalSection(&g_nms_lock);
@@ -5552,6 +5700,9 @@ struct AbiBody final
 
 // Only destinations whose conventions are verified appear here; everything else
 // resolves to 0 and the installer reports it as skipped.
+// Each row is {reference VA, body}. The VA is the original handler's address in
+// the original ASI (image base 0x10000000): provenance, not an install address.
+// The body name states which handler the VA belongs to (research 07 appendix A).
 const AbiBody kAbiBodies[] =
 {
         {0x10005590u, reinterpret_cast<void(*)()>(&abi_aim_projectile_crash_fix)},

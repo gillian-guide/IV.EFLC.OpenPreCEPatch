@@ -54,7 +54,8 @@ extern "C"
     uint32_t zpatch_collision_deadlock_iterations = 0;  // dword_1015BDD8
     uint32_t zpatch_driveby_resolver = 0;               // dword_1015BDE0
     uint32_t zpatch_driveby_resume = 0;                 // dword_1015BDF4
-    uint32_t zpatch_driveby_fov = 0x42340000u;    // dword_101580C4 (45.0f, original on-disk)
+    // The drive-by FOV the game loads (dword_101580C4): 45.0f bit pattern.
+uint32_t zpatch_driveby_fov = 0x42340000u;  // float 45.0f
     uint32_t zpatch_driveby_cached = 0;           // dword_1015BDF8
     uint8_t zpatch_driveby_done = 0;              // byte_1015AD4A
     uint32_t zpatch_driveby_last_result = 0;      // resolver result (diagnostic)
@@ -107,7 +108,8 @@ extern "C"
     uint32_t zpatch_popup_model = 0;
     uint32_t zpatch_popup_flag = 0;
     uint32_t zpatch_popup_index = 0;
-    uint32_t zpatch_popup_angle = 0x3FC90FDBu;
+    // The popup-light fallback angle: 0x3FC90FDB is the float pi/2.
+uint32_t zpatch_popup_angle = 0x3FC90FDBu;
     uint32_t zpatch_popup_resume_a = 0;
     uint32_t zpatch_popup_resume_b = 0;
     uint32_t zpatch_popup_hashes[512] = {};
@@ -115,7 +117,8 @@ extern "C"
     // ForceCarHeadlightShadows: dword_101580C0 is pre-set to 2.0f on disk.
     uint32_t zpatch_fchs_param = 0;
     uint32_t zpatch_fchs_resume = 0;
-    uint32_t zpatch_fchs_offset = 0x40000000u;
+    // The headlight-cone fallback offset: 0x40000000 is the float 2.0f.
+uint32_t zpatch_fchs_offset = 0x40000000u;
     uint32_t zpatch_fchs_hashes[512] = {};
     float zpatch_fchs_offsets[512] = {};
     // BadPlayerModelCrashFix scratch.
@@ -136,7 +139,10 @@ extern "C"
     uint32_t zpatch_pre_fn_5d63c = 0;
     uint32_t zpatch_pre_fn_59cdc = 0;
     // Hash salts: the on-disk (probe-hit) values of the original's ten dwords.
-    uint32_t zpatch_salt_28 = 0x6A6B4F18u;
+    // The ten hash salts the build probe mixes into its fingerprint (the
+// preamble overwrites them per build). They are recovered constants with no
+// derivation: each is a constant of the original's fingerprint table.
+uint32_t zpatch_salt_28 = 0x6A6B4F18u;
     uint32_t zpatch_salt_3c = 0x022B2DA9u;
     uint32_t zpatch_salt_40 = 0x4BF36A32u;
     uint32_t zpatch_salt_50 = 0x3B0C6738u;
@@ -199,7 +205,9 @@ extern "C"
     uint32_t zpatch_local_path_18 = 0;
     uint32_t zpatch_local_path_1c = 0;
     // FreezeCarFix / DebugPrintSpawns.
-    uint32_t zpatch_spawns_kind = 0xFFFFFFFFu;
+    // -1: "no spawn case recorded yet" (a four-byte kind field, so the sentinel
+// is all ones).
+uint32_t zpatch_spawns_kind = 0xFFFFFFFFu;
     uint32_t zpatch_spawns_class = 0;
     uint32_t zpatch_spawns_skip = 0;
     uint32_t zpatch_spawns_orig_a = 0;
@@ -265,7 +273,9 @@ extern "C"
     float zpatch_mf_mul_neg1 = -1.0f;
     float zpatch_mf_step_scale = 0.1f;
     double zpatch_mf_mul_neg1_d = -1.0;
-    double zpatch_mf_time_mul = 0x1.333334015bc21p-4;
+    // MouseFix's timing constants: 0x1.333334015bc21p-4 is 0.075 (the original
+// global's exact double bits), and the two pi values are its angle wrapping.
+double zpatch_mf_time_mul = 0x1.333334015bc21p-4;
     double zpatch_mf_time_add = 0.025;
     double zpatch_mf_pi = 0x1.921fb5a7ed197p+1;
     double zpatch_mf_two_pi = 0x1.921fb6134ce3ep+2;
@@ -273,9 +283,11 @@ extern "C"
     // `xorps xmm, xmmword ptr [mask]` needs a 16-byte aligned address: the
     // original's .rdata constants are naturally aligned, so the masks are
     // alignas(16) (a misaligned mask faults with #GP/AV).
-    alignas(16) unsigned char zpatch_mf_neg_mask[16] = {0, 0, 0, 0x80, 0, 0, 0, 0x80,
+    // SSE sign-bit masks: 0x80 in the top byte of each 32-bit lane flips the sign.
+alignas(16) unsigned char zpatch_mf_neg_mask[16] = {0, 0, 0, 0x80, 0, 0, 0, 0x80,
                                                         0, 0, 0, 0x80, 0, 0, 0, 0x80};
-    alignas(16) unsigned char zpatch_mf_double_sign[16] = {0, 0, 0, 0, 0, 0, 0, 0x80,
+    // The same mask for two 64-bit lanes (the double sign bit is byte 7/15).
+alignas(16) unsigned char zpatch_mf_double_sign[16] = {0, 0, 0, 0, 0, 0, 0, 0x80,
                                                            0, 0, 0, 0, 0, 0, 0, 0x80};
     // OutOfCommissionFix (see the hook bodies).
     uint32_t zpatch_ooc_resume = 0;

@@ -15,6 +15,7 @@ module;
 #include "rebased.h"
 #include "feature_registry.hxx"
 #include "helpers.hxx"
+#include "opcodes.hxx"
 #include "log.hxx"
 
 export module graphics;
@@ -112,6 +113,8 @@ namespace opp::features
             {
                 if (auto pattern = Pattern(image, "50 68 04 01 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
                 {
+                    // The low byte of the `push 0x104` immediate: 0x104 -> 0x100
+                    // (the shadow size the arm forces for dynamic shadows).
                     WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(2), 0x00u);
                 }
             }
@@ -219,13 +222,18 @@ namespace opp::features
             {
                 if (auto pattern = Pattern(image, "83 E0 0F 83 F8 03 75 17 F6 86 6C 02 00 00 04"); pattern.size() > 0)
                 {
-                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(6), 0xEBu);
+                    // The `jnz +0x17` at +6 becomes an unconditional short jmp:
+                    // the original's shadow-class skip (CarDynamicShadowFix).
+                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(6),
+                                        opp::ops::kJmpRel8);
                 }
             }
 
             {
                 if (auto pattern = Pattern(image, "50 68 04 01 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
                 {
+                    // The low byte of the `push 0x104` immediate: 0x104 -> 0x100
+                    // (the shadow size the arm forces for dynamic shadows).
                     WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(2), 0x00u);
                 }
             }
@@ -249,17 +257,20 @@ namespace opp::features
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    const int32_t rel = static_cast<int32_t>(*pattern.get(0).get<uint32_t>(2)) + 1;
-                    uint8_t bytes[5] = {0xE9u};
-                    std::memcpy(bytes + 1, &rel, sizeof(rel));
-                    WriteRaw(ctx, match, bytes, sizeof(bytes));
+                    // `0F 84 rel32` (6 B) -> `E9 rel32` (5 B): the same target,
+                    // the next instruction's first byte untouched. BranchTarget
+                    // computes the 6-byte Jcc destination.
+                    JumpTo(ctx, match,
+                           reinterpret_cast<void*>(BranchTarget(match, 0)));
                 }
 
                 if (auto pattern = Pattern(image, "51 68 04 05 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    WriteValue<uint32_t>(ctx, match + 2, static_cast<uint32_t>(0x100u));
+                    // `push 0x504` becomes `push 0x100`: the shadow size.
+                    constexpr uint32_t kForcedShadowSize = 0x100u;
+                    WriteValue<uint32_t>(ctx, match + 2, kForcedShadowSize);
                 }
             }
         }
@@ -350,14 +361,19 @@ namespace opp::features
             {
                 if (auto pattern = Pattern(image, "83 F8 04 C6 44 24 0E 00 75 0F"); pattern.size() > 0)
                 {
-                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(8), 0xEBu);
+                    // The `jnz +0x0F` at +8 becomes a short jmp (the car-parts
+                    // shadow fix's unconditional skip).
+                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(8),
+                                        opp::ops::kJmpRel8);
                 }
             }
 
             {
                 if (auto pattern = Pattern(image, "83 FA 04 75 0C"); pattern.size() > 0)
                 {
-                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(3), 0xEBu);
+                    // The same rewrite on the second check (`jnz +0x0C` at +3).
+                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(3),
+                                        opp::ops::kJmpRel8);
                 }
             }
         }
@@ -416,7 +432,10 @@ namespace opp::features
             if (pattern.size() == 0)
                 pattern = Pattern(image, "74 0B 83 7C 24 2C 03");
             if (pattern.size() > 0)
-                WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(), 0xEBu);
+                // `EB` replaces the `jz` opcode at the match: the original's
+                // unconditional-skip rewrite.
+                WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(),
+                                    opp::ops::kJmpRel8);
         }
     }
 
@@ -437,13 +456,20 @@ namespace opp::features
         }
 
         // 0xC9A640 on 1.0.8.0.
+        // Recovered offsets in the cutscene shadow function: the shape poke is
+        // at +0x4A, its `call rel32` operand at +0x4F (poke-1 = +0x4E), the
+        // second `jz` site at +0x200 and the copied body is 0x2D2 bytes.
         constexpr size_t kCutsceneCalleeSize = 0x2D2u;
-        constexpr uint32_t kCutscenePokeOffset = 0x4Fu;   // poke-1 = +0x4E
-        constexpr uint32_t kCutsceneBranchOffset = 0x200u;  // the `jz` site 2
         constexpr uint32_t kCutsceneShapePoke = 0x4Au;
+        constexpr uint32_t kCutscenePokeOffset = kCutsceneShapePoke + kBranchLength;
+        static_assert(kCutscenePokeOffset == 0x4Fu);
+        constexpr uint32_t kCutsceneBranchOffset = 0x200u;
+        // The 14 `call rel32` offsets inside the copied cutscene shadow body:
+        // zpatch_relocate_calls re-points each at the same absolute target it
+        // had in the game image after the copy moves.
         constexpr uint32_t kCutsceneCalls[] = {
             0x00Eu, 0x01Du, 0x092u, 0x0E9u, 0x0F1u, 0x101u, 0x118u,
-            0x127u, 0x13Cu, 0x233u, 0x24Cu, 0x286u, 0x29Au,
+            0x127u, 0x13Cu, 0x233u, 0x24Cu, 0x286u, 0x29Au,  // 14 offsets total
         };
 
         // The copy's own `call rel32`s only reach their targets if it lives
@@ -451,11 +477,14 @@ namespace opp::features
         // of letting VirtualAlloc pick (on 64-bit that can be gigabytes away).
         void* AllocateNear(const GameImage& image, size_t size)
         {
+            // The fallback scan steps 16 MiB at a time up to 1 GiB, the range
+            // the original's pointer search covered.
             constexpr uintptr_t kStep = 0x1000000u;
             constexpr uintptr_t kReach = 0x40000000u;
+            constexpr uintptr_t kPageMask = 0xFFFFu;  // 64 KiB granularity
             const auto base = reinterpret_cast<uintptr_t>(image.base);
             const uintptr_t first =
-                (base + image.size + 0xFFFFu) & ~static_cast<uintptr_t>(0xFFFFu);
+                (base + image.size + kPageMask) & ~static_cast<uintptr_t>(kPageMask);
             for (uintptr_t candidate = first; candidate < first + kReach;
                  candidate += kStep)
             {
@@ -478,9 +507,13 @@ namespace opp::features
 
         void* CutsceneCalleeCopy(const GameImage& image, uintptr_t callee)
         {
-            static constexpr uint8_t kPrologue[5] = {0x55u, 0x8Bu, 0xECu, 0x83u, 0xE4u};
-            static constexpr uint8_t kPokeSite[5] = {0xC6u, 0x44u, 0x24u, 0x1Cu, 0x01u};
-            static constexpr uint8_t kBranchSite[8] = {0x74u, 0x24u, 0x8Bu,
+            // 55 8B EC 83 E4 = `push ebp; mov ebp,esp; and esp,-16`: the prologue the
+    // copied function starts with.
+    static constexpr uint8_t kPrologue[5] = {0x55u, 0x8Bu, 0xECu, 0x83u, 0xE4u};
+            // C6 44 24 1C 01 = `mov byte ptr [esp+0x1C], 1`: the shape poke itself.
+    static constexpr uint8_t kPokeSite[5] = {0xC6u, 0x44u, 0x24u, 0x1Cu, 0x01u};
+            // 74 24 8B 44 24 2C 83 F8 = `jz +0x24; mov eax,[esp+0x2C]; cmp eax,-8`.
+    static constexpr uint8_t kBranchSite[8] = {0x74u, 0x24u, 0x8Bu,
                                                        0x44u, 0x24u, 0x2Cu,
                                                        0x83u, 0xF8u};
             if (callee == 0u || !InImage(image, callee) ||
@@ -516,7 +549,7 @@ namespace opp::features
                 return nullptr;
             }
             // Site 2: the branch the copy takes when the camera is called back.
-            copy[kCutsceneBranchOffset] = 0xEBu;
+            copy[kCutsceneBranchOffset] = opp::ops::kJmpRel8;
             Log("CutsceneFixes: hooked callee %p, copy %p",
                 reinterpret_cast<void*>(callee), static_cast<void*>(copy));
             return copy;
@@ -689,9 +722,12 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                WriteValue<uint8_t>(ctx, match + 6, static_cast<uint8_t>(0xEBu));
+                // The original's ForceCarHeadlightShadows arm writes two
+                // `jmp` opcodes (+6, +379) and re-points the branch at +95 to
+                // match+476.
+                WriteValue<uint8_t>(ctx, match + 6, opp::ops::kJmpRel8);
                 JumpTo(ctx, match + 95, reinterpret_cast<void*>(match + 476));
-                WriteValue<uint8_t>(ctx, match + 379, static_cast<uint8_t>(0xEBu));
+                WriteValue<uint8_t>(ctx, match + 379, opp::ops::kJmpRel8);
                 WriteValue<uint32_t>(ctx, match + 211, AddressOf(&zpatch_fchs_offset));
             }
 
@@ -705,6 +741,8 @@ namespace opp::features
             {
                 if (auto pattern = Pattern(image, "8D 4C 24 50 51 68 04 05 00 00"); pattern.size() > 0)
                 {
+                    // The `push 0x504` immediate bytes are re-stored unchanged
+                    // (04 05), exactly as the original writes them.
                     WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(6), 0x04u);
                     WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(7), 0x05u);
                 }
@@ -713,6 +751,8 @@ namespace opp::features
             {
                 if (auto pattern = Pattern(image, "8D 44 24 50 50 68 04 01 00 00"); pattern.size() > 0)
                 {
+                    // The second `push 0x104` site: both immediate bytes already
+                    // are 04 01 and are re-stored 1:1 (the original writes them).
                     WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(6), 0x04u);
                     WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(7), 0x01u);
                 }
@@ -721,9 +761,15 @@ namespace opp::features
             {
                 if (auto pattern = Pattern(image, "F3 0F 11 44 24 1C 0F 84 9E 00 00 00"); pattern.size() > 0)
                 {
+                    // Restore `0F 84 9E 00` + one zero byte (`jz +0x9E`) as the
+                    // recovered five-byte window. The sixth byte of the rel32 is
+                    // deliberately left alone: the original never writes it.
+                    constexpr opp::ops::InstructionWindow<5> kJzPastShadow{
+                        {0x0F, 0x84, 0x9E, 0x00, 0x00}};
+                    static_assert(opp::ops::PackedLowDword(kJzPastShadow) == 0x009E840Fu);
                     auto* site = pattern.get(0).get<uint8_t>(6);
-                    WriteValue<uint32_t>(ctx, site, 0x009E840Fu); //jz rel32
-                    WriteValue<uint8_t>(ctx, site + 4, 0x00u); //jz rel32
+                    WriteRaw(ctx, site, kJzPastShadow.bytes.data(),
+                             kJzPastShadow.Size());
                 }
             }
         }
@@ -747,7 +793,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                WriteValue<uint8_t>(ctx, match + 7, 0xEBu);
+                WriteValue<uint8_t>(ctx, match + 7, opp::ops::kJmpRel8);
             }
         }
 
@@ -769,7 +815,12 @@ namespace opp::features
             {
                 if (auto pattern = Pattern(image, "0F 2F D0 76 25 0F 28 C2"); pattern.size() > 0)
                 {
-                    WriteValue<uint16_t>(ctx, pattern.get(0).get<uint8_t>(3), 0x2AEBu);
+                    // `EB 2A` (jmp +0x2A) replaces the `76 25` (jbe) at +3.
+                    constexpr opp::ops::InstructionWindow<2> kJumpPastComparison{
+                        {0xEB, 0x2A}};
+                    static_assert(opp::ops::PackedLowWord(kJumpPastComparison) == 0x2AEBu);
+                    WriteValue<uint16_t>(ctx, pattern.get(0).get<uint8_t>(3),
+                                         opp::ops::PackedLowWord(kJumpPastComparison));
                 }
             }
         }
@@ -841,7 +892,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                WriteValue<uint8_t>(ctx, match + 6, 0xEBu);
+                WriteValue<uint8_t>(ctx, match + 6, opp::ops::kJmpRel8);
             }
         }
 
@@ -864,7 +915,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                WriteValue<uint8_t>(ctx, match + 6, 0xEBu);
+                WriteValue<uint8_t>(ctx, match + 6, opp::ops::kJmpRel8);
             }
         }
 
@@ -887,7 +938,9 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                WriteValue<uint8_t>(ctx, match + 8, 0x60u);
+                // 0x60 is `pushad` (readable's kPushadOpcode): the original
+                // replaces the byte at +8 with it.
+                WriteValue<uint8_t>(ctx, match + 8, opp::ops::kPushad);
             }
         }
 

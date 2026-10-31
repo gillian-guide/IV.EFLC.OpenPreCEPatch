@@ -82,16 +82,19 @@ namespace opp
         // fall back to these values.
         if (resolve("68 ? ? ? ? 68 A9 54 14 51 E8") == nullptr)
         {
-            zpatch_salt_28 = 0x931F73A2u;
+            // The per-build fingerprint salts the probe installs when its own scan
+    // matches: recovered constants of the original's build table (no
+    // derivation exists; the preamble's build switch selects the row).
+    zpatch_salt_28 = 0x931F73A2u;
             zpatch_salt_3c = 0xA4EA0691u;
             zpatch_salt_40 = 0xC9DBDA90u;
             zpatch_salt_50 = 0x6B86410Eu;
             zpatch_salt_54 = 0x6DCD115Au;
             zpatch_salt_5c = 0x1CC648EAu;
-            zpatch_salt_a8 = 0x7F6A60D3u;
-            zpatch_salt_b8 = 0x62BFDB37u;
-            zpatch_salt_c8 = 0x406B4B20u;
-            zpatch_salt_d4 = 0x09399528u;
+            zpatch_salt_a8 = 0x7F6A60D3u;  // recovered fingerprint constant
+            zpatch_salt_b8 = 0x62BFDB37u;  // recovered fingerprint constant
+            zpatch_salt_c8 = 0x406B4B20u;  // recovered fingerprint constant
+            zpatch_salt_d4 = 0x09399528u;  // recovered fingerprint constant
         }
         return report;
     }

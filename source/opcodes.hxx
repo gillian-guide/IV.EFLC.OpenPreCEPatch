@@ -25,6 +25,7 @@ namespace opp::ops
     inline constexpr uint8_t kJnzRel8 = 0x75;    // 75 cb
     inline constexpr uint8_t kNop = 0x90;        // 90
     inline constexpr uint8_t kRet = 0xC3;        // C3
+    inline constexpr uint8_t kPushad = 0x60;     // 60
 
     // A recovered instruction window: `size` raw bytes copied verbatim over the
     // site. Windows are given as bytes because the original stores them as

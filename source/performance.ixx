@@ -15,6 +15,7 @@ module;
 #include "rebased.h"
 #include "feature_registry.hxx"
 #include "helpers.hxx"
+#include "opcodes.hxx"
 
 export module performance;
 
@@ -39,6 +40,8 @@ namespace opp::features
             {
                 if (auto pattern = Pattern(image, "6A 0A E8 ? ? ? ? 83 C7 0A 83 C4 04 81 FF E8 03 00 00 75 02 33 FF"); pattern.size() > 0)
                 {
+                    // `6A 0A` is `push 10`: zeroing its low byte makes the
+                    // sleep call wait 0 ms instead of 10 (the original's write).
                     WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(1), 0x00u);
                 }
             }
@@ -65,7 +68,9 @@ namespace opp::features
 
                 NopAt(ctx, match - 7, 2);
                 NopAt(ctx, match + 3, 2);
-                WriteValue<uint8_t>(ctx, match + 224, 0xEBu);
+                // The branch at +224 becomes a short jmp (the original's
+                // unconditional-skip rewrite in the 0x400-byte read function).
+                WriteValue<uint8_t>(ctx, match + 224, opp::ops::kJmpRel8);
                 NopAt(ctx, match + 231, 2);
                 NopAt(ctx, match + 367, 2);
                 NopAt(ctx, match + 377, 2);
@@ -120,6 +125,8 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
+                // The `push imm32` operand at +8 is the pointer-node pool count:
+                // 0x13880 (80,000) -> 0x4E200 (320,000).
                 WriteValue<uint32_t>(ctx, match + 8, static_cast<uint32_t>(0x4E200u));
             }
 
@@ -127,6 +134,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
+                // The same operand on the 16,000-entry pool: -> 0xFA00 (64,000).
                 WriteValue<uint32_t>(ctx, match + 8, static_cast<uint32_t>(0xFA00u));
             }
 
@@ -134,6 +142,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
+                // The same operand on the 16,000-entry pool: -> 0xFA00 (64,000).
                 WriteValue<uint32_t>(ctx, match + 8, static_cast<uint32_t>(0xFA00u));
             }
         }
@@ -157,6 +166,8 @@ namespace opp::features
             {
                 auto* target = MatchPointer(pattern, 77);
                 if (target != nullptr)
+                    // The model-limit slot the pattern's stored pointer names:
+                    // 1024 models (0x400).
                     WriteValue<uint32_t>(ctx, target, static_cast<uint32_t>(0x400u));
             }
         }
@@ -180,6 +191,8 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
+                // The `push 50` operand at +6 becomes 100: the vehicle-struct
+                // count the allocator is asked for.
                 WriteValue<uint8_t>(ctx, match + 6, static_cast<uint8_t>(0x64u));
             }
         }
@@ -247,6 +260,8 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
+                // `push 0x1388` (5000 ms) becomes `push 0`: the loading sleep
+                // the original removes.
                 WriteValue<uint32_t>(ctx, match + 1, static_cast<uint32_t>(0x0u));
             }
         }
