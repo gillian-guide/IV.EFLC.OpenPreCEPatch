@@ -1,4 +1,4 @@
-name: Build
+name: CI
 
 on:
   push:
@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   x86:
-    name: Windows x86 (shipped ASI + XLivelessAddon)
+    name: x86
     runs-on: windows-latest
 
     steps:
@@ -79,7 +79,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
-      - name: Package release zip
+      - name: Stage release files
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -101,39 +101,25 @@ jobs:
           if (-not $ini) { throw 'XLivelessAddon.ini was not found in the companion repository' }
           Copy-Item $ini.FullName (Join-Path $dist 'XLivelessAddon.ini')
 
-          # Exactly four files: an ASI and its INI for each module.
-          Compress-Archive -Path `
-            (Join-Path $dist 'IV.EFLC.OpenPreCEPatch.asi'), `
-            (Join-Path $dist 'IV.EFLC.OpenPreCEPatch.ini'), `
-            (Join-Path $dist 'XLivelessAddon.asi'), `
-            (Join-Path $dist 'XLivelessAddon.ini') `
-            -DestinationPath 'OpenPreCEPatch.zip' -Force
-
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path 'OpenPreCEPatch.zip'))
-          try {
-            $expected = @(
-              'IV.EFLC.OpenPreCEPatch.asi',
-              'IV.EFLC.OpenPreCEPatch.ini',
-              'XLivelessAddon.asi',
-              'XLivelessAddon.ini')
-            $actual = @($zip.Entries | ForEach-Object FullName | Sort-Object)
-            if (Compare-Object -ReferenceObject ($expected | Sort-Object) -DifferenceObject $actual) {
-              throw "release zip contains unexpected entries: $($actual -join ', ')"
-            }
-          } finally {
-            $zip.Dispose()
+          $expected = @(
+            'IV.EFLC.OpenPreCEPatch.asi',
+            'IV.EFLC.OpenPreCEPatch.ini',
+            'XLivelessAddon.asi',
+            'XLivelessAddon.ini')
+          $actual = @(Get-ChildItem $dist -File | Select-Object -ExpandProperty Name | Sort-Object)
+          if (Compare-Object -ReferenceObject ($expected | Sort-Object) -DifferenceObject $actual) {
+            throw "release folder contains unexpected files: $($actual -join ', ')"
           }
 
-      - name: Upload release zip
+      - name: Upload release
         uses: actions/upload-artifact@v7
         with:
           name: OpenPreCEPatch
-          path: OpenPreCEPatch.zip
+          path: dist/*
           if-no-files-found: error
 
-  x64-parity:
-    name: Windows x64 (parity dump)
+  x64:
+    name: x64
     runs-on: windows-latest
 
     steps:
