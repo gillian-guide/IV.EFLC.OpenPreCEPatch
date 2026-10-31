@@ -9652,38 +9652,143 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 
 		if (ctx.build == GameBuild::v1060)
 		{
-			injector::MakeJMP(image.base + 0x003982,
-				reinterpret_cast<void*>(ctx.gameBase + 0x003A09), true); //jmp
-			injector::WriteMemory<std::uint8_t>(image.base + 0x0038AC, 0x00u, true); //patch
-			injector::WriteMemory<std::uint8_t>(image.base + 0x00397E, 0x00u, true); //patch
-			injector::MakeNOP(image.base + 0x0042E7, 1, true); //nop
-			injector::MakeNOP(image.base + 0x0042E8, 1, true); //nop
-			injector::MakeNOP(image.base + 0x0042E9, 1, true); //nop
-			injector::MakeNOP(image.base + 0x0042EA, 1, true); //nop
-			injector::MakeNOP(image.base + 0x0042EB, 1, true); //nop
-			injector::MakeNOP(image.base + 0x0042EC, 1, true); //nop
-			injector::MakeNOP(image.base + 0x0042ED, 1, true); //nop
-			injector::WriteMemory<std::uint8_t>(image.base + 0x00392E, kShortJmpOpcode, true); //jmp
-			injector::WriteMemory<std::uint8_t>(image.base + 0x003A14, kShortJmpOpcode, true); //jmp
+			// The original wrote these packed-entry-stub bytes by RVA. Each
+			// signature below is the candidate research 08 verified as exactly one
+			// hit at its site on this build; the scans run in ascending address
+			// order so no candidate is read after an earlier site was overwritten.
+			if (auto p = Pattern(image, "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x0038AC
+				injector::WriteMemory<std::uint8_t>(site, 0x00u, true); //patch
+			}
+			if (auto p = Pattern(image, "74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? 83 C4 ?? 68"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x00392E
+				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true); //jmp
+			}
+			if (auto p = Pattern(image, "01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x00397E
+				injector::WriteMemory<std::uint8_t>(site, 0x00u, true); //patch
+			}
+			if (auto p = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x003982
+				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x003A09), true); //jmp
+			}
+			if (auto p = Pattern(image, "74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x003A14
+				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true); //jmp
+			}
+			if (auto p = Pattern(image, "C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x0042E7
+				injector::MakeNOP(site, 1, true); //nop
+			}
+			if (auto p = Pattern(image, "05 ?? ?? ?? ?? 01 74 1B ?? 40 18 56 ?? 01 6A ?? 50 83 CE ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x0042E8
+				injector::MakeNOP(site, 1, true); //nop
+			}
+			if (auto p = Pattern(image, "67 71 ?? 01 01 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x0042E9
+				injector::MakeNOP(site, 1, true); //nop
+			}
+			if (auto p = Pattern(image, "71 ?? 01 01 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x0042EA
+				injector::MakeNOP(site, 1, true); //nop
+			}
+			if (auto p = Pattern(image, "8A 01 01 74 1B ?? 40 18 56 ?? 01 6A ?? 50 83 CE ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x0042EB
+				injector::MakeNOP(site, 1, true); //nop
+			}
+			if (auto p = Pattern(image, "01 01 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x0042EC
+				injector::MakeNOP(site, 1, true); //nop
+			}
+			if (auto p = Pattern(image, "01 74 1B ?? 40 18 56 ?? 01 6A ?? 50 83 CE ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x0042ED
+				injector::MakeNOP(site, 1, true); //nop
+			}
 		}
 
 		if (ctx.build == GameBuild::v1070)
 		{
-			injector::MakeJMP(image.base + 0x00389C,
-				reinterpret_cast<void*>(ctx.gameBase + 0x0038AE), true); //jmp
-			injector::MakeJMP(image.base + 0x003962,
-				reinterpret_cast<void*>(ctx.gameBase + 0x0039E9), true); //jmp
-			injector::WriteMemory<std::uint8_t>(image.base + 0x00388C, 0x00u, true); //patch
-			injector::WriteMemory<std::uint8_t>(image.base + 0x00395E, 0x00u, true); //patch
-			injector::MakeNOP(image.base + 0x0042C7, 1, true); //nop
-			injector::MakeNOP(image.base + 0x0042C8, 1, true); //nop
-			injector::MakeNOP(image.base + 0x0042C9, 1, true); //nop
-			injector::MakeNOP(image.base + 0x0042CA, 1, true); //nop
-			injector::MakeNOP(image.base + 0x0042CB, 1, true); //nop
-			injector::MakeNOP(image.base + 0x0042CC, 1, true); //nop
-			injector::MakeNOP(image.base + 0x0042CD, 1, true); //nop
-			injector::WriteMemory<std::uint8_t>(image.base + 0x00390E, kShortJmpOpcode, true); //jmp
-			injector::WriteMemory<std::uint8_t>(image.base + 0x0039F4, kShortJmpOpcode, true); //jmp
+			// The original wrote these packed-entry-stub bytes by RVA. Each
+			// signature below is the candidate research 08 verified as exactly one
+			// hit at its site on this build; the scans run in ascending address
+			// order so no candidate is read after an earlier site was overwritten.
+			if (auto p = Pattern(image, "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x00388C
+				injector::WriteMemory<std::uint8_t>(site, 0x00u, true); //patch
+			}
+			if (auto p = Pattern(image, "75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x00389C
+				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x0038AE), true); //jmp
+			}
+			if (auto p = Pattern(image, "74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? ?? ?? ?? 68"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x00390E
+				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true); //jmp
+			}
+			if (auto p = Pattern(image, "01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x00395E
+				injector::WriteMemory<std::uint8_t>(site, 0x00u, true); //patch
+			}
+			if (auto p = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x003962
+				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x0039E9), true); //jmp
+			}
+			if (auto p = Pattern(image, "74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x0039F4
+				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true); //jmp
+			}
+			if (auto p = Pattern(image, "C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x0042C7
+				injector::MakeNOP(site, 1, true); //nop
+			}
+			if (auto p = Pattern(image, "05 ?? ?? ?? ?? 01 74 1B ?? 40 18 56 ?? 01 6A ?? 50 83 CE ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x0042C8
+				injector::MakeNOP(site, 1, true); //nop
+			}
+			if (auto p = Pattern(image, "57 81 8A ?? ?? ?? ?? ?? ?? ?? ?? 6A ?? 6A ?? 50 83 CE ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x0042C9
+				injector::MakeNOP(site, 1, true); //nop
+			}
+			if (auto p = Pattern(image, "81 8A ?? ?? ?? ?? ?? ?? ?? ?? 6A ?? 6A ?? 50 83 CE ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x0042CA
+				injector::MakeNOP(site, 1, true); //nop
+			}
+			if (auto p = Pattern(image, "8A 01 01 74 1B ?? 40 18 56 ?? 01 6A ?? 50 83 CE ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x0042CB
+				injector::MakeNOP(site, 1, true); //nop
+			}
+			if (auto p = Pattern(image, "01 01 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x0042CC
+				injector::MakeNOP(site, 1, true); //nop
+			}
+			if (auto p = Pattern(image, "01 74 1B ?? 40 18 56 ?? 01 6A ?? 50 83 CE ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x0042CD
+				injector::MakeNOP(site, 1, true); //nop
+			}
 		}
 	}
 	Trace("PathNodeCrashFix");
@@ -10148,16 +10253,33 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 
 		if (ctx.build == GameBuild::v1060)
 		{
-			injector::MakeJMP(image.base + 0x003982,
-				reinterpret_cast<void*>(ctx.gameBase + 0x003A09), true); //jmp
+			// The original wrote these packed-entry-stub bytes by RVA. Each
+			// signature below is the candidate research 08 verified as exactly one
+			// hit at its site on this build; the scans run in ascending address
+			// order so no candidate is read after an earlier site was overwritten.
+			if (auto p = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x003982
+				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x003A09), true); //jmp
+			}
 		}
 
 		if (ctx.build == GameBuild::v1070)
 		{
-			injector::MakeJMP(image.base + 0x00389C,
-				reinterpret_cast<void*>(ctx.gameBase + 0x0038AE), true); //jmp
-			injector::MakeJMP(image.base + 0x003962,
-				reinterpret_cast<void*>(ctx.gameBase + 0x0039E9), true); //jmp
+			// The original wrote these packed-entry-stub bytes by RVA. Each
+			// signature below is the candidate research 08 verified as exactly one
+			// hit at its site on this build; the scans run in ascending address
+			// order so no candidate is read after an earlier site was overwritten.
+			if (auto p = Pattern(image, "75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x00389C
+				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x0038AE), true); //jmp
+			}
+			if (auto p = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x003962
+				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x0039E9), true); //jmp
+			}
 		}
 	}
 	Trace("SuperLODFix");
