@@ -71,7 +71,7 @@ the builds the original is merely pattern-gated on, see
 | key | default | notes |
 | --- | --- | --- |
 | `LoadDLCs` | `1` | load TBoGT and TLAD from EFLC or CE folders, plus any more addon episodes in the same format (extra DLC folders should be named Episode3, Episode4, etc. and their ids in setup2.xml be the episode id multiplied by 2) [1060,1070,1080] |
-| `SCOSignatureFix` | `1` | allow loading of any .sco file regardless of which episode it came from (or which platform it came from, in case of patch 4 and below) this is required for trainer IV parachute support to work [all; FF] |
+| `SCOSignatureFix` | `1` | allow loading of any .sco file regardless of which episode it came from (or which platform it came from, in case of patch 4 and below) this is required for trainer IV parachute support to work [FF] |
 | `EpisodicVehicleSupport` | `0` | APC and buzzard support for all episodes [1004,1060-1130,1061,12043; FF] |
 | `EpisodicWeaponSupport` | `0` | explosive shotgun, stickybomb and DSR1 sniper support for all episodes [1004,1060-1130,1061,12043; FF] |
 | `PoliceEpisodicWeaponSupport` | `0` | makes cops use P90s and assault shotguns - only enable this if those weapons exist, or NOOSE and FIB will spawn unarmed [1004,1060-1130,1061,12043; FF] |
@@ -104,12 +104,12 @@ the builds the original is merely pattern-gated on, see
 | `RemoveAllWeaponsProtection` | `1` | make other players no longer able to remove all your weapons |
 | `TeleportProtection` | `1` | make other players no longer able to to teleport you |
 | `SuperLODFix` | `1` | fix crash if SuperLOD is spawned [1070,1080] |
-| `AimProjectileCrashFix` | `0` | crash fix, usually happens in GTAC |
-| `PathNodeCrashFix` | `0` | crash fix, usually happens in GTAC |
-| `CollisionDeadlockFix` | `0` | freeze fix, usually happens in GTAC |
+| `AimProjectileCrashFix` | `1` | crash fix, usually happens in GTAC |
+| `PathNodeCrashFix` | `1` | crash fix, usually happens in GTAC |
+| `CollisionDeadlockFix` | `1` | freeze fix, usually happens in GTAC |
 | `DebugPrintSpawns` | `0` | log all entities as they sync in into GTAC console (GTAC only, requires FreezeCarFix to be on) this doesn't actually log which player spawned the entity but who's currently syncing it which 99% of the time is the person who spawned it ONLY if they spawned it while they were in sync range |
 | `RemoveModChecks` | `1` | remove modded-file checks (patch 4 = 1.0.4.0, 1060 and 1070) [1040,1060,1070] |
-| `RemoveRGSCLoginRequirement` | `1` | remove Social Club login requirement for MP (all builds; 1.0.8.0 uses an RVA fallback) [all] |
+| `RemoveRGSCLoginRequirement` | `1` | remove Social Club login requirement for MP |
 | `RemoveGFWLUpdatePopup` | `1` | remove "update or sign out of LIVE" popup for GFWL (patch 5 and below) [1000-1040] |
 
 ## VEHICLES
@@ -119,7 +119,7 @@ the builds the original is merely pattern-gated on, see
 | `GarageModelFix` | `1` | fixes cars being randomly changed in parking spots if addons models are added |
 | `IncreaseVehicleStructLimit` | `1` | increase the amount of vehicles with different models that can be loaded at one time [FF] |
 | `IncreaseVehicleModelLimit` | `1` | increase the amount of possible vehicles.ide entries to 1024 [FF] |
-| `CarDecalsFix` | `0` | fix bulletholes not appearing on some modded cars outside TBoGT |
+| `CarDecalsFix` | `1` | fix bulletholes not appearing on some modded cars outside TBoGT |
 | `NoLiveryLimit` | `1` | removes the 4 livery limit, allowing up to 255 unique livery textures for any car [FF] |
 | `PopupHeadlightsFlag` | `0` | vehicles.ide flag for Hakumai's popup headlights on any car that supports it (+popuplights) |
 | `CopSirensFlag` | `0` | add +siren vehicles.ide flag to cars to make them use sirens |

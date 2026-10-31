@@ -5,6 +5,7 @@ bin/
 release/
 out/
 obj/
+*.zip
 *.obj
 *.pdb
 *.ilk

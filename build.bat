@@ -28,7 +28,7 @@ cmake --preset x86
 if errorlevel 1 goto :fail
 
 echo [build] Building...
-cmake --build --preset x86-release -- /m
+cmake --build --preset x86-release
 if errorlevel 1 goto :fail
 
 if "%DO_TEST%"=="1" (

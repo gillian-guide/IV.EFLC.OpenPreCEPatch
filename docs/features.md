@@ -237,7 +237,7 @@ load TBoGT and TLAD from EFLC or CE folders, plus any more addon episodes in the
 
 ### SCOSignatureFix
 
-allow loading of any .sco file regardless of which episode it came from (or which platform it came from, in case of patch 4 and below) this is required for trainer IV parachute support to work [all; FF]
+allow loading of any .sco file regardless of which episode it came from (or which platform it came from, in case of patch 4 and below) this is required for trainer IV parachute support to work [FF]
 
 - **Default:** `1`
 
@@ -381,19 +381,19 @@ fix crash if SuperLOD is spawned [1070,1080]
 
 crash fix, usually happens in GTAC
 
-- **Default:** `0`
+- **Default:** `1`
 
 ### PathNodeCrashFix
 
 crash fix, usually happens in GTAC
 
-- **Default:** `0`
+- **Default:** `1`
 
 ### CollisionDeadlockFix
 
 freeze fix, usually happens in GTAC
 
-- **Default:** `0`
+- **Default:** `1`
 
 ### DebugPrintSpawns
 
@@ -409,7 +409,7 @@ remove modded-file checks (patch 4 = 1.0.4.0, 1060 and 1070) [1040,1060,1070]
 
 ### RemoveRGSCLoginRequirement
 
-remove Social Club login requirement for MP (all builds; 1.0.8.0 uses an RVA fallback) [all]
+remove Social Club login requirement for MP
 
 - **Default:** `1`
 
@@ -443,7 +443,7 @@ increase the amount of possible vehicles.ide entries to 1024 [FF]
 
 fix bulletholes not appearing on some modded cars outside TBoGT
 
-- **Default:** `0`
+- **Default:** `1`
 
 ### NoLiveryLimit
 
