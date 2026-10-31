@@ -184,12 +184,12 @@ void CanonicaliseHookBodyBranches(std::uint8_t* image, const std::uint8_t* prist
 }
 } // namespace
 
-static bool RunPass(std::uint8_t* image, std::uint32_t size, const ConfigDocument* config,
-                    DWORD& code, void*& where)
+static bool RunPass(std::uint8_t* image, std::uint32_t size, GameBuild build,
+                    const ConfigDocument* config, DWORD& code, void*& where)
 {
 	__try
 	{
-		PatchGame(GameBuild::v1080, GameImage{image, size}, *config);
+		PatchGame(build, GameImage{image, size}, *config);
 		return true;
 	}
 	__except (code = GetExceptionCode(),
@@ -247,7 +247,7 @@ int RunOrderingCheck(std::uint8_t* image, std::uint32_t size, const ConfigDocume
 		const ConfigDocument isolated = IsolateOptions(config, enabled, count);
 		DWORD code = 0;
 		void* where = nullptr;
-		if (RunPass(image, size, &isolated, code, where))
+		if (RunPass(image, size, GameBuild::v1080, &isolated, code, where))
 			return true;
 		std::fprintf(stderr, "zp_dump: ordering: pass faulted %08lX at %p\n", code, where);
 		return false;
@@ -309,19 +309,62 @@ int RunOrderingCheck(std::uint8_t* image, std::uint32_t size, const ConfigDocume
 
 int main(int argc, char** argv)
 {
-	if (argc < 2)
+	// --exe/--build select which game image and build id the pass runs as, so a
+	// build-gated arm can be exercised against its own executable. Everything
+	// after the flags is <out.txt> [ini].
+	bool perOption = false;
+	bool ordering = false;
+	const char* exePath = nullptr;
+	int buildId = -1;
+	std::vector<const char*> positional;
+	for (int i = 1; i < argc; ++i)
+	{
+		if (std::strcmp(argv[i], "--per-option") == 0)
+			perOption = true;
+		else if (std::strcmp(argv[i], "--ordering") == 0)
+			ordering = true;
+		else if (std::strcmp(argv[i], "--exe") == 0 && i + 1 < argc)
+			exePath = argv[++i];
+		else if (std::strcmp(argv[i], "--build") == 0 && i + 1 < argc)
+			buildId = std::atoi(argv[++i]);
+		else
+			positional.push_back(argv[i]);
+	}
+	if (!ordering && positional.empty())
 	{
 		std::fprintf(stderr,
-		             "usage: zp_dump [--per-option] <out.txt> [ZolikaPatch.ini]\n"
-		             "       zp_dump --ordering [ZolikaPatch.ini]\n");
+		             "usage: zp_dump [--per-option] [--exe <image>] [--build <id>] <out.txt> [ini]\n"
+		             "       zp_dump --ordering [ini]\n");
 		return 1;
+	}
+
+	GameBuild build = GameBuild::v1080;
+	if (buildId >= 0)
+	{
+		bool known = false;
+		for (const int id : {0, 1, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 18})
+			known = known || id == buildId;
+		if (!known)
+		{
+			std::fprintf(stderr, "zp_dump: unknown build id %d\n", buildId);
+			return 1;
+		}
+		build = static_cast<GameBuild>(buildId);
 	}
 
 	std::vector<std::uint8_t> file_image;
 	std::uint32_t imageBase = 0;
 	std::uint32_t size = 0;
-	if (!MapPeImage("game_refs/GTAIV.exe", file_image, imageBase, size) &&
-	    !MapPeImage("../game_refs/GTAIV.exe", file_image, imageBase, size))
+	if (exePath != nullptr)
+	{
+		if (!MapPeImage(exePath, file_image, imageBase, size))
+		{
+			std::fprintf(stderr, "zp_dump: cannot read %s\n", exePath);
+			return 2;
+		}
+	}
+	else if (!MapPeImage("game_refs/GTAIV.exe", file_image, imageBase, size) &&
+	         !MapPeImage("../game_refs/GTAIV.exe", file_image, imageBase, size))
 	{
 		std::fprintf(stderr, "zp_dump: GTAIV.exe not found\n");
 		return 2;
@@ -357,10 +400,7 @@ int main(int argc, char** argv)
 	}
 	std::memcpy(image, file_image.data(), size);
 
-	const bool perOption = argc >= 3 && std::strcmp(argv[1], "--per-option") == 0;
-	const bool ordering = std::strcmp(argv[1], "--ordering") == 0;
-	const char* ini = perOption ? (argc >= 4 ? argv[3] : "game_refs/ZolikaPatch.ini")
-	                            : (argc >= 3 ? argv[2] : "game_refs/ZolikaPatch.ini");
+	const char* ini = positional.size() > 1 ? positional[1] : "game_refs/ZolikaPatch.ini";
 	ConfigDocument config;
 	if (!LoadConfig(ini, config) && !LoadConfig("../game_refs/ZolikaPatch.ini", config))
 	{
@@ -368,18 +408,26 @@ int main(int argc, char** argv)
 		return 4;
 	}
 
-	std::fprintf(stderr, "zp_dump: module base %p\n",
-	             static_cast<void*>(GetModuleHandleA(nullptr)));
+	std::fprintf(stderr, "zp_dump: module base %p build %d image %s\n",
+	             static_cast<void*>(GetModuleHandleA(nullptr)), static_cast<int>(build),
+	             exePath ? exePath : "game_refs/GTAIV.exe");
 
-	// Ordering guard (see RunOrderingCheck).
+	// Ordering guard (see RunOrderingCheck); its RVAs are the 1.0.8.0 sites.
 	if (ordering)
+	{
+		if (build != GameBuild::v1080)
+		{
+			std::fprintf(stderr, "zp_dump: --ordering is a 1.0.8.0 check\n");
+			return 1;
+		}
 		return RunOrderingCheck(image, size, config);
+	}
 
 	// --per-option: run each arm alone (every other key forced to 0) and print
 	// "option rva byte" so a divergence can be attributed to one installer.
 	if (perOption)
 	{
-		std::FILE* perOut = std::fopen(argv[2], "wb");
+		std::FILE* perOut = std::fopen(positional[0], "wb");
 		if (!perOut)
 			return 5;
 		const std::vector<HookBodyStand> stands = HookBodyStands();
@@ -389,7 +437,7 @@ int main(int argc, char** argv)
 			ConfigDocument single = IsolateOptions(config, enabled, 1);
 
 			std::memcpy(image, file_image.data(), size);
-			PatchGame(GameBuild::v1080, GameImage{image, size}, single);
+			PatchGame(build, GameImage{image, size}, single);
 			CanonicaliseHookBodyBranches(image, file_image.data(), imageBase, size, stands);
 			for (std::size_t b = 0; b < size; ++b)
 			{
@@ -407,7 +455,7 @@ int main(int argc, char** argv)
 	// write the way the original does, so a fault is a finding.
 	DWORD faultCode = 0;
 	void* faultAddress = nullptr;
-	if (!RunPass(image, size, &config, faultCode, faultAddress))
+	if (!RunPass(image, size, build, &config, faultCode, faultAddress))
 	{
 		for (unsigned short i = 0; i < g_frameCount; ++i)
 		{
@@ -422,7 +470,7 @@ int main(int argc, char** argv)
 		return 6;
 	}
 
-	std::FILE* out = std::fopen(argv[1], "wb");
+	std::FILE* out = std::fopen(positional[0], "wb");
 	if (!out)
 		return 5;
 	CanonicaliseHookBodyBranches(image, pristine.data(), imageBase, size, HookBodyStands());
