@@ -170,12 +170,12 @@ NAME_ALLOWLIST = {"image", "ctx", "pattern", "config", "match", "out", "value"}
 
 
 def iter_files(only: list[str] | None, include_tests: bool = True):
-    roots = [SRC]
+    roots = [SRC, ROOT / "source"]
     if include_tests:
         roots.append(ROOT / "tests")
     for root in roots:
         for path in sorted(root.rglob("*")):
-            if path.suffix not in (".cpp", ".h", ".hpp"):
+            if path.suffix not in (".cpp", ".h", ".hpp", ".ixx"):
                 continue
             rel = path.relative_to(ROOT).as_posix()
             if any(rel.startswith(x) or rel == x for x in EXCLUDED):

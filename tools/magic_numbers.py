@@ -88,7 +88,7 @@ def split_comment(line: str):
 
 def iter_sources(include_tests: bool = True):
     paths = []
-    for pattern in ("src/**/*.cpp", "src/**/*.h", "src/**/*.inc",
+    for pattern in ("src/**/*.cpp", "src/**/*.h", "src/**/*.inc", "source/*.ixx",
                     "tests/*.cpp", "tests/*.h"):
         paths.extend(ROOT.glob(pattern))
     for path in sorted(set(paths)):
