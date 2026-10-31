@@ -25,6 +25,15 @@ constexpr std::size_t kPeSignatureSize = 4;
 constexpr std::size_t kCoffHeaderSize = 20;
 constexpr std::size_t kSectionHeaderSize = 40;
 constexpr std::size_t kMinPeSize = 0x100;
+// COFF file header plus the optional-header fields the dump reads (the
+// reader needs at least this much of the NT headers).
+constexpr std::size_t kMinNtHeadersSize = 0x60;
+constexpr std::uint8_t kNop = 0x90u;
+constexpr std::uint8_t kJeRel8Opcode = 0x74u; // je rel8
+constexpr std::uint8_t kShortJmpOpcode = 0xEBu; // jmp rel8
+// The RemoveUselessChecks pass writes these two bytes over the signatures.
+constexpr std::uint8_t kUselessChecksMiscByte = 0x90u;
+constexpr std::uint8_t kUselessChecksDeathByte = 0x32u;
 constexpr std::uint32_t kMaxImageSize = 0x10000000u;
 constexpr unsigned kFaultFrameCount = 16;
 constexpr std::size_t kSparePage = 0x1000;
@@ -58,7 +67,7 @@ bool MapPeImage(const char* path, std::vector<std::uint8_t>& image, std::uint32_
 		return false;
 
 	const std::size_t e_lfanew = rd32(kDosLfanewOffset);
-	if (e_lfanew + 0x60 > file.size())
+	if (e_lfanew + kMinNtHeadersSize > file.size())
 		return false;
 	const std::size_t coff = e_lfanew + kPeSignatureSize;
 	const std::size_t optional = coff + kCoffHeaderSize;
@@ -232,7 +241,8 @@ int RunOrderingCheck(std::uint8_t* image, std::uint32_t size, const ConfigDocume
 	}
 	const std::vector<std::uint8_t> pristine(image, image + size);
 	// The two anchor bytes prove the image is the build these RVAs belong to.
-	if (pristine[kMiscFixesScanByte] != 0xE8 || pristine[kDeathMusicScanByte] != 0xE8)
+	if (pristine[kMiscFixesScanByte] != kCallOpcode ||
+    pristine[kDeathMusicScanByte] != kCallOpcode)
 	{
 		std::fprintf(stderr, "zp_dump: ordering: image is not 1.0.8.0 (0x%X=%02X, 0x%X=%02X)\n",
 		             kMiscFixesScanByte, pristine[kMiscFixesScanByte], kDeathMusicScanByte,
@@ -263,9 +273,11 @@ int RunOrderingCheck(std::uint8_t* image, std::uint32_t size, const ConfigDocume
 	// RemoveUselessChecks on: both installs must be suppressed.
 	if (!pass(all, 3))
 		return 1;
-	failures += expectByte(kMiscFixesScanByte, 0x90, "the RemoveUselessChecks byte");
-	failures += expectByte(kDeathMusicScanByte, 0x32, "the RemoveUselessChecks byte");
-	failures += expectByte(kMiscFixesPatchByte, 0x74, "MiscFixes' patch byte");
+	failures += expectByte(kMiscFixesScanByte, kUselessChecksMiscByte,
+                       "the RemoveUselessChecks byte");
+	failures += expectByte(kDeathMusicScanByte, kUselessChecksDeathByte,
+                       "the RemoveUselessChecks byte");
+	failures += expectByte(kMiscFixesPatchByte, kJeRel8Opcode, "MiscFixes' patch byte");
 	if (HasMatch(image, size, kMiscFixesSignature))
 	{
 		std::fprintf(stderr,
@@ -290,15 +302,18 @@ int RunOrderingCheck(std::uint8_t* image, std::uint32_t size, const ConfigDocume
 		// RemoveUselessChecks. Run it first and the tables' 5-byte nops overwrite
 		// both, so the opcode byte would be 0x90 instead of 0xE8: this is what
 		// distinguishes the two orders (the third call is destroyed either way).
-		failures += expectByte(site, 0xE8, "a RestoreDeathMusic call surviving RemoveUselessChecks");
+		failures += expectByte(site, kCallOpcode,
+                       "a RestoreDeathMusic call surviving RemoveUselessChecks");
 	}
 
 	// RemoveUselessChecks off: both arms must apply. This is the control that
 	// proves the suppression above is due to the tables, not to the arms.
 	if (!pass(all + 1, 2))
 		return 1;
-	failures += expectByte(kMiscFixesPatchByte, 0xEB, "MiscFixes' patch byte with RC off");
-	failures += expectByte(kMiscFixesScanByte, 0xE8, "the untouched signature byte");
+	failures += expectByte(kMiscFixesPatchByte, kShortJmpOpcode,
+                       "MiscFixes' patch byte with RC off");
+	failures += expectByte(kMiscFixesScanByte, kCallOpcode,
+                       "the untouched signature byte");
 	if (std::memcmp(image + kDeathMusicScanByte, pristine.data() + kDeathMusicScanByte,
 	                kBranchBytes) == 0)
 	{

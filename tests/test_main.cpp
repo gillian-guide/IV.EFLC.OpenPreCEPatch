@@ -30,6 +30,24 @@ constexpr std::size_t kPeSignatureSize = 4;
 constexpr std::size_t kCoffHeaderSize = 20;
 constexpr std::size_t kSectionHeaderSize = 40;
 constexpr std::size_t kMinPeSize = 0x100;
+constexpr std::size_t kMinNtHeadersSize = 0x60;  // COFF + optional header prefix
+// A buffer above the largest RVA any scan may report.
+constexpr std::size_t kScanProbeSize = 0x1000000u;
+constexpr std::uint8_t kByteMask = 0xFFu;
+constexpr std::uint64_t kFnvPrime = 0x100000001b3ull;
+// Recovered GameHash vectors, with the input beside each expectation.
+constexpr std::uint32_t kPoliceHash = 0x79fbb0c5u;   // "police"
+constexpr std::uint32_t kLiteralHash = 0x1234u;      // "hash:0x1234"
+constexpr std::uint32_t kWrappedHash = 0xffffffffu;  // "hash:  -1tail"
+constexpr std::uint32_t kZeroHash = 0xf4856ffeu;     // "hash:0"
+// ret 8's three bytes and the site byte the 4-byte MakeRET store must not
+// touch (the audit's O-1).
+constexpr std::uint8_t kRetImm16Opcode = 0xC2u;
+constexpr std::uint8_t kRet8Pop = 0x08u;
+constexpr std::uint8_t kZeroByte = 0x00u;
+constexpr std::uint8_t kUntouched83 = 0x83u;
+constexpr std::uint16_t kRet8Word = 0x08C2u;
+constexpr std::uint32_t kZMenuRejectFlag = 1u << 4;
 constexpr std::uint32_t kMaxImageSize = 0x10000000u;
 } // namespace
 
@@ -62,7 +80,7 @@ static bool MapPeImage(const char* path, std::vector<std::uint8_t>& image,
 		return false;
 
 	const std::size_t e_lfanew = rd32(kDosLfanewOffset);
-	if (e_lfanew + 0x60 > file.size())
+	if (e_lfanew + kMinNtHeadersSize > file.size())
 		return false;
 	const std::size_t coff = e_lfanew + kPeSignatureSize;
 	const std::size_t optional = coff + kCoffHeaderSize;
@@ -233,7 +251,7 @@ int Run()
 		};
 		for (const Expected& want : expected)
 		{
-			std::vector<std::uint8_t> buffer(0x1000000u, 0); // above the largest RVA
+			std::vector<std::uint8_t> buffer(kScanProbeSize, 0); // above the largest RVA
 			const GameImage image{buffer.data(), buffer.size()};
 			ApplyRemoveUselessChecks(want.build, image);
 
@@ -246,8 +264,8 @@ int Run()
 				++positions;
 				const auto rva = static_cast<std::uint32_t>(i);
 				for (unsigned shift = 0; shift < 32; shift += 8)
-					hash = (hash ^ ((rva >> shift) & 0xFFu)) * 0x100000001b3ull;
-				hash = (hash ^ buffer[i]) * 0x100000001b3ull;
+					hash = (hash ^ ((rva >> shift) & kByteMask)) * kFnvPrime;
+				hash = (hash ^ buffer[i]) * kFnvPrime;
 			}
 			CHECK(positions == want.positions);
 			CHECK(hash == want.hash);
@@ -260,7 +278,7 @@ int Run()
 		};
 		for (GameBuild build : other)
 		{
-			std::vector<std::uint8_t> buffer(0x1000000u, 0);
+			std::vector<std::uint8_t> buffer(kScanProbeSize, 0);
 			const GameImage image{buffer.data(), buffer.size()};
 			ApplyRemoveUselessChecks(build, image);
 			for (std::uint8_t byte : buffer)
@@ -269,16 +287,16 @@ int Run()
 	}
 
 	// ---- game hash and build classification --------------------------------
-	CHECK(GameHash("police") == 0x79fbb0c5u);
+	CHECK(GameHash("police") == kPoliceHash);
 	CHECK(GameHash("POLICE") == GameHash("police"));
 	CHECK(GameHash("a\\b") == GameHash("a/b"));
 	CHECK(GameHash("\"POLICE\"ignored") == GameHash("police"));
 	CHECK(GameHash("") == 2u);
-	CHECK(GameHash("hash:0x1234") == 0x1234u);
+	CHECK(GameHash("hash:0x1234") == kLiteralHash);
 	CHECK(GameHash("HASH:123trailing") == 123u);
-	CHECK(GameHash("hash:  -1tail") == 0xffffffffu);
+	CHECK(GameHash("hash:  -1tail") == kWrappedHash);
 	CHECK(GameHash("hash:077") == 63u);
-	CHECK(GameHash("hash:0") == 0xf4856ffeu);
+	CHECK(GameHash("hash:0") == kZeroHash);
 
 	CHECK(ClassifyGameBuild(1000) == GameBuild::v1000);
 	CHECK(ClassifyGameBuild(1004) == GameBuild::v1004);
@@ -301,12 +319,14 @@ int Run()
 	{
 		std::uint8_t api[6] = {0x83, 0x83, 0x83, 0x83, 0x83, 0x83};
 		injector::MakeRET(api, 8, false);
-		CHECK(api[0] == 0xC2 && api[1] == 0x08 && api[2] == 0x00 && api[3] == 0x00);
+		CHECK(api[0] == kRetImm16Opcode && api[1] == kRet8Pop && api[2] == kZeroByte &&
+      api[3] == kZeroByte);
 
 		std::uint8_t site[4] = {0x83, 0x83, 0x83, 0x83};
-		injector::WriteMemory<std::uint16_t>(site, 0x08C2u, false);
-		injector::WriteMemory<std::uint8_t>(site + 2, 0x00u, false);
-		CHECK(site[0] == 0xC2 && site[1] == 0x08 && site[2] == 0x00 && site[3] == 0x83);
+		injector::WriteMemory<std::uint16_t>(site, kRet8Word, false);
+		injector::WriteMemory<std::uint8_t>(site + 2, kZeroByte, false);
+		CHECK(site[0] == kRetImm16Opcode && site[1] == kRet8Pop && site[2] == kZeroByte &&
+      site[3] == kUntouched83);
 	}
 
 	std::uint32_t compact = 0;
@@ -500,12 +520,12 @@ int Run()
 	}
 
 	// ---- ZMenuIV guard -----------------------------------------------------
-	CHECK(!ZMenuVersionAccepted(0x35DD0u));
-	CHECK(ZMenuVersionAccepted(0x35DD1u));
-	CHECK(ZMenuVersionAccepted(0x35DD2u));
+	CHECK(!ZMenuVersionAccepted(kZMenuMinVersion - 1));
+	CHECK(ZMenuVersionAccepted(kZMenuMinVersion));
+	CHECK(ZMenuVersionAccepted(kZMenuMinVersion + 1));
 	CHECK(std::strcmp(kZMenuModuleName, "ZMenuIV.asi") == 0);
 	CHECK(std::strcmp(kZMenuProcName, "GetZMenuVersion") == 0);
-	CHECK(kZMenuRejectFlags == 0x10u);
+	CHECK(kZMenuRejectFlags == kZMenuRejectFlag);
 	CHECK(kZMenuTerminateExitCode == 0u);
 	{
 		// Harness cell: the guard fills it only when the export is found.

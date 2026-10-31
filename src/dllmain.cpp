@@ -141,6 +141,171 @@ constexpr std::size_t kModelRegistryStride = 0xE0;
 static_assert(kModelRegistryStride == 224u);
 constexpr std::uint16_t kOocPadMask = 0x1Fu << 11;
 
+// A recovered game-image RVA: a byte offset from GTAIV.exe's image base, used
+// where no safe signature exists (the value is the original handler's own
+// operand). `site()` is the only conversion, so a raw RVA cannot leak into a
+// write. The provenance of each constant below is the build, the original
+// function and the instruction that put the value in a register.
+struct GameRva final
+{
+	std::uint32_t value;
+	constexpr std::uintptr_t site(std::uintptr_t base) const noexcept
+	{
+		return base + value;
+	}
+	constexpr std::uintptr_t site(const std::uint8_t* base) const noexcept
+	{
+		return site(reinterpret_cast<std::uintptr_t>(base));
+	}
+	const void* site_ptr(std::uintptr_t base) const noexcept
+	{
+		return reinterpret_cast<const void*>(site(base));
+	}
+	const void* site_ptr(const std::uint8_t* base) const noexcept
+	{
+		return site_ptr(reinterpret_cast<std::uintptr_t>(base));
+	}
+};
+
+// LoadDLCs (original handler sub_100234E0): the loader's return value is stored
+// as the callback and the two DLC entry points it patches in are RVAs.
+// provenance: GTAIV_1070.exe / GTAIV_1060.exe / GTAIV.exe, IDA 2026-10-31;
+// instructions: `add edi, 414560h`, `lea edi, [eax+4136E0h]`, `lea edi,
+// [eax+414080h]` (and the 1060/1080 equivalents).
+constexpr GameRva kDlcLoadCallback_1070{0x414560u};
+constexpr GameRva kDlcRegister_1070{0x4136E0u};
+constexpr GameRva kDlcApply_1070{0x414080u};
+constexpr GameRva kDlcLoadCallback_1060{0x414300u};
+constexpr GameRva kDlcRegister_1060{0x413480u};
+constexpr GameRva kDlcApply_1060{0x413E20u};
+constexpr GameRva kDlcLoadCallback_1080{0x490460u};
+constexpr GameRva kDlcRegister_1080{0x48F440u};
+constexpr GameRva kDlcApply_1080{0x48FE00u};
+
+// LoadDLCs rail: the game functions the original's handler calls/jumps to
+// after patching the loader. provenance: same three images; instructions
+// `mov byte ptr [edi], 0E9h` / `0E8h` at the site named by each constant.
+constexpr GameRva kLoadDlcsJmpA_1070{0x4144B8u};   // 0x4144B8: jmp target
+constexpr GameRva kLoadDlcsJmpB_1070{0x41452Cu};   // 0x41452C: jmp target
+constexpr GameRva kLoadDlcsCall_1070{0x413E30u};   // 0x413E30: call target
+constexpr GameRva kLoadDlcsJmpA_1060{0x414258u};   // 0x414258: jmp target
+constexpr GameRva kLoadDlcsJmpB_1060{0x4142CCu};   // 0x4142CC: jmp target
+constexpr GameRva kLoadDlcsCall_1060{0x413BD0u};   // 0x413BD0: call target
+constexpr GameRva kLoadDlcsJmpA_1080{0x4903B8u};   // 0x4903B8: jmp target
+constexpr GameRva kLoadDlcsJmpB_1080{0x49042Cu};   // 0x49042C: jmp target
+constexpr GameRva kLoadDlcsCall_1080{0x48FBB0u};   // 0x48FBB0: call target
+
+// SuperLODFix (original handler sub_10046A10): the three game addresses the
+// shim tail-jumps to / calls, per build. provenance: IDA 2026-10-31; the
+// original's `lea edi, [ecx+4A3CE9h]` site is the JumpToBody the arm patches.
+constexpr GameRva kSuperLodFail_1080{0x4A3D37u};
+constexpr GameRva kSuperLodOk_1080{0x4A3CEFu};
+constexpr GameRva kSuperLodLookup_1080{0x58AAE0u};
+constexpr GameRva kSuperLodFail_1070{0x540E67u};
+constexpr GameRva kSuperLodOk_1070{0x540E1Fu};
+constexpr GameRva kSuperLodLookup_1070{0x4DD2D0u};
+
+// The packed entry-stub jumps the RemoveModChecks arms write (original handler
+// sub_10044710). provenance: GTAIV_1060.exe / GTAIV_1070.exe, IDA 2026-10-31;
+// the original's `add esi/edi, <rva>` instruction precedes each write.
+constexpr GameRva kModChecksEntryJmp_1060{0x003A09u};
+constexpr GameRva kModChecksMidJmp_1060{0x0038AEu};
+constexpr GameRva kModChecksCaseJmp_1060{0x0039E9u};
+constexpr GameRva kModChecksEntryJmp_1070{0x003A09u};
+constexpr GameRva kModChecksMidJmp_1070{0x0038AEu};
+constexpr GameRva kModChecksCaseJmp_1070{0x0039E9u};
+
+// The 1.0.8.0 driveby resume RVA the diagnostic reconstructs the game base from
+// (original signature: `E8 ? ? ? ?` at 0x85031C). Kept as a named value: the
+// loader's own base is not passed to this path.
+constexpr std::uint32_t kDrivebyResumeRva_1080 = 0x85031Fu;
+// The model-table key the driveby diagnostic searches for (opaque: an entry id
+// in the game's model table, not derivable from the name).
+constexpr std::uint32_t kDrivebyModelKey = 0x9399528u;
+
+// Structural values the arms and the compiled bodies would otherwise spell as
+// bare hex. Each is a field offset, a size or a mask; the recovered literal is
+// in the comment (research 07 §2).
+constexpr std::uint8_t kByteMask = 0xFFu;                  // low byte of a value
+constexpr std::uint8_t kNibbleMask = 0x0Fu;                // low hex digit
+constexpr std::uint16_t kClearedLowBit = 0xFFFEu;          // clears flag bit 0
+// The two push immediates ForceCarHeadlightShadows' patterns embed (0x0504
+// and 0x0104); the arm rewrites their two bytes.
+constexpr std::uint16_t kShadowPushA = 0x0504u;
+constexpr std::uint16_t kShadowPushB = 0x0104u;
+constexpr std::uint8_t kMinimizePauseTick = 0x06u;  // DoNotPauseOnMinimize
+constexpr std::size_t kSpawnsNameCapacity = 0x40u;  // ooc name buffer
+constexpr std::uint32_t kFlagBit4 = 1u << 4;               // object flag bit 4
+constexpr std::uintptr_t kMinPlausiblePointer = 0x10000u;  // below any mapping
+constexpr std::uintptr_t kUserModeCeiling = 0x80000000u;   // user-mode limit
+constexpr std::uint32_t kMaxModelCount = 0x100000u;        // model-table cap
+constexpr std::uint32_t kModelRegistryCountOffset = 0x14u; // +0: count
+constexpr std::uint32_t kModelEntryBoneOffset = 0x14u;     // name +0, bone +0x14
+constexpr std::uint32_t kPedModelHashOffset = 0x3Cu;       // CPed model hash
+constexpr std::uint32_t kVehicleComponentP1 = 0xB4u;        // ped+8 -> +0xB4
+constexpr std::uint32_t kVehicleComponentRegistry = 0xCu;   // -> +0xC
+constexpr std::uint32_t kNewFilesNameA = 0x10u;             // name, update A
+constexpr std::uint32_t kNewFilesNameB = 0x10Fu;            // name, update B
+constexpr std::size_t kNoLiveryNameCapacity = 0x10u;        // strcpy_s extent
+constexpr std::size_t kEpisodeSuffixCapacity = 0x40u;       // "\\Episode%d\\"
+constexpr std::uint8_t kUninitialisedHeapPoison = 0xCDu;    // MSVC debug CRT
+constexpr std::uint8_t kZeroByte = 0x00u;                   // clear a byte
+constexpr std::uint8_t kJeRel8Opcode = 0x74u;               // je rel8
+constexpr std::uint8_t kShortJmpOpcode = 0xEBu;              // jmp rel8
+constexpr std::uint32_t kTrueValue = 1u;                    // mov eax,1
+constexpr std::uint8_t kMovssStorePrefix = 0xF3u;           // movss dword ptr
+constexpr std::uint8_t kMovssTwoByteOpcode = 0x0Fu;
+constexpr std::uint8_t kMovssStoreOpcode = 0x11u;
+constexpr std::uint8_t kModrmXmm0Esi = 0x86u;   // /r 0x86: xmm0, [esi+disp32]
+constexpr std::uint8_t kModrmXmm1Esi = 0x8Eu;   // /r 0x8E: xmm1, [esi+disp32]
+constexpr std::uint8_t kFstpSt0Bytes[2] = {0xDD, 0xD8};  // fstp st(0)
+constexpr std::uint8_t kMovEbxHead[2] = {0x8B, 0x5C};    // mov ebx,[esp+..] head
+constexpr std::uint16_t kRet8Imm = 0x08C2u;     // C2 08 = ret 8
+constexpr std::uint8_t kRet8High = 0x00u;       // high byte of the imm16
+constexpr std::uint16_t kCutsceneBranchDisp = 0x009Eu;  // je +0x9E
+constexpr std::uint8_t kCutsceneJmpDisp = 0x2Au;        // jmp +0x2A
+constexpr std::uint8_t kMiscJmpDispC9 = 0xC9u;          // jmp +0xC9
+constexpr std::uint8_t kMiscJmpDisp0D = 0x0Du;          // jmp +0x0D
+constexpr std::uint32_t kVehicleStructLimit = 100u;     // 0x64: struct count
+constexpr std::uint32_t kPtrNodeCount = 320'000u;       // 0x4E200
+constexpr std::uint32_t kPtrNodeCountAlt = 64'000u;     // 0xFA00
+constexpr std::uint32_t kPtrNodeInitial = 0x400u;       // 0x400
+// The borderless arm's GWL_STYLE mask: the recovered 0xFF30FFFF clears the
+// framed-window bits (caption, system menu, thick frame, minimise/maximise).
+constexpr std::uint32_t kBorderlessStyleMask =
+    ~static_cast<std::uint32_t>(WS_CAPTION | WS_SYSMENU | WS_THICKFRAME |
+                                WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
+static_assert(kBorderlessStyleMask == 0xFF30FFFFu);
+// The short-jump and je opcodes the NewSaves flag toggle chooses between.
+constexpr std::size_t kOocPathCapacity = 0x44u;  // ooc name buffer
+constexpr std::uint32_t kModelLimitIncrease = 0x100u;   // 0x100
+constexpr std::uint32_t kForcedShadowSize = 0x100u;     // 0x100
+
+// opaque: the OOC archive's build tag (the first dword of the original's
+// embedded resource). provenance: ZolikaPatch_original.asi resource at
+// 0x100B6798, IDA 2026-10-31; the self-test compares it byte-for-byte.
+// why: it is a build-time tag of the original's resource, not a derivable value.
+constexpr std::uint32_t kOocArchiveMagic = 0x86723DFFu;
+constexpr std::uint16_t kOocHeaderPage = 0x10u;  // header words[0]
+constexpr std::uint16_t kOocHeaderOp = 0xE9u;    // header words[1]
+constexpr std::uint8_t kOocPakMarker = 0xFAu;    // second byte of the pak blob
+constexpr std::uint8_t kOocRecordTag = 0xB0u;    // record[14]
+constexpr std::uint8_t kOocRecordTag2 = 0x02u;   // record[15]
+constexpr std::uint32_t kOocDecodedLength = 182272u;  // decoded stream length
+// grade B: recomputed from the decoded blob; the literals are the proof values.
+constexpr std::uint32_t kOocTableAdler = 0x41E794ABu;
+constexpr std::uint32_t kOocArchiveFnv = 0xB5AF7B10u;
+
+// opaque: model hashes the original handlers look up by hash (the game's
+// name->hash result); provenance: ZolikaPatch_original.asi sub_100469A0 /
+// sub_10044XXX, IDA 2026-10-31; why: the input strings are not in this repo.
+constexpr std::uint32_t kSuperLodLookupHash = 0xAE4B15D6u;
+constexpr std::uint32_t kSuperLodFallbackHash = 0xC703DB5Fu;
+constexpr std::uint32_t kScriptCallHash = 0x79023CFCu;  // zpatch_script_call
+constexpr std::uint32_t kPopupLightsHash = 0xEB9F21D3u;  // popuplights script
+constexpr std::uint32_t kNewFilesRegistrarKey = 0x2C89A1F9u;
+
+
 // NewSaves: header layout and the "SAVE" magic the reader checks.
 constexpr std::size_t kSaveHeaderSize = 0x110u;
 constexpr std::size_t kSaveMagicOffset = 0x0C;
@@ -206,7 +371,7 @@ LONG WINAPI TraceFault(EXCEPTION_POINTERS* info)
 	for (int i = 0; i < 256; ++i)
 	{
 		const std::uintptr_t value = stack[i];
-		if (value < 0x10000)
+		if (value < kMinPlausiblePointer)
 			continue;
 		MEMORY_BASIC_INFORMATION mbi{};
 		if (VirtualQuery(reinterpret_cast<const void*>(value), &mbi, sizeof(mbi)) == 0)
@@ -517,9 +682,11 @@ void ApplyLaunchWithPlayGTAIV(GameBuild build, GameImage image, INI<>& ini)
 	}
 
 	// Collect every hit before writing: the write destroys the string a re-scan
-	// would need (research 11 §3.4).
+	// would need (research 11 §3.4). Pattern(image, ...) is single-site; the
+	// launcher needs both slots, so this uses the multi-hit helper explicitly.
+	const ModuleView view{image.base, image.size};
 	std::vector<const std::uint8_t*> sites;
-	if (FindAllPatterns({image.base, image.size}, kLauncherSlotSignature, sites) == 0)
+	if (FindAllPatterns(view, kLauncherSlotSignature, sites) == 0)
 		return;
 	for (const std::uint8_t* site : sites)
 	{
@@ -734,7 +901,7 @@ std::uint64_t ConfigKeyHash(std::string_view section, std::string_view key) noex
 		hash ^= static_cast<unsigned char>(c);
 		hash *= kFnvPrime;
 	}
-	hash ^= 0xFFu;
+	hash ^= kByteMask;
 	hash *= kFnvPrime;
 	for (const char c : key)
 	{
@@ -1268,7 +1435,7 @@ bool ParseToken(std::string_view token, int& value, bool& wildcard)
 		accumulated = accumulated * 16u + static_cast<std::uint32_t>(digit);
 	}
 
-	value = static_cast<int>((negative ? 0u - accumulated : accumulated) & 0xFFu);
+	value = static_cast<int>((negative ? 0u - accumulated : accumulated) & kByteMask);
 	return true;
 }
 
@@ -1306,8 +1473,8 @@ bool Normalize(std::string_view signature, std::string& out)
 		else
 		{
 			static const char kHex[] = "0123456789ABCDEF";
-			out.push_back(kHex[(value >> 4) & 0xFu]);
-			out.push_back(kHex[value & 0xFu]);
+			out.push_back(kHex[(value >> 4) & kNibbleMask]);
+			out.push_back(kHex[value & kNibbleMask]);
 		}
 		any = true;
 	}
@@ -2485,7 +2652,7 @@ bool abi_super_lod_helper(const void* object) noexcept
 	std::int32_t index = -1;
 	const auto lookup = reinterpret_cast<int(__cdecl*)(std::uint32_t, std::int32_t*)>(
 	    static_cast<std::uintptr_t>(zpatch_super_lod_lookup));
-	lookup(0xAE4B15D6u, &index);  // sub_100469A0's call is unguarded
+	lookup(kSuperLodLookupHash, &index);  // sub_100469A0's call is unguarded
 	const auto* o = static_cast<const std::uint8_t*>(object);
 	return *reinterpret_cast<const std::int16_t*>(o + kModelIndexOffset) == index;
 }
@@ -2511,7 +2678,7 @@ void abi_popup_check() noexcept
 	zpatch_popup_angle = kPiOver2Bits;  // dword_101580CC: pi/2 float bits
 	zpatch_popup_flag = 0;             // dword_1015BE24
 	std::int32_t out = -1;
-	lookup(0xEB9F21D3u, &out);  // sub_10044310's call is unguarded
+	lookup(kPopupLightsHash, &out);  // sub_10044310's call is unguarded
 	zpatch_popup_index = static_cast<std::uint32_t>(out);  // dword_1015BE1C
 	if (out == static_cast<std::int32_t>(zpatch_popup_model))
 	{
@@ -2662,7 +2829,8 @@ extern "C" std::uint32_t zpatch_script_call(std::uint32_t hash, std::uint32_t na
                                             const std::uint32_t* args) noexcept
 {
 	zpatch_native_block block;
-	std::memset(&block, 0, 0xA0);
+	// The original clears 0xA0 bytes (args[16] stays dirty; preserved).
+	std::memset(&block, 0, offsetof(zpatch_native_block, args[16]));
 	for (auto& record : block.m_records)
 	{
 		record.v[0] = 0;
@@ -2745,7 +2913,7 @@ void zpatch_spawns_print_c(const char* text) noexcept
 {
 	const std::uint32_t arg = static_cast<std::uint32_t>(
 	    reinterpret_cast<std::uintptr_t>(text));
-	zpatch_script_call(0x79023CFCu, 1, &arg);
+	zpatch_script_call(kScriptCallHash, 1, &arg);
 }
 }  // namespace
 __declspec(naked) void zpatch_spawns_print_edx()
@@ -2817,7 +2985,7 @@ extern "C" void abi_bpm_check() noexcept
 	{
 		const std::uint32_t modelHash =
 		    *reinterpret_cast<const std::uint32_t*>(
-		        static_cast<const std::uint8_t*>(object) + 0x3C);
+		        static_cast<const std::uint8_t*>(object) + kPedModelHashOffset);
 		const char* model_name = zpatch_bpm_model_name(modelHash);
 		std::uint32_t entity = zpatch_bpm_obj;
 		const char* who = reinterpret_cast<const char*>(static_cast<std::uintptr_t>(
@@ -2827,7 +2995,7 @@ extern "C" void abi_bpm_check() noexcept
 		              model_name);
 		const std::uint32_t text = static_cast<std::uint32_t>(
 		    reinterpret_cast<std::uintptr_t>(buffer));
-		zpatch_script_call(0x79023CFCu, 1, &text);
+		zpatch_script_call(kScriptCallHash, 1, &text);
 	}
 	const std::uint32_t hash = GameHash("m_y_multiplayer");
 	if (zpatch_script_call_bool(zpatch_salt_b8, 1, &hash) == 0)
@@ -3143,9 +3311,9 @@ std::int32_t zpatch_garage_lookup_c(std::uint8_t* object) noexcept
 	if (out <= 0 || out >= 32000)
 	{
 		out = -1;
-		lookup(0xC703DB5Fu, &out);
+		lookup(kSuperLodFallbackHash, &out);
 		*reinterpret_cast<std::int16_t*>(object + 16) = static_cast<std::int16_t>(out);
-		*reinterpret_cast<std::uint16_t*>(object + 48) &= 0xFFFEu;
+		*reinterpret_cast<std::uint16_t*>(object + 48) &= kClearedLowBit;
 		return 65534;
 	}
 	*reinterpret_cast<std::int16_t*>(object + 16) = static_cast<std::int16_t>(out);
@@ -3204,7 +3372,7 @@ extern "C" const void* abi_vehicle_component(const void* registry,
 	// sub_10003F40 dereferences the registry and each candidate name unguarded.
 	const auto* entries = *reinterpret_cast<const std::uint8_t* const*>(registry);
 	const auto count = *reinterpret_cast<const std::uint16_t*>(
-	    static_cast<const std::uint8_t*>(registry) + 0x14);
+	    static_cast<const std::uint8_t*>(registry) + kModelRegistryCountOffset);
 	for (std::uint16_t i = 0; i < count; ++i)
 	{
 		const auto* entry = entries + static_cast<std::size_t>(i) * kModelRegistryStride;
@@ -3275,16 +3443,16 @@ extern "C" std::uint32_t abi_steer_body() noexcept
 		const std::uint32_t p1 = *reinterpret_cast<const std::uint32_t*>(
 		    static_cast<std::uintptr_t>(ped) + 8);
 		const std::uint32_t p2 = *reinterpret_cast<const std::uint32_t*>(
-		    static_cast<std::uintptr_t>(p1) + 0xB4);
+		    static_cast<std::uintptr_t>(p1) + kVehicleComponentP1);
 		const std::uint32_t registry = *reinterpret_cast<const std::uint32_t*>(
-		    static_cast<std::uintptr_t>(p2) + 0xC);
+		    static_cast<std::uintptr_t>(p2) + kVehicleComponentRegistry);
 		const auto* entry = static_cast<const std::uint8_t*>(abi_vehicle_component(
 		    reinterpret_cast<const void*>(static_cast<std::uintptr_t>(registry)), name));
 		if (entry == nullptr) return nullptr;  // the original's own `if (v6)` check
 		// sub_10004C70 0x10004D4A calls get_bone unguarded (it is null only when
 		// the loader's preamble missed).
 		const std::uint32_t bone =
-		    *reinterpret_cast<const std::uint16_t*>(entry + 0x14);
+		    *reinterpret_cast<const std::uint16_t*>(entry + kModelEntryBoneOffset);
 		return get_bone(vehicle, bone);
 	};
 
@@ -3353,7 +3521,7 @@ extern "C" std::uint32_t abi_steer_body() noexcept
 					const float rpm = *reinterpret_cast<const float*>(vehicle + kVehicleRpmOffset);
 					scale = static_cast<float>(static_cast<double>(rpm) * 0.75 + 0.25);
 				}
-				if ((flags & 0x10u) != 0u) scale = 1.0f;
+				if ((flags & kFlagBit4) != 0u) scale = 1.0f;
 				if (set_b) set_b(matrix, scale * zpatch_engine_phase);
 			}
 		}
@@ -3536,7 +3704,7 @@ extern "C" void abi_new_saves_convert(const char* path) noexcept
 	if (p1 == nullptr) p1 = scan_game("74 37 80 3D ? ? ? ? 00 75 2E 8D 84 ? ? ? ? 00 6A 1E");
 	if (p1 != nullptr)
 		wp_byte(const_cast<std::uint8_t*>(p1),
-		        zpatch_new_saves_flag9 != 0 ? 0xEB : 0x74);
+		        zpatch_new_saves_flag9 != 0 ? kShortJmpOpcode : kJeRel8Opcode);
 
 	// P2 (game 0x7D8C50): route the oversized read through the plugin's scratch
 	// buffer, resize the read, and force/NOP the branch per the save format.
@@ -3660,7 +3828,7 @@ int __cdecl abi_better_mp_sync() { return 0; }
 // @exact 0x10005ed0 CombinedRadioFreezeFix: mov eax,13h / ret.
 int __cdecl abi_combined_radio_freeze_fix() { return 19; }
 
-// 0x10003e50 AllowHashesForIDE: the game's model-name hash function, replaced so
+// @orig 0x10003e50 AllowHashesForIDE: the game's model-name hash function, replaced so
 // that "hash:<number>" literals are accepted (see GameHash). The original is
 // __cdecl(char*) -> unsigned int; this wrapper keeps that ABI.
 unsigned int __cdecl abi_game_hash(const char* text)
@@ -3668,7 +3836,7 @@ unsigned int __cdecl abi_game_hash(const char* text)
 	return GameHash(text ? std::string_view{text} : std::string_view{});
 }
 
-// 0x10050870 PedModelsInCutscenesFix: replaces the game's "does this object use
+// @orig 0x10050870 PedModelsInCutscenesFix: replaces the game's "does this object use
 // the player model" check (the original calls a game helper and compares +0x2E).
 // The original is __thiscall(this) -> bool in al; __fastcall puts `this` in ECX
 // and returns bool in AL the same way.
@@ -3925,7 +4093,7 @@ __declspec(naked) void abi_player_ped_components_shim()
 	}
 }
 
-// 0x1001af60 EmissiveLerpFix: register-exact transcription of the original
+// @orig 0x1001af60 EmissiveLerpFix: register-exact transcription of the original
 // tramp. It saves ecx/edx, runs sub_1001AF20 (inlined: the integer state
 // machine over dword_10159CC0/CCC), then does the SSE tail and tail-jumps to
 // the resume (match-12, game 0x7F8BAD).
@@ -5057,7 +5225,7 @@ extern "C" void abi_vram_fix_helper() noexcept
 	if (argB < 0 || zpatch_vram_arg_a != 0 || argB < static_cast<std::int32_t>(kFloatQuarterBits))
 		zpatch_vram_flag = 1;
 }
-// 0x1004aab0 VRAMFix: stashes two of the game function's arguments, calls the
+// @orig 0x1004aab0 VRAMFix: stashes two of the game function's arguments, calls the
 // verdict helper under pushad/popad, then reproduces the original tail
 // (fldcw [esp]; add esp,0x1c; ret), returning INT_MAX when the verdict is set.
 // The E9 site replaced that tail, so this must be naked.
@@ -5092,20 +5260,20 @@ extern "C" void abi_driveby_fov_note_impl()
 	if (logged) return;
 	logged = true;
 	const std::uintptr_t game_base =
-	    static_cast<std::uintptr_t>(zpatch_driveby_resume) - 5u - 0x85031Fu;  // build-9 sig RVA
+	    static_cast<std::uintptr_t>(zpatch_driveby_resume) - 5u - kDrivebyResumeRva_1080;  // build-9 sig RVA
 	std::uint32_t count = 0;
 	std::uint32_t table = 0;
-	if (game_base > 0x10000u && game_base < 0x80000000u)
+	if (game_base > kMinPlausiblePointer && game_base < kUserModeCeiling)
 	{
 		count = *reinterpret_cast<const std::uint32_t*>(game_base + kModelTableCountRva);
 		table = *reinterpret_cast<const std::uint32_t*>(game_base + kModelTablePointerRva);
-		if (table > 0x10000u && count > 0u && count < 0x100000u)
+		if (table > kMinPlausiblePointer && count > 0u && count < kMaxModelCount)
 		{
 			for (std::uint32_t i = 0; i < count; ++i)
 			{
 				const std::uint32_t key = *reinterpret_cast<const std::uint32_t*>(
 				    static_cast<std::uintptr_t>(table) + i * 8u);
-				if (key == 0x9399528u) break;
+				if (key == kDrivebyModelKey) break;
 			}
 		}
 	}
@@ -5190,7 +5358,7 @@ extern "C" __declspec(naked) void abi_driveby_fov_note()
 	}
 }
 
-// 0x100064b0 DrivebyFOVFix: computes the drive-by FOV once and feeds it to the
+// @orig 0x100064b0 DrivebyFOVFix: computes the drive-by FOV once and feeds it to the
 // resume as xmm0. The original is `pushal; call sub_10006450; popal;
 // movss xmm0,[0x101580c4]; jmp [0x1015bdf4]`; sub_10006450 resolves the handle
 // dword_101580D4 (salt 0x09399528) through dword_1015BDE0, walks two structures,
@@ -5278,7 +5446,7 @@ extern "C" void abi_nolivery_copy_name()  // sub_1003D2F0
 	char* const dst = reinterpret_cast<char*>(static_cast<std::uintptr_t>(zpatch_nolivery_dest));
 	const char* const src =
 	    reinterpret_cast<const char*>(static_cast<std::uintptr_t>(zpatch_nolivery_bufptr));
-	zpatch_secure_strcpy_s(dst, 0x10u, src);
+	zpatch_secure_strcpy_s(dst, kNoLiveryNameCapacity, src);
 }
 extern "C" void abi_nolivery_count_loop()  // sub_1003D270
 {
@@ -5458,7 +5626,7 @@ extern "C" void __cdecl abi_newfiles_register()
 	// arguments after the call.
 	const auto register_file = reinterpret_cast<void(__cdecl*)(std::uint32_t, void*)>(
 	    static_cast<std::uintptr_t>(zpatch_newfiles_register_slot));
-	register_file(0x2C89A1F9u, reinterpret_cast<void*>(&abi_newfiles_cb));
+	register_file(kNewFilesRegistrarKey, reinterpret_cast<void*>(&abi_newfiles_cb));
 }
 extern "C" void* abi_newfiles_find_obj()  // 0x10051730
 {
@@ -5522,19 +5690,19 @@ extern "C" __declspec(naked) void abi_newfiles_register_body()  // 0x10051600
 extern "C" char __fastcall abi_newfiles_update_a(void* self, int)  // 0x10051890
 {
 	auto* base = static_cast<unsigned char*>(self);
-	if (base[0x10] == 0) return 0;
+	if (base[kNewFilesNameA] == 0) return 0;
 	if (abi_newfiles_call_obj(abi_newfiles_find_obj(),
-	                          GameHash(reinterpret_cast<const char*>(base + 0x10))))
-		abi_newfiles_call_add(base + 8, base + 0x10);
+	                          GameHash(reinterpret_cast<const char*>(base + kNewFilesNameA))))
+		abi_newfiles_call_add(base + 8, base + kNewFilesNameA);
 	return 1;
 }
 extern "C" char __fastcall abi_newfiles_update_b(void* self, int)  // 0x100518D0
 {
 	auto* base = static_cast<unsigned char*>(self);
-	if (base[0x10F] == 0) return 0;
+	if (base[kNewFilesNameB] == 0) return 0;
 	if (abi_newfiles_call_obj(abi_newfiles_find_obj(),
-	                          GameHash(reinterpret_cast<const char*>(base + 0x10F))))
-		abi_newfiles_call_add(base + 4, base + 0x10F);
+	                          GameHash(reinterpret_cast<const char*>(base + kNewFilesNameB))))
+		abi_newfiles_call_add(base + 4, base + kNewFilesNameB);
 	return 1;
 }
 
@@ -5799,7 +5967,7 @@ extern "C" LRESULT __stdcall abi_borderless_w(HWND hwnd, UINT msg, WPARAM wparam
 	{
 		SetWindowPos(hwnd, reinterpret_cast<HWND>(static_cast<INT_PTR>(-2)), 0, 0, 0, 0, 3);
 		SetWindowLongA(hwnd, GWL_STYLE,
-		               GetWindowLongA(hwnd, GWL_STYLE) & static_cast<LONG>(0xff30ffffu));
+		               GetWindowLongA(hwnd, GWL_STYLE) & static_cast<LONG>(kBorderlessStyleMask));
 		SetWindowLongA(hwnd, GWL_EXSTYLE, GetWindowLongA(hwnd, GWL_EXSTYLE) & ~static_cast<LONG>(8));
 		zpatch_borderless_w_done = 1;
 	}
@@ -5812,7 +5980,7 @@ extern "C" LRESULT __stdcall abi_borderless_a(HWND hwnd, UINT msg, WPARAM wparam
 	{
 		SetWindowPos(hwnd, reinterpret_cast<HWND>(static_cast<INT_PTR>(-2)), 0, 0, 0, 0, 3);
 		SetWindowLongA(hwnd, GWL_STYLE,
-		               GetWindowLongA(hwnd, GWL_STYLE) & static_cast<LONG>(0xff30ffffu));
+		               GetWindowLongA(hwnd, GWL_STYLE) & static_cast<LONG>(kBorderlessStyleMask));
 		SetWindowLongA(hwnd, GWL_EXSTYLE, GetWindowLongA(hwnd, GWL_EXSTYLE) & ~static_cast<LONG>(8));
 		zpatch_borderless_a_done = 1;
 	}
@@ -5941,7 +6109,7 @@ __declspec(naked) void abi_episode_switch_shim_c()
 	}
 }
 
-// 0x1001ef60 HighFPSBikePhysicsFix: saves the incoming value, clamps it,
+// @orig 0x1001ef60 HighFPSBikePhysicsFix: saves the incoming value, clamps it,
 // restores the registers, then tail-jumps to the resume (match+9).
 // @exact 0x1001EF60
 __declspec(naked) void abi_bike_physics_detour()
@@ -6197,7 +6365,7 @@ void* dlc_discovery_post(void* object)
 	try_paths("\\dlc\\TBoGT\\content\\", "\\TBoGT\\", 4);
 	for (int i = 3; i < 255; ++i)
 	{
-		char suffix[0x40];
+		char suffix[kEpisodeSuffixCapacity];
 		zpatch_spawns_sprintf(suffix, sizeof(suffix), "\\Episode%d\\", i);
 		try_paths(suffix, suffix, 2 * i);
 	}
@@ -6279,14 +6447,14 @@ constexpr std::size_t kYawFpuWindow = 107;
 // 0x8E is xmm1; both use the disp32 form (mod = 10, r/m = 110b = esi).
 constexpr std::array<std::uint8_t, 8> MovssToEsi(std::uint8_t modrm, std::size_t field) noexcept
 {
-	return {0xF3,
-	        0x0F,
-	        0x11,
+	return {kMovssStorePrefix,
+	        kMovssTwoByteOpcode,
+	        kMovssStoreOpcode,
 	        modrm,
-	        static_cast<std::uint8_t>(field & 0xFF),
-	        static_cast<std::uint8_t>((field >> 8) & 0xFF),
-	        static_cast<std::uint8_t>((field >> 16) & 0xFF),
-	        static_cast<std::uint8_t>((field >> 24) & 0xFF)};
+	        static_cast<std::uint8_t>(field & kByteMask),
+	        static_cast<std::uint8_t>((field >> 8) & kByteMask),
+	        static_cast<std::uint8_t>((field >> 16) & kByteMask),
+	        static_cast<std::uint8_t>((field >> 24) & kByteMask)};
 }
 
 // 8x nop: the window's disabled form.
@@ -6295,25 +6463,26 @@ constexpr std::array<std::uint8_t, 8> kEightNops = {kNop, kNop, kNop, kNop,
                                                     kNop, kNop, kNop, kNop};
 
 // Window 0: store pitch from xmm0 (8 bytes exactly: prefix, opcode, modrm, disp32).
-constexpr std::array<std::uint8_t, 8> kPitchStore = MovssToEsi(0x86, kResumePitchOffset);
+constexpr std::array<std::uint8_t, 8> kPitchStore = MovssToEsi(kModrmXmm0Esi, kResumePitchOffset);
 // Window 1: store yaw from xmm1.
-constexpr std::array<std::uint8_t, 8> kYawStore = MovssToEsi(0x8E, kResumeYawOffset);
+constexpr std::array<std::uint8_t, 8> kYawStore = MovssToEsi(kModrmXmm1Esi, kResumeYawOffset);
 // Window 2: `fstp dword ptr [esi+148h]` (D9 9E + disp32) then `8B 5C`, the head of
 // the next instruction, which never changes.
 constexpr std::array<std::uint8_t, 8> kYawFpuStore = {
-    0xD9,
+    0xD9,  // fstp dword ptr [esi+disp32]
     0x9E,
     static_cast<std::uint8_t>(kResumeYawOffset & 0xFF),
     static_cast<std::uint8_t>((kResumeYawOffset >> 8) & 0xFF),
     static_cast<std::uint8_t>((kResumeYawOffset >> 16) & 0xFF),
     static_cast<std::uint8_t>((kResumeYawOffset >> 24) & 0xFF),
-    0x8B,
-    0x5C};
+    kMovEbxHead[0],
+    kMovEbxHead[1]};
 // Window 2's disabled form is NOT nop fill: DD D8 is `fstp st(0)`. The enclosing
 // routine pushes one x87 value and pops it later, so the pop must stay or the x87
 // stack overflows after eight calls. Bytes 6-7 are the preserved next instruction.
-constexpr std::array<std::uint8_t, 8> kYawFpuNops = {0xDD, 0xD8, kNop, kNop,
-                                                     kNop, kNop, 0x8B, 0x5C};
+constexpr std::array<std::uint8_t, 8> kYawFpuNops = {
+    kFstpSt0Bytes[0], kFstpSt0Bytes[1], kNop, kNop, kNop, kNop,
+    kMovEbxHead[0], kMovEbxHead[1]};
 
 struct ResumeWindow final
 {
@@ -6907,7 +7076,7 @@ bool zpatch_ooc_decode(unsigned char* table) noexcept
 		if (pc == previous) terminated = true;
 	}
 	if (!terminated || stream.cursor != kOocTableSize) return false;
-	if (kOocPakBlob[pc] != 5u || kOocPakBlob[pc + 1] != 0xFAu) return false;
+	if (kOocPakBlob[pc] != 5u || kOocPakBlob[pc + 1] != kOocPakMarker) return false;
 	const std::uint32_t trailer = (static_cast<std::uint32_t>(kOocPakBlob[pc + 2]) << 24) |
 	                              (static_cast<std::uint32_t>(kOocPakBlob[pc + 3]) << 16) |
 	                              (static_cast<std::uint32_t>(kOocPakBlob[pc + 4]) << 8) |
@@ -6949,8 +7118,8 @@ unsigned char* zpatch_ooc_build_archive(unsigned char* table,
 		std::uint16_t words[2];
 	};
 	static_assert(sizeof(OocHeader) == 20);
-	const OocHeader header{{0x86723DFFu, 3u, 1u, name_bytes + 16u},
-	                       {0x10u, 0xE9u}};
+	const OocHeader header{{kOocArchiveMagic, 3u, 1u, name_bytes + 16u},
+	                       {kOocHeaderPage, kOocHeaderOp}};
 	append(&header, sizeof(header));
 	unsigned char record[16] = {};
 	std::memcpy(record, &size, 4);                 // physical size (entry[0x20])
@@ -7025,12 +7194,12 @@ extern "C" bool zpatch_ooc_selftest() noexcept
 		std::free(table);
 		return false;
 	}
-	const std::uint32_t header[4] = {0x86723DFFu, 3u, 1u, 28u};
+	const std::uint32_t header[4] = {kOocArchiveMagic, 3u, 1u, 28u};
 	bool header_ok = true;
 	for (int i = 0; i < 4; ++i)
 		header_ok = header_ok && std::memcmp(archive + 4 * i, &header[i], 4) == 0;
-	header_ok = header_ok && archive[16] == 0x10u && archive[17] == 0u &&
-	            archive[18] == 0xE9u && archive[19] == 0u;
+	header_ok = header_ok && archive[16] == kOocHeaderPage && archive[17] == 0u &&
+	            archive[18] == kOocHeaderOp && archive[19] == 0u;
 	const std::uint32_t record_size = static_cast<std::uint32_t>(kOocTableSize);
 	const std::uint32_t record_index = 1u;
 	bool record_ok = std::memcmp(archive + 20, &record_size, 4) == 0;
@@ -7038,11 +7207,11 @@ extern "C" bool zpatch_ooc_selftest() noexcept
 	record_ok = record_ok && std::memcmp(archive + 24, &zero, 4) == 0 &&
 	            std::memcmp(archive + 28, &record_index, 4) == 0;
 	record_ok = record_ok && archive[32] == 88u && archive[33] == 0u &&
-	            archive[34] == 0xB0u && archive[35] == 0x02u;
+	            archive[34] == kOocRecordTag && archive[35] == kOocRecordTag2;
 	const bool name_ok = std::memcmp(archive + 36, "finale2.sco", 12) == 0;
-	const bool ok = decoded && final_offset == 182272u && table_adler == 0x41E794ABu &&
+	const bool ok = decoded && final_offset == kOocDecodedLength && table_adler == kOocTableAdler &&
 	                header_ok && record_ok && name_ok &&
-	                zpatch_ooc_fnv1a(archive, final_offset) == 0xB5AF7B10u;
+	                zpatch_ooc_fnv1a(archive, final_offset) == kOocArchiveFnv;
 	std::free(archive);
 	return ok;
 }
@@ -7075,10 +7244,10 @@ extern "C" std::uint32_t abi_ooc_wrap(std::uint32_t arg0, std::uint32_t arg1) no
 	const std::uint32_t lookup = zpatch_ooc_lookup();
 	if (lookup != 0u)
 	{
-		char buffer[0x44];
-		zpatch_spawns_sprintf(buffer, 0x40, zpatch_ooc_fmt_b, zpatch_ooc_fmt_a, 0x3A, 0x24,
-		                      static_cast<int>(lookup), static_cast<int>(zpatch_ooc_state),
-		                      0x30, 0x3A, 0);
+		char buffer[kOocPathCapacity];
+		zpatch_spawns_sprintf(buffer, kSpawnsNameCapacity, zpatch_ooc_fmt_b, zpatch_ooc_fmt_a,
+		                      ':', '$', static_cast<int>(lookup),
+		                      static_cast<int>(zpatch_ooc_state), '0', ':', 0);
 		const auto logger = reinterpret_cast<void(__cdecl*)(char*, int, int)>(
 		    static_cast<std::uintptr_t>(zpatch_ooc_logger));
 		// sub_1004C350 calls the logger and the original target unguarded.
@@ -7577,7 +7746,7 @@ extern "C" void* __stdcall zpatch_nms_alloc(std::uint32_t size, std::uint32_t al
 	*reinterpret_cast<std::uint32_t*>(aligned - 4u) =
 	    static_cast<std::uint32_t>(aligned - raw);
 	auto* result = reinterpret_cast<void*>(aligned);
-	std::memset(result, 0xCD, want);
+	std::memset(result, kUninitialisedHeapPoison, want);
 	EnterCriticalSection(&g_nms_lock);
 	g_nms_allocations.insert(static_cast<std::uint32_t>(aligned));
 	LeaveCriticalSection(&g_nms_lock);
@@ -7890,6 +8059,27 @@ const AbiBody kAbiBodies[] =
 		{BodyId::driveby_fov_shim, reinterpret_cast<void(*)()>(&abi_driveby_fov_shim)},
 };
 
+// The ten spawn-probe case bodies: `offset` is the byte distance from the
+// probe match to the case body (the original's jump-table selector).
+struct SpawnCase final
+{
+	std::uint32_t offset;
+	void (*body)();
+};
+constexpr SpawnCase kSpawnCases[] = {
+	{0x24u, &abi_spawns_case_0x24},
+	{0x3Du, &abi_spawns_case_0x3D},
+	{0x56u, &abi_spawns_case_0x56},
+	{0x6Fu, &abi_spawns_case_0x6F},
+	{0x88u, &abi_spawns_case_0x88},
+	{0x9Eu, &abi_spawns_case_0x9E},
+	{0xB4u, &abi_spawns_case_0xB4},
+	{0xCAu, &abi_spawns_case_0xCA},
+	{0xE0u, &abi_spawns_case_0xE0},
+	{0xF6u, &abi_spawns_case_0xF6},
+};
+
+
 std::uintptr_t ResolveHookBody(std::uint32_t reference_va, void*) noexcept
 {
 	for (const AbiBody& body : kAbiBodies)
@@ -7940,7 +8130,6 @@ namespace
 	constexpr std::uint8_t kCallOpcode = 0xE8;
 	// The other instruction bytes the arms write. An opcode is not data: name it
 	// so `0xEB` at a site reads as "jmp rel8" and not as a magic number.
-	constexpr std::uint8_t kShortJmpOpcode = 0xEB; // jmp rel8
 	constexpr std::uint8_t kRetOpcode = 0xC3;
 	constexpr std::uint8_t kMovEaxOpcode = 0xB8;   // mov eax, imm32
 	constexpr std::uint8_t kPushadOpcode = 0x60;
@@ -8278,23 +8467,23 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 	{
 		if (ctx.build == GameBuild::v1060)
 		{
-			zpatch_dlc_load_callback = static_cast<std::uint32_t>(ctx.gameBase + 0x414560);
-			DlcRegisterRva() = 0x004136E0u;
-			DlcApplyRva() = 0x00414080u;
+			zpatch_dlc_load_callback = static_cast<std::uint32_t>(kDlcLoadCallback_1070.site(ctx.gameBase));
+			DlcRegisterRva() = kDlcRegister_1070.value;
+			DlcApplyRva() = kDlcApply_1070.value;
 		}
 
 		if (ctx.build == GameBuild::v1070)
 		{
-			zpatch_dlc_load_callback = static_cast<std::uint32_t>(ctx.gameBase + 0x414300);
-			DlcRegisterRva() = 0x00413480u;
-			DlcApplyRva() = 0x00413E20u;
+			zpatch_dlc_load_callback = static_cast<std::uint32_t>(kDlcLoadCallback_1060.site(ctx.gameBase));
+			DlcRegisterRva() = kDlcRegister_1060.value;
+			DlcApplyRva() = kDlcApply_1060.value;
 		}
 
 		if (ctx.build == GameBuild::v1080)
 		{
-			zpatch_dlc_load_callback = static_cast<std::uint32_t>(ctx.gameBase + 0x490460);
-			DlcApplyRva() = 0x0048FE00u;
-			DlcRegisterRva() = 0x0048F440u;
+			zpatch_dlc_load_callback = static_cast<std::uint32_t>(kDlcLoadCallback_1080.site(ctx.gameBase));
+			DlcApplyRva() = kDlcApply_1080.value;
+			DlcRegisterRva() = kDlcRegister_1080.value;
 		}
 	}
 	Trace("publish LocalSettingsPath");
@@ -8539,16 +8728,16 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 
 		if (ctx.build == GameBuild::v1070)
 		{
-			zpatch_super_lod_fail = AddressOf(image.base + 0x4A3D37u);
-			zpatch_super_lod_ok = AddressOf(image.base + 0x4A3CEFu);
-			zpatch_super_lod_lookup = AddressOf(image.base + 0x58AAE0u);
+			zpatch_super_lod_fail = AddressOf(kSuperLodFail_1080.site_ptr(image.base));
+			zpatch_super_lod_ok = AddressOf(kSuperLodOk_1080.site_ptr(image.base));
+			zpatch_super_lod_lookup = AddressOf(kSuperLodLookup_1080.site_ptr(image.base));
 		}
 
 		if (ctx.build == GameBuild::v1080)
 		{
-			zpatch_super_lod_fail = AddressOf(image.base + 0x540E67u);
-			zpatch_super_lod_ok = AddressOf(image.base + 0x540E1Fu);
-			zpatch_super_lod_lookup = AddressOf(image.base + 0x4DD2D0u);
+			zpatch_super_lod_fail = AddressOf(kSuperLodFail_1070.site_ptr(image.base));
+			zpatch_super_lod_ok = AddressOf(kSuperLodOk_1070.site_ptr(image.base));
+			zpatch_super_lod_lookup = AddressOf(kSuperLodLookup_1070.site_ptr(image.base));
 		}
 	}
 	Trace("publish DrivebyFOVFix");
@@ -8970,7 +9159,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			if (auto pattern = Pattern(image, "50 68 04 01 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
 			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(2), 0x00u, true); //patch
+				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(2), kZeroByte, true); //patch
 			}
 		}
 
@@ -9498,7 +9687,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 				// `jmp +0x2A` written as its two bytes (there is no short-jump API).
 				auto* site = pattern.get(0).get<std::uint8_t>(3);
 				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true);     //jmp
-				injector::WriteMemory<std::uint8_t>(site + 1, 0x2Au, true); // +0x2A
+				injector::WriteMemory<std::uint8_t>(site + 1, kCutsceneJmpDisp, true); // +0x2A
 			}
 		}
 	}
@@ -9524,7 +9713,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x41445C
-				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x4144B8), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpA_1070.site(ctx.gameBase)), true); //jmp
 			}
 			if (auto p = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8"); p.size() > 0)
 			{
@@ -9536,12 +9725,12 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			if (auto p = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x41450E
-				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x41452C), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpB_1070.site(ctx.gameBase)), true); //jmp
 			}
 			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x41453A
-				injector::MakeCALL(site, reinterpret_cast<void*>(ctx.gameBase + 0x413E30), true); //call
+				injector::MakeCALL(site, reinterpret_cast<void*>(kLoadDlcsCall_1070.site(ctx.gameBase)), true); //call
 			}
 			if (auto p = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); p.size() > 0)
 			{
@@ -9566,7 +9755,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x4141FC
-				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x414258), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpA_1060.site(ctx.gameBase)), true); //jmp
 			}
 			if (auto p = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E"); p.size() > 0)
 			{
@@ -9578,12 +9767,12 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			if (auto p = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x4142AE
-				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x4142CC), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpB_1060.site(ctx.gameBase)), true); //jmp
 			}
 			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x4142DA
-				injector::MakeCALL(site, reinterpret_cast<void*>(ctx.gameBase + 0x413BD0), true); //call
+				injector::MakeCALL(site, reinterpret_cast<void*>(kLoadDlcsCall_1060.site(ctx.gameBase)), true); //call
 			}
 			if (auto p = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); p.size() > 0)
 			{
@@ -9608,7 +9797,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x49035C
-				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x4903B8), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpA_1080.site(ctx.gameBase)), true); //jmp
 			}
 			if (auto p = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6"); p.size() > 0)
 			{
@@ -9620,12 +9809,12 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			if (auto p = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x49040E
-				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x49042C), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpB_1080.site(ctx.gameBase)), true); //jmp
 			}
 			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x49043A
-				injector::MakeCALL(site, reinterpret_cast<void*>(ctx.gameBase + 0x48FBB0), true); //call
+				injector::MakeCALL(site, reinterpret_cast<void*>(kLoadDlcsCall_1080.site(ctx.gameBase)), true); //call
 			}
 			if (auto p = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); p.size() > 0)
 			{
@@ -9714,7 +9903,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
 			injector::WriteMemory<std::uint8_t>(match, kMovEaxOpcode, true); //patch
-			injector::WriteMemory<std::uint32_t>(match + 1, 0x00000001u, true); //patch
+			injector::WriteMemory<std::uint32_t>(match + 1, kTrueValue, true); //patch
 		}
 
 		if (auto pattern = Pattern(image, "8B 54 24 04 52 A3"); pattern.size() > 0)
@@ -9723,7 +9912,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 
 			// `jmp +0xC9` written as its two bytes (there is no short-jump API).
 			injector::WriteMemory<std::uint8_t>(match, kShortJmpOpcode, true);      //jmp
-			injector::WriteMemory<std::uint8_t>(match + 1, 0xC9u, true);  // +0xC9
+			injector::WriteMemory<std::uint8_t>(match + 1, kMiscJmpDispC9, true);  // +0xC9
 		}
 
 		if (auto pattern = Pattern(image, "C7 05 ? ? ? ? 03 00 00 00 33 C0 5E 59 C3 C7"); pattern.size() > 0)
@@ -9732,7 +9921,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 
 			// `jmp +0x0D` written as its two bytes (there is no short-jump API).
 			injector::WriteMemory<std::uint8_t>(match, kShortJmpOpcode, true);      //jmp
-			injector::WriteMemory<std::uint8_t>(match + 1, 0x0Du, true);  // +0x0D
+			injector::WriteMemory<std::uint8_t>(match + 1, kMiscJmpDisp0D, true);  // +0x0D
 		}
 
 		if (auto pattern = Pattern(image, "C7 06 ? ? ? ? 74 19"); pattern.size() > 0)
@@ -9860,7 +10049,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			if (auto p = Pattern(image, "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x0038AC
-				injector::WriteMemory<std::uint8_t>(site, 0x00u, true); //patch: clear the entry-stub byte
+				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); //patch: clear the entry-stub byte
 			}
 			if (auto p = Pattern(image, "74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? 83 C4 ?? 68"); p.size() > 0)
 			{
@@ -9870,12 +10059,12 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			if (auto p = Pattern(image, "01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x00397E
-				injector::WriteMemory<std::uint8_t>(site, 0x00u, true); //patch: clear the entry-stub byte
+				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); //patch: clear the entry-stub byte
 			}
 			if (auto p = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x003982
-				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x003A09), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksEntryJmp_1070.site(ctx.gameBase)), true); //jmp
 			}
 			if (auto p = Pattern(image, "74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F"); p.size() > 0)
 			{
@@ -9900,12 +10089,12 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			if (auto p = Pattern(image, "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x00388C
-				injector::WriteMemory<std::uint8_t>(site, 0x00u, true); //patch: clear the entry-stub byte
+				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); //patch: clear the entry-stub byte
 			}
 			if (auto p = Pattern(image, "75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x00389C
-				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x0038AE), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksMidJmp_1070.site(ctx.gameBase)), true); //jmp
 			}
 			if (auto p = Pattern(image, "74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? ?? ?? ?? 68"); p.size() > 0)
 			{
@@ -9915,12 +10104,12 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			if (auto p = Pattern(image, "01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x00395E
-				injector::WriteMemory<std::uint8_t>(site, 0x00u, true); //patch: clear the entry-stub byte
+				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); //patch: clear the entry-stub byte
 			}
 			if (auto p = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x003962
-				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x0039E9), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksCaseJmp_1070.site(ctx.gameBase)), true); //jmp
 			}
 			if (auto p = Pattern(image, "74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F"); p.size() > 0)
 			{
@@ -10103,6 +10292,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			{
 				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x498460
 				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_rgsc_login_removed), true); //jmp
+				// The original writes the same jump twice (duplicate-write rule).
 				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_rgsc_login_removed), true); //jmp
 			}
 		}
@@ -10361,8 +10551,8 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			// MakeRET is NOT equivalent: its header stores the opcode through a
 			// 4-byte int store, so it also zeroes match+3 (0x83 on 1.0.8.0, the
 			// first byte of the next instruction). Keep the three-byte form.
-			injector::WriteMemory<std::uint16_t>(injector::raw_ptr(match), 0x08C2u, true); //ret 8
-			injector::WriteMemory<std::uint8_t>(injector::raw_ptr(match + 2), 0x00u, true); //ret 8
+			injector::WriteMemory<std::uint16_t>(injector::raw_ptr(match), kRet8Imm, true); //ret 8
+			injector::WriteMemory<std::uint8_t>(injector::raw_ptr(match + 2), kRet8High, true); //ret 8
 		}
 	}
 	Trace("TryToSkipAllErrors");
@@ -10419,7 +10609,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			if (auto p = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x003982
-				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x003A09), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksEntryJmp_1070.site(ctx.gameBase)), true); //jmp
 			}
 		}
 
@@ -10432,12 +10622,12 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			if (auto p = Pattern(image, "75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x00389C
-				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x0038AE), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksMidJmp_1070.site(ctx.gameBase)), true); //jmp
 			}
 			if (auto p = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x003962
-				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x0039E9), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksCaseJmp_1070.site(ctx.gameBase)), true); //jmp
 			}
 		}
 	}
@@ -10563,16 +10753,20 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			if (auto pattern = Pattern(image, "8D 4C 24 50 51 68 04 05 00 00"); pattern.size() > 0)
 			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6), 0x04u, true); //patch
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(7), 0x05u, true); //patch
+				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6),
+				                                    kShadowPushA & kByteMask, true); //patch
+				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(7),
+				                                    (kShadowPushA >> 8) & kByteMask, true); //patch
 			}
 		}
 
 		{
 			if (auto pattern = Pattern(image, "8D 44 24 50 50 68 04 01 00 00"); pattern.size() > 0)
 			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6), 0x04u, true); //patch
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(7), 0x01u, true); //patch
+				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6),
+				                                    kShadowPushB & kByteMask, true); //patch
+				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(7),
+				                                    (kShadowPushB >> 8) & kByteMask, true); //patch
 			}
 		}
 
@@ -10584,8 +10778,8 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 				// bytes (the sixth was already 0).
 				injector::WriteMemory<std::uint8_t>(site, kJeRel32First, true);      // 0F
 				injector::WriteMemory<std::uint8_t>(site + 1, kJeRel32Second, true); // 84
-				injector::WriteMemory<std::uint16_t>(site + 2, 0x009Eu, true);       // +0x9E
-				injector::WriteMemory<std::uint8_t>(site + 4, 0x00u, true); //jz rel32
+				injector::WriteMemory<std::uint16_t>(site + 2, kCutsceneBranchDisp, true); // +0x9E
+				injector::WriteMemory<std::uint8_t>(site + 4, kZeroByte, true); //jz rel32
 			}
 		}
 	}
@@ -10627,16 +10821,10 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::MakeCALL(match + 36, reinterpret_cast<void*>(&abi_spawns_case_0x24), true); //call
-			injector::MakeCALL(match + 61, reinterpret_cast<void*>(&abi_spawns_case_0x3D), true); //call
-			injector::MakeCALL(match + 86, reinterpret_cast<void*>(&abi_spawns_case_0x56), true); //call
-			injector::MakeCALL(match + 111, reinterpret_cast<void*>(&abi_spawns_case_0x6F), true); //call
-			injector::MakeCALL(match + 136, reinterpret_cast<void*>(&abi_spawns_case_0x88), true); //call
-			injector::MakeCALL(match + 158, reinterpret_cast<void*>(&abi_spawns_case_0x9E), true); //call
-			injector::MakeCALL(match + 180, reinterpret_cast<void*>(&abi_spawns_case_0xB4), true); //call
-			injector::MakeCALL(match + 202, reinterpret_cast<void*>(&abi_spawns_case_0xCA), true); //call
-			injector::MakeCALL(match + 224, reinterpret_cast<void*>(&abi_spawns_case_0xE0), true); //call
-			injector::MakeCALL(match + 246, reinterpret_cast<void*>(&abi_spawns_case_0xF6), true); //call
+			// The ten case bodies inside the probe: the original's jump-table
+			// selectors are the byte offsets from the probe match.
+			for (const SpawnCase& spawn : kSpawnCases)
+				injector::MakeCALL(match + spawn.offset, reinterpret_cast<void*>(spawn.body), true); //call
 		}
 
 		if (auto pattern = Pattern(image, "88 87 40 01 00 00 E8"); pattern.size() > 0)
@@ -10705,7 +10893,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			if (auto pattern = Pattern(image, "50 68 04 01 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
 			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(2), 0x00u, true); //patch
+				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(2), kZeroByte, true); //patch
 			}
 		}
 
@@ -10740,7 +10928,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			{
 				auto* match = pattern.get(0).get<std::uint8_t>();
 
-				injector::WriteMemory<std::uint32_t>(match + 2, static_cast<std::uint32_t>(0x100u), true); //patch
+				injector::WriteMemory<std::uint32_t>(match + 2, kModelLimitIncrease, true); //patch
 			}
 		}
 	}
@@ -11114,7 +11302,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			if (auto pattern = Pattern(image, "6A 0A E8 ? ? ? ? 83 C7 0A 83 C4 04 81 FF E8 03 00 00 75 02 33 FF"); pattern.size() > 0)
 			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(1), 0x00u, true); //patch
+				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(1), kZeroByte, true); //patch
 			}
 		}
 	}
@@ -11127,7 +11315,8 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			if (auto pattern = Pattern(image, "6A 0A 56 50 FF D2 A1"); pattern.size() > 0)
 			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(1), 0x06u, true); //patch
+				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(1),
+			                                    kMinimizePauseTick, true); //patch
 			}
 		}
 
@@ -11168,7 +11357,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* target = MatchPointer(pattern, 77);
 			if (target != nullptr)
-				injector::WriteMemory<std::uint32_t>(target, static_cast<std::uint32_t>(0x400u), true); //patch
+				injector::WriteMemory<std::uint32_t>(target, kPtrNodeInitial, true); //patch
 		}
 	}
 	Trace("NoPhysicsSleep");
@@ -11181,7 +11370,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* target = MatchPointer(pattern, -38);
 			if (target != nullptr)
-				injector::WriteMemory<std::uint32_t>(target, static_cast<std::uint32_t>(0x0u), true); //patch
+				injector::WriteMemory<std::uint32_t>(target, 0u, true); //patch
 		}
 	}
 	Trace("NoImpostorHeightCutoff");
@@ -11225,21 +11414,21 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint32_t>(match + 8, static_cast<std::uint32_t>(0x4E200u), true); //patch
+			injector::WriteMemory<std::uint32_t>(match + 8, kPtrNodeCount, true); //patch
 		}
 
 		if (auto pattern = Pattern(image, "6A 10 ? ? ? ? ? 68 80 3E 00 00"); pattern.size() > 0)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint32_t>(match + 8, static_cast<std::uint32_t>(0xFA00u), true); //patch
+			injector::WriteMemory<std::uint32_t>(match + 8, kPtrNodeCountAlt, true); //patch
 		}
 
 		if (auto pattern = Pattern(image, "6A 14 ? ? ? ? ? 68 80 3E 00 00"); pattern.size() > 0)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint32_t>(match + 8, static_cast<std::uint32_t>(0xFA00u), true); //patch
+			injector::WriteMemory<std::uint32_t>(match + 8, kPtrNodeCountAlt, true); //patch
 		}
 	}
 	Trace("IncreaseVehicleStructLimit");
@@ -11252,7 +11441,9 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match + 6, static_cast<std::uint8_t>(0x64u), true); //patch
+			injector::WriteMemory<std::uint8_t>(match + 6,
+			                                    static_cast<std::uint8_t>(kVehicleStructLimit),
+			                                    true); //patch
 		}
 	}
 	Trace("NoLODLightHeightCutoff");
@@ -11278,7 +11469,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint32_t>(match + 1, static_cast<std::uint32_t>(0x0u), true); //patch
+			injector::WriteMemory<std::uint32_t>(match + 1, 0u, true); //patch
 		}
 	}
 	Trace("OverrideGTADatPath");
@@ -11390,16 +11581,18 @@ PreambleReport FindGamePointers(GameImage image) noexcept
 	// fall back to these values.
 	if (resolve("68 ? ? ? ? 68 A9 54 14 51 E8") == nullptr)
 	{
-		zpatch_salt_28 = 0x931F73A2u;
-		zpatch_salt_3c = 0xA4EA0691u;
-		zpatch_salt_40 = 0xC9DBDA90u;
-		zpatch_salt_50 = 0x6B86410Eu;
-		zpatch_salt_54 = 0x6DCD115Au;
-		zpatch_salt_5c = 0x1CC648EAu;
-		zpatch_salt_a8 = 0x7F6A60D3u;
-		zpatch_salt_b8 = 0x62BFDB37u;
-		zpatch_salt_c8 = 0x406B4B20u;
-		zpatch_salt_d4 = 0x09399528u;
+		// opaque: fallback salt table, selected when the build-probe signature is
+		// absent (research 07 §7.3); the primary values are the globals' defaults.
+		zpatch_salt_28 = 0x931F73A2u; // opaque: fallback salt 0x28
+		zpatch_salt_3c = 0xA4EA0691u; // opaque: fallback salt 0x3c
+		zpatch_salt_40 = 0xC9DBDA90u; // opaque: fallback salt 0x40
+		zpatch_salt_50 = 0x6B86410Eu; // opaque: fallback salt 0x50
+		zpatch_salt_54 = 0x6DCD115Au; // opaque: fallback salt 0x54
+		zpatch_salt_5c = 0x1CC648EAu; // opaque: fallback salt 0x5c
+		zpatch_salt_a8 = 0x7F6A60D3u; // opaque: fallback salt 0xa8
+		zpatch_salt_b8 = 0x62BFDB37u; // opaque: fallback salt 0xb8
+		zpatch_salt_c8 = 0x406B4B20u; // opaque: fallback salt 0xc8
+		zpatch_salt_d4 = 0x09399528u; // opaque: fallback salt 0xd4
 	}
 	return report;
 }

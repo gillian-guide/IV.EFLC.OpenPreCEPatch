@@ -54,6 +54,11 @@ constexpr std::size_t kPeSignatureSize = 4;
 constexpr std::size_t kCoffHeaderSize = 20;
 constexpr std::size_t kSectionHeaderSize = 40;
 constexpr std::size_t kMinPeSize = 0x100;
+constexpr std::size_t kMinNtHeadersSize = 0x60;  // COFF + optional header prefix
+constexpr std::uint32_t kGtaImageBase = 0x400000u;  // GTAIV.exe ImageBase
+constexpr std::uint32_t kSyntheticHookBase = 0x7F000000u;  // tagged hook VA
+constexpr std::uint32_t kSyntheticHookStride = 0x100u;
+constexpr std::uint8_t kNibbleMask = 0x0Fu;
 constexpr std::uint32_t kMaxImageSize = 0x10000000u;
 constexpr std::uint32_t kGameImageBase = 0x400000u;
 constexpr std::uint32_t kGameVaCeiling = 0x10000000u;
@@ -97,7 +102,7 @@ bool MapPeImage(const char* path, std::vector<std::uint8_t>& image, std::uint32_
 		return false;
 
 	const std::size_t e_lfanew = rd32(kDosLfanewOffset);
-	if (e_lfanew + 0x60 > file.size())
+	if (e_lfanew + kMinNtHeadersSize > file.size())
 		return false;
 	const std::size_t coff = e_lfanew + kPeSignatureSize;
 	const std::size_t optional = coff + kCoffHeaderSize;
@@ -269,7 +274,7 @@ LONG CALLBACK MapGamePageOnFault(EXCEPTION_POINTERS* info)
 // module, so their rel32 values are comparable between the two drivers.
 std::uintptr_t FakeSkipResolver(SkipHook hook, void* /*user*/)
 {
-	return 0x7F000000u + static_cast<std::uint32_t>(hook) * 0x100u;
+	return kSyntheticHookBase + static_cast<std::uint32_t>(hook) * kSyntheticHookStride;
 }
 
 ULONG_PTR g_access = 0;
@@ -432,7 +437,7 @@ int main(int argc, char** argv)
 		const auto* bytes = static_cast<const unsigned char*>(row.address);
 		static const char* kHex = "0123456789abcdef";
 		for (std::size_t b = 0; b < row.size; ++b)
-			header << kHex[bytes[b] >> 4] << kHex[bytes[b] & 0xF];
+			header << kHex[bytes[b] >> 4] << kHex[bytes[b] & kNibbleMask];
 		header << "\n";
 	}
 
@@ -452,7 +457,7 @@ int main(int argc, char** argv)
 		++changed;
 		// Decimal VA: tools/phase3/diff_oracle.py and compare_live_memory.py
 		// parse this field with int(x) in base 10.
-		out << "D " << (0x400000ull + i) << " " << static_cast<unsigned>(pristine[i]) << " "
+		out << "D " << (kGtaImageBase + i) << " " << static_cast<unsigned>(pristine[i]) << " "
 		    << static_cast<unsigned>(image[i]) << "\n";
 	}
 	out << "done\n";
