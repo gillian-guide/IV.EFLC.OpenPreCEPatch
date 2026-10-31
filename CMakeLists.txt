@@ -54,6 +54,7 @@ set(OPCEP_CORE_SOURCES
     source/game.cpp
     source/helpers.cpp
     source/hooks.cpp
+    source/ini_file.cpp
     source/ini_import.cpp
     source/log.cpp
     source/menu.cpp

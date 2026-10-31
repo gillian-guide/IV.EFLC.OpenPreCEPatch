@@ -3,10 +3,9 @@
 #include "ini_import.hxx"
 
 #include "config.hxx"
+#include "ini_file.hxx"
 #include "ini_template.hxx"
 #include "log.hxx"
-
-#include <IniReader.h>
 
 #include <algorithm>
 #include <array>
@@ -167,7 +166,7 @@ namespace opp
             return keys;
         }
 
-        bool Has(CIniReader& ini, const char* section, const char* key, std::string& value)
+        bool Has(LegacyIniFile& ini, const char* section, const char* key, std::string& value)
         {
             value = ini.ReadString(section, key, kMissing);
             return value != kMissing;
@@ -176,7 +175,7 @@ namespace opp
         // The old file keeps every option in [Options]. The grouped file uses
         // subsystem sections, so a conversion must look in both places (and in
         // every section, for a partially converted file).
-        std::string ReadLegacy(CIniReader& ini, const char* key, const char* section,
+        std::string ReadLegacy(LegacyIniFile& ini, const char* key, const char* section,
                                const char* defaultValue)
         {
             std::string value;
@@ -202,7 +201,7 @@ namespace opp
             return file.good();
         }
 
-        std::string BuildFromLegacy(CIniReader& legacy)
+        std::string BuildFromLegacy(LegacyIniFile& legacy)
         {
             std::string misc;
             const bool hasMisc = Has(legacy, "Options", "MiscFixes", misc) ||
@@ -322,7 +321,7 @@ namespace opp
         if (std::filesystem::exists(legacy))
         {
             const std::string legacyText = ReadText(legacy);
-            CIniReader reader(std::filesystem::absolute(legacy));
+            LegacyIniFile reader(std::filesystem::absolute(legacy));
             const std::string text = BuildFromLegacy(reader);
 
             // Anything the template has no row for cannot be carried over. Name

@@ -32,7 +32,6 @@
 #include <utility>
 #include <vector>
 
-#include <IniReader.h>
 #include <Hooking.Patterns.h>
 #if defined(OPCEP_DUMP_TOOL)
 #include <injector/injector.hpp>
