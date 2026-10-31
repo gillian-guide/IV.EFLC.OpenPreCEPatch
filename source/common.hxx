@@ -86,11 +86,6 @@ namespace opp
         v12043 = 18,
     };
 
-    const char* GameBuildName(GameBuild build) noexcept;
-
-    // True when `build` is one of the listed builds.
-    bool BuildIs(GameBuild build, std::initializer_list<GameBuild> builds) noexcept;
-
     // The game image as it is mapped in the process. Installers write through it;
     // the standalone tools hand in a mapped copy of the same executable.
     struct GameImage

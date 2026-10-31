@@ -8,7 +8,7 @@
 #include "common.hxx"
 #include "config.hxx"
 #include "feature_registry.hxx"
-#include "game.hxx"
+import opp.game;
 #include "helpers.hxx"
 #include "hooks.h"
 import opp.log;

@@ -2,7 +2,7 @@
 
 #include "vehicle_lights.hxx"
 
-#include "game.hxx"
+import opp.game;
 
 #include <cerrno>
 #include <cstdlib>

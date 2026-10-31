@@ -5,7 +5,7 @@
 // deferred worker would get to scan, so signatures have to be matched now.
 
 #include "common.hxx"
-#include "game.hxx"
+import opp.game;
 #include "hooks.h"
 import opp.log;
 #include "menu.hxx"

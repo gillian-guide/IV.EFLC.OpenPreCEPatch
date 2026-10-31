@@ -1,31 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
-// Rebased values: the lookups map an address inside the ORIGINAL module (e.g.
-// StartupTimeFix's timing dword) to our equivalent global. A value with no entry
-// is skipped instead of written as a dangling original address.
+// The extern "C" rebased globals: the hook bodies address these symbols by
+// name, and the arms publish resumes into them. The C++ accessors that map an
+// original global name to its rebuilt counterpart (FindGlobalValue,
+// FindGlobalSymbol, FindGlobalSlot, SetOverrideGtaDatPath, StartupTimeGlobal,
+// DlcRegisterRva, DlcApplyRva) are exported by opp.game, which owns the
+// definitions (rebased.cpp was folded into it).
 
 #include <cstdint>
 #include <string_view>
 
-// The rebuilt module's global for `option`, or 0 when it has not been rebased.
-uintptr_t FindGlobalValue(std::string_view option) noexcept;
-
-// The global a `plugin_data_ptr` sig install stores the ADDRESS of at the site
-// (e.g. LocalSettingsPath's "\GTA IV" suffix). 0 = not rebased.
-uintptr_t FindGlobalSymbol(std::string_view symbol) noexcept;
-
 // OverrideGTADatPath: retargeted `push <char*>` operand (the original pushed its
 // own "common:/data/gta.dat"); filled from OverrideGTADatPathTo, defaults to it.
 extern "C" char zpatch_override_gta_dat_path[260];
-void SetOverrideGtaDatPath(std::string_view path) noexcept;
-
-// StartupTimeFix's counterpart of dword_101580d8: the patched site writes the
-// game's startup timestamp here.
-uint32_t& StartupTimeGlobal() noexcept;
-
-// Slot publishes are keyed by the ORIGINAL global's name ("dword_1015BDDC");
-// 0 = not rebased, and the publish is skipped.
-uintptr_t FindGlobalSlot(std::string_view slot_name) noexcept;
 
 // LoadDLCs: the published loader callback and the two RVAs the handler stores
 // (dword_101580D0 / dword_1015804C, the register/apply functions).
@@ -376,6 +363,4 @@ extern "C" uint32_t zpatch_cutscene_eps_b;    // 0x101522FC = 0.5f
 // NewMemorySystem: the allocator singleton the handler's second scan publishes
 // (dword_10159CD8); the E8 body writes our CRageAllocator vtable at it.
 extern "C" uint32_t zpatch_nms_object;        // dword_10159CD8
-uint32_t& DlcRegisterRva() noexcept;
-uint32_t& DlcApplyRva() noexcept;
 

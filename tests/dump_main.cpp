@@ -6,7 +6,7 @@
 
 #include "common.hxx"
 #include "feature_registry.hxx"
-#include "game.hxx"
+import opp.game;
 #include "patches.hxx"
 
 #include <algorithm>

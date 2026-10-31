@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "catalogue.hxx"
-
-#include "game.hxx"
+#include "common.hxx"
 
 #include <algorithm>
+
+import opp.game;
 
 extern const char* const kModelNames[];
 extern const size_t kModelNameCount;

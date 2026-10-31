@@ -9,7 +9,6 @@
 module;
 
 #include "common.hxx"
-#include "game.hxx"
 #include "hooks.h"
 #include "patches.hxx"
 #include "rebased.h"
@@ -20,6 +19,7 @@ module;
 
 export module opp.compatibility;
 
+import opp.game;
 import opp.common;
 import opp.settings;
 

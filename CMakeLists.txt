@@ -35,6 +35,7 @@ set(OPCEP_EXTERNAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external")
 set(OPCEP_MODULES
     source/common.ixx
     source/log.ixx
+    source/game.ixx
     source/settings.ixx
     source/stability.ixx
     source/performance.ixx
@@ -51,7 +52,6 @@ set(OPCEP_CORE_SOURCES
     source/catalogue.cpp
     source/config.cpp
     source/feature_registry.cpp
-    source/game.cpp
     source/helpers.cpp
     source/hooks.cpp
     source/menu.cpp
@@ -60,7 +60,6 @@ set(OPCEP_CORE_SOURCES
     source/pattern.cpp
     source/steam_achievements.cpp
     source/preamble.cpp
-    source/rebased.cpp
     source/vehicle_lights.cpp
     source/data/model_catalogue.cpp
     external/hooking/Hooking.Patterns.cpp

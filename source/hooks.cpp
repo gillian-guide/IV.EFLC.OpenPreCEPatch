@@ -6,7 +6,7 @@
 // original destination VA. Resumes are tail-jumped, never called.
 
 #include "common.hxx"
-#include "game.hxx"
+import opp.game;
 #include "hooks.h"
 #include "catalogue.hxx"
 import opp.log;

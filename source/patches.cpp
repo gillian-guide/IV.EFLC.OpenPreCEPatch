@@ -7,7 +7,7 @@
 #include "patches.hxx"
 
 #include "feature_registry.hxx"
-#include "game.hxx"
+import opp.game;
 #include "helpers.hxx"
 import opp.log;
 #include "pattern.hxx"

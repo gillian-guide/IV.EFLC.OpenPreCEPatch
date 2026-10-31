@@ -2,7 +2,7 @@
 
 #include "helpers.hxx"
 
-#include "game.hxx"
+import opp.game;
 import opp.log;
 
 #include <cstdio>
