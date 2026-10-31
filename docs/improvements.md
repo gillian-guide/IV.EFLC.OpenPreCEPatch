@@ -31,7 +31,7 @@ Two defaults are legitimate and are not made equal:
   `tests/parity/loader_defaults.tsv` (94 rows, kind A/B). CTest
   `opcep_option_defaults` fails if a call site drifts from it or if one key uses
   two defaults without a documented reason (`CarDynamicShadowFix`).
-* a **present key** uses the shipped INI value. 26 options ship a value that
+* a **present key** uses the shipped INI value. 22 options ship a value that
   differs from the loader fallback (`tests/parity/option_defaults.tsv`, status
   `ok-shipped-differs`), so deleting one of those lines intentionally restores
   the original fallback. No behaviour changed to produce this split; it is the
@@ -65,5 +65,24 @@ exactly-`1` gate with `std::stoi`'s base-10 prefix grammar (`"1abc"` is 1,
 `"0x2"` is 0), quoting, and the space-preceded inline-comment rule of the mINI
 reader this replaces. Tests: `TestConfig`, `TestConfigSemantics`, `TestIntPrefix`,
 `TestShippedTemplate` in `tests/test_main.cpp`.
+
+## Launcher slots: exactly the original's two
+
+`ApplyLaunchWithPlayGTAIV` rewrites the two `LaunchGTAIV.exe\0` name slots the
+original's handler patches. The arm now requires **exactly two** matches on a
+gated build: zero, one or three-or-more matches log
+`launcher: N LaunchGTAIV name slot(s), expected 2: skipped` and leave the image
+untouched, so a modded image cannot make this tree write a slot the original
+never wrote. The native test covers the two-hit case plus the 0/1/3-hit skips
+(`TestLauncherNamePatch`); the 96-cell matrix is unchanged (26 launcher writes
+in its launcher cell).
+
+## Backlog (documented, not gates)
+
+`tools/gen_version_matrix.py` renders `docs/version-matrix.md` from
+`docs/version-matrix.json`, the recovered IDA applicability dump. That input is
+not checked in, so the tool prints a clear missing-input message and exits
+without writing anything; it is deliberately not a CTest. Regenerating the
+matrix needs the dump, which is a separate evidence-collection step.
 
 Revert: `git revert <this commit>` (tag before it: `good-steam-init-20261030`).

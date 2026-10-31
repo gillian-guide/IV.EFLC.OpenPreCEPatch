@@ -39,8 +39,9 @@ namespace opp::features
         // carrying three RVAs.
         //
         // The two helpers the discovery loop calls (DlcRegisterRva/DlcApplyRva)
-        // are separate functions; their per-build RVAs are recovered data and no
-        // unique prologue has been verified for them yet.
+        // are separate functions: each per-build RVA below comes from that
+        // function's own unique 24/16-byte window, proved with
+        // tools/opcep_sigcheck.py (tests/parity/address_sites.tsv).
         if (ctx.Option("LoadDLCs", "1"))
         {
             // Distance from the struct-fixup site to the loader callback entry

@@ -1227,13 +1227,11 @@ void zpatch_tls_static_footer(uint32_t& guard) noexcept
 
 namespace
 {
-// The GFWL update-window flags in xlive.dll. `83 0E 00 10` is
-// `or dword ptr [esi], 0x10000000`, the value the original stores at all four
-// sites (0x10000E83 little-endian). RVAs recovered from its writer.
-// `or dword ptr [esi], 0x10000000`, the window value the original stores.
-constexpr opp::ops::InstructionWindow<4> kGfwlWindowDisable{{0x83, 0x0E, 0x00, 0x10}};
-constexpr uint32_t kGfwlWindowDisableValue = opp::ops::PackedLowDword(kGfwlWindowDisable);
-static_assert(kGfwlWindowDisableValue == 0x10000E83u);
+// The GFWL update-window version dword in xlive.dll: the original's getnewver()
+// returns 0x10000E83 and its handler stores that dword at all four sites (four
+// bytes each). It is a version constant, not an instruction: 83 0E 00 10 is its
+// little-endian byte image. RVAs recovered from its writer.
+constexpr uint32_t kGfwlWindowVersion = 0x10000E83u;
 // The four flag RVAs live in hooks.h (kXliveUpdateFlag0Rva .. 3) so the test
 // suite can pin them; they are the original handler's decimal immediates.
 }  // namespace
@@ -1275,13 +1273,13 @@ extern "C" void abi_gfwl_patch() noexcept
         if (zpatch_failsafe_skip("RemoveGFWLUpdatePopup xlive.dll", base == 0u))
             return;
         wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlag0Rva),
-                 kGfwlWindowDisableValue);
+                 kGfwlWindowVersion);
         wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlag1Rva),
-                 kGfwlWindowDisableValue);
+                 kGfwlWindowVersion);
         wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlag2Rva),
-                 kGfwlWindowDisableValue);
+                 kGfwlWindowVersion);
         wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlag3Rva),
-                 kGfwlWindowDisableValue);
+                 kGfwlWindowVersion);
     }
 }
 

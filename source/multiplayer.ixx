@@ -121,8 +121,6 @@ namespace opp::features
                 auto* match = pattern.get(0).get<uint8_t>();
 
                 // Each offset is the call instruction of one jump-table case;
-                // the body name carries that case's value.
-                // Each offset is the call instruction of one jump-table case;
                 // the body name carries that case's value (0x24..0xF6 are the
                 // case ids the original's dispatch compares).
                 struct SpawnCase final

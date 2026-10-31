@@ -905,6 +905,32 @@ namespace
         opp::ApplyLaunchWithPlayGTAIV(other_ctx);
         opp::SetLauncherProbeOverride(false);
         CHECK(std::memcmp(other.data() + 0x2100, launch_name, sizeof(launch_name)) == 0);
+
+        // The original writes exactly its two slots. An image with 0, 1 or 3
+        // name strings must be left alone (a third slot is not the original's).
+        const auto untouched_with_slots = [&config, &launch_name](
+                                              std::initializer_list<size_t> slots) {
+            std::vector<uint8_t> candidate;
+            BuildSyntheticPe(candidate);
+            for (const size_t offset : slots)
+                std::memcpy(candidate.data() + offset, launch_name, sizeof(launch_name));
+            opp::SetLauncherProbeOverride(true);
+            opp::PatchContext candidate_ctx{{candidate.data(), candidate.size()},
+                                            reinterpret_cast<uintptr_t>(candidate.data()),
+                                            opp::GameBuild::v1080, config};
+            opp::ApplyLaunchWithPlayGTAIV(candidate_ctx);
+            opp::SetLauncherProbeOverride(false);
+            for (const size_t offset : slots)
+            {
+                if (std::memcmp(candidate.data() + offset, launch_name,
+                                sizeof(launch_name)) != 0)
+                    return false;
+            }
+            return true;
+        };
+        CHECK(untouched_with_slots({}));                             // 0 hits
+        CHECK(untouched_with_slots({0x2100u}));                      // 1 hit
+        CHECK(untouched_with_slots({0x1100u, 0x2100u, 0x3100u}));    // 3 hits
         std::filesystem::remove(ini);
     }
 

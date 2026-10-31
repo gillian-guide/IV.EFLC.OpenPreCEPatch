@@ -82,10 +82,9 @@ namespace opp
         // fall back to these values.
         if (resolve("68 ? ? ? ? 68 A9 54 14 51 E8") == nullptr)
         {
-            // The per-build fingerprint salts the probe installs when its own scan
-    // matches: recovered constants of the original's build table (no
-    // derivation exists; the preamble's build switch selects the row).
-    zpatch_salt_28 = 0x931F73A2u;
+            // The recovered fingerprint constants of the original's build table:
+            // no derivation exists, the preamble's build switch selects the row.
+            zpatch_salt_28 = 0x931F73A2u;
             zpatch_salt_3c = 0xA4EA0691u;
             zpatch_salt_40 = 0xC9DBDA90u;
             zpatch_salt_50 = 0x6B86410Eu;
