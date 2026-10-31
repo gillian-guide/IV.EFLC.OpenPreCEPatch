@@ -48,6 +48,7 @@ set(ZP_MODULE_UNITS
   source/config.ixx
   source/vehicle_lights.ixx
   source/menu.ixx
+  source/hook_bodies.ixx
   source/useless_checks.ixx
   source/catalogue.ixx
   source/launcher.ixx)
@@ -77,6 +78,7 @@ set_target_properties(zp PROPERTIES CXX_EXTENSIONS OFF)
 add_library(zp_modules STATIC)
 set_target_properties(zp_modules PROPERTIES CXX_SCAN_FOR_MODULES ON CXX_EXTENSIONS OFF)
 target_sources(zp_modules PUBLIC FILE_SET CXX_MODULES FILES ${ZP_MODULE_UNITS})
+target_sources(zp_modules PRIVATE source/hook_bodies.cpp)
 target_include_directories(zp_modules PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/source
                                               ${CMAKE_CURRENT_SOURCE_DIR}/src
                                               ${ZP_EXT_INJECTOR}
@@ -148,6 +150,7 @@ if(ZP_BUILD_DUMP)
   add_library(zp_dump_modules STATIC)
   set_target_properties(zp_dump_modules PROPERTIES CXX_SCAN_FOR_MODULES ON CXX_EXTENSIONS OFF)
   target_sources(zp_dump_modules PUBLIC FILE_SET CXX_MODULES FILES ${ZP_MODULE_UNITS})
+  target_sources(zp_dump_modules PRIVATE source/hook_bodies.cpp)
   target_include_directories(zp_dump_modules BEFORE PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/dump_injector)
   target_include_directories(zp_dump_modules PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/source

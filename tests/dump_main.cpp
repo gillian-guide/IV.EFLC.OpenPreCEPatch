@@ -17,6 +17,8 @@
 #include "common.h"
 #include "patches.h"
 
+import zp.hook_bodies;
+
 namespace
 {
 // PE32 layout the dump reads; 0x400000 is GTA IV's preferred image base.

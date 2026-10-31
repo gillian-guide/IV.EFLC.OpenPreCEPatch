@@ -8,6 +8,11 @@ module;
 
 #include "common.hxx"
 
+#if defined(ZP_DUMP_TOOL)
+// The write-set tool's own image; the linker provides this symbol.
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+#endif
+
 export module zp.common;
 
 export namespace zp
@@ -35,6 +40,15 @@ inline constexpr std::uint8_t kNibbleMask = 0x0Fu;  // low hex digit
 
 // The four bytes of the little-endian dwords the original compares.
 inline constexpr std::size_t kDwordLength = sizeof(std::uint32_t);
+
+// The short-jump opcode the NewSaves flag toggle chooses between (its twin,
+// kJeRel8Opcode, lives with the body that writes it).
+inline constexpr std::uint8_t kShortJmpOpcode = 0xEBu;  // jmp rel8
+
+// A value an installer publishes for the game. The dump (ZP_DUMP_TOOL)
+// substitutes a fixed stand-in for its own addresses; in the ASI every value is
+// published unchanged.
+std::uintptr_t PublishedAddress(std::uintptr_t value) noexcept;
 }  // export
 
 namespace
@@ -54,4 +68,34 @@ std::string_view Trim(std::string_view value)
 	while (!value.empty() && IsWhite(value.back()))
 		value.remove_suffix(1);
 	return value;
+}
+
+#if defined(ZP_DUMP_TOOL)
+namespace
+{
+// The dump never runs the game, so a pointer into the tool itself can never be
+// used there. Publishing one would only record where the tool happened to load,
+// which is not part of the installer logic, so the dump substitutes a fixed
+// stand-in: the write still shows up, at the same site, with a value that does
+// not depend on the tool's layout.
+constexpr std::uint32_t kDumpToolPointer = 0xD0000000u;
+
+bool IsToolPointer(std::uintptr_t address) noexcept
+{
+	const auto* base = reinterpret_cast<const std::uint8_t*>(&__ImageBase);
+	const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+	const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+	const std::uintptr_t start = reinterpret_cast<std::uintptr_t>(base);
+	return address >= start && address < start + nt->OptionalHeader.SizeOfImage;
+}
+}  // namespace
+#endif
+
+std::uintptr_t PublishedAddress(std::uintptr_t value) noexcept
+{
+#if defined(ZP_DUMP_TOOL)
+	return IsToolPointer(value) ? std::uintptr_t{kDumpToolPointer} : value;
+#else
+	return value;
+#endif
 }

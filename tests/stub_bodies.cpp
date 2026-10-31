@@ -33,8 +33,8 @@ extern "C" void abi_copsirens_b() {}
 extern "C" void abi_copsirens_ide() {}
 extern "C" void abi_crash_msg_shim() {}
 void abi_cutscene_chain_b() {}
-extern "C" std::uint8_t abi_death_music_enabled() { return {}; }
-extern "C" char abi_death_music_install() { return {}; }
+extern "C" std::uint8_t abi_death_music_enabled() noexcept { return {}; }
+extern "C" char abi_death_music_install() noexcept { return {}; }
 void abi_driveby_fov_shim() {}
 extern "C" void abi_dual_headlights_new() {}
 extern "C" void abi_dual_headlights_old() {}
@@ -66,8 +66,8 @@ void abi_mouse_axis_float() {}
 void abi_mouse_axis_int() {}
 void abi_mouse_axis_neg() {}
 void abi_new_saves_compat() {}
-extern "C" std::int32_t abi_new_saves_p3_hook() { return {}; }
-extern "C" std::uint8_t abi_new_saves_read_hook(void*, std::uint32_t size) { return {}; }
+extern "C" std::int32_t abi_new_saves_p3_hook() noexcept { return {}; }
+extern "C" std::uint8_t abi_new_saves_read_hook(void*, std::uint32_t size) noexcept { return {}; }
 extern "C" void* abi_newfiles_cb(void** a1) { return {}; }
 extern "C" void abi_newfiles_register_body() {}
 extern "C" char __fastcall abi_newfiles_update_a(void* self, int) { return {}; }
@@ -88,7 +88,7 @@ extern "C" void abi_nolivery_c() {}
 extern "C" void abi_nolivery_d() {}
 extern "C" void abi_nolivery_e() {}
 void abi_ooc_branch() {}
-extern "C" std::uint32_t abi_ooc_wrap(std::uint32_t arg0, std::uint32_t arg1) { return {}; }
+extern "C" std::uint32_t abi_ooc_wrap(std::uint32_t arg0, std::uint32_t arg1) noexcept { return {}; }
 void abi_path_node_shim() {}
 bool __fastcall abi_ped_models_in_cutscenes_check(const void* self, void*) { return {}; }
 void abi_plane_crash_shim() {}

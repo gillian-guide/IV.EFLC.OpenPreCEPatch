@@ -3,7 +3,7 @@
 
 The write-set dump (`tests/dump_main.cpp`) applies the installers only; it never
 executes or compares a hook body. This tool closes that gap offline: it reads
-`kAbiBodies` from `src/dllmain.cpp`, finds every body in the linker map of the
+`kAbiBodies` from `source/hook_bodies.cpp`, finds every body in the linker map of the
 built ASI, disassembles it with capstone and compares it instruction for
 instruction with the original body at the reference VA in
 `game_refs/ZolikaPatch_original.asi.off` (image base 0x10000000).
@@ -47,7 +47,7 @@ except ImportError:  # pragma: no cover - environment without capstone
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent
-DEFAULT_SOURCE = ROOT / "src/dllmain.cpp"
+DEFAULT_SOURCE = ROOT / "source/hook_bodies.cpp"
 DEFAULT_REBASED = ROOT / "src/rebased.h"
 DEFAULT_ASI = ROOT / "build/agent-x86/Release/ZolikaPatch.asi"
 DEFAULT_MAP = ROOT / "build/agent-x86/Release/ZolikaPatch.map"
@@ -75,14 +75,14 @@ FANOUT_HELPERS = {
 # documented instruction range. These bodies are NOT byte-compared: their only
 # contract is that range plus the behaviour the native tests exercise.
 CONVERTED_BODIES = [
-    ("abi_new_saves_convert", 0x10051B30, "sub_10051B30", "src/dllmain.cpp",
+    ("abi_new_saves_convert", 0x10051B30, "sub_10051B30", "source/hook_bodies.cpp",
      "compiled port of sub_10051B30: read the 0x110-byte save header, walk 18 chunks of "
      "9-byte header plus payload, record the new-format chunk sizes, then patch game "
      "0x872185/0x7D8C50/0x8DA090"),
-    ("abi_menu_focus_set", 0x1001EDC0, "sub_1001EDB0/C0", "src/dllmain.cpp",
+    ("abi_menu_focus_set", 0x1001EDC0, "sub_1001EDB0/C0", "source/hook_bodies.cpp",
      "compiled port of sub_1001EDC0: set the focus-loss flag, then NOP or restore the "
      "2-byte branch sub_1001ECB0 patches"),
-    ("zpatch_mf_advance_c", 0x100241E0, "sub_100241E0", "src/dllmain.cpp",
+    ("zpatch_mf_advance_c", 0x100241E0, "sub_100241E0", "source/hook_bodies.cpp",
      "compiled port of sub_100241E0: write the three 8-byte resume windows "
      "(kResumeWindows) selected by the both-axes-zero predicate; the window bytes are "
      "named and static_assert-pinned in the source"),
@@ -254,8 +254,8 @@ def parse_documented_bindings(source_text: str, rebased_text: str) -> dict[int, 
     """original global VA -> port symbol, as documented by the source itself.
 
     Two forms are parsed: `src/rebased.h`'s `extern "C" T symbol; // dword_1015..`
-    declarations and dllmain's `if (slot_name == "dword_1015..") return &symbol;`
-    publishes. A learned binding that contradicts either is a FAIL.
+    declarations and the hook-bodies unit's
+    `if (slot_name == "dword_1015..") return &symbol;` publishes. A learned binding that contradicts either is a FAIL.
     """
     documented: dict[int, str] = {}
     decl = re.compile(
