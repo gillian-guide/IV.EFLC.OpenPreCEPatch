@@ -37,7 +37,6 @@ The same file holds the small support modules the loader needs (INI reader, game
 | `data/finale2.sco` | decoded OutOfCommission script table for research |
 | `src/INI.h`, `src/common.h`, `src/hooks.h`, `src/patches.h`, `src/useless_checks.h`, `src/rebased.h`, `src/xlive/xliveless.h` | declarations shared by those units |
 | `external/injector/include/injector/` | LINK/2012's memory-write library (submodule) |
-| `src/jitasm.h`, `src/Hooking.h`, `src/Hooking.cpp`, `src/Pool.h`, `src/StdInc.h` | carried from the original tree; not used by the recovered bodies |
 | `tests/test_main.cpp` | native assertions; no game files needed |
 
 ## Build classification

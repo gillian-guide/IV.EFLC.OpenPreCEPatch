@@ -24,19 +24,7 @@
     <ClInclude Include="external\Hooking.Patterns\Hooking.Patterns.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\Hooking.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\INI.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\jitasm.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\Pool.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\StdInc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\common.h">

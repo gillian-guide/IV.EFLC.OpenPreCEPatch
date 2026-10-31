@@ -98,7 +98,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="src\framework.h" />
-    <ClInclude Include="src\Hooking.h" />
     <ClInclude Include="external\Hooking.Patterns\Hooking.Patterns.h" />
     <ClInclude Include="src\INI.h" />
     <ClInclude Include="external\injector\include\injector\assembly.hpp" />
@@ -108,10 +107,7 @@
     <ClInclude Include="external\injector\include\injector\hooking.hpp" />
     <ClInclude Include="external\injector\include\injector\injector.hpp" />
     <ClInclude Include="external\injector\include\injector\utility.hpp" />
-    <ClInclude Include="src\jitasm.h" />
     <ClInclude Include="src\pch.h" />
-    <ClInclude Include="src\Pool.h" />
-    <ClInclude Include="src\StdInc.h" />
     <ClInclude Include="src\xlive\xliveless.h" />
     <ClInclude Include="src\common.h" />
     <ClInclude Include="src\driveby_seh.h" />
