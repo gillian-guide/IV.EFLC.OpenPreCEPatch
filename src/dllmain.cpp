@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 // ZolikaPatch ASI entry point.
 //
 // Everything runs synchronously from DllMain: the DRM has already rewritten the
@@ -23,6 +23,7 @@
 #include <cwchar>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <new>
 #include <string>
 #include <utility>
@@ -108,7 +109,44 @@ constexpr std::uint64_t kOldDsoundLoaderSize = 91648ull;
 constexpr std::uint32_t kUnsupportedVersionMin = 1201;
 constexpr std::uint32_t kUnsupportedVersionMax = 12999;
 constexpr DWORD kUnsupportedSleepMs = 500;
-constexpr UINT kUnsupportedExitCode = 0x8000FFFFu;
+constexpr UINT kUnsupportedExitCode = E_UNEXPECTED;  // 0x8000FFFF
+static_assert(kUnsupportedExitCode == 0x8000FFFFu);
+
+// Float values the mod stores into the game as raw bit patterns (the globals
+// that carry them are uint32_t because the bodies read/write the bits). C++17
+// has no constexpr std::bit_cast, so the recovered pattern is the constant and
+// the float it spells is the provenance comment.
+constexpr std::uint32_t kFloatOneBits = 0x3F800000u;            // 1.0f
+constexpr std::uint32_t kFloatQuarterBits = 0x3E800000u;        // 0.25f
+constexpr std::uint32_t kFloatHalfBits = 0x3F000000u;           // 0.5f
+constexpr std::uint32_t kDrivebyFovBits = 0x42340000u;          // 45.0f
+constexpr std::uint32_t kPiOver2Bits = 0x3FC90FDBu;             // 1.5707964f
+constexpr std::uint32_t kFchsOffsetBits = 0x40000000u;          // 2.0f
+constexpr std::uint32_t kBikeSpeedThresholdBits = 0x3BDA740Eu;  // 0.0066666668f
+constexpr std::uint32_t kCutsceneEpsBits = 0x3D4CCCCDu;         // 0.05f
+constexpr std::uint32_t kCutsceneSpeedLimitBits = 0x3F000000u;  // 0.5f
+constexpr std::uint64_t kCutsceneLimitBits = 0x3FD554C985F06F69ull; // 1.0 / 3.0
+constexpr std::uint32_t kFloatAbsMask = 0x7FFFFFFFu;  // clears a float's sign bit
+constexpr std::uint32_t kFloatSignBit = 0x80000000u;  // 1u << 31
+static_assert(kFloatSignBit == (1u << 31));
+
+// The parser index cannot address more than this many entries (slot = entry+1).
+constexpr std::size_t kMaxIndexEntries = 0xFFFFFFF0u;
+
+// Opaque recovered layouts: the model registry's entry stride and the OOC
+// record's 5-bit padding field (the numbers are the original's).
+constexpr std::size_t kModelRegistryStride = 0xE0;
+static_assert(kModelRegistryStride == 224u);
+constexpr std::uint16_t kOocPadMask = 0x1Fu << 11;
+
+// NewSaves: header layout and the "SAVE" magic the reader checks.
+constexpr std::size_t kSaveHeaderSize = 0x110u;
+constexpr std::size_t kSaveMagicOffset = 0x0C;
+constexpr std::uint32_t kSaveMagic = static_cast<std::uint32_t>('S') |
+                                     (static_cast<std::uint32_t>('A') << 8) |
+                                     (static_cast<std::uint32_t>('V') << 16) |
+                                     (static_cast<std::uint32_t>('E') << 24);
+static_assert(kSaveMagic == 0x45564153u);
 
 struct LauncherPatch
 {
@@ -707,7 +745,7 @@ void ConfigDocument::BuildIndex() noexcept
 	indexed = 0;
 	try
 	{
-		if (entries.empty() || entries.size() > 0xFFFFFFF0u)
+		if (entries.empty() || entries.size() > kMaxIndexEntries)
 			return;
 		std::size_t cells = 16;
 		while (cells < entries.size() * 2)
@@ -1770,7 +1808,7 @@ extern "C"
 	std::uint8_t zpatch_vram_flag = 0;                       // byte_1015D638
 	std::uint32_t zpatch_driveby_resolver = 0;               // dword_1015BDE0
 	std::uint32_t zpatch_driveby_resume = 0;                 // dword_1015BDF4
-	std::uint32_t zpatch_driveby_fov = 0x42340000u;    // dword_101580C4 (45.0f, original on-disk)
+	std::uint32_t zpatch_driveby_fov = kDrivebyFovBits;    // dword_101580C4 (45.0f, original on-disk)
 	std::uint32_t zpatch_driveby_cached = 0;           // dword_1015BDF8
 	std::uint8_t zpatch_driveby_done = 0;              // byte_1015AD4A
 	std::uint32_t zpatch_driveby_last_result = 0;      // resolver result (diagnostic)
@@ -1823,7 +1861,7 @@ extern "C"
 	std::uint32_t zpatch_popup_model = 0;
 	std::uint32_t zpatch_popup_flag = 0;
 	std::uint32_t zpatch_popup_index = 0;
-	std::uint32_t zpatch_popup_angle = 0x3FC90FDBu;
+	std::uint32_t zpatch_popup_angle = kPiOver2Bits;
 	std::uint32_t zpatch_popup_resume_a = 0;
 	std::uint32_t zpatch_popup_resume_b = 0;
 	std::uint32_t zpatch_popup_hashes[512] = {};
@@ -1831,7 +1869,7 @@ extern "C"
 	// ForceCarHeadlightShadows: dword_101580C0 is pre-set to 2.0f on disk.
 	std::uint32_t zpatch_fchs_param = 0;
 	std::uint32_t zpatch_fchs_resume = 0;
-	std::uint32_t zpatch_fchs_offset = 0x40000000u;
+	std::uint32_t zpatch_fchs_offset = kFchsOffsetBits;
 	std::uint32_t zpatch_fchs_hashes[512] = {};
 	float zpatch_fchs_offsets[512] = {};
 	// BadPlayerModelCrashFix scratch.
@@ -1916,7 +1954,7 @@ extern "C"
 	std::uint32_t zpatch_local_path_18 = 0;
 	std::uint32_t zpatch_local_path_1c = 0;
 	// FreezeCarFix / DebugPrintSpawns.
-	std::uint32_t zpatch_spawns_kind = 0xFFFFFFFFu;
+	std::uint32_t zpatch_spawns_kind = std::numeric_limits<std::uint32_t>::max();
 	std::uint32_t zpatch_spawns_class = 0;
 	std::uint32_t zpatch_spawns_skip = 0;
 	std::uint32_t zpatch_spawns_orig_a = 0;
@@ -2021,10 +2059,10 @@ extern "C"
 	std::uint32_t zpatch_cutscene_poke = 0;                      // dword_1015BDF0
 	std::uint64_t zpatch_cutscene_accum = 0;                     // qword_1015BDE8 (BSS: starts 0)
 	std::uint64_t zpatch_cutscene_zero = 0x0ull;                 // 0.0
-	std::uint64_t zpatch_cutscene_limit = 0x3FD554C985F06F69ull; // 0.333333...
-	std::uint32_t zpatch_cutscene_abs_mask = 0x7FFFFFFFu;        // 0x101523D0
-	std::uint32_t zpatch_cutscene_eps_a = 0x3D4CCCCDu;           // 0.05f
-	std::uint32_t zpatch_cutscene_eps_b = 0x3F000000u;           // 0.5f
+	std::uint64_t zpatch_cutscene_limit = kCutsceneLimitBits;  // 1.0 / 3.0
+	std::uint32_t zpatch_cutscene_abs_mask = kFloatAbsMask;           // 0x101523D0
+	std::uint32_t zpatch_cutscene_eps_a = kCutsceneEpsBits;           // 0.05f
+	std::uint32_t zpatch_cutscene_eps_b = kCutsceneSpeedLimitBits;    // 0.5f
 	// NewMemorySystem: the allocator singleton the handler's second scan publishes
 	// (the immediate of `mov esi, 0x19cf9f0`); the E8 body writes our vtable there.
 	std::uint32_t zpatch_nms_object = 0; // dword_10159CD8
@@ -2449,7 +2487,7 @@ void abi_bike_physics_helper() noexcept
 	float value = 0.0f;
 	std::memcpy(&value, &zpatch_bike_value, sizeof(value));
 	if (0.006666666665 > static_cast<double>(value))
-		zpatch_bike_value = 0x3BDA740Eu;
+		zpatch_bike_value = kBikeSpeedThresholdBits;
 }
 
 // PopupHeadlightsFlag checker (original sub_10044310), called between
@@ -2460,7 +2498,7 @@ void abi_popup_check() noexcept
 {
 	const auto lookup = reinterpret_cast<int(__cdecl*)(std::uint32_t, std::int32_t*)>(
 	    static_cast<std::uintptr_t>(zpatch_model_lookup));
-	zpatch_popup_angle = 0x3FC90FDBu;  // dword_101580CC: pi/2 float bits
+	zpatch_popup_angle = kPiOver2Bits;  // dword_101580CC: pi/2 float bits
 	zpatch_popup_flag = 0;             // dword_1015BE24
 	std::int32_t out = -1;
 	lookup(0xEB9F21D3u, &out);  // sub_10044310's call is unguarded
@@ -2500,7 +2538,7 @@ void abi_fchs_check() noexcept
 {
 	const std::uint32_t* const hashes = zpatch_fchs_hashes;
 	std::uint32_t hash = hashes[0];
-	zpatch_fchs_offset = 0x40000000u;  // 2.0f, as the original
+	zpatch_fchs_offset = kFchsOffsetBits;  // 2.0f, as the original
 	if (hash == 0u) return;
 	const auto lookup = reinterpret_cast<int(__cdecl*)(std::uint32_t, std::int32_t*)>(
 	    static_cast<std::uintptr_t>(zpatch_model_lookup));
@@ -3159,7 +3197,7 @@ extern "C" const void* abi_vehicle_component(const void* registry,
 	    static_cast<const std::uint8_t*>(registry) + 0x14);
 	for (std::uint16_t i = 0; i < count; ++i)
 	{
-		const auto* entry = entries + static_cast<std::size_t>(i) * 0xE0u;
+		const auto* entry = entries + static_cast<std::size_t>(i) * kModelRegistryStride;
 		const char* candidate = *reinterpret_cast<const char* const*>(entry);
 		if (_stricmp(candidate, name) == 0) return entry;
 	}
@@ -3209,15 +3247,15 @@ extern "C" std::uint32_t abi_steer_body() noexcept
 	};
 	const auto identity = [](std::uint32_t* m)
 	{
-		m[0] = 0x3F800000u;
+		m[0] = kFloatOneBits;
 		m[1] = 0;
 		m[2] = 0;
 		m[4] = 0;
-		m[5] = 0x3F800000u;
+		m[5] = kFloatOneBits;
 		m[6] = 0;
 		m[8] = 0;
 		m[9] = 0;
-		m[10] = 0x3F800000u;
+		m[10] = kFloatOneBits;
 	};
 	const auto bone_matrix = [&](std::int16_t model, const char* name) -> std::uint32_t*
 	{
@@ -3409,11 +3447,23 @@ extern "C" void abi_gfwl_patch() noexcept
 	{
 		// 0x10005421 writes xlive base + 0x66F770.. with no base check; with
 		// xlive.dll absent the base is 0 and the original faults on that page.
+		// The offsets were decimal in the original's constants (6748016 /
+		// 6748020 / 7034320 / 7034352); they are one dword apart at 0x66F770 and
+		// two more slots at 0x6B5C50/0x6B5C70.
+		constexpr std::uintptr_t kXliveUpdateFlagA = 0x66F770u;
+		constexpr std::uintptr_t kXliveUpdateFlagB = kXliveUpdateFlagA + sizeof(std::uint32_t);
+		constexpr std::uintptr_t kXliveUpdateFlagC = 0x6B55D0u;
+		constexpr std::uintptr_t kXliveUpdateFlagD = 0x6B55F0u;
+		constexpr std::uint32_t kXliveUpdateFlagValue = 0x10000E83u;  // documented opaque
+		static_assert(kXliveUpdateFlagA == 6748016u);
+		static_assert(kXliveUpdateFlagB == 6748020u);
+		static_assert(kXliveUpdateFlagC == 7034320u);
+		static_assert(kXliveUpdateFlagD == 7034352u);
 		const auto base = static_cast<std::uintptr_t>(zpatch_xlive_base);
-		wp_dword(reinterpret_cast<void*>(base + 6748016u), 0x10000E83u);
-		wp_dword(reinterpret_cast<void*>(base + 6748020u), 0x10000E83u);
-		wp_dword(reinterpret_cast<void*>(base + 7034320u), 0x10000E83u);
-		wp_dword(reinterpret_cast<void*>(base + 7034352u), 0x10000E83u);
+		wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlagA), kXliveUpdateFlagValue);
+		wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlagB), kXliveUpdateFlagValue);
+		wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlagC), kXliveUpdateFlagValue);
+		wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlagD), kXliveUpdateFlagValue);
 	}
 }
 
@@ -3445,11 +3495,11 @@ extern "C" void abi_new_saves_convert(const char* path) noexcept
 {
 	std::FILE* file = std::fopen(path, "rb");
 	if (!file) return;
-	std::uint8_t header[0x110];
-	std::fread(header, 0x110, 1, file);  // return ignored, like the original
+	std::uint8_t header[kSaveHeaderSize];
+	std::fread(header, kSaveHeaderSize, 1, file);  // return ignored, like the original
 	std::uint32_t magic = 0;
-	std::memcpy(&magic, header + 0x0C, 4);
-	if (magic != 0x45564153u)  // "SAVE"
+	std::memcpy(&magic, header + kSaveMagicOffset, 4);
+	if (magic != kSaveMagic)  // "SAVE"
 	{
 		std::fclose(file);
 		return;
@@ -4994,7 +5044,7 @@ extern "C" void abi_vram_fix_helper() noexcept
 {
 	const auto argB = static_cast<std::int32_t>(zpatch_vram_arg_b);
 	zpatch_vram_flag = 0;
-	if (argB < 0 || zpatch_vram_arg_a != 0 || argB < 0x3E800000)
+	if (argB < 0 || zpatch_vram_arg_a != 0 || argB < static_cast<std::int32_t>(kFloatQuarterBits))
 		zpatch_vram_flag = 1;
 }
 // 0x1004aab0 VRAMFix: stashes two of the game function's arguments, calls the
@@ -5955,6 +6005,7 @@ __declspec(naked) void abi_collision_deadlock_walk()
 		jne coll_return_di
 		movzx edi, WORD PTR [esi]
 		add DWORD PTR [zpatch_collision_deadlock_iterations], 1
+		; 0x2710 = 10,000: the original's walk-step bound (inline asm needs a literal)
 		cmp DWORD PTR [zpatch_collision_deadlock_iterations], 0x2710
 		je coll_return_minus1
 		cmp di, 0xFFFF
@@ -6010,7 +6061,7 @@ int __stdcall abi_savegame_fix_copy(const void* src, std::uint32_t size, void* d
 		return 0;
 	}
 	*out_size = size;
-	return static_cast<int>(0x8007007Au);
+	return static_cast<int>(HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER));
 }
 
 // @exact 0x1001b080 EpisodeSwitchFreezeFix sum: __thiscall, no stack arguments,
@@ -6036,6 +6087,8 @@ __declspec(naked) void abi_episode_switch_sum()
 __declspec(naked) void abi_skip_intro_body()
 {
 	__asm {
+		; 0x190 = 400 (the game's per-second tick scale) and 0x1f40 = 8000 (the
+		; intro-skip threshold); inline asm takes literals for both.
 		imul ecx, ecx, 0x190
 		cmp edx, 0x1f40
 		jge ok
@@ -6900,7 +6953,7 @@ unsigned char* zpatch_ooc_build_archive(unsigned char* table,
 		const std::uint16_t padding =
 		    static_cast<std::uint16_t>(kOocPageSize - remainder);
 		const std::uint16_t packed =
-		    static_cast<std::uint16_t>((static_cast<std::uint16_t>(0u) & 0xF800u) | padding);
+		    static_cast<std::uint16_t>((static_cast<std::uint16_t>(0u) & kOocPadMask) | padding);
 		std::memcpy(record + 14, &packed, 2);        // sub_1004AB90
 	}
 	append(record, 16);
@@ -6968,7 +7021,7 @@ extern "C" bool zpatch_ooc_selftest() noexcept
 		header_ok = header_ok && std::memcmp(archive + 4 * i, &header[i], 4) == 0;
 	header_ok = header_ok && archive[16] == 0x10u && archive[17] == 0u &&
 	            archive[18] == 0xE9u && archive[19] == 0u;
-	const std::uint32_t record_size = 0x2BD50u;
+	const std::uint32_t record_size = static_cast<std::uint32_t>(kOocTableSize);
 	const std::uint32_t record_index = 1u;
 	bool record_ok = std::memcmp(archive + 20, &record_size, 4) == 0;
 	const std::uint32_t zero = 0u;
