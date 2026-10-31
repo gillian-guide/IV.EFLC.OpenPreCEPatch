@@ -7,7 +7,7 @@
 
 #include "common.hxx"
 #include "hooks.h"
-#include "catalogue.hxx"
+import opp.multiplayer;
 #include "opcodes.hxx"
 #include "rebased.h"
 #include "driveby_seh.h"

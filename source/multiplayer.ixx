@@ -13,12 +13,15 @@ module;
 #include "rebased.h"
 #include "opcodes.hxx"
 
+#include <algorithm>
+
 export module opp.multiplayer;
 
 import opp.pipeline;
 import opp.patch;
 import opp.game;
 import opp.common;
+import opp.catalogue_data;
 import opp.settings;
 
 namespace opp::features
@@ -285,3 +288,118 @@ namespace
 } // namespace
 
 } // namespace opp::features
+
+// ---------------------------------------------------------------------------
+// The multiplayer model-name catalogue (folded in from catalogue.*): the hash
+// index over the generated table in opp.catalogue_data. The spawn diagnostics
+// print names from here; the index is built once.
+// ---------------------------------------------------------------------------
+
+export namespace opp
+{
+    size_t ModelCatalogSize() noexcept;
+    std::string_view ModelCatalogName(size_t index) noexcept;
+
+    // 0x10003F00: first match in the original table order; "**UNKNOWN**" on a
+    // miss.
+    std::string_view ModelNameFromHash(uint32_t hash) noexcept;
+}
+
+namespace opp
+{
+    namespace
+    {
+        // ModelNameIndex: sorted (hash, first table index) pairs. The original
+        // scans all 38,455 names per diagnostic lookup; the table is static, so
+        // build the index once. A fixed array keeps this free of CRT/TLS-backed
+        // static initialisation, which is unsafe before the ASI's CRT is ready.
+        constexpr size_t kModelIndexCapacity = 40000;
+
+        struct ModelHashEntry
+        {
+            uint32_t hash;
+            uint32_t index;
+        };
+
+        ModelHashEntry g_modelIndex[kModelIndexCapacity];
+        size_t g_modelIndexCount = 0;
+        volatile LONG g_modelIndexState = 0;  // 0 uninitialised, 1 building, 2 ready
+
+        bool BuildModelHashIndex() noexcept
+        {
+            for (;;)
+            {
+                const LONG observed =
+                    InterlockedCompareExchange(&g_modelIndexState, 1, 0);
+                if (observed == 2)
+                    return g_modelIndexCount != 0;
+                if (observed == 1)
+                {
+                    Sleep(0);
+                    continue;
+                }
+                const size_t count = ModelNameCount();
+                if (count > kModelIndexCapacity)
+                {
+                    InterlockedExchange(&g_modelIndexState, 2);
+                    return false;
+                }
+                for (size_t i = 0; i < count; ++i)
+                    g_modelIndex[i] = {GameHash(ModelNameAt(i)),
+                                       static_cast<uint32_t>(i)};
+                std::sort(g_modelIndex, g_modelIndex + count,
+                          [](const ModelHashEntry& left, const ModelHashEntry& right) {
+                              if (left.hash != right.hash) return left.hash < right.hash;
+                              return left.index < right.index;
+                          });
+                g_modelIndexCount = count;
+                InterlockedExchange(&g_modelIndexState, 2);
+                return true;
+            }
+        }
+    } // namespace
+
+    size_t ModelCatalogSize() noexcept
+    {
+        return ModelNameCount();
+    }
+
+    std::string_view ModelCatalogName(size_t index) noexcept
+    {
+        const char* name = ModelNameAt(index);
+        return name != nullptr ? std::string_view(name) : "**UNKNOWN**";
+    }
+
+    std::string_view ModelNameFromHash(uint32_t hash) noexcept
+    {
+        if (BuildModelHashIndex())
+        {
+            size_t low = 0;
+            size_t high = g_modelIndexCount;
+            while (low < high)
+            {
+                const size_t mid = low + (high - low) / 2;
+                if (g_modelIndex[mid].hash < hash)
+                    low = mid + 1;
+                else
+                    high = mid;
+            }
+            if (low < g_modelIndexCount && g_modelIndex[low].hash == hash)
+            {
+                const char* name = ModelNameAt(g_modelIndex[low].index);
+                return name != nullptr ? std::string_view(name) : "**UNKNOWN**";
+            }
+            return "**UNKNOWN**";
+        }
+
+        // Index unavailable (catalogue grew past the fixed capacity): keep the
+        // original lookup as the fallback.
+        const size_t count = ModelNameCount();
+        for (size_t i = 0; i < count; ++i)
+        {
+            if (GameHash(ModelNameAt(i)) == hash)
+                return ModelNameAt(i);
+        }
+        return "**UNKNOWN**";
+    }
+} // namespace opp

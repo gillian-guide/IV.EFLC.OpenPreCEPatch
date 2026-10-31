@@ -4,10 +4,8 @@
 // grouped/legacy lookup, build classification, the model catalogue, the vehicle
 // light tables, the menu probes and the ZMenu guard.
 
-#include "catalogue.hxx"
 #include "common.hxx"
 #include "hooks.h"
-#include "menu.hxx"
 
 #include <cmath>
 #include <cstdio>
@@ -22,8 +20,10 @@ import opp.common;
 import opp.config;
 import opp.game;
 import opp.log;
+import opp.multiplayer;
 import opp.patch;
 import opp.pipeline;
+import opp.settings;
 import opp.vehicles;
 
 

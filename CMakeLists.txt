@@ -38,6 +38,7 @@ set(OPCEP_MODULES
     source/patch.ixx
     source/pipeline.ixx
     source/config.ixx
+    source/data/model_catalogue.ixx
     source/steam.ixx
     source/game.ixx
     source/settings.ixx
@@ -53,10 +54,7 @@ set(OPCEP_MODULES
 )
 
 set(OPCEP_CORE_SOURCES
-    source/catalogue.cpp
     source/hooks.cpp
-    source/menu.cpp
-    source/data/model_catalogue.cpp
     external/hooking/Hooking.Patterns.cpp
 )
 
@@ -174,12 +172,12 @@ if(CMAKE_SIZEOF_VOID_P EQUAL 4)
     install(FILES data/plugins/IV.EFLC.OpenPreCEPatch.ini DESTINATION .)
 else()
     # -----------------------------------------------------------------------
-    # 64-bit: only the parity dump. hooks.cpp and menu.cpp are replaced by
+    # 64-bit: only the parity dump. hooks.cpp is replaced by
     # tests/dump_stubs.cpp so no 32-bit body is ever executed.
     # -----------------------------------------------------------------------
     if(OPCEP_BUILD_PARITY_DUMP)
         set(OPCEP_DUMP_SOURCES ${OPCEP_CORE_SOURCES})
-        list(REMOVE_ITEM OPCEP_DUMP_SOURCES source/hooks.cpp source/menu.cpp)
+        list(REMOVE_ITEM OPCEP_DUMP_SOURCES source/hooks.cpp)
 
         add_executable(opcep_parity_dump
             tests/dump_main.cpp

@@ -6,7 +6,7 @@
 
 #include "common.hxx"
 #include "hooks.h"
-#include "menu.hxx"
+
 #include "rebased.h"
 
 #include <cstdlib>

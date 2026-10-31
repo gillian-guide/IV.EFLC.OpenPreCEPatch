@@ -1,14 +1,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The multiplayer model-name catalogue, in the original ASI's table order.
-// Extracted from the game's model table; 38,455 entries. The index is the
-// model id and the name is what the MP spawn probes print. Regenerate with
-// tools/extract_data.py --models.
+//
+// opp.catalogue_data - the generated multiplayer model-name table.
+//
+// 38,455 names in the original ASI's table order, generated from the game's
+// model table (data/model_catalogue.cpp in the old layout). The array stays
+// module-local; only the two accessors are exported, so the table never enters
+// a BMI. Regenerate the array block, keep the accessors.
+
+module;
 
 #include <cstddef>
 
+export module opp.catalogue_data;
 
+export namespace opp
+{
+    size_t ModelNameCount() noexcept;
+    const char* ModelNameAt(size_t index) noexcept;
+} // namespace opp
 
-extern const char* const kModelNames[];
 const char* const kModelNames[] = {
   "01_wires_mh1",
   "02ground_mh8",
@@ -38467,7 +38477,18 @@ const char* const kModelNames[] = {
   "ztype",
 };
 
-extern const std::size_t kModelNameCount = sizeof(kModelNames) / sizeof(kModelNames[0]);
+const std::size_t kModelNameCount = sizeof(kModelNames) / sizeof(kModelNames[0]);
 static_assert(kModelNameCount == 0x9637, "model catalogue must keep all 38,455 entries");
 
+namespace opp
+{
+    size_t ModelNameCount() noexcept
+    {
+        return kModelNameCount;
+    }
 
+    const char* ModelNameAt(size_t index) noexcept
+    {
+        return index < kModelNameCount ? kModelNames[index] : nullptr;
+    }
+} // namespace opp
