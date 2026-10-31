@@ -100,6 +100,12 @@
     <ClCompile Include="source\launcher.ixx">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="source\vehicle_lights.ixx">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="source\menu.ixx">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="source\game.ixx">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>

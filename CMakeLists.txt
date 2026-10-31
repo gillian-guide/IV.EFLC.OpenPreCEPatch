@@ -46,6 +46,8 @@ set(ZP_MODULE_UNITS
   source/patch.ixx
   source/log.ixx
   source/config.ixx
+  source/vehicle_lights.ixx
+  source/menu.ixx
   source/useless_checks.ixx
   source/catalogue.ixx
   source/launcher.ixx)
