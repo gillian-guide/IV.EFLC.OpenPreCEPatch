@@ -14,9 +14,10 @@
 #include "hooks.h"
 #include "patches.h"
 #include "rebased.h"
-#include "useless_checks.h"
 #include "xlive/xliveless.h"
 import zp.common;
+import zp.useless_checks;
+import zp.catalogue;
 
 char iniPath[MAX_PATH];
 
@@ -1602,34 +1603,6 @@ PatchResult ApplyMappedOperation(GameImage image, std::string_view signature, st
 }
 
 // ---------------------------------------------------------------------------
-// model catalogue
-// ---------------------------------------------------------------------------
-
-// Defined in catalogue_data.cpp (38,455 names in original table order).
-extern const char* const kModelNames[];
-extern const std::size_t kModelNameCount;
-
-std::size_t ModelCatalogSize() noexcept
-{
-	return kModelNameCount;
-}
-
-std::string_view ModelCatalogName(std::size_t index) noexcept
-{
-	return index < kModelNameCount ? kModelNames[index] : "**UNKNOWN**";
-}
-
-std::string_view ModelNameFromHash(std::uint32_t hash) noexcept
-{
-	for (std::size_t i = 0; i < kModelNameCount; ++i)
-	{
-		if (GameHash(kModelNames[i]) == hash)
-			return kModelNames[i];
-	}
-	return "**UNKNOWN**";
-}
-
-// ---------------------------------------------------------------------------
 // vehicle light tables
 // ---------------------------------------------------------------------------
 
@@ -2850,7 +2823,7 @@ extern "C" std::uint8_t zpatch_script_call_bool(std::uint32_t hash, std::uint32_
 extern "C" const char* zpatch_bpm_model_name(std::uint32_t hash) noexcept
 {
 	// Return the first table name whose GameHash matches; "**UNKNOWN**" on a miss.
-	return ModelNameFromHash(hash).data();
+	return zp::ModelNameFromHash(hash).data();
 }
 
 // FreezeCarFix / DebugPrintSpawns helper shims: the original's helpers take
@@ -9182,7 +9155,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 	// so those two later installs are suppressed exactly as in the original.
 	Trace("RemoveUselessChecks");
 	if (ctx.Option("RemoveUselessChecks", "0"))
-		ApplyRemoveUselessChecks(ctx.build, ctx.image);
+		zp::ApplyRemoveUselessChecks(ctx.build, ctx.image);
 	Trace("CollisionDeadlockFix");
 	// CollisionDeadlockFix: 1 sigjump
 	if (ctx.Option("CollisionDeadlockFix", "1"))

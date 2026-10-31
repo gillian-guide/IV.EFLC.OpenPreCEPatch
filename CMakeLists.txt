@@ -36,12 +36,13 @@ endforeach()
 # the same units are compiled into two module libraries with different include
 # paths and definitions; no target links both.
 set(ZP_MODULE_UNITS
-  source/common.ixx)
+  source/common.ixx
+  source/useless_checks.ixx
+  source/catalogue.ixx)
 
 set(ZP_SOURCES
   ${ZP_EXT_PATTERNS}/Hooking.Patterns.cpp
   src/catalogue_data.cpp
-  src/useless_checks.cpp
   src/xlive/xliveless.cpp
 )
 
@@ -140,7 +141,7 @@ if(ZP_BUILD_DUMP)
 
   add_executable(zp_dump tests/dump_main.cpp tests/stub_bodies.cpp
                  ${ZP_EXT_PATTERNS}/Hooking.Patterns.cpp src/catalogue_data.cpp src/dllmain.cpp
-                 src/useless_checks.cpp)
+)
   set_target_properties(zp_dump PROPERTIES CXX_SCAN_FOR_MODULES ON)
   target_link_libraries(zp_dump PRIVATE zp_dump_modules)
   target_link_libraries(zp_dump PRIVATE version user32 shlwapi psapi)

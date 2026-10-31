@@ -1,26 +1,43 @@
-#include "pch.h"
-// RemoveUselessChecks, the original way: three write shapes over the handler's
-// own RVA tables, plus its singles. Every entry is `game base + RVA`, written
-// unconditionally (the original verifies nothing before writing) and only on the
-// builds the original gated it to.
+// zp.useless_checks — RemoveUselessChecks as the original handler does it.
+//
+// The original handler sub_10044BD0 writes a per-build list of game RVAs as NOP
+// or one-byte patches: 19/2/2 singles first, then its five RVA tables
+// (2230/45/56 on build 9, 2288 on build 8, 2466 on build 5). The data is the
+// generated, SHA-pinned `src/useless_checks_data.inc`
+// (tools/extract_useless_checks.py); this module owns the three write shapes and
+// the application point. Every entry is `game base + RVA`, written
+// unconditionally (the original verifies nothing before writing), and only on
+// the builds the original gated it to.
+//
+// The caller owns the RemoveUselessChecks INI gate, exactly like the other arms.
 
-#include <cstddef>
-#include <cstdint>
-#include <iterator>
+module;
 
+#include "common.hxx"
 #include "common.h"
-#include "useless_checks.h"
 
-#if defined(ZP_DUMP_TOOL)
-#include "../tests/dump_injector/injector/injector.hpp"
-#elif defined(ZP_TRACE_WRITES)
-#include "../tests/trace_injector/injector/injector.hpp"
-#else
-#include "injector/injector.hpp"
-#endif
+export module zp.useless_checks;
+
+export namespace zp
+{
+// One single write: `length` bytes of `byte` at game base + rva.
+struct UselessCheckSingle
+{
+	std::uint32_t rva;
+	std::uint8_t length;
+	std::uint8_t byte;
+};
+
+// The original handler, applied at one point: the singles first, then the
+// build's RVA tables. Writes only on builds 5 (v1040), 8 (v1070) and 9 (v1080);
+// every other build writes nothing.
+void ApplyRemoveUselessChecks(GameBuild build, GameImage image);
+}  // namespace zp
 
 namespace
 {
+using zp::UselessCheckSingle;
+
 // The original's tables, one uint32 game RVA per site (generated data).
 #include "useless_checks_data.inc"
 
@@ -74,8 +91,10 @@ void SweepSingles(GameImage image, const UselessCheckSingle* rows, std::size_t c
 			injector::WriteMemory<std::uint8_t>(image.base + rows[i].rva, rows[i].byte, true); //jmp
 	}
 }
-} // namespace
+}  // namespace
 
+namespace zp
+{
 void ApplyRemoveUselessChecks(GameBuild build, GameImage image)
 {
 	// The handler's order: the singles first, then that build's tables.
@@ -99,3 +118,4 @@ void ApplyRemoveUselessChecks(GameBuild build, GameImage image)
 		break;
 	}
 }
+}  // namespace zp

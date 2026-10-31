@@ -19,7 +19,8 @@
 
 #include "injector/injector.hpp"
 #include "patches.h"
-#include "useless_checks.h"
+import zp.useless_checks;
+import zp.catalogue;
 #include "xlive/xliveless.h"
 
 namespace
@@ -253,7 +254,7 @@ int Run()
 		{
 			std::vector<std::uint8_t> buffer(kScanProbeSize, 0); // above the largest RVA
 			const GameImage image{buffer.data(), buffer.size()};
-			ApplyRemoveUselessChecks(want.build, image);
+			zp::ApplyRemoveUselessChecks(want.build, image);
 
 			std::size_t positions = 0;
 			std::uint64_t hash = 0xcbf29ce484222325ull;
@@ -280,7 +281,7 @@ int Run()
 		{
 			std::vector<std::uint8_t> buffer(kScanProbeSize, 0);
 			const GameImage image{buffer.data(), buffer.size()};
-			ApplyRemoveUselessChecks(build, image);
+			zp::ApplyRemoveUselessChecks(build, image);
 			for (std::uint8_t byte : buffer)
 				CHECK(byte == 0);
 		}
@@ -449,13 +450,13 @@ int Run()
 	}
 
 	// ---- catalogue ---------------------------------------------------------
-	CHECK(ModelCatalogSize() == 38455);
-	CHECK(ModelCatalogName(0) == "01_wires_mh1");
-	CHECK(ModelCatalogName(38454) == "ztype");
-	CHECK(ModelCatalogName(38455) == "**UNKNOWN**");
-	CHECK(ModelNameFromHash(GameHash("police")) == "police");
-	CHECK(ModelNameFromHash(GameHash("ztype")) == "ztype");
-	CHECK(ModelNameFromHash(0) == "**UNKNOWN**");
+	CHECK(zp::ModelCatalogSize() == 38455);
+	CHECK(zp::ModelCatalogName(0) == "01_wires_mh1");
+	CHECK(zp::ModelCatalogName(38454) == "ztype");
+	CHECK(zp::ModelCatalogName(38455) == "**UNKNOWN**");
+	CHECK(zp::ModelNameFromHash(GameHash("police")) == "police");
+	CHECK(zp::ModelNameFromHash(GameHash("ztype")) == "ztype");
+	CHECK(zp::ModelNameFromHash(0) == "**UNKNOWN**");
 
 	// ---- vehicle-light tables ---------------------------------------------
 	{
