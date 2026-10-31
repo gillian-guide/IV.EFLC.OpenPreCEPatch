@@ -2,7 +2,7 @@
 
 #include "fusionfix_compat.hxx"
 
-#include "log.hxx"
+import opp.log;
 
 #include <windows.h>
 

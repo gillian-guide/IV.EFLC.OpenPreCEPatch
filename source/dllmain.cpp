@@ -9,7 +9,7 @@
 #include "hooks.h"
 #include "fusionfix_compat.hxx"
 #include "ini_import.hxx"
-#include "log.hxx"
+import opp.log;
 #include "menu.hxx"
 #include "patches.hxx"
 #include "pattern.hxx"

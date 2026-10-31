@@ -9,7 +9,7 @@
 #include "game.hxx"
 #include "hooks.h"
 #include "catalogue.hxx"
-#include "log.hxx"
+import opp.log;
 #include "opcodes.hxx"
 #include "pattern.hxx"
 #include "rebased.h"

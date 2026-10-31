@@ -16,9 +16,10 @@ module;
 #include "feature_registry.hxx"
 #include "helpers.hxx"
 #include "opcodes.hxx"
-#include "log.hxx"
 
 export module opp.graphics;
+
+import opp.log;
 
 import opp.common;
 import opp.settings;

@@ -3,7 +3,7 @@
 #include "helpers.hxx"
 
 #include "game.hxx"
-#include "log.hxx"
+import opp.log;
 
 #include <cstdio>
 

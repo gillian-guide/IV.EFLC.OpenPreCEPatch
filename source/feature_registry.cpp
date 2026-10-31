@@ -2,7 +2,7 @@
 
 #include "feature_registry.hxx"
 
-#include "log.hxx"
+import opp.log;
 
 namespace opp
 {

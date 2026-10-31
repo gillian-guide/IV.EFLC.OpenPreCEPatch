@@ -5,7 +5,7 @@
 #include "config.hxx"
 #include "ini_file.hxx"
 #include "ini_template.hxx"
-#include "log.hxx"
+import opp.log;
 
 #include <algorithm>
 #include <array>

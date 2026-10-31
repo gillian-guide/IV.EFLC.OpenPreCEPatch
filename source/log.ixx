@@ -1,9 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+//
+// opp.log — the synchronous trace log.
+//
+// The original mod wrote a trace log next to the ASI; the line shape (stage,
+// build, option, result) is unchanged so existing diagnostics keep working.
+// This module is a leaf: it depends only on the CRT, so every other module may
+// log without creating a cycle.
 
-#include "log.hxx"
+module;
 
 #include <cstdarg>
 #include <cstdio>
+#include <filesystem>
+
+export module opp.log;
+
+export namespace opp
+{
+    void OpenLog(const std::filesystem::path& path);
+    void Log(const char* format, ...);
+}
 
 namespace opp
 {

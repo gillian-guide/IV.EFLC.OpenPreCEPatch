@@ -34,6 +34,7 @@ set(OPCEP_INCLUDES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/includes")
 # the core library through a CXX_MODULES file set.
 set(OPCEP_MODULES
     source/common.ixx
+    source/log.ixx
     source/settings.ixx
     source/stability.ixx
     source/performance.ixx
@@ -56,7 +57,6 @@ set(OPCEP_CORE_SOURCES
     source/hooks.cpp
     source/ini_file.cpp
     source/ini_import.cpp
-    source/log.cpp
     source/menu.cpp
     source/order.cpp
     source/patches.cpp

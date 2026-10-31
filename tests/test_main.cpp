@@ -13,7 +13,7 @@
 #include "helpers.hxx"
 #include "hooks.h"
 #include "ini_import.hxx"
-#include "log.hxx"
+import opp.log;
 #include "menu.hxx"
 #include "patches.hxx"
 #include "pattern.hxx"

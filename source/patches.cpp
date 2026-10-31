@@ -9,7 +9,7 @@
 #include "feature_registry.hxx"
 #include "game.hxx"
 #include "helpers.hxx"
-#include "log.hxx"
+import opp.log;
 #include "pattern.hxx"
 #include "rebased.h"
 

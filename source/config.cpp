@@ -6,7 +6,7 @@
 #include "config.hxx"
 
 #include "fusionfix_compat.hxx"
-#include "log.hxx"
+import opp.log;
 
 #include <cstring>
 #include <fstream>

@@ -6,7 +6,7 @@
 
 #include "order.hxx"
 
-#include "log.hxx"
+import opp.log;
 
 #include <algorithm>
 #include <iterator>
