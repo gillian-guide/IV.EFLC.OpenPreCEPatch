@@ -88,7 +88,6 @@ jobs:
 
           Copy-Item 'bin/IV.EFLC.OpenPreCEPatch.asi' $dist
           Copy-Item 'bin/IV.EFLC.OpenPreCEPatch.ini' $dist
-          Copy-Item 'readme.md', 'LICENSE', 'CREDITS.md', 'NOTICE' $dist
 
           $asi = Get-ChildItem -Path 'companion-build', 'companion/XLivelessAddon' `
             -Recurse -Filter 'XLivelessAddon.asi' -ErrorAction SilentlyContinue |
@@ -102,22 +101,19 @@ jobs:
           if (-not $ini) { throw 'XLivelessAddon.ini was not found in the companion repository' }
           Copy-Item $ini.FullName (Join-Path $dist 'XLivelessAddon.ini')
 
-          Compress-Archive -Path (Join-Path $dist '*') `
-            -DestinationPath (Join-Path $dist 'OpenPreCEPatch.zip') -Force
-          Get-ChildItem $dist | Select-Object Name, Length
+          # Exactly four files: an ASI and its INI for each module.
+          Compress-Archive -Path `
+            (Join-Path $dist 'IV.EFLC.OpenPreCEPatch.asi'), `
+            (Join-Path $dist 'IV.EFLC.OpenPreCEPatch.ini'), `
+            (Join-Path $dist 'XLivelessAddon.asi'), `
+            (Join-Path $dist 'XLivelessAddon.ini') `
+            -DestinationPath 'OpenPreCEPatch.zip' -Force
 
       - name: Upload release zip
         uses: actions/upload-artifact@v7
         with:
           name: OpenPreCEPatch
-          path: dist/OpenPreCEPatch.zip
-          if-no-files-found: error
-
-      - name: Upload linker map
-        uses: actions/upload-artifact@v7
-        with:
-          name: IV.EFLC.OpenPreCEPatch.map
-          path: bin/IV.EFLC.OpenPreCEPatch.map
+          path: OpenPreCEPatch.zip
           if-no-files-found: error
 
   x64-parity:
@@ -136,10 +132,3 @@ jobs:
 
       - name: Build
         run: cmake --build --preset x64-release -- /m
-
-      - name: Upload dump
-        uses: actions/upload-artifact@v7
-        with:
-          name: opcep_parity_dump
-          path: build/x64/Release/opcep_parity_dump.exe
-          if-no-files-found: error
