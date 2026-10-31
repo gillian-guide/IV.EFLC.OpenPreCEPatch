@@ -38,7 +38,7 @@ You need Visual Studio 2022/2026 with the x86 C++ toolchain. Open `ZolikaPatch.s
 msbuild ZolikaPatch.sln /p:Configuration=Release /p:Platform=x86
 ```
 
-The output is `build\msvc-x86\ZolikaPatch.asi` plus the native tests and a linker `.map`. `build\build_msvc.cmd` and CMake are also supported:
+The output is `build\msvc-x86\ZolikaPatch.asi` plus the native tests; the release artefact is a zip holding only the ASI and `ZolikaPatch.ini` (no `.map`). `build\build_msvc.cmd` and CMake are also supported:
 
 ```bat
 cmake -S . -B build -A Win32

@@ -70,8 +70,6 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
       <ModuleDefinitionFile>ZolikaPatch.def</ModuleDefinitionFile>
-      <GenerateMapFile>true</GenerateMapFile>
-      <MapFileName>$(OutDir)ZolikaPatch.map</MapFileName>
       <AdditionalDependencies>Shlwapi.lib;Version.lib;User32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
@@ -95,8 +93,6 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
       <ModuleDefinitionFile>ZolikaPatch.def</ModuleDefinitionFile>
-      <GenerateMapFile>true</GenerateMapFile>
-      <MapFileName>$(OutDir)ZolikaPatch.map</MapFileName>
       <AdditionalDependencies>Shlwapi.lib;Version.lib;User32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>

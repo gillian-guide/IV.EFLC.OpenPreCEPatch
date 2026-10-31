@@ -29,7 +29,7 @@ if not exist "%INCDIR%\injector\include\injector" (
   exit /b 2
 )
 set "COMMON=/nologo /std:c++17 /O2 /EHsc /W3 /DUNICODE /D_UNICODE /DNDEBUG /DNOMINMAX /I"%SRC%" /I"%INCDIR%\injector\include" /I"%INCDIR%\Hooking.Patterns""
-set "LDFLAGS=/link /MACHINE:X86 /SUBSYSTEM:WINDOWS /BASE:0x10000000 /INCREMENTAL:NO /DYNAMICBASE /NOLOGO /MAP"
+set "LDFLAGS=/link /MACHINE:X86 /SUBSYSTEM:WINDOWS /BASE:0x10000000 /INCREMENTAL:NO /DYNAMICBASE /NOLOGO"
 
 cl %COMMON% ^
   "%SRC%\dllmain.cpp" ^
@@ -43,5 +43,5 @@ cl %COMMON% ^
 if errorlevel 1 exit /b 1
 
 echo built:
-dir /b "%OUT%\*.asi" "%OUT%\*.map"
+dir /b "%OUT%\*.asi"
 endlocal

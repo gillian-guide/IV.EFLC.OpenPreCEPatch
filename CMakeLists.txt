@@ -11,6 +11,7 @@ option(ZP_BUILD_ASI "Build the 32-bit ZolikaPatch.asi" ON)
 option(ZP_BUILD_TESTS "Build the native tests" ON)
 option(ZP_BUILD_DUMP "Build the write-set dump tool" OFF)
 option(ZP_BUILD_STATE_DUMP "Build the offline Runtime State driver (Gate 3)" OFF)
+option(ZP_LINK_MAP "Emit a linker .map for the ASI (development aid, not shipped)" OFF)
 
 # Third-party headers and the scanner are git submodules (see .gitmodules),
 # checked out under include/.
@@ -49,7 +50,11 @@ if(ZP_BUILD_ASI)
   add_library(ZolikaPatch SHARED src/dllmain.cpp ZolikaPatch.def)
   target_link_libraries(ZolikaPatch PRIVATE zp)
   target_link_options(ZolikaPatch PRIVATE
-    /MACHINE:X86 /SUBSYSTEM:WINDOWS /BASE:0x10000000 /INCREMENTAL:NO /MAP)
+    /MACHINE:X86 /SUBSYSTEM:WINDOWS /BASE:0x10000000 /INCREMENTAL:NO)
+  # A linker .map is a development aid (symbol order/addresses), never shipped.
+  if(ZP_LINK_MAP)
+    target_link_options(ZolikaPatch PRIVATE /MAP)
+  endif()
   set_target_properties(ZolikaPatch PROPERTIES PREFIX "" SUFFIX ".asi")
 endif()
 

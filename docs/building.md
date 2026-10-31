@@ -44,8 +44,11 @@ Link settings that matter:
 - `/SUBSYSTEM:WINDOWS`
 - `/BASE:0x10000000` (the mod's preferred base)
 - `/INCREMENTAL:NO`
-- `/MAP`
 - `version.lib user32.lib shlwapi.lib`
+
+A linker `.map` is not part of the release build: what ships is the ASI plus its
+INI, nothing else. Pass `-DZP_LINK_MAP=ON` to CMake (or add `/MAP` by hand) when
+you want the symbol/address listing for offline verification.
 
 `ZolikaPatch.def` sets the module name; the ASI exports nothing.
 
@@ -57,7 +60,7 @@ From the project root:
 build\build_msvc.cmd
 ```
 
-Run it from an **x86 Developer Command Prompt** (so `cl.exe` is on `PATH`), or pass the full path to `vcvars32.bat` as the first argument. It compiles the same sources into `build\msvc-x86\ZolikaPatch.asi`, and emits `build\msvc-x86\ZolikaPatch.map`. The script uses the `src\` and `include\` include paths that match the current tree; an older copy assumed the sources sat next to `build\`.
+Run it from an **x86 Developer Command Prompt** (so `cl.exe` is on `PATH`), or pass the full path to `vcvars32.bat` as the first argument. It compiles the same sources into `build\msvc-x86\ZolikaPatch.asi`; no `.map` is emitted. The script uses the `src\` and `include\` include paths that match the current tree; an older copy assumed the sources sat next to `build\`.
 
 ## CMake
 
@@ -66,14 +69,14 @@ cmake -S . -B build -A Win32
 cmake --build build --config Release
 ```
 
-`ZP_BUILD_ASI=OFF` builds only the static core; `ZP_BUILD_TESTS=OFF` skips the tests. The ASI target uses the same base/subsystem/map options.
+`ZP_BUILD_ASI=OFF` builds only the static core; `ZP_BUILD_TESTS=OFF` skips the tests; `ZP_LINK_MAP=ON` adds the `/MAP` development listing that the release build leaves out. The ASI target uses the same base/subsystem options.
 
 ## Continuous integration
 
 `.github/workflows/build.yml` builds the ASI and runs the native tests on
-`windows-latest` for every push and pull request, and uploads
-`ZolikaPatch.asi` and its `.map` as build artefacts. The same three commands
-work locally:
+`windows-latest` for every push and pull request, then uploads one artefact: a
+zip holding exactly `ZolikaPatch.asi` and `ZolikaPatch.ini`. No `.map` and no
+intermediate files go into it. The same three commands work locally:
 
 ```bat
 cmake -S . -B build -A Win32
@@ -88,8 +91,7 @@ See `build/build_mingw.md`. MinGW-w64 can compile the core and run the native te
 ## Output
 
 ```
-build/msvc-x86/ZolikaPatch.asi   <- copy next to GTAIV.exe
-build/msvc-x86/ZolikaPatch.map   <- development only
+build/msvc-x86/ZolikaPatch.asi   <- copy next to GTAIV.exe, with ZolikaPatch.ini
 ```
 
 If you rebuild while the game is running, the file is locked. Close the game first.
