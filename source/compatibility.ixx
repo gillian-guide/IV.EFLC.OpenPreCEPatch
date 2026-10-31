@@ -10,14 +10,13 @@ module;
 
 #include "common.hxx"
 #include "hooks.h"
-#include "patches.hxx"
 #include "rebased.h"
-#include "feature_registry.hxx"
 #include "opcodes.hxx"
 #include "steam_achievements.hxx"
 
 export module opp.compatibility;
 
+import opp.pipeline;
 import opp.patch;
 import opp.game;
 import opp.common;

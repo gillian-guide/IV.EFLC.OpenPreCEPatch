@@ -10,13 +10,12 @@ module;
 
 #include "common.hxx"
 #include "hooks.h"
-#include "patches.hxx"
 #include "rebased.h"
-#include "feature_registry.hxx"
 #include "opcodes.hxx"
 
 export module opp.multiplayer;
 
+import opp.pipeline;
 import opp.patch;
 import opp.game;
 import opp.common;

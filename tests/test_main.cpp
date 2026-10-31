@@ -7,13 +7,12 @@
 #include "catalogue.hxx"
 #include "common.hxx"
 #include "config.hxx"
-#include "feature_registry.hxx"
+import opp.pipeline;
 import opp.patch;
 import opp.game;
 #include "hooks.h"
 import opp.log;
 #include "menu.hxx"
-#include "patches.hxx"
 #include "vehicle_lights.hxx"
 
 #include <cmath>

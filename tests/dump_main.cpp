@@ -5,9 +5,8 @@
 // want to diff an INI's effect without launching the game.
 
 #include "common.hxx"
-#include "feature_registry.hxx"
+import opp.pipeline;
 import opp.game;
-#include "patches.hxx"
 
 #include <algorithm>
 #include <cstdio>
