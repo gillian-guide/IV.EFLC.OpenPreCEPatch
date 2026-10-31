@@ -32,6 +32,10 @@ import zp.launcher;
 
 char iniPath[MAX_PATH];
 
+// The menu-integration decision the RestoreDeathMusic arm reads
+// (declared in src/patches.h so the feature modules link it).
+bool bMenuIntegration = false;
+
 namespace
 {
 
@@ -574,151 +578,6 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID /*reserved*/)
 }
 
 
-// ---------------------------------------------------------------------------
-// Option pass: one block per INI option, in the original loader's order.
-// ---------------------------------------------------------------------------
-
-namespace
-{
-	constexpr std::size_t kWordLength = 2;
-	constexpr std::size_t kBranchLength = 5; // E8/E9 <rel32>
-	constexpr std::uint8_t kCallOpcode = 0xE8;
-	// The other instruction bytes the arms write. An opcode is not data: name it
-	// so `0xEB` at a site reads as "jmp rel8" and not as a magic number.
-	constexpr std::uint8_t kRetOpcode = 0xC3;
-	constexpr std::uint8_t kMovEaxOpcode = 0xB8;   // mov eax, imm32
-	constexpr std::uint8_t kPushadOpcode = 0x60;
-	constexpr std::uint8_t kXorEaxOpcode = 0x33;      // xor
-	constexpr std::uint8_t kXorEaxEaxModrm = 0xC0;    // eax, eax
-	constexpr std::uint8_t kJeRel32First = 0x0F;      // jcc rel32, two-byte opcode
-	constexpr std::uint8_t kJeRel32Second = 0x84;     // je
-	// 66 0F 6E C0 / 66 0F 6E C8 = movd xmm0, eax / movd xmm1, eax.
-	constexpr std::uint8_t kMovdXmm0Eax[] = {0x66, 0x0F, 0x6E, 0xC0};
-	constexpr std::uint8_t kMovdXmm1Eax[] = {0x66, 0x0F, 0x6E, 0xC8};
-	constexpr std::uint32_t kFusionFixProbeRva = 0x20D7u + 4u;
-
-	bool bMenuIntegration = false;
-
-	bool BuildIs(GameBuild build, std::initializer_list<GameBuild> builds)
-	{
-		for (const GameBuild candidate : builds)
-		{
-			if (candidate == build)
-				return true;
-		}
-		return false;
-	}
-
-	// The original's hook::pattern, over the image the parity drivers hand in.
-	hook::pattern Pattern(const GameImage& image, std::string_view signature)
-	{
-		const std::string normalized = NormalizeSignature(signature);
-		if (normalized.empty())
-			return hook::pattern{};
-		const std::uintptr_t begin = reinterpret_cast<std::uintptr_t>(image.base);
-		return hook::make_range_pattern(begin, begin + image.size, normalized);
-	}
-
-	// The address of a site inside the current match.
-	std::uint32_t MatchAddress(hook::pattern& pattern, std::ptrdiff_t offset = 0)
-	{
-		return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(
-		    pattern.get(0).get<std::uint8_t>(offset)));
-	}
-
-	// A rel32 target inside the current match: the displacement at
-	// `displacementOffset`, measured from the instruction at `nextOffset`.
-	std::uint32_t MatchTarget(hook::pattern& pattern, std::ptrdiff_t displacementOffset,
-	                          std::ptrdiff_t nextOffset)
-	{
-		return MatchAddress(pattern, nextOffset) +
-		       *pattern.get(0).get<std::uint32_t>(displacementOffset);
-	}
-
-	// The dword stored at `address`.
-	std::uint32_t ReadDword(const std::uint8_t* address)
-	{
-		std::uint32_t value = 0;
-		std::memcpy(&value, address, sizeof(value));
-		return value;
-	}
-
-	// A dword field inside a match: a call displacement, or a site pointer.
-	std::uint32_t Field(const std::uint8_t* match, std::ptrdiff_t offset)
-	{
-		return ReadDword(match + offset);
-	}
-
-	// A pointer stored in a dword field of the current match.
-	std::uint8_t* MatchPointer(hook::pattern& pattern, std::ptrdiff_t offset)
-	{
-		return reinterpret_cast<std::uint8_t*>(static_cast<std::uintptr_t>(
-		    *pattern.get(0).get<std::uint32_t>(offset)));
-	}
-
-	// A pointer as the dword the game and the injector expect (the ASI is x86).
-	std::uint32_t AddressOf(const void* pointer)
-	{
-		return static_cast<std::uint32_t>(
-		    PublishedAddress(reinterpret_cast<std::uintptr_t>(pointer)));
-	}
-
-	bool InImage(const GameImage& image, std::uintptr_t address)
-	{
-		const auto base = reinterpret_cast<std::uintptr_t>(image.base);
-		return address >= base && address + kDwordLength <= base + image.size;
-	}
-
-	// Where the branch at `siteOffset` goes: the original re-points these.
-	std::uintptr_t BranchTarget(const std::uint8_t* match, std::ptrdiff_t siteOffset)
-	{
-		const auto displacement = static_cast<std::int32_t>(Field(match, siteOffset + 2));
-		return reinterpret_cast<std::uintptr_t>(match) + siteOffset + 6 +
-		       static_cast<std::uintptr_t>(displacement);
-	}
-
-	// A five-byte branch written the way the original's collector writes it
-	// (opcode + rel32). injector::MakeCALL/MakeJMP first call
-	// GetBranchDestination, which for a `FF 15 <disp32>` site dereferences the
-	// operand; that read is discarded, and it is the only difference from the
-	// original. Use this where the dereference would read memory the site does
-	// not point into (e.g. a byte of the operand is overwritten by the same arm).
-	// Only WriteMemoryRaw is guaranteed by every injector shim (the real one, the
-	// dump shim and the trace shim), so the rel32 is built here.
-	void WriteBranchNoRead(std::uint8_t* site, std::uint8_t opcode, void* destination)
-	{
-		std::uint8_t bytes[kBranchLength];
-		bytes[0] = opcode;
-		const auto displacement = static_cast<std::int32_t>(
-		    reinterpret_cast<std::intptr_t>(destination) -
-		    reinterpret_cast<std::intptr_t>(site + kBranchLength));
-		std::memcpy(bytes + 1, &displacement, sizeof(displacement));
-		injector::WriteMemoryRaw(site, bytes, sizeof(bytes), true); //write
-	}
-
-	void WriteCallNoRead(std::uint8_t* site, void* destination)
-	{
-		WriteBranchNoRead(site, kCallOpcode, destination);
-	}
-
-	// The FusionFix compatibility probe: a build of the fix we cannot share a
-	// module with keeps its own bytes at 0x20D3/0x20D7.
-	bool FusionFixGateClosed()
-	{
-		const HMODULE module = GetModuleHandleW(L"GTAIV.EFLC.FusionFix.asi");
-		if (module == nullptr)
-			return false;
-		const auto* image = reinterpret_cast<const std::uint8_t*>(module);
-		return ModuleLacksSignature(image, kFusionFixProbeRva);
-	}
-
-	bool NewFilesConflictModulesPresent()
-	{
-		return GetModuleHandleA("GTAC.dll") != nullptr ||
-		       GetModuleHandleA("JacksIVFixes.asi") != nullptr;
-	}
-
-} // namespace
 
 // The ten spawn-probe case bodies: `offset` is the byte distance from the
 // probe match to the case body (the original's jump-table selector).
@@ -739,33 +598,6 @@ constexpr SpawnCase kSpawnCases[] = {
 	{0xE0u, &abi_spawns_case_0xE0},
 	{0xF6u, &abi_spawns_case_0xF6},
 };
-// One pass over every arm, in the original loader's order.
-#if defined(ZP_TRACE_WRITES)
-namespace injector
-{
-const char* g_traceArm = "?";
-}
-#endif
-
-#if defined(ZP_TRACE_INSTALLS)
-// Debug builds only: name the arm that is about to run, so a boot fault can
-// be narrowed down from the log.
-void Trace(const char* name)
-{
-	static std::FILE* log = std::fopen("ZolikaPatch.trace.log", "a");
-	if (log == nullptr)
-		return;
-	std::fprintf(log, "arm %s\n", name);
-	std::fprintf(log, "heap %s arm:%s\n",
-	             HeapValidate(GetProcessHeap(), 0, nullptr) ? "ok" : "BAD", name);
-#if defined(ZP_TRACE_WRITES)
-	injector::g_traceArm = name;
-#endif
-	std::fflush(log); //patch
-}
-#else
-void Trace(const char*) {}
-#endif
 
 void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 {

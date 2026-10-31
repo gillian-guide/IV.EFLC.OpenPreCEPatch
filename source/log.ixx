@@ -23,6 +23,9 @@ void TraceBootValue(const char* label, std::uintptr_t value);
 
 // Installs the fault tracer; a release build installs nothing.
 void InstallFaultTracer();
+
+// The option pass's arm tracer (ZP_TRACE_INSTALLS): a release ASI is silent.
+void Trace(const char* name);
 }  // export
 
 #if defined(ZP_TRACE_INSTALLS)
@@ -124,3 +127,31 @@ void InstallFaultTracer()
 	AddVectoredExceptionHandler(1, TraceFault);
 #endif
 }
+
+// One pass over every arm, in the original loader's order.
+#if defined(ZP_TRACE_WRITES)
+namespace injector
+{
+const char* g_traceArm = "?";
+}
+#endif
+
+#if defined(ZP_TRACE_INSTALLS)
+// Debug builds only: name the arm that is about to run, so a boot fault can
+// be narrowed down from the log.
+void Trace(const char* name)
+{
+	static std::FILE* log = std::fopen("ZolikaPatch.trace.log", "a");
+	if (log == nullptr)
+		return;
+	std::fprintf(log, "arm %s\n", name);
+	std::fprintf(log, "heap %s arm:%s\n",
+	             HeapValidate(GetProcessHeap(), 0, nullptr) ? "ok" : "BAD", name);
+#if defined(ZP_TRACE_WRITES)
+	injector::g_traceArm = name;
+#endif
+	std::fflush(log); //patch
+}
+#else
+void Trace(const char*) {}
+#endif

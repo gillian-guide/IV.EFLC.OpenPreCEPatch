@@ -23,10 +23,8 @@
 namespace
 {
 constexpr std::uint8_t kNopByte = 0x90;
-constexpr std::uint8_t kCallOpcode = 0xE8;
 constexpr std::uint8_t kJumpOpcode = 0xE9;
 constexpr std::size_t kDwordLength = 4;
-constexpr std::size_t kBranchLength = 5;  //E8/E9 <rel32>
 constexpr std::uint16_t kCollectorStubLength = 4;
 
 template <typename T, std::size_t N>
@@ -290,7 +288,7 @@ constexpr SkipLauncherCollectedInstall kSkipLauncherDfaCollected[] = {
 
 // A signature scan over the caller-owned image, in the original's hook::pattern
 // style; a miss is the one failure a pass tolerates.
-hook::pattern Pattern(const GameImage& image, std::string_view signature)
+hook::pattern ScanPattern(const GameImage& image, std::string_view signature)
 {
 	const std::uintptr_t begin = reinterpret_cast<std::uintptr_t>(image.base);
 	return hook::make_range_pattern(begin, begin + image.size,
@@ -352,7 +350,7 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 		for (std::size_t i = 0; i < entryCount; ++i)
 		{
 			const SkipLauncherEntry& entry = entries[i];
-			hook::pattern pattern = Pattern(image, entry.signature);
+			hook::pattern pattern = ScanPattern(image, entry.signature);
 			if (pattern.empty())
 			{
 				++report.entriesMissing;
@@ -426,7 +424,7 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 		for (std::size_t i = 0; i < collectorCount; ++i)
 		{
 			const SkipLauncherCollector& collector = collectors[i];
-			hook::pattern pattern = Pattern(image, collector.pattern);
+			hook::pattern pattern = ScanPattern(image, collector.pattern);
 			const std::size_t hits = pattern.size();
 			if (hits == 0)
 				continue;
@@ -458,7 +456,7 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 	{
 		// The create_file hook forwards through this IAT slot, so the capture must
 		// happen before the installer writes the hook.
-		hook::pattern capture = Pattern(image, kDfaCapturePattern);
+		hook::pattern capture = ScanPattern(image, kDfaCapturePattern);
 		if (!capture.empty())
 			report.createFileSlot = injector::ReadMemory<std::uint32_t>(
 			    capture.get(0).get<std::uint8_t>() + kDfaCaptureSlotOffset);
@@ -481,7 +479,7 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 					++missing;
 					continue;
 				}
-				hook::pattern hookSite = Pattern(image, install.signature);
+				hook::pattern hookSite = ScanPattern(image, install.signature);
 				if (hookSite.empty())
 				{
 					++missing;
@@ -522,13 +520,13 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 			for (std::size_t i = 0; i < collectedCount; ++i)
 			{
 				const SkipLauncherCollectedInstall& install = collected[i];
-				hook::pattern hits = Pattern(image, install.collector);
+				hook::pattern hits = ScanPattern(image, install.collector);
 				for (std::size_t t = 0; t < install.targetCount; ++t)
 				{
 					const SkipLauncherCollectedTarget& target = install.targets[t];
 					if (target.index >= hits.size())
 						continue;
-					hook::pattern targetPattern = Pattern(image, target.targetSignature);
+					hook::pattern targetPattern = ScanPattern(image, target.targetSignature);
 					if (targetPattern.empty())
 						continue;
 					auto* site = hits.get(target.index).get<std::uint8_t>();

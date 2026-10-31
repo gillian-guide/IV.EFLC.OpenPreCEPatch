@@ -41,7 +41,6 @@ constexpr unsigned kFaultFrameCount = 16;
 constexpr std::size_t kSparePage = 0x1000;
 // A rel32 branch: one opcode byte and a four-byte displacement.
 constexpr std::uint32_t kBranchBytes = 5;
-constexpr std::uint8_t kCallOpcode = 0xE8;
 constexpr std::uint8_t kJumpOpcode = 0xE9;
 
 bool MapPeImage(const char* path, std::vector<std::uint8_t>& image, std::uint32_t& imageBase,
