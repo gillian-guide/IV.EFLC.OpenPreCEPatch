@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Prove the rebuilt 32-bit hook bodies against the original ZolikaPatch ASI.
 
 The write-set dump (`tests/dump_main.cpp`) applies the installers only; it never
@@ -94,7 +94,7 @@ CONVERTED_BODIES = [
 
 _HEX = re.compile(r"0x[0-9a-fA-F]+")
 _ROW = re.compile(
-    r"^\s*\{\s*(?:BodyId::(?P<id>\w+)|(?P<va>0x[0-9A-Fa-f]+)u?)\s*,\s*"
+    r"\{\s*(?:BodyId::(?P<id>\w+)|(?P<va>0x[0-9A-Fa-f]+)u?)\s*,\s*"
     r"(?:reinterpret_cast<[^>]*>\(\s*)?&(?P<sym>\w+)\)?\s*\}\s*,?"
 )
 _ENUM_ENTRY = re.compile(r"^\s*(?P<id>\w+)\s*=\s*(?P<va>0x[0-9A-Fa-f]+)u?\s*,?")
@@ -157,10 +157,8 @@ def parse_source(source: pathlib.Path):
     table = re.search(r"const AbiBody kAbiBodies\[\]\s*=\s*\{(?P<body>.*?)\n\};", text, re.S)
     if not table:
         raise ValueError(f"{source}: kAbiBodies table not found")
-    for line in table.group("body").splitlines():
-        match = _ROW.match(line)
-        if not match:
-            continue
+    table_text = table.group("body")
+    for match in _ROW.finditer(table_text):
         if match.group("id"):
             va = body_ids.get(match.group("id"))
             if va is None:
@@ -168,6 +166,12 @@ def parse_source(source: pathlib.Path):
         else:
             va = int(match.group("va"), 16)
         entries.append((va, match.group("sym")))
+    # Every table row must be parsed: a formatting change must not silently
+    # shrink the proof set (this is exactly how a two-line row hid two bodies
+    # before the parse became multiline).
+    rows = len(re.findall(r"\{\s*(?:BodyId::\w+|0x[0-9A-Fa-f]+u)\s*,", table_text))
+    if rows != len(entries):
+        raise ValueError(f"{source}: parsed {len(entries)} of {rows} kAbiBodies rows")
 
     exact: dict[int, str | None] = {}
     for match in _EXACT.finditer(text):

@@ -7650,9 +7650,130 @@ std::uintptr_t zpatch_nms_vtable[24] =
 #include "../tests/stub_bodies.h"
 #endif
 
+// The original ASI's handler/body addresses, named. The resolver keys on the
+// original VA, so each value is an identity label, not a patch address: the name
+// is what the table is for, and the comment names the original function (and
+// what the body does). `@exact` on a body says the body is a byte-exact
+// transcription of that original function; tools/verify_bodies.py proves it.
+enum class BodyId : std::uint32_t
+{
+    aim_projectile_crash_fix = 0x10005590u,  // sub_10005590: AimProjectileCrashFix (__thiscall, ret 12)
+    better_mp_sync = 0x100057f0u,  // sub_100057f0: BetterMPSync (xor eax,eax / ret)
+    combined_radio_freeze_fix = 0x10005ed0u,  // sub_10005ed0: CombinedRadioFreezeFix (mov eax,13h / ret)
+    carparts_shadow = 0x10006880u,  // sub_10006880: CarPartsShadowFix shim (NOPs are original bytes)
+    popup_headlights = 0x10044530u,  // sub_10044530: PopupHeadlightsFlag, first site
+    popup_headlights_edx = 0x10044560u,  // sub_10044560: PopupHeadlightsFlag, EDX twin
+    fchs_shim = 0x1001adb0u,  // sub_1001adb0: ForceCarHeadlightShadows thunk
+    dual_headlights_new = 0x100064f0u,  // sub_100064f0: DualVehicleHeadlights, new-game body
+    dual_headlights_old = 0x10006630u,  // sub_10006630: DualVehicleHeadlights, old-game body
+    car_decals_fix = 0x1001b2e0u,  // sub_1001b2e0: CarDecalsFix (scan-based replacement)
+    bad_player_model = 0x10037ba0u,  // sub_10037ba0: BadPlayerModelCrashFix trampoline
+    death_music_install = 0x10050ad0u,  // sub_10050ad0: RestoreDeathMusic installer body
+    death_music_enabled = 0x10050a50u,  // sub_10050a50: RestoreDeathMusic gate body
+    new_saves_compat = 0x100521e0u,  // sub_100521e0: NewSavesCompatibility savegame-load tramp
+    gfwl_stub = 0x100054e0u,  // sub_100054e0: Patch4RemoveModChecks / RemoveGFWLUpdatePopup stub
+    nolivery_e = 0x1003d3e0u,  // sub_1003d3e0: NoLiveryLimit body E (ESI object, name = &edi[0x13c])
+    carparts_shadow_2 = 0x100068a0u,  // sub_100068a0: CarPartsShadowFix other slot
+    carparts_shadow_2b = 0x100068d0u,  // sub_100068d0: CarDynamicShadowFix body B (pattern-B)
+    garage_body_a = 0x10046c80u,  // sub_10046c80: GarageModelFix body A (installed at game 0xC68BB0)
+    garage_body_b = 0x10046ca0u,  // sub_10046ca0: GarageModelFix body B (installed at game 0x9659C3)
+    steer_detour_eax = 0x100051b0u,  // sub_100051b0: MovingSteeringWheelSupport detour (EAX entry)
+    steer_detour_edx = 0x100051e0u,  // sub_100051e0: MovingSteeringWheelSupport fallback detour (EDX entry)
+    local_settings_detour = 0x100512f0u,  // sub_100512f0: LocalSettingsPath detour
+    local_settings_fallback_detour = 0x10051300u,  // sub_10051300: LocalSettingsPath fallback detour
+    spawns_probe = 0x10037510u,  // sub_10037510: FreezeCarFix/DebugPrintSpawns probe (394 insns)
+    spawns_guard = 0x100372f0u,  // sub_100372f0: FreezeCarFix / DebugPrintSpawns guard
+    spawns_case_0x24 = 0x10037330u,  // sub_10037330: spawns dispatch case 0x24
+    spawns_case_0x3D = 0x100373f0u,  // sub_100373f0: spawns dispatch case 0x3D
+    spawns_case_0x56 = 0x10037420u,  // sub_10037420: spawns dispatch case 0x56
+    spawns_case_0x6F = 0x10037390u,  // sub_10037390: spawns dispatch case 0x6F
+    spawns_case_0x88 = 0x10037450u,  // sub_10037450: spawns dispatch case 0x88
+    spawns_case_0x9E = 0x10037480u,  // sub_10037480: spawns dispatch case 0x9E
+    spawns_case_0xB4 = 0x100374e0u,  // sub_100374e0: spawns dispatch case 0xB4
+    spawns_case_0xCA = 0x10037360u,  // sub_10037360: spawns dispatch case 0xCA
+    spawns_case_0xE0 = 0x100373c0u,  // sub_100373c0: spawns dispatch case 0xE0
+    spawns_case_0xF6 = 0x100374b0u,  // sub_100374b0: spawns dispatch case 0xF6
+    game_hash = 0x10003e50u,  // sub_10003e50: AllowHashesForIDE model-name hash replacement
+    ped_models_in_cutscenes_check = 0x10050870u,  // sub_10050870: PedModelsInCutscenesFix player-model check
+    improved_shader_streaming_find_hpe = 0x10045a30u,  // sub_10045a30: ImprovedShaderStreaming HPE filter
+    improved_shader_streaming_find_v = 0x10045a80u,  // sub_10045a80: ImprovedShaderStreaming V filter
+    vram_fix_shim = 0x1004aab0u,  // sub_1004aab0: VRAMFix argument/verdict shim
+    nolivery_a = 0x1003d310u,  // sub_1003d310: NoLiveryLimit body A (name = &ebx[0x13c], index = eax)
+    nolivery_b = 0x1003d340u,  // sub_1003d340: NoLiveryLimit body B (name = &ebx[0x13c], index = ecx)
+    nolivery_c = 0x1003d370u,  // sub_1003d370: NoLiveryLimit body C (drops 8 bytes of args)
+    nolivery_d = 0x1003d3a0u,  // sub_1003d3a0: NoLiveryLimit body D (16-byte name copy, counts _sign_N)
+    crash_msg_shim = 0x10036f00u,  // sub_10036f00: CrashMsgFix message-getter shim
+    newfiles_register_body = 0x10051600u,  // sub_10051600: NewFilesCompatibility register body
+    newfiles_update_a = 0x10051890u,  // sub_10051890: NewFilesCompatibility update A
+    newfiles_update_b = 0x100518d0u,  // sub_100518d0: NewFilesCompatibility update B
+    benchmark_a = 0x10005650u,  // sub_10005650: BenchmarkFix shim A (E9 at match[0])
+    benchmark_b = 0x10005670u,  // sub_10005670: BenchmarkFix shim B (E9 at match[1]+8)
+    building_dynamic_shadows = 0x10005af0u,  // sub_10005af0: BuildingDynamicShadows shim
+    copsirens_a = 0x10006310u,  // sub_10006310: CopSirensFlag shim A
+    copsirens_b = 0x10006330u,  // sub_10006330: CopSirensFlag shim B
+    copsirens_ide = 0x100040e0u,  // sub_100040e0: CopSirensFlag IDE-hook body
+    borderless_w = 0x10005890u,  // sub_10005890: BorderlessWindowed Unicode window-proc shim
+    borderless_a = 0x10005900u,  // sub_10005900: BorderlessWindowed ANSI window-proc shim
+    speedup_body = 0x10050540u,  // sub_10050540: SpeedupBugFix timing-helper replacement
+    episode_switch_sum = 0x1001b080u,  // sub_1001b080: EpisodeSwitchFreezeFix sum body (__thiscall)
+    load_dlcs_dummy = 0x10023480u,  // sub_10023480: LoadDLCs dummy (mov al,1 / ret 8)
+    load_dlcs_struct_fixup = 0x10023490u,  // sub_10023490: LoadDLCs struct fixup (ESI object, cleans 0x14)
+    skip_intro_body = 0x10045c30u,  // sub_10045c30: SkipIntro body (E9 from match-6)
+    skip_menu_body = 0x10046610u,  // sub_10046610: SkipMenu body (E8 from the patched site)
+    rgsc_login_removed = 0x10038550u,  // sub_10038550: RemoveRGSCLoginRequirement (mov al,1 / ret)
+    savegame_fix_null = 0x10038570u,  // sub_10038570: SavegameFix null path (xor eax,eax / ret 8)
+    nms_ctor = 0x10038640u,  // sub_10038640: NewMemorySystem CRageAllocator constructor
+    nms_reject_ptr = 0x10038350u,  // sub_10038350: NewMemorySystem allocator vtable reject-pointer slot
+    nms_self = 0x10038540u,  // sub_10038540: NewMemorySystem allocator vtable self slot
+    nms_zero_ptr = 0x10001950u,  // sub_10001950: NewMemorySystem allocator vtable zero-pointer slot
+    nms_noop_ret0 = 0x10038560u,  // sub_10038560: NewMemorySystem allocator vtable no-op returning 0
+    nms_noop_pair = 0x10038580u,  // sub_10038580: NewMemorySystem allocator vtable paired no-op
+    nms_reject = 0x10038590u,  // sub_10038590: NewMemorySystem allocator vtable reject
+    nms_thunk18 = 0x10038620u,  // sub_10038620: NewMemorySystem allocator vtable forwarder (slot 18)
+    nms_noop_arg = 0x10038630u,  // sub_10038630: NewMemorySystem allocator vtable no-op with argument
+    nms_apply = 0x10038670u,  // sub_10038670: NewMemorySystem vtable install
+    savegame_fix_close = 0x10045580u,  // sub_10045580: SavegameFix CloseHandle path (ret 4)
+    savegame_fix_copy = 0x100455a0u,  // sub_100455a0: SavegameFix read/copy path
+    savegame_fix_mutex = 0x100455e0u,  // sub_100455e0: SavegameFix CreateMutex path
+    blackscreen_shim = 0x10036ee0u,  // sub_10036ee0: BlackscreenFix shim
+    path_node_shim = 0x1003d7b0u,  // sub_1003d7b0: PathNodeCrashFix shim (sentinel 0x1FFFDF)
+    plane_crash_shim = 0x1003d870u,  // sub_1003d870: PlaneCrashFix shim
+    wanted_level_shim = 0x10050490u,  // sub_10050490: WantedLevelCrashFix shim (null returns 0)
+    group_hack_shim = 0x10036e90u,  // sub_10036e90: GroupHackFix shim
+    smpa60_shim = 0x10046750u,  // sub_10046750: SMPA60Fix shim (sentinel 0xDDDDDDDD)
+    smpa60_tail_shim = 0x10046780u,  // sub_10046780: SMPA60Fix tail shim
+    freeze_gun_shim = 0x10036eb0u,  // sub_10036eb0: FreezeGunFix shim
+    player_ped_components_shim = 0x1003d9a0u,  // sub_1003d9a0: PlayerAsPedComponentsFix shim
+    emissive_lerp_shim = 0x1001af60u,  // sub_1001af60: EmissiveLerpFix shim
+    super_lod_fix_shim = 0x100469e0u,  // sub_100469e0: SuperLODFix shim (calls a helper)
+    episode_switch_store_shim = 0x1001b040u,  // sub_1001b040: EpisodeSwitchFreezeFix store shim
+    episode_switch_shim_b = 0x1001b060u,  // sub_1001b060: EpisodeSwitchFreezeFix shim B
+    episode_switch_vcall = 0x1001b0a0u,  // sub_1001b0a0: EpisodeSwitchFreezeFix virtual call shim
+    episode_switch_shim_c = 0x1001b0c0u,  // sub_1001b0c0: EpisodeSwitchFreezeFix shim C
+    bike_physics_detour = 0x1001ef60u,  // sub_1001ef60: HighFPSBikePhysicsFix detour
+    collision_deadlock_walk = 0x10005d80u,  // sub_10005d80: CollisionDeadlockFix replacement
+    mouse_axis_float = 0x10024060u,  // sub_10024060: MouseFix axis-float helper
+    mouse_axis_neg = 0x100240c0u,  // sub_100240c0: MouseFix negated-axis helper
+    mouse_axis_int = 0x10024120u,  // sub_10024120: MouseFix int-axis helper
+    mouse_axis_flag = 0x10024170u,  // sub_10024170: MouseFix flagged-axis helper
+    mf_angle_step = 0x10024440u,  // sub_10024440: MouseFix angle-step helper
+    mouse_angle = 0x10024560u,  // sub_10024560: MouseFix body A (installed at game 0xA81B10)
+    mouse_advance = 0x100243a0u,  // sub_100243a0: MouseFix body B (installed at game 0xA82265)
+    ooc_branch = 0x1004c3c0u,  // sub_1004c3c0: OutOfCommissionFix branch body
+    ooc_wrap = 0x1004c350u,  // sub_1004c350: OutOfCommissionFix wrapper
+    hqr_body = 0x1001f030u,  // sub_1001f030: HighQualityReflections body
+    cutscene_chain_b = 0x100388c0u,  // sub_100388c0: CutsceneFixes chain B
+    driveby_fov_shim = 0x100064b0u,  // sub_100064b0: DrivebyFOVFix shim
+};
+
+constexpr std::uint32_t OriginalHandlerVa(BodyId id) noexcept
+{
+	return static_cast<std::uint32_t>(id);
+}
+
 struct AbiBody final
 {
-	std::uint32_t reference_va;
+	BodyId id;
 	void (*address)();
 };
 
@@ -7660,128 +7781,123 @@ struct AbiBody final
 // resolves to 0 and the installer reports it as skipped.
 const AbiBody kAbiBodies[] =
 {
-		{0x10005590u, reinterpret_cast<void(*)()>(&abi_aim_projectile_crash_fix)},
-		{0x100057f0u, reinterpret_cast<void(*)()>(&abi_better_mp_sync)},
-		{0x10005ed0u, reinterpret_cast<void(*)()>(&abi_combined_radio_freeze_fix)},
-		{0x10006880u, reinterpret_cast<void(*)()>(&abi_carparts_shadow)},
-		{0x10044530u, reinterpret_cast<void(*)()>(&abi_popup_headlights)},
-		{0x10044560u, reinterpret_cast<void(*)()>(&abi_popup_headlights_edx)},
-		{0x1001ADB0u, reinterpret_cast<void(*)()>(&abi_fchs_shim)},
-		{0x100064F0u, reinterpret_cast<void(*)()>(&abi_dual_headlights_new)},
-		{0x10006630u, reinterpret_cast<void(*)()>(&abi_dual_headlights_old)},
-		{0x1001B2E0u, reinterpret_cast<void(*)()>(&abi_car_decals_fix)},
-		{0x10037BA0u, reinterpret_cast<void(*)()>(&abi_bad_player_model)},
-		{0x10050AD0u, reinterpret_cast<void(*)()>(&abi_death_music_install)},
-		{0x10050A50u, reinterpret_cast<void(*)()>(&abi_death_music_enabled)},
-		{0x100521E0u, reinterpret_cast<void(*)()>(&abi_new_saves_compat)},
-		{0x100054E0u, reinterpret_cast<void(*)()>(&abi_gfwl_stub)},
-		{0x1003D3E0u, reinterpret_cast<void(*)()>(&abi_nolivery_e)},
-		{0x100068A0u, reinterpret_cast<void(*)()>(&abi_carparts_shadow_2)},
-		{0x100068D0u, reinterpret_cast<void(*)()>(&abi_carparts_shadow_2b)},
-		{0x10046C80u, reinterpret_cast<void(*)()>(&abi_garage_body_a)},
-		{0x10046CA0u, reinterpret_cast<void(*)()>(&abi_garage_body_b)},
-		{0x100051B0u, reinterpret_cast<void(*)()>(&abi_steer_detour_eax)},
-		{0x100051E0u, reinterpret_cast<void(*)()>(&abi_steer_detour_edx)},
-		{0x100512F0u, reinterpret_cast<void(*)()>(&abi_local_settings_detour)},
-		{0x10051300u, reinterpret_cast<void(*)()>(&abi_local_settings_fallback_detour)},
-		{0x10037510u, reinterpret_cast<void(*)()>(&abi_spawns_probe)},
-		{0x100372F0u, reinterpret_cast<void(*)()>(&abi_spawns_guard)},
-		{0x10037330u, reinterpret_cast<void(*)()>(&abi_spawns_case_0x24)},
-		{0x100373F0u, reinterpret_cast<void(*)()>(&abi_spawns_case_0x3D)},
-		{0x10037420u, reinterpret_cast<void(*)()>(&abi_spawns_case_0x56)},
-		{0x10037390u, reinterpret_cast<void(*)()>(&abi_spawns_case_0x6F)},
-		{0x10037450u, reinterpret_cast<void(*)()>(&abi_spawns_case_0x88)},
-		{0x10037480u, reinterpret_cast<void(*)()>(&abi_spawns_case_0x9E)},
-		{0x100374E0u, reinterpret_cast<void(*)()>(&abi_spawns_case_0xB4)},
-		{0x10037360u, reinterpret_cast<void(*)()>(&abi_spawns_case_0xCA)},
-		{0x100373C0u, reinterpret_cast<void(*)()>(&abi_spawns_case_0xE0)},
-		{0x100374B0u, reinterpret_cast<void(*)()>(&abi_spawns_case_0xF6)},
-		{0x10003e50u, reinterpret_cast<void(*)()>(&abi_game_hash)},
-		{0x10050870u, reinterpret_cast<void(*)()>(&abi_ped_models_in_cutscenes_check)},
-		{0x10045a30u, reinterpret_cast<void(*)()>(&abi_improved_shader_streaming_find_hpe)},
-		{0x10045a80u, reinterpret_cast<void(*)()>(&abi_improved_shader_streaming_find_v)},
-		{0x1004aab0u, reinterpret_cast<void(*)()>(&abi_vram_fix_shim)},
-		// 0x100064b0 (DrivebyFOVFix) is registered above: the arm installs
-		// unconditionally when its pattern matches, and the pattern exists on 1.0.8.0.
-		{0x1003d310u, reinterpret_cast<void(*)()>(&abi_nolivery_a)},
-		{0x1003d340u, reinterpret_cast<void(*)()>(&abi_nolivery_b)},
-		{0x1003d370u, reinterpret_cast<void(*)()>(&abi_nolivery_c)},
-		{0x1003d3a0u, reinterpret_cast<void(*)()>(&abi_nolivery_d)},
-		{0x10036f00u, reinterpret_cast<void(*)()>(&abi_crash_msg_shim)},
-		{0x10051600u, reinterpret_cast<void(*)()>(&abi_newfiles_register_body)},
-		{0x10051890u, reinterpret_cast<void(*)()>(&abi_newfiles_update_a)},
-		{0x100518d0u, reinterpret_cast<void(*)()>(&abi_newfiles_update_b)},
-		{0x10005650u, reinterpret_cast<void(*)()>(&abi_benchmark_a)},
-		{0x10005670u, reinterpret_cast<void(*)()>(&abi_benchmark_b)},
-		{0x10005af0u, reinterpret_cast<void(*)()>(&abi_building_dynamic_shadows)},
-		{0x10006310u, reinterpret_cast<void(*)()>(&abi_copsirens_a)},
-		{0x10006330u, reinterpret_cast<void(*)()>(&abi_copsirens_b)},
-		{0x100040e0u, reinterpret_cast<void(*)()>(&abi_copsirens_ide)},
-		{0x10005890u, reinterpret_cast<void(*)()>(&abi_borderless_w)},
-		{0x10005900u, reinterpret_cast<void(*)()>(&abi_borderless_a)},
-		{0x10050540u, reinterpret_cast<void(*)()>(&abi_speedup_body)},
-		{0x1001b080u, reinterpret_cast<void(*)()>(&abi_episode_switch_sum)},
-		{0x10023480u, reinterpret_cast<void(*)()>(&abi_load_dlcs_dummy)},
-		{0x10023490u, reinterpret_cast<void(*)()>(&abi_load_dlcs_struct_fixup)},
-		{0x10045C30u, reinterpret_cast<void(*)()>(&abi_skip_intro_body)},
-		{0x10046610u, reinterpret_cast<void(*)()>(&abi_skip_menu_body)},
-		{0x10038550u, reinterpret_cast<void(*)()>(&abi_rgsc_login_removed)},
-		{0x10038570u, reinterpret_cast<void(*)()>(&abi_savegame_fix_null)},
-		// NewMemorySystem's CRageAllocator stubs (the E8 body's vtable); the alloc/
-		// free/contains methods are compiled methods registered only through the
-		// vtable, not here.
-		{0x10038640u, reinterpret_cast<void(*)()>(&abi_nms_ctor)},
-		{0x10038350u, reinterpret_cast<void(*)()>(&abi_nms_reject_ptr)},
-		{0x10038540u, reinterpret_cast<void(*)()>(&abi_nms_self)},
-		{0x10001950u, reinterpret_cast<void(*)()>(&abi_nms_zero_ptr)},
-		{0x10038560u, reinterpret_cast<void(*)()>(&abi_nms_noop_ret0)},
-		{0x10038580u, reinterpret_cast<void(*)()>(&abi_nms_noop_pair)},
-		{0x10038590u, reinterpret_cast<void(*)()>(&abi_nms_reject)},
-		{0x10038620u, reinterpret_cast<void(*)()>(&abi_nms_thunk18)},
-		{0x10038630u, reinterpret_cast<void(*)()>(&abi_nms_noop_arg)},
-		{0x10038670u, reinterpret_cast<void(*)()>(&abi_nms_apply)},
-		{0x10045580u, reinterpret_cast<void(*)()>(&abi_savegame_fix_close)},
-		{0x100455a0u, reinterpret_cast<void(*)()>(&abi_savegame_fix_copy)},
-		{0x100455e0u, reinterpret_cast<void(*)()>(&abi_savegame_fix_mutex)},
-		// Crash-fix shims (0x10036ee0..0x10005d80). WantedLevelCrashFix's null
-		// path pops ebx (the site sits after `push ebx`); CollisionDeadlock needs
-		// eax/edx for its predicate (see the body).
-		{0x10036ee0u, reinterpret_cast<void(*)()>(&abi_blackscreen_shim)},
-		{0x1003d7b0u, reinterpret_cast<void(*)()>(&abi_path_node_shim)},
-		{0x1003d870u, reinterpret_cast<void(*)()>(&abi_plane_crash_shim)},
-		{0x10050490u, reinterpret_cast<void(*)()>(&abi_wanted_level_shim)},
-		{0x10036e90u, reinterpret_cast<void(*)()>(&abi_group_hack_shim)},
-		{0x10046750u, reinterpret_cast<void(*)()>(&abi_smpa60_shim)},
-		{0x10046780u, reinterpret_cast<void(*)()>(&abi_smpa60_tail_shim)},
-		{0x10036eb0u, reinterpret_cast<void(*)()>(&abi_freeze_gun_shim)},
-		{0x1003d9a0u, reinterpret_cast<void(*)()>(&abi_player_ped_components_shim)},
-		{0x1001af60u, reinterpret_cast<void(*)()>(&abi_emissive_lerp_shim)},
-		{0x100469e0u, reinterpret_cast<void(*)()>(&abi_super_lod_fix_shim)},
-		{0x1001b040u, reinterpret_cast<void(*)()>(&abi_episode_switch_store_shim)},
-		{0x1001b060u, reinterpret_cast<void(*)()>(&abi_episode_switch_shim_b)},
-		{0x1001b0a0u, reinterpret_cast<void(*)()>(&abi_episode_switch_vcall)},
-		{0x1001b0c0u, reinterpret_cast<void(*)()>(&abi_episode_switch_shim_c)},
-		{0x1001ef60u, reinterpret_cast<void(*)()>(&abi_bike_physics_detour)},
-		{0x10005d80u, reinterpret_cast<void(*)()>(&abi_collision_deadlock_walk)},
-		{0x10024060u, reinterpret_cast<void(*)()>(&abi_mouse_axis_float)},
-		{0x100240C0u, reinterpret_cast<void(*)()>(&abi_mouse_axis_neg)},
-		{0x10024120u, reinterpret_cast<void(*)()>(&abi_mouse_axis_int)},
-		{0x10024170u, reinterpret_cast<void(*)()>(&abi_mouse_axis_flag)},
-		{0x10024440u, reinterpret_cast<void(*)()>(&abi_mf_angle_step)},
-		{0x10024560u, reinterpret_cast<void(*)()>(&abi_mouse_angle)},
-		{0x100243A0u, reinterpret_cast<void(*)()>(&abi_mouse_advance)},
-		{0x1004C3C0u, reinterpret_cast<void(*)()>(&abi_ooc_branch)},
-		{0x1004C350u, reinterpret_cast<void(*)()>(&abi_ooc_wrap)},
-		{0x1001F030u, reinterpret_cast<void(*)()>(&abi_hqr_body)},
-		{0x100388C0u, reinterpret_cast<void(*)()>(&abi_cutscene_chain_b)},
-		{0x100064B0u, reinterpret_cast<void(*)()>(&abi_driveby_fov_shim)},
+		{BodyId::aim_projectile_crash_fix, reinterpret_cast<void(*)()>(&abi_aim_projectile_crash_fix)},
+		{BodyId::better_mp_sync, reinterpret_cast<void(*)()>(&abi_better_mp_sync)},
+		{BodyId::combined_radio_freeze_fix, reinterpret_cast<void(*)()>(&abi_combined_radio_freeze_fix)},
+		{BodyId::carparts_shadow, reinterpret_cast<void(*)()>(&abi_carparts_shadow)},
+		{BodyId::popup_headlights, reinterpret_cast<void(*)()>(&abi_popup_headlights)},
+		{BodyId::popup_headlights_edx, reinterpret_cast<void(*)()>(&abi_popup_headlights_edx)},
+		{BodyId::fchs_shim, reinterpret_cast<void(*)()>(&abi_fchs_shim)},
+		{BodyId::dual_headlights_new, reinterpret_cast<void(*)()>(&abi_dual_headlights_new)},
+		{BodyId::dual_headlights_old, reinterpret_cast<void(*)()>(&abi_dual_headlights_old)},
+		{BodyId::car_decals_fix, reinterpret_cast<void(*)()>(&abi_car_decals_fix)},
+		{BodyId::bad_player_model, reinterpret_cast<void(*)()>(&abi_bad_player_model)},
+		{BodyId::death_music_install, reinterpret_cast<void(*)()>(&abi_death_music_install)},
+		{BodyId::death_music_enabled, reinterpret_cast<void(*)()>(&abi_death_music_enabled)},
+		{BodyId::new_saves_compat, reinterpret_cast<void(*)()>(&abi_new_saves_compat)},
+		{BodyId::gfwl_stub, reinterpret_cast<void(*)()>(&abi_gfwl_stub)},
+		{BodyId::nolivery_e, reinterpret_cast<void(*)()>(&abi_nolivery_e)},
+		{BodyId::carparts_shadow_2, reinterpret_cast<void(*)()>(&abi_carparts_shadow_2)},
+		{BodyId::carparts_shadow_2b, reinterpret_cast<void(*)()>(&abi_carparts_shadow_2b)},
+		{BodyId::garage_body_a, reinterpret_cast<void(*)()>(&abi_garage_body_a)},
+		{BodyId::garage_body_b, reinterpret_cast<void(*)()>(&abi_garage_body_b)},
+		{BodyId::steer_detour_eax, reinterpret_cast<void(*)()>(&abi_steer_detour_eax)},
+		{BodyId::steer_detour_edx, reinterpret_cast<void(*)()>(&abi_steer_detour_edx)},
+		{BodyId::local_settings_detour, reinterpret_cast<void(*)()>(&abi_local_settings_detour)},
+		{BodyId::local_settings_fallback_detour, reinterpret_cast<void(*)()>(&abi_local_settings_fallback_detour)},
+		{BodyId::spawns_probe, reinterpret_cast<void(*)()>(&abi_spawns_probe)},
+		{BodyId::spawns_guard, reinterpret_cast<void(*)()>(&abi_spawns_guard)},
+		{BodyId::spawns_case_0x24, reinterpret_cast<void(*)()>(&abi_spawns_case_0x24)},
+		{BodyId::spawns_case_0x3D, reinterpret_cast<void(*)()>(&abi_spawns_case_0x3D)},
+		{BodyId::spawns_case_0x56, reinterpret_cast<void(*)()>(&abi_spawns_case_0x56)},
+		{BodyId::spawns_case_0x6F, reinterpret_cast<void(*)()>(&abi_spawns_case_0x6F)},
+		{BodyId::spawns_case_0x88, reinterpret_cast<void(*)()>(&abi_spawns_case_0x88)},
+		{BodyId::spawns_case_0x9E, reinterpret_cast<void(*)()>(&abi_spawns_case_0x9E)},
+		{BodyId::spawns_case_0xB4, reinterpret_cast<void(*)()>(&abi_spawns_case_0xB4)},
+		{BodyId::spawns_case_0xCA, reinterpret_cast<void(*)()>(&abi_spawns_case_0xCA)},
+		{BodyId::spawns_case_0xE0, reinterpret_cast<void(*)()>(&abi_spawns_case_0xE0)},
+		{BodyId::spawns_case_0xF6, reinterpret_cast<void(*)()>(&abi_spawns_case_0xF6)},
+		{BodyId::game_hash, reinterpret_cast<void(*)()>(&abi_game_hash)},
+		{BodyId::ped_models_in_cutscenes_check, reinterpret_cast<void(*)()>(&abi_ped_models_in_cutscenes_check)},
+		{BodyId::improved_shader_streaming_find_hpe,
+		 reinterpret_cast<void(*)()>(&abi_improved_shader_streaming_find_hpe)},
+		{BodyId::improved_shader_streaming_find_v,
+		 reinterpret_cast<void(*)()>(&abi_improved_shader_streaming_find_v)},
+		{BodyId::vram_fix_shim, reinterpret_cast<void(*)()>(&abi_vram_fix_shim)},
+		{BodyId::nolivery_a, reinterpret_cast<void(*)()>(&abi_nolivery_a)},
+		{BodyId::nolivery_b, reinterpret_cast<void(*)()>(&abi_nolivery_b)},
+		{BodyId::nolivery_c, reinterpret_cast<void(*)()>(&abi_nolivery_c)},
+		{BodyId::nolivery_d, reinterpret_cast<void(*)()>(&abi_nolivery_d)},
+		{BodyId::crash_msg_shim, reinterpret_cast<void(*)()>(&abi_crash_msg_shim)},
+		{BodyId::newfiles_register_body, reinterpret_cast<void(*)()>(&abi_newfiles_register_body)},
+		{BodyId::newfiles_update_a, reinterpret_cast<void(*)()>(&abi_newfiles_update_a)},
+		{BodyId::newfiles_update_b, reinterpret_cast<void(*)()>(&abi_newfiles_update_b)},
+		{BodyId::benchmark_a, reinterpret_cast<void(*)()>(&abi_benchmark_a)},
+		{BodyId::benchmark_b, reinterpret_cast<void(*)()>(&abi_benchmark_b)},
+		{BodyId::building_dynamic_shadows, reinterpret_cast<void(*)()>(&abi_building_dynamic_shadows)},
+		{BodyId::copsirens_a, reinterpret_cast<void(*)()>(&abi_copsirens_a)},
+		{BodyId::copsirens_b, reinterpret_cast<void(*)()>(&abi_copsirens_b)},
+		{BodyId::copsirens_ide, reinterpret_cast<void(*)()>(&abi_copsirens_ide)},
+		{BodyId::borderless_w, reinterpret_cast<void(*)()>(&abi_borderless_w)},
+		{BodyId::borderless_a, reinterpret_cast<void(*)()>(&abi_borderless_a)},
+		{BodyId::speedup_body, reinterpret_cast<void(*)()>(&abi_speedup_body)},
+		{BodyId::episode_switch_sum, reinterpret_cast<void(*)()>(&abi_episode_switch_sum)},
+		{BodyId::load_dlcs_dummy, reinterpret_cast<void(*)()>(&abi_load_dlcs_dummy)},
+		{BodyId::load_dlcs_struct_fixup, reinterpret_cast<void(*)()>(&abi_load_dlcs_struct_fixup)},
+		{BodyId::skip_intro_body, reinterpret_cast<void(*)()>(&abi_skip_intro_body)},
+		{BodyId::skip_menu_body, reinterpret_cast<void(*)()>(&abi_skip_menu_body)},
+		{BodyId::rgsc_login_removed, reinterpret_cast<void(*)()>(&abi_rgsc_login_removed)},
+		{BodyId::savegame_fix_null, reinterpret_cast<void(*)()>(&abi_savegame_fix_null)},
+		{BodyId::nms_ctor, reinterpret_cast<void(*)()>(&abi_nms_ctor)},
+		{BodyId::nms_reject_ptr, reinterpret_cast<void(*)()>(&abi_nms_reject_ptr)},
+		{BodyId::nms_self, reinterpret_cast<void(*)()>(&abi_nms_self)},
+		{BodyId::nms_zero_ptr, reinterpret_cast<void(*)()>(&abi_nms_zero_ptr)},
+		{BodyId::nms_noop_ret0, reinterpret_cast<void(*)()>(&abi_nms_noop_ret0)},
+		{BodyId::nms_noop_pair, reinterpret_cast<void(*)()>(&abi_nms_noop_pair)},
+		{BodyId::nms_reject, reinterpret_cast<void(*)()>(&abi_nms_reject)},
+		{BodyId::nms_thunk18, reinterpret_cast<void(*)()>(&abi_nms_thunk18)},
+		{BodyId::nms_noop_arg, reinterpret_cast<void(*)()>(&abi_nms_noop_arg)},
+		{BodyId::nms_apply, reinterpret_cast<void(*)()>(&abi_nms_apply)},
+		{BodyId::savegame_fix_close, reinterpret_cast<void(*)()>(&abi_savegame_fix_close)},
+		{BodyId::savegame_fix_copy, reinterpret_cast<void(*)()>(&abi_savegame_fix_copy)},
+		{BodyId::savegame_fix_mutex, reinterpret_cast<void(*)()>(&abi_savegame_fix_mutex)},
+		{BodyId::blackscreen_shim, reinterpret_cast<void(*)()>(&abi_blackscreen_shim)},
+		{BodyId::path_node_shim, reinterpret_cast<void(*)()>(&abi_path_node_shim)},
+		{BodyId::plane_crash_shim, reinterpret_cast<void(*)()>(&abi_plane_crash_shim)},
+		{BodyId::wanted_level_shim, reinterpret_cast<void(*)()>(&abi_wanted_level_shim)},
+		{BodyId::group_hack_shim, reinterpret_cast<void(*)()>(&abi_group_hack_shim)},
+		{BodyId::smpa60_shim, reinterpret_cast<void(*)()>(&abi_smpa60_shim)},
+		{BodyId::smpa60_tail_shim, reinterpret_cast<void(*)()>(&abi_smpa60_tail_shim)},
+		{BodyId::freeze_gun_shim, reinterpret_cast<void(*)()>(&abi_freeze_gun_shim)},
+		{BodyId::player_ped_components_shim, reinterpret_cast<void(*)()>(&abi_player_ped_components_shim)},
+		{BodyId::emissive_lerp_shim, reinterpret_cast<void(*)()>(&abi_emissive_lerp_shim)},
+		{BodyId::super_lod_fix_shim, reinterpret_cast<void(*)()>(&abi_super_lod_fix_shim)},
+		{BodyId::episode_switch_store_shim, reinterpret_cast<void(*)()>(&abi_episode_switch_store_shim)},
+		{BodyId::episode_switch_shim_b, reinterpret_cast<void(*)()>(&abi_episode_switch_shim_b)},
+		{BodyId::episode_switch_vcall, reinterpret_cast<void(*)()>(&abi_episode_switch_vcall)},
+		{BodyId::episode_switch_shim_c, reinterpret_cast<void(*)()>(&abi_episode_switch_shim_c)},
+		{BodyId::bike_physics_detour, reinterpret_cast<void(*)()>(&abi_bike_physics_detour)},
+		{BodyId::collision_deadlock_walk, reinterpret_cast<void(*)()>(&abi_collision_deadlock_walk)},
+		{BodyId::mouse_axis_float, reinterpret_cast<void(*)()>(&abi_mouse_axis_float)},
+		{BodyId::mouse_axis_neg, reinterpret_cast<void(*)()>(&abi_mouse_axis_neg)},
+		{BodyId::mouse_axis_int, reinterpret_cast<void(*)()>(&abi_mouse_axis_int)},
+		{BodyId::mouse_axis_flag, reinterpret_cast<void(*)()>(&abi_mouse_axis_flag)},
+		{BodyId::mf_angle_step, reinterpret_cast<void(*)()>(&abi_mf_angle_step)},
+		{BodyId::mouse_angle, reinterpret_cast<void(*)()>(&abi_mouse_angle)},
+		{BodyId::mouse_advance, reinterpret_cast<void(*)()>(&abi_mouse_advance)},
+		{BodyId::ooc_branch, reinterpret_cast<void(*)()>(&abi_ooc_branch)},
+		{BodyId::ooc_wrap, reinterpret_cast<void(*)()>(&abi_ooc_wrap)},
+		{BodyId::hqr_body, reinterpret_cast<void(*)()>(&abi_hqr_body)},
+		{BodyId::cutscene_chain_b, reinterpret_cast<void(*)()>(&abi_cutscene_chain_b)},
+		{BodyId::driveby_fov_shim, reinterpret_cast<void(*)()>(&abi_driveby_fov_shim)},
 };
 
 std::uintptr_t ResolveHookBody(std::uint32_t reference_va, void*) noexcept
 {
 	for (const AbiBody& body : kAbiBodies)
 	{
-		if (body.reference_va == reference_va) return reinterpret_cast<std::uintptr_t>(body.address);
+		if (OriginalHandlerVa(body.id) == reference_va)
+			return reinterpret_cast<std::uintptr_t>(body.address);
 	}
 	return 0;
 }
@@ -7804,7 +7920,7 @@ std::size_t DumpHookBodyCount() noexcept
 
 std::uint32_t DumpHookBodyReference(std::size_t index) noexcept
 {
-	return kAbiBodies[index].reference_va;
+	return OriginalHandlerVa(kAbiBodies[index].id);
 }
 
 std::uintptr_t DumpHookBodyAddress(std::size_t index) noexcept
