@@ -1,0 +1,6 @@
+[submodule "vendor/injector"]
+	path = vendor/injector
+	url = https://github.com/ThirteenAG/injector
+[submodule "vendor/Hooking.Patterns"]
+	path = vendor/Hooking.Patterns
+	url = https://github.com/ThirteenAG/Hooking.Patterns

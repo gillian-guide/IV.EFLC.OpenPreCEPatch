@@ -1,0 +1,29 @@
+# Build output
+build/*
+!build/build_msvc.cmd
+!build/build_mingw.md
+out/
+__pycache__/
+*.pyc
+*.obj
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.map
+*.asi
+*.dll
+*.exe
+
+# Local game files and logs
+*.log
+GTAIV.exe
+EFLC.exe
+crashdump*.dmp
+
+# Editors / OS
+.vs/
+.vscode/
+*.user
+Thumbs.db
+.DS_Store

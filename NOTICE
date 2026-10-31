@@ -1,0 +1,81 @@
+# Third-party notices
+
+This repository contains original code plus the following third-party
+components. They are checked out as git submodules (`.gitmodules`), pinned to
+the upstream commits whose files this tree was written against; their licenses
+travel with them and apply to those files, not to the reconstruction.
+
+## injector
+
+`vendor/injector` - https://github.com/ThirteenAG/injector, pinned to
+`fdd27705` (`include/injector/*.hpp`).
+
+Copyright (C) 2012-2014 LINK/2012 <dma_2012@hotmail.com>
+
+zlib-style license: permission is granted to use, alter and redistribute
+freely, provided the origin is not misrepresented and this notice is kept.
+The full text is at the top of `include/injector/injector.hpp`.
+
+## Hooking.Patterns
+
+`vendor/Hooking.Patterns` - https://github.com/ThirteenAG/Hooking.Patterns,
+pinned to `961c83cc`.
+
+Part of the CitizenFX project (https://citizen.re/), MIT licensed. The
+upstream LICENSE.md carries the full terms. The tree compiles upstream's
+`Hooking.Patterns.cpp` unmodified; this project's earlier copy added a
+precompiled-header include, which is now handled by the build instead.
+
+## jitasm, Hooking.h / Hooking.cpp, Pool.h, StdInc.h
+
+`jitasm.h`, `Hooking.h`, `Hooking.cpp`, `Pool.h`, `StdInc.h`
+
+These are carried verbatim from the original project's source tree, because
+they are part of it: `jitasm.h` is Takashi Tosaka's runtime assembler,
+`Hooking.h` / `Hooking.cpp` are CitizenFX's `hook2` framework built on it, and
+`Pool.h` / `StdInc.h` are the pool accessor and the shared include the original
+loader compiled against. The rebuilt hook bodies do not use them; they are kept
+so the tree matches the original and so a reader can compare the two hooking
+approaches. Their licenses are the upstream ones (jitasm: free use, see its
+header; CitizenFX: MIT).
+
+## ZolikaPatch.ini reader
+
+`INI.h`
+
+The loader needs the shipped mod's own parsing rules (duplicate keys are
+last-value-wins, an absent key yields the option arm's default, a value must
+parse to exactly 1), so `INI.h` is this project's implementation. It keeps the
+`INI<>` call shape of the Feather INI parser (Turbine) that the original
+source used; no Feather code is included.
+
+## ZolikaPatch and XLivelessAddon
+
+This is an independent, readable reimplementation of ZolikaPatch 7.65 by
+Zolika1351. No ZolikaPatch source code from the older source mirror is copied
+here; the mirror (which states no license) was used only as a style reference.
+The vendored libraries above are separate third-party components, licensed as
+described. The SkipLauncher feature descends from XLivelessAddon
+(GTAmodding/XLivelessAddon), which also states no license; its behaviour was
+reimplemented from the observed feature contract, not copied.
+
+The hook bodies are hand-written transcriptions of the shipped mod's machine
+code. They are part of this repository's MIT-licensed code; the original mod's
+authorship and the game's rights holders are acknowledged in CREDITS.md.
+
+The repository history carries `GTAmodding/XLivelessAddon` as a merged
+ancestor, so the lineage of the SkipLauncher work stays visible in `git log`.
+That merge adds history only: its tree is this project's, and no XLivelessAddon
+source is copied into it.
+
+## Game data
+
+`catalogue_data.cpp` contains the multiplayer model-name list used for
+diagnostic messages. `ooc_payload.h` is the original compressed
+`finale2.sco` resource used by OutOfCommissionFix, kept as static data because
+the shipped mod carried it as a module resource. `data/finale2.sco` is the
+decoded table for research, and `tools/compress_ooc.py` can produce an
+equivalent blob. Both are data extracted from the game / the original mod and
+remain the property of their respective rights holders. They are included so a
+clean checkout builds the complete mod; `tools/extract_data.py` can regenerate
+them from files you own.
