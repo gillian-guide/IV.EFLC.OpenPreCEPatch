@@ -285,6 +285,13 @@ namespace
         opp::Log("config: %s", configPath.string().c_str());
         NotifyFusionFixGatedOptions(config);
         LoadFlags(config);
+        if (config.InvalidValues() != 0)
+        {
+            // Each of these used the option's own default instead of throwing
+            // std::invalid_argument out of DllMain (the original's fault).
+            opp::Log("config: %zu value(s) did not parse and used the option default",
+                     config.InvalidValues());
+        }
 
         // The ZMenuIV guard follows config-object construction and is
         // unconditional, so a failed load must not suppress it.

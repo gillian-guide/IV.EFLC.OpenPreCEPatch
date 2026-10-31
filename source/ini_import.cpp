@@ -6,6 +6,8 @@
 #include "ini_template.hxx"
 #include "log.hxx"
 
+#include <IniReader.h>
+
 #include <algorithm>
 #include <array>
 #include <cctype>

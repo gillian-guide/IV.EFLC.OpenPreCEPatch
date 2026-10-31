@@ -138,6 +138,8 @@ if(CMAKE_SIZEOF_VOID_P EQUAL 4)
         enable_testing()
         add_executable(opcep_tests tests/test_main.cpp)
         opcep_configure_target(opcep_tests)
+        target_compile_definitions(opcep_tests PRIVATE
+            OPCEP_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data/plugins")
         target_link_libraries(opcep_tests PRIVATE
             "$<LINK_LIBRARY:WHOLE_ARCHIVE,opcep_core>"
             version user32 shlwapi)

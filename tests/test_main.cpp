@@ -79,6 +79,148 @@ namespace
         std::filesystem::remove(legacy);
     }
 
+    void TestIntPrefix()
+    {
+        // std::stoi's base-10 grammar, without the throw.
+        CHECK(opp::ParseIntPrefix("1").status == opp::IntStatus::ok);
+        CHECK(opp::ParseIntPrefix("1").value == 1);
+        CHECK(opp::ParseIntPrefix("1abc").value == 1);      // prefix accepted
+        CHECK(opp::ParseIntPrefix("  +2").value == 2);
+        CHECK(opp::ParseIntPrefix("-3").value == -3);
+        CHECK(opp::ParseIntPrefix("0x2").value == 0);       // base 10 stops at 'x'
+        CHECK(opp::ParseIntPrefix("").status == opp::IntStatus::empty);
+        CHECK(opp::ParseIntPrefix("   ").status == opp::IntStatus::empty);
+        CHECK(opp::ParseIntPrefix("abc").status == opp::IntStatus::not_a_number);
+        CHECK(opp::ParseIntPrefix("").status != opp::IntStatus::ok);
+        CHECK(opp::FlagExactlyOne("1"));
+        CHECK(!opp::FlagExactlyOne("2"));
+        CHECK(!opp::FlagExactlyOne("0"));
+        CHECK(!opp::FlagExactlyOne(""));
+        CHECK(!opp::FlagExactlyOne("abc"));
+        // A value far outside int range is not "1" and must not throw.
+        CHECK(!opp::FlagExactlyOne("999999999999999999999"));
+    }
+
+    void TestConfigSemantics()
+    {
+        const std::filesystem::path path = "opcep_semantics.ini";
+        WriteFile(path,
+                  "\xEF\xBB\xBF"  // UTF-8 BOM: the first section must still parse
+                  "[Options]\n"
+                  "Dup = 1\n"
+                  "Dup = 0\n"                 // last duplicate wins
+                  "Prec = 2\n"                // [Options] is searched before [STABILITY]
+                  "Inline = 1 // note\n"      // space-preceded comment is stripped
+                  "NoSpace = 1//note\n"       // not space-preceded: part of the value
+                  "Quoted = \"1\"\n"
+                  "Empty =\n"                 // present, unparseable
+                  "Bad = abc\n"               // present, unparseable
+                  "Escaped\\=Key = 1\n"
+                  "; whole-line comment\n"
+                  "# another\n"
+                  "// slash comment\n"
+                  "[STABILITY]\n"
+                  "Prec = 1\n"                // loses to [Options]
+                  "OnlySecond = 1\n"
+                  "[Options]\n"               // a second block merges, last value wins
+                  "Merged = 1\n");
+
+        opp::Config config(path);
+        CHECK(config.loaded());
+        CHECK(!config.Option("Dup", "1"));                 // 0 wins over 1
+        CHECK(!config.Option("Prec", "0"));                // [Options] order, not file order
+        CHECK(config.Option("Inline", "0"));
+        CHECK(config.Option("NoSpace", "0"));              // "1//note" -> prefix 1
+        CHECK(config.Option("Quoted", "0"));
+        CHECK(config.Option("Empty", "1"));                // invalid -> arm default
+        CHECK(!config.Option("Empty", "0"));
+        CHECK(config.Option("Bad", "1"));                  // no throw, default used
+        CHECK(config.Option("Escaped=Key", "0"));          // `\=` is restored in the key
+        CHECK(config.Has("STABILITY", "OnlySecond"));
+        CHECK(config.Option("OnlySecond", "0"));
+        CHECK(config.Has("Options", "Merged"));            // duplicate block merges
+
+        // Sort order and case sensitivity are the reader's, as before.
+        CHECK(!config.Has("stability", "OnlySecond"));
+        CHECK(!config.Has("STABILITY", "onlysecond"));
+        CHECK(config.InvalidValues() >= 2);                 // Empty + Bad
+        std::filesystem::remove(path);
+
+        // A missing file loads nothing and every option keeps its default.
+        opp::Config missing("opcep_semantics_missing.ini");
+        CHECK(!missing.loaded());
+        CHECK(!missing.Has("Options", "Dup"));
+        CHECK(missing.Option("Dup", "1"));
+        CHECK(!missing.Option("Dup", "0"));
+        CHECK(missing.String("", "OverrideGTADatPathTo", "common:/data/gta.dat") ==
+              "common:/data/gta.dat");
+
+        // The section policy is data: [Options] first, then the subsystem groups.
+        const auto sections = opp::Config::OptionSections();
+        CHECK(sections.size() == 15);
+        CHECK(sections.front() == "Options");
+        CHECK(sections.back() == "DEBUG");
+    }
+
+    void TestShippedTemplate()
+    {
+        // The flat option lookup is only correct while a key is unique across
+        // the searched sections; this census pins that invariant (research 05
+        // S9/T16) and that the shipped defaults are parseable flags.
+        const std::filesystem::path templatePath =
+            std::filesystem::path(OPCEP_DATA_DIR) / "IV.EFLC.OpenPreCEPatch.ini";
+        opp::Config config(templatePath);
+        CHECK(config.loaded());
+
+        // Walk the file's own sections: every key may occur in one section only.
+        std::FILE* file = std::fopen(templatePath.string().c_str(), "rb");
+        CHECK(file != nullptr);
+        if (file)
+        {
+            const auto sections = opp::Config::OptionSections();
+            std::string current;
+            std::vector<std::pair<std::string, std::string>> seen;
+            char line[512];
+            while (std::fgets(line, sizeof(line), file))
+            {
+                std::string text(line);
+                while (!text.empty() && (text.back() == '\n' || text.back() == '\r'))
+                    text.pop_back();
+                if (text.empty() || text[0] == ';')
+                    continue;
+                if (text[0] == '[')
+                {
+                    const size_t close = text.find(']');
+                    if (close != std::string::npos)
+                        current = text.substr(1, close - 1);
+                    continue;
+                }
+                const size_t equals = text.find('=');
+                if (equals == std::string::npos)
+                    continue;
+                std::string key = text.substr(0, equals);
+                while (!key.empty() && key.back() == ' ')
+                    key.pop_back();
+
+                bool searched = false;
+                for (const std::string_view section : sections)
+                    searched = searched || current == section;
+                if (!searched)
+                    continue;  // the two vehicle tables are read section-qualified
+
+                for (const auto& entry : seen)
+                    CHECK(!(entry.first == key && entry.second != current));
+                seen.emplace_back(key, current);
+            }
+            std::fclose(file);
+        }
+
+        // Shipped defaults, read through the same accessor the installers use.
+        CHECK(config.Option("LoadDLCs", "0"));
+        CHECK(config.Option("RemoveModChecks", "0"));
+        CHECK(!config.Option("SkipIntro", "0"));  // not in the grouped template
+    }
+
     void TestIniImport()
     {
         const std::filesystem::path dir = "opcep_import_test";
@@ -556,6 +698,9 @@ namespace
 int main()
 {
     TestConfig();
+    TestIntPrefix();
+    TestConfigSemantics();
+    TestShippedTemplate();
     TestIniImport();
     TestFusionFixGate();
     TestExecutableView();
