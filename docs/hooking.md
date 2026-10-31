@@ -59,7 +59,7 @@ The two script-call layers differ:
 - `sub_100038E0` receives the hash in ECX/ESI **and** the call block in EDX. The resolver must preserve both.
 - `sub_10003980` is the unary path; EDX is scratch and may be clobbered.
 
-The bodies live in `dllmain.cpp` as `zpatch_script_call_by_hash` and the exact transcriptions around them.
+The bodies live in `source/hook_bodies.cpp` as `zpatch_script_call_by_hash` and the exact transcriptions around them (`source/hook_bodies.ixx` is the interface that declares them).
 
 ## LoadDLCs
 

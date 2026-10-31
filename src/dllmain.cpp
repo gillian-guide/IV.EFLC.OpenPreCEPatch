@@ -4,9 +4,11 @@
 // game's import-time code by the time a deferred worker would get to scan, so the
 // signatures have to be matched now.
 //
-// The support library is split into FusionFix-style modules under `source/`
-// (one logical piece per .ixx); this TU keeps the entry point, the loader
-// pipeline and the option pass.
+// The support code is split into FusionFix-style modules under `source/` (one
+// logical piece per .ixx). This is the only plain translation unit left: it keeps
+// the entry point, the loader pipeline (`SetStuff`), its helpers and the probe
+// (`FindGamePointers`). The install arms live in the feature modules and
+// `PatchGame` only walks them, in the original loader's order.
 
 #include "pch.h"
 
@@ -359,13 +361,84 @@ void ApplyLaunchWithPlayGTAIV(GameBuild build, GameImage image, INI<>& ini)
 	}
 }
 
-// ---- loader --------------------------------------------------------------
+// ---- the loader pipeline -------------------------------------------------
+//
+// `SetStuff` is the whole load-time pipeline, in the original loader's order.
+// Each phase is one named step; the install arms themselves live in the feature
+// modules (`source/<feature>.ixx`) and `PatchGame` only walks them. The order is
+// the behaviour: no phase may move.
+//
+// The two load-bearing edges: the ZMenuIV guard runs even when the config load
+// fails (it follows config-object construction, unconditionally), and
+// RemoveUselessChecks runs before MiscFixes/RestoreDeathMusic, whose signatures
+// its tables destroy (`zp_dump --ordering` pins that one).
+
+// FixPCIDKickbug: drop the GFWL CD-key value so keygen users stop kicking each
+// other on join.
+void ApplyFixPCIDKickbug(INI<>& ini)
+{
+	if (Option(ini, "FixPCIDKickbug", "1"))
+	{
+		if (HMODULE shlwapi = LoadLibraryW(L"shlwapi.dll"))
+		{
+			const auto deleteValue = reinterpret_cast<LONG(WINAPI*)(HKEY, LPCWSTR, LPCWSTR)>(
+				GetProcAddress(shlwapi, "SHDeleteValueW"));
+			if (deleteValue)
+			{
+				deleteValue(HKEY_CURRENT_USER, L"Software\\Classes\\Software\\Microsoft\\XLive",
+				            L"PCID");
+			}
+		}
+	}
+}
+
+// The menu integration: with AddOptionsInMenu on and the module available, the
+// two runtime toggles are registered and RestoreDeathMusic's hooks install.
+void SetupMenuIntegration(INI<>& ini)
+{
+	const bool menu = IsMenuIntegrationAvailable(ini);
+	SetMenuIntegration(menu);
+	if (menu)
+		RegisterMenuOptions();
+	if (menu || Option(ini, "DoNotPauseOnMinimize", "0"))
+		zpatch_menu_prime_focus_loss();
+}
+
+// LocalSettingsPath captures the CWD and arms its call slot before installing.
+void CaptureLocalSettings(INI<>& ini)
+{
+	if (Option(ini, "LocalSettingsPath", "0"))
+	{
+		TraceBoot("localsettings");
+		zpatch_local_settings_capture_cwd();
+	}
+}
+
+// CarDecalsFix's double-load guard: when its scan finds nothing, another ASI
+// loader already patched the site.
+void ReportDoubleLoad(INI<>& ini, GameImage image)
+{
+	if (Option(ini, "CarDecalsFix", "1"))
+	{
+		Match decals;
+		const ModuleView view{image.base, image.size};
+		if (!FindPattern(view, "8B 44 24 08 8B 48 28 81 E1 C0 03 00 00 81 F9 80 00 00 00", decals))
+		{
+			MessageBoxA(0,
+			            "ZPatch was loaded twice! Make sure that you don't have multiple ASI "
+			            "loaders installed! (e.g. xliveless + dsound, xliveless + dinput8, "
+			            "dsound + dinput8, etc)",
+			            "ZPatch Error", 0);
+		}
+	}
+}
 
 void SetStuff()
 {
 	if (!iniPath[0])
 		return;
 
+	// Phase 1: the INI and the config-derived globals.
 	TraceBoot("ini");
 	INI<> ini(iniPath, true);
 	ini.select(kOptionsSection);
@@ -375,6 +448,7 @@ void SetStuff()
 	const bool initialized = ini.loaded() && LoadConfigAndFlags(ini, config);
 	TraceBoot("config");
 
+	// Phase 2: the unconditional guards.
 	// The ZMenuIV guard follows config-object construction and is unconditional, so
 	// a failed initialize must not suppress it.
 	TraceBoot("zmenu");
@@ -393,6 +467,7 @@ void SetStuff()
 	                     ? reinterpret_cast<const IMAGE_NT_HEADERS*>(moduleBase + dos->e_lfanew)
 	                     : nullptr;
 
+	// Phase 3: the loader's pre-install stages: DFA, SkipLauncher, PCID.
 	// MiscFixes' loader arm runs before SkipLauncher's and calls the one-shot DFA
 	// installer under the same guards; the SkipLauncher call is then a no-op.
 	if (nt && nt->Signature == IMAGE_NT_SIGNATURE && Option(ini, "MiscFixes", "1"))
@@ -404,22 +479,8 @@ void SetStuff()
 	TraceBoot("skiplauncher");
 	(void)ApplySkipLauncherIfEnabled(build, ini);
 
-	// FixPCIDKickbug: drop the GFWL CD-key value so keygen users stop kicking
-	// each other on join.
 	TraceBoot("pcid");
-	if (Option(ini, "FixPCIDKickbug", "1"))
-	{
-		if (HMODULE shlwapi = LoadLibraryW(L"shlwapi.dll"))
-		{
-			const auto deleteValue = reinterpret_cast<LONG(WINAPI*)(HKEY, LPCWSTR, LPCWSTR)>(
-				GetProcAddress(shlwapi, "SHDeleteValueW"));
-			if (deleteValue)
-			{
-				deleteValue(HKEY_CURRENT_USER, L"Software\\Classes\\Software\\Microsoft\\XLive",
-				            L"PCID");
-			}
-		}
-	}
+	ApplyFixPCIDKickbug(ini);
 
 	if (build == GameBuild::unknown)
 		return;
@@ -428,45 +489,22 @@ void SetStuff()
 
 	const GameImage gameImage{moduleBase, nt->OptionalHeader.SizeOfImage};
 
-	// With AddOptionsInMenu on and the module available, the two runtime toggles
-	// are registered and RestoreDeathMusic's hooks install.
+	// Phase 4: the runtime integration (menu toggles, the settings-path capture).
 	TraceBoot("menu");
-	const bool menu = IsMenuIntegrationAvailable(ini);
-	SetMenuIntegration(menu);
-	if (menu)
-		RegisterMenuOptions();
-	if (menu || Option(ini, "DoNotPauseOnMinimize", "0"))
-		zpatch_menu_prime_focus_loss();
+	SetupMenuIntegration(ini);
+	CaptureLocalSettings(ini);
 
-	// LocalSettingsPath captures the CWD and arms its call slot before installing.
-	if (Option(ini, "LocalSettingsPath", "0"))
-	{
-		TraceBoot("localsettings");
-		zpatch_local_settings_capture_cwd();
-	}
-
+	// Phase 5: the probe -- the seven scans the arms read, plus the double-load
+	// guard.
 	TraceBoot("preamble");
 	(void)FindGamePointers(gameImage);
+	ReportDoubleLoad(ini, gameImage);
 
-	// CarDecalsFix's double-load guard: when its scan finds nothing, another ASI
-	// loader already patched the site.
-	if (Option(ini, "CarDecalsFix", "1"))
-	{
-		Match decals;
-		const ModuleView view{gameImage.base, gameImage.size};
-		if (!FindPattern(view, "8B 44 24 08 8B 48 28 81 E1 C0 03 00 00 81 F9 80 00 00 00", decals))
-		{
-			MessageBoxA(0,
-			            "ZPatch was loaded twice! Make sure that you don't have multiple ASI "
-			            "loaders installed! (e.g. xliveless + dsound, xliveless + dinput8, "
-			            "dsound + dinput8, etc)",
-			            "ZPatch Error", 0);
-		}
-	}
-
+	// Phase 6: the install pass (the feature modules, in the loader's order).
 	TraceBoot("patchgame");
 	PatchGame(build, gameImage, config);
 
+	// Phase 7: the post-install tail (the PlayGTAIV launcher slots).
 	ApplyLaunchWithPlayGTAIV(build, GameImage{moduleBase, nt->OptionalHeader.SizeOfImage}, ini);
 }
 } // namespace

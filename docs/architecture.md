@@ -1,10 +1,10 @@
 # Architecture
 
-The tree follows the original mod's own source layout: the project's sources live under `src/`, and the two vendored libraries are git submodules under `external/` (`external/injector/`, `external/Hooking.Patterns/`). `ZolikaPatch.sln` / `CMakeLists.txt` build the ASI from there; both add `external/injector/include` and `external/Hooking.Patterns` to the include path.
+The tree follows the original mod's own source layout: the loader and the shared headers live under `src/`, the module units (one logical piece per `.ixx`) under `source/`, and the two vendored libraries are git submodules under `external/` (`external/injector/`, `external/Hooking.Patterns/`). `ZolikaPatch.sln` / `CMakeLists.txt` build the ASI from there; both add `external/injector/include` and `external/Hooking.Patterns` to the include path.
 
 ## Entry point
 
-`dllmain.cpp` exports `DllMain`. Everything happens synchronously on `DLL_PROCESS_ATTACH`; the DRM has already modified the game's code by the time a deferred thread would run, so signatures must be matched now.
+`src/dllmain.cpp` is the **only plain translation unit** and exports `DllMain`. Everything happens synchronously on `DLL_PROCESS_ATTACH`; the DRM has already modified the game's code by the time a deferred thread would run, so signatures must be matched now. It also holds the loader pipeline (`SetStuff`, whose phases are named below) and its helpers; the install arms themselves live in the feature modules, and `PatchGame` is the straight call sequence over them.
 
 ```
 DllMain
@@ -12,33 +12,38 @@ DllMain
   read the game's VS_FIXEDFILEINFO -> compact version -> GameBuild
   old-loader warning + unsupported-version guard
   capture xlive.dll / XLivelessAddon.asi / CitizenIV.exe
-  read INI, vehicle-light sections, option globals
-  ZMenuIV version guard
-  SkipLauncher (+ DFA + ROM stages), FixPCIDKickbug
-  IVMenuAPI registration, LocalSettingsPath capture
-  unconditional preamble (game pointers + hash salts)
-  PatchGame (all INI-gated installs)
-  LaunchWithPlayGTAIV
+SetStuff
+  phase 1  read INI, vehicle-light sections, option globals
+  phase 2  ZMenuIV version guard (unconditional)
+  phase 3  SkipLauncher (+ DFA + ROM stages), FixPCIDKickbug
+  phase 4  IVMenuAPI registration, LocalSettingsPath capture
+  phase 5  the probe: game pointers + hash salts, double-load guard
+  phase 6  PatchGame (every INI-gated install, in the loader's order)
+  phase 7  LaunchWithPlayGTAIV
 ```
 
-The same file holds the small support modules the loader needs (INI reader, game identity, signature wrapper, mapped-image writes, model catalogue, vehicle-light tables, IVMenuAPI and ZMenuIV), and - as in the original's single `dllmain.cpp` - the re-created globals, the hook bodies and the inline option blocks.
+The support code is split into modules under `source/`: `common`, `game`, `patch`, `log`, `config`, `catalogue`, `vehicle_lights`, `menu`, `launcher`, `useless_checks`, `hook_bodies` (the rebased globals, the 97 hook bodies and the resolver), `xliveless` (SkipLauncher/DFA/ROM) and one module per feature group (`vehicles`, `graphics`, `stability`, `audio`, `input`, `loading`, `mission`, `world`, `multiplayer`, `misc`). Types the plain TU and the headers name stay in `src/*.h`; the modules move implementations and export the declarations.
 
 ## Files
 
 | file | responsibility |
 | --- | --- |
-| `src/dllmain.cpp` | loader, INI feature blocks, build classification, config parser, model hash, signature scanner, map writes, catalogue, vehicle lights, IVMenuAPI/ZMenuIV, re-created globals, hook bodies and their VA table, and the inline option blocks in loader order |
+| `src/dllmain.cpp` | the plain TU: `DllMain`, the loader pipeline (`SetStuff` and its phases), `PatchGame`'s straight call sequence, `FindGamePointers`, the INI/config helpers, the SkipLauncher/DFA/launcher stages |
+| `source/hook_bodies.ixx`, `source/hook_bodies.cpp` | the rebased globals, the hook bodies (interface declares, implementation unit defines: MSVC rejects naked bodies in an imported interface) and the resolver (`BodyId`/`kAbiBodies`) |
+| `source/xliveless.ixx`, `source/xliveless.cpp` | SkipLauncher/DFA/ROM stages, file-API hooks and the ROM window |
+| `source/<feature>.ixx` | one module per feature group: that group's `Publish*`/`Apply*` arms, patterns, constants and config reads, in the loader's order |
+| `source/patch.ixx` | signature normalisation and scans, all-hit collection, the mapped-image write and the arms' scan/write helpers |
+| `source/game.ixx`, `source/common.ixx`, `source/log.ixx`, `source/config.ixx` | build identity, shared bounds/text/byte helpers, the boot/fault trace, the config document |
 | `source/useless_checks.ixx` | RemoveUselessChecks module: the original handler's three write shapes over its five RVA tables and 23 singles |
 | `source/catalogue.ixx` | model-catalogue module: count, index and name-hash lookups over the generated table |
 | `source/launcher.ixx` | the launch-slot rewrite bytes and the `LaunchGTAIV.exe\0` scan signature |
-| `source/common.hxx`, `source/common.ixx` | shared includes and the shared plausibility bounds |
+| `source/vehicle_lights.ixx`, `source/menu.ixx` | the two 512-slot light tables; IVMenuAPI/ZMenuIV |
 | `src/useless_checks_data.inc` | generated: the five original RVA arrays and the single-write rows (`tools/extract_useless_checks.py`) |
-| `src/xlive/xliveless.cpp` | SkipLauncher/DFA/ROM stages and file-API hooks |
-| `src/catalogue_data.cpp` | the 38,455-entry model catalogue (data) |
+| `src/catalogue_data.cpp` | the 38,455-entry model catalogue (generated data) |
 | `external/Hooking.Patterns/Hooking.Patterns.cpp` | vendored signature scanner (submodule) |
 | `src/ooc_payload.h` | original compressed OutOfCommission resource (static data) |
 | `data/finale2.sco` | decoded OutOfCommission script table for research |
-| `src/INI.h`, `src/common.h`, `src/hooks.h`, `src/patches.h`, `src/useless_checks.h`, `src/rebased.h`, `src/xlive/xliveless.h` | declarations shared by those units |
+| `src/common.h`, `src/hooks.h`, `src/patches.h`, `src/rebased.h`, `src/hook_bodies.h`, `src/INI.h`, `src/xlive/xliveless.h` | declarations shared by the loader, the modules and the tests |
 | `external/injector/include/injector/` | LINK/2012's memory-write library (submodule) |
 | `tests/test_main.cpp` | native assertions; no game files needed |
 
@@ -80,7 +85,7 @@ The cross-option rules are ordinary `if` conditions in the blocks that need them
 
 ## Hooks
 
-`dllmain.cpp` registers every body in `kAbiBodies`, keyed by a `BodyId`: the enum's value is the original destination VA (the resolver's key), and `OriginalHandlerVa` is the only conversion. Each enum entry names the original function and what the body does. `ResolveHookBody` maps a reference VA to the live body. The install blocks never point at a missing body: a row with an unresolved companion is skipped as a unit, matching the handler's behaviour.
+`source/hook_bodies.ixx` declares every body and `source/hook_bodies.cpp` registers it in `kAbiBodies`, keyed by a `BodyId`: the enum's value is the original destination VA (the resolver's key), and `OriginalHandlerVa` is the only conversion. Each enum entry names the original function and what the body does. `ResolveHookBody` maps a reference VA to the live body. The install blocks never point at a missing body: a row with an unresolved companion is skipped as a unit, matching the handler's behaviour.
 
 `tools/verify_bodies.py` proves the bodies offline. A body carries `@exact 0xVA` when it is a byte-level transcription; the tool finds it in the linker map (build the ASI with `ZP_LINK_MAP=ON`), disassembles it and compares it instruction-for-instruction with the original ASI at the reference VA. Module addresses are not blanked out blindly: internal branch targets are compared as body-relative deltas, every other module operand is bound original↔port with a required bijection, and the bindings `src/rebased.h` documents must agree by symbol name. Compiled C++ replacements are reported as INFO with the original function's disassembled extent and the source comment that documents them, never as byte-equal. It runs as the `zp_body_proof` CTest and as the `verify_bodies` target.
 
