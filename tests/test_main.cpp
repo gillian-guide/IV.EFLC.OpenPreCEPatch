@@ -253,6 +253,50 @@ namespace
         std::filesystem::remove_all(fresh);
     }
 
+    void TestLegacyUnsupportedKeys()
+    {
+        // The legacy import is a text transform over the template, so a key the
+        // template has no row for cannot be carried over. It must be reported
+        // and logged instead of disappearing (missed-findings audit).
+        const std::filesystem::path dir = "opcep_legacy_unsupported";
+        std::filesystem::remove_all(dir);
+        std::filesystem::create_directories(dir);
+        WriteFile(dir / "ZolikaPatch.ini",
+                  "[Options]\nMouseFix=0\nRemoveUselessChecks=1\nNoPhysicsSleep=1\n"
+                  "SkipLauncher=1\nUnknownOldKey=1\n"
+                  "[PopupLightAngles]\nCar1Name=police\nCar1Angle=90\n");
+
+        opp::LegacyImportReport report;
+        const std::filesystem::path created = opp::EnsureConfigFile(dir, &report);
+        CHECK(created == dir / "IV.EFLC.OpenPreCEPatch.ini");
+
+        const auto dropped = [&report](const char* key) -> const char* {
+            for (const auto& entry : report.dropped)
+            {
+                if (entry.key == key)
+                    return entry.reason.c_str();
+            }
+            return nullptr;
+        };
+        CHECK(dropped("RemoveUselessChecks") != nullptr);
+        CHECK(std::strcmp(dropped("RemoveUselessChecks"), "not implemented in OpenPreCEPatch") == 0);
+        CHECK(std::strcmp(dropped("NoPhysicsSleep"), "not implemented in OpenPreCEPatch") == 0);
+        CHECK(std::strcmp(dropped("SkipLauncher"), "provided by the XLivelessAddon companion") == 0);
+        CHECK(std::strcmp(dropped("UnknownOldKey"), "no row in the grouped INI") == 0);
+        // Handled: the option is carried over, the vehicle table row is ported.
+        CHECK(dropped("MouseFix") == nullptr);
+        CHECK(dropped("Car1Name") == nullptr);
+
+        opp::Config config(created);
+        CHECK(!config.Has("Options", "RemoveUselessChecks"));
+        CHECK(!config.Option("MouseFix", "1"));  // the old value, 0
+        CHECK(config.String("PopupLightAngles", "Car1Name", "") == "police");
+
+        CHECK(opp::UnsupportedLegacyKeys().size() == 7);
+        CHECK(opp::CompanionLegacyKeys().size() == 7);
+        std::filesystem::remove_all(dir);
+    }
+
     void TestFusionFixGate()
     {
         const std::filesystem::path path = "opcep_gate.ini";
@@ -830,6 +874,7 @@ int main()
     TestConfigSemantics();
     TestShippedTemplate();
     TestIniImport();
+    TestLegacyUnsupportedKeys();
     TestFusionFixGate();
     TestExecutableView();
     TestPatternScan();

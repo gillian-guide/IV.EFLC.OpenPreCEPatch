@@ -2,13 +2,35 @@
 
 [![Build](https://github.com/gillian-guide/IV.EFLC.OpenPreCEPatch/actions/workflows/msvc_x86.yml/badge.svg)](https://github.com/gillian-guide/IV.EFLC.OpenPreCEPatch/actions/workflows/msvc_x86.yml)
 
-OpenPreCEPatch is an open-source successor to [ZolikaPatch](https://github.com/gillian-guide/ZolikaPatch), the GTA IV / Episodes from Liberty City quality-of-life and crash-fix plugin. It keeps the original mod's fixes and features, rewrites them as readable, maintainable C++23, and modernises the loader, hooking and configuration layers around the same signature data, as well as introduces improvements to some unreliable code.
+OpenPreCEPatch is an open-source successor to [ZolikaPatch](https://github.com/gillian-guide/ZolikaPatch), the GTA IV / Episodes from Liberty City quality-of-life and crash-fix plugin. It implements the fixes and features listed in `data/plugins/IV.EFLC.OpenPreCEPatch.ini` (one row per option, generated into `docs/features.md`), rewrites them as readable, maintainable C++23, and modernises the loader, hooking and configuration layers around the same signature data, as well as introduces improvements to some unreliable code.
 
 The mod targets improvements to the PreCE experience to bring closer parity to CE, as well as improve general stability and improve the multiplayer experience. Features that exist in FusionFix are already gated and are intentionally not reimplemented in this mod.
 
 This mod is meant to be used with [this fork of XLivelessAddon](https://github.com/gillian-guide/XLivelessAddon) as a companion, as some features belong there.
 
 The mod also carries the standalone `GFWLProtectionDisabler2019` patch and a reimplementation of the Steam Achievements mod that works differently from the original one - now GFWL achievements work alongside Steam's.
+
+## Original options that are not implemented
+
+An old `ZolikaPatch.ini` is imported key by key into the grouped file. These
+original options have no row there on purpose, and the import logs each one it
+cannot carry over instead of dropping it silently:
+
+| option | why |
+| --- | --- |
+| `AddOptionsInMenu` | the menu integration is not implemented |
+| `FixPCIDKickbug` | not implemented in this tree |
+| `ForceDynamicShadowsEverywhere` | not implemented in this tree |
+| `HighQualityReflections` | not implemented in this tree |
+| `NoPhysicsSleep` | not implemented in this tree |
+| `RemoveBoundingBoxCulling` | not implemented in this tree |
+| `RemoveUselessChecks` | the build-gated RVA table is not carried by this tree |
+
+`BorderlessWindowed`, `DoNotPauseOnMinimize`, `LocalSettingsPath`, `SkipIntro`,
+`SkipLauncher`, `SkipMenu` and `VRAMFix` belong to the
+[XLivelessAddon](https://github.com/gillian-guide/XLivelessAddon) companion, which
+reads the same legacy keys from its own INI; the import lists them separately so
+they are not mistaken for missing features.
 
 ## Installation
 

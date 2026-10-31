@@ -15,6 +15,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace opp
 {
@@ -38,6 +39,41 @@ namespace opp
             "SkipHealthCheck",
         };
 
+        // Original options this tree does not implement. Importing one silently
+        // would make the mod look configured when it is not, so each is logged
+        // and reported.
+        constexpr std::string_view kUnsupportedLegacyKeys[] = {
+            "AddOptionsInMenu",
+            "FixPCIDKickbug",
+            "ForceDynamicShadowsEverywhere",
+            "HighQualityReflections",
+            "NoPhysicsSleep",
+            "RemoveBoundingBoxCulling",
+            "RemoveUselessChecks",
+        };
+
+        // Options the XLivelessAddon companion implements; its own INI reads the
+        // same legacy keys, so the import deliberately does not copy them.
+        constexpr std::string_view kCompanionLegacyKeys[] = {
+            "BorderlessWindowed",
+            "DoNotPauseOnMinimize",
+            "LocalSettingsPath",
+            "SkipIntro",
+            "SkipLauncher",
+            "SkipMenu",
+            "VRAMFix",
+        };
+
+        // Legacy keys the import maps onto another key instead of copying them:
+        // the per-patch mod-check aliases (read by the RemoveModChecks arm) and
+        // the old MiscFixes bundle (whose value seeds the xliveless keys).
+        constexpr std::string_view kRemappedLegacyKeys[] = {
+            "MiscFixes",
+            "Patch4RemoveModChecks",
+            "Patch6and7RemoveModChecks",
+            "Patch7RemoveModChecks",
+        };
+
         std::string Trim(std::string_view text)
         {
             while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front())))
@@ -45,6 +81,90 @@ namespace opp
             while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back())))
                 text.remove_suffix(1);
             return std::string(text);
+        }
+
+        std::string ReadText(const std::filesystem::path& path)
+        {
+            std::ifstream file(path, std::ios::binary);
+            if (!file)
+                return {};
+            std::ostringstream text;
+            text << file.rdbuf();
+            return text.str();
+        }
+
+        // True for the two vehicle tables' generated rows, which the import
+        // ports separately: `Car<1..512><Name|Angle|Offset>`.
+        bool IsVehicleTableRow(std::string_view key) noexcept
+        {
+            if (key.size() < 7 || key.substr(0, 3) != "Car")
+                return false;
+            size_t digits = 3;
+            while (digits < key.size() && key[digits] >= '0' && key[digits] <= '9')
+                ++digits;
+            if (digits == 3)
+                return false;
+            const std::string_view suffix = key.substr(digits);
+            return suffix == "Name" || suffix == "Angle" || suffix == "Offset";
+        }
+
+        bool Contains(std::span<const std::string_view> list, std::string_view key) noexcept
+        {
+            for (const std::string_view candidate : list)
+            {
+                if (candidate == key)
+                    return true;
+            }
+            return false;
+        }
+
+        std::vector<std::string> TemplateKeys()
+        {
+            std::vector<std::string> keys;
+            std::istringstream input(kDefaultIni);
+            std::string line;
+            while (std::getline(input, line))
+            {
+                if (line.empty() || line[0] == '[' || line[0] == ';')
+                    continue;
+                const size_t equals = line.find('=');
+                if (equals == std::string::npos)
+                    continue;
+                keys.push_back(Trim(std::string_view(line).substr(0, equals)));
+            }
+            std::sort(keys.begin(), keys.end());
+            return keys;
+        }
+
+        // Every option key the legacy file declares, deduplicated and sorted.
+        std::vector<std::string> LegacyKeys(std::string_view text)
+        {
+            std::vector<std::string> keys;
+            size_t start = 0;
+            while (start <= text.size())
+            {
+                const size_t newline = text.find('\n', start);
+                const std::string_view line =
+                    newline == std::string_view::npos ? text.substr(start)
+                                                      : text.substr(start, newline - start);
+                start = newline == std::string_view::npos ? text.size() + 1 : newline + 1;
+
+                std::string_view trimmed = line;
+                while (!trimmed.empty() && std::isspace(static_cast<unsigned char>(trimmed.back())))
+                    trimmed.remove_suffix(1);
+                while (!trimmed.empty() && std::isspace(static_cast<unsigned char>(trimmed.front())))
+                    trimmed.remove_prefix(1);
+                if (trimmed.empty() || trimmed.front() == '[' || trimmed.front() == ';' ||
+                    trimmed.front() == '#')
+                    continue;
+                const size_t equals = trimmed.find('=');
+                if (equals == std::string_view::npos)
+                    continue;
+                keys.push_back(Trim(trimmed.substr(0, equals)));
+            }
+            std::sort(keys.begin(), keys.end());
+            keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+            return keys;
         }
 
         bool Has(CIniReader& ini, const char* section, const char* key, std::string& value)
@@ -178,7 +298,18 @@ namespace opp
         }
     } // namespace
 
-    std::filesystem::path EnsureConfigFile(const std::filesystem::path& moduleDirectory)
+    std::span<const std::string_view> UnsupportedLegacyKeys() noexcept
+    {
+        return kUnsupportedLegacyKeys;
+    }
+
+    std::span<const std::string_view> CompanionLegacyKeys() noexcept
+    {
+        return kCompanionLegacyKeys;
+    }
+
+    std::filesystem::path EnsureConfigFile(const std::filesystem::path& moduleDirectory,
+                                           LegacyImportReport* report)
     {
         if (moduleDirectory.empty())
             return {};
@@ -190,8 +321,35 @@ namespace opp
         const std::filesystem::path legacy = moduleDirectory / kLegacyName;
         if (std::filesystem::exists(legacy))
         {
+            const std::string legacyText = ReadText(legacy);
             CIniReader reader(std::filesystem::absolute(legacy));
             const std::string text = BuildFromLegacy(reader);
+
+            // Anything the template has no row for cannot be carried over. Name
+            // it instead of letting the old setting silently disappear.
+            if (report != nullptr)
+            {
+                const std::vector<std::string> templateKeys = TemplateKeys();
+                for (const std::string& key : LegacyKeys(legacyText))
+                {
+                    if (IsVehicleTableRow(key) ||
+                        std::binary_search(templateKeys.begin(), templateKeys.end(), key) ||
+                        Contains(kRemappedLegacyKeys, key))
+                        continue;
+
+                    std::string reason;
+                    if (Contains(kUnsupportedLegacyKeys, key))
+                        reason = "not implemented in OpenPreCEPatch";
+                    else if (Contains(kCompanionLegacyKeys, key))
+                        reason = "provided by the XLivelessAddon companion";
+                    else
+                        reason = "no row in the grouped INI";
+
+                    Log("ini: legacy key %s not imported (%s)", key.c_str(), reason.c_str());
+                    report->dropped.push_back({key, std::move(reason)});
+                }
+            }
+
             if (WriteText(own, text))
             {
                 Log("ini: ported %s -> %s", legacy.string().c_str(),

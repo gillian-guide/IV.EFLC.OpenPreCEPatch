@@ -1,9 +1,12 @@
 # Improvements over the original loader
 
-This tree keeps every original write, gate and arm order (proved by
-`tools/opcep_matrix.py --check`: 96 INI cells, 3874 writes). The entries below are
-the deliberate differences: each one only changes what happens when the image or
-the INI does not match what the original assumed, and each leaves the original
+This tree keeps every original write, gate and arm order **of the options it
+implements**, proved by `tools/opcep_matrix.py --check` (96 INI cells, 3874
+writes) and by `tools/opcep_crossbuild.py` (nine on-disk builds). Options the
+original has and this tree does not implement are listed in the README; the
+legacy import reports each one instead of dropping it silently. The entries below
+are the deliberate differences: each one only changes what happens when the image
+or the INI does not match what the original assumed, and each leaves the original
 path reachable or trivially revertable.
 
 ## Install-time failsafes (default on)
