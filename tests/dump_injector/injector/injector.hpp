@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 // A minimal stand-in for the vendored injector, used only by the 64-bit
 // write-set dump. The real header is 32-bit oriented (its pointer arithmetic
 // assumes a module and game in one flat 32-bit space), which is exactly right
@@ -103,17 +103,16 @@ inline MemoryPointerRaw ReadRelativeOffset(void* at, std::size_t size, bool unpr
 	return {static_cast<std::uint8_t*>(at) + size + relative};
 }
 
-// C3, or C2 <pop> + a two-byte stack adjustment.
+// C3, or C2 <pop> and one trailing zero byte. This models the REAL header
+// exactly: it calls WriteMemory(int 0xC2), a FOUR-byte store, then writes the
+// pop word at +1, so the opcode write also zeroes the byte after the immediate.
+// A site that must leave that byte alone (TeleportProtection) cannot use MakeRET.
 inline void MakeRET(void* at, std::uint16_t pop, bool unprotect)
 {
+	const std::uint32_t opcode = pop == 0 ? 0xC3u : 0xC2u;
+	WriteMemoryRaw(at, &opcode, sizeof(opcode), unprotect);
 	if (pop == 0)
-	{
-		const std::uint8_t ret = 0xC3;
-		WriteMemoryRaw(at, &ret, sizeof(ret), unprotect);
 		return;
-	}
-	std::uint8_t bytes[3] = {0xC2, 0, 0};
-	std::memcpy(bytes + 1, &pop, sizeof(pop));
-	WriteMemoryRaw(at, bytes, sizeof(bytes), unprotect);
+	WriteMemoryRaw(static_cast<std::uint8_t*>(at) + 1, &pop, sizeof(pop), unprotect);
 }
 } // namespace injector

@@ -125,7 +125,9 @@ constexpr std::uint32_t kFchsOffsetBits = 0x40000000u;          // 2.0f
 constexpr std::uint32_t kBikeSpeedThresholdBits = 0x3BDA740Eu;  // 0.0066666668f
 constexpr std::uint32_t kCutsceneEpsBits = 0x3D4CCCCDu;         // 0.05f
 constexpr std::uint32_t kCutsceneSpeedLimitBits = 0x3F000000u;  // 0.5f
-constexpr std::uint64_t kCutsceneLimitBits = 0x3FD554C985F06F69ull; // 1.0 / 3.0
+// 0.3333 exactly (the constant the original's .rdata holds; 1.0/3.0 would be
+// 0x3FD5555555555555).
+constexpr std::uint64_t kCutsceneLimitBits = 0x3FD554C985F06F69ull;
 constexpr std::uint32_t kFloatAbsMask = 0x7FFFFFFFu;  // clears a float's sign bit
 constexpr std::uint32_t kFloatSignBit = 0x80000000u;  // 1u << 31
 static_assert(kFloatSignBit == (1u << 31));
@@ -142,6 +144,9 @@ constexpr std::uint16_t kOocPadMask = 0x1Fu << 11;
 // NewSaves: header layout and the "SAVE" magic the reader checks.
 constexpr std::size_t kSaveHeaderSize = 0x110u;
 constexpr std::size_t kSaveMagicOffset = 0x0C;
+// NewSaves' flag16 restore branch: 75 26 = jne +0x26 (the two bytes the original
+// writes back over the forced short jump).
+constexpr std::uint16_t kJneRel8Plus38 = 0x2675u;
 constexpr std::uint32_t kSaveMagic = static_cast<std::uint32_t>('S') |
                                      (static_cast<std::uint32_t>('A') << 8) |
                                      (static_cast<std::uint32_t>('V') << 16) |
@@ -722,18 +727,21 @@ namespace
 // FNV-1a over the section and key, separated so ("a","bc") and ("ab","c") differ.
 std::uint64_t ConfigKeyHash(std::string_view section, std::string_view key) noexcept
 {
-	std::uint64_t hash = 0xcbf29ce484222325ull;
+	// FNV-1a 64: the standard offset basis and prime.
+	constexpr std::uint64_t kFnvOffsetBasis = 0xcbf29ce484222325ull;
+	constexpr std::uint64_t kFnvPrime = 0x100000001b3ull;
+	std::uint64_t hash = kFnvOffsetBasis;
 	for (const char c : section)
 	{
 		hash ^= static_cast<unsigned char>(c);
-		hash *= 0x100000001b3ull;
+		hash *= kFnvPrime;
 	}
 	hash ^= 0xFFu;
-	hash *= 0x100000001b3ull;
+	hash *= kFnvPrime;
 	for (const char c : key)
 	{
 		hash ^= static_cast<unsigned char>(c);
-		hash *= 0x100000001b3ull;
+		hash *= kFnvPrime;
 	}
 	return hash;
 }
@@ -3449,7 +3457,7 @@ extern "C" void abi_gfwl_patch() noexcept
 		// xlive.dll absent the base is 0 and the original faults on that page.
 		// The offsets were decimal in the original's constants (6748016 /
 		// 6748020 / 7034320 / 7034352); they are one dword apart at 0x66F770 and
-		// two more slots at 0x6B5C50/0x6B5C70.
+		// two more slots at 0x6B55D0/0x6B55F0.
 		constexpr std::uintptr_t kXliveUpdateFlagA = 0x66F770u;
 		constexpr std::uintptr_t kXliveUpdateFlagB = kXliveUpdateFlagA + sizeof(std::uint32_t);
 		constexpr std::uintptr_t kXliveUpdateFlagC = 0x6B55D0u;
@@ -3546,7 +3554,7 @@ extern "C" void abi_new_saves_convert(const char* path) noexcept
 		if (zpatch_new_saves_flag16 != 0)
 			injector::MakeNOP(injector::raw_ptr(site - 5), 2, true); //nop
 		else
-			wp_word(site - 5, 0x2675u);
+			wp_word(site - 5, kJneRel8Plus38);  // 75 26 = jne +0x26
 	}
 
 	// P3 (game 0x8DA090): route the second LoadData call through the plugin body
@@ -7818,6 +7826,13 @@ namespace
 	constexpr std::uint8_t kRetOpcode = 0xC3;
 	constexpr std::uint8_t kMovEaxOpcode = 0xB8;   // mov eax, imm32
 	constexpr std::uint8_t kPushadOpcode = 0x60;
+	constexpr std::uint8_t kXorEaxOpcode = 0x33;      // xor
+	constexpr std::uint8_t kXorEaxEaxModrm = 0xC0;    // eax, eax
+	constexpr std::uint8_t kJeRel32First = 0x0F;      // jcc rel32, two-byte opcode
+	constexpr std::uint8_t kJeRel32Second = 0x84;     // je
+	// 66 0F 6E C0 / 66 0F 6E C8 = movd xmm0, eax / movd xmm1, eax.
+	constexpr std::uint8_t kMovdXmm0Eax[] = {0x66, 0x0F, 0x6E, 0xC0};
+	constexpr std::uint8_t kMovdXmm1Eax[] = {0x66, 0x0F, 0x6E, 0xC8};
 	constexpr std::uint32_t kFusionFixProbeRva = 0x20D7u + 4u;
 
 	bool bMenuIntegration = false;
@@ -9377,59 +9392,128 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 
 		if (ctx.build == GameBuild::v1060)
 		{
-			injector::MakeCALL(image.base + 0x4137CD,
-				reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
-			injector::MakeJMP(image.base + 0x41445C,
-				reinterpret_cast<void*>(ctx.gameBase + 0x4144B8), true); //jmp
-			injector::MakeJMP(image.base + 0x4144D4,
-				reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
-			injector::MakeJMP(image.base + 0x41450E,
-				reinterpret_cast<void*>(ctx.gameBase + 0x41452C), true); //jmp
-			injector::MakeCALL(image.base + 0x41453A,
-				reinterpret_cast<void*>(ctx.gameBase + 0x413E30), true); //call
-			injector::MakeNOP(image.base + 0x41453F, 12, true); //nop
-			injector::MakeCALL(image.base + 0x4137CD,
-				reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
-			injector::MakeJMP(image.base + 0x4144D4,
-				reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
+			// The original patched these LoadDLCs call/jump sites by RVA. Each
+			// signature below is the research-08 candidate that verifies as exactly
+			// one hit at its site on this build; the gate is unchanged. Sites are
+			// scanned in ascending order, before any of them is written.
+			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x4137CD
+				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
+				// the original patches this site twice; keep the duplicate write
+				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
+			}
+			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x41445C
+				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x4144B8), true); //jmp
+			}
+			if (auto p = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x4144D4
+				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
+				// duplicate write kept
+				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
+			}
+			if (auto p = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x41450E
+				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x41452C), true); //jmp
+			}
+			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x41453A
+				injector::MakeCALL(site, reinterpret_cast<void*>(ctx.gameBase + 0x413E30), true); //call
+			}
+			if (auto p = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x41453F
+				injector::MakeNOP(site, 12, true); //nop
+			}
 		}
 
 		if (ctx.build == GameBuild::v1070)
 		{
-			injector::MakeCALL(image.base + 0x41356D,
-				reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
-			injector::MakeJMP(image.base + 0x4141FC,
-				reinterpret_cast<void*>(ctx.gameBase + 0x414258), true); //jmp
-			injector::MakeJMP(image.base + 0x414274,
-				reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
-			injector::MakeJMP(image.base + 0x4142AE,
-				reinterpret_cast<void*>(ctx.gameBase + 0x4142CC), true); //jmp
-			injector::MakeCALL(image.base + 0x4142DA,
-				reinterpret_cast<void*>(ctx.gameBase + 0x413BD0), true); //call
-			injector::MakeNOP(image.base + 0x4142DF, 12, true); //nop
-			injector::MakeCALL(image.base + 0x41356D,
-				reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
-			injector::MakeJMP(image.base + 0x414274,
-				reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
+			// The original patched these LoadDLCs call/jump sites by RVA. Each
+			// signature below is the research-08 candidate that verifies as exactly
+			// one hit at its site on this build; the gate is unchanged. Sites are
+			// scanned in ascending order, before any of them is written.
+			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x41356D
+				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
+				// the original patches this site twice; keep the duplicate write
+				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
+			}
+			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x4141FC
+				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x414258), true); //jmp
+			}
+			if (auto p = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x414274
+				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
+				// duplicate write kept
+				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
+			}
+			if (auto p = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x4142AE
+				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x4142CC), true); //jmp
+			}
+			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x4142DA
+				injector::MakeCALL(site, reinterpret_cast<void*>(ctx.gameBase + 0x413BD0), true); //call
+			}
+			if (auto p = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x4142DF
+				injector::MakeNOP(site, 12, true); //nop
+			}
 		}
 
 		if (ctx.build == GameBuild::v1080)
 		{
-			injector::MakeCALL(image.base + 0x48F558,
-				reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
-			injector::MakeJMP(image.base + 0x49035C,
-				reinterpret_cast<void*>(ctx.gameBase + 0x4903B8), true); //jmp
-			injector::MakeJMP(image.base + 0x4903D4,
-				reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
-			injector::MakeJMP(image.base + 0x49040E,
-				reinterpret_cast<void*>(ctx.gameBase + 0x49042C), true); //jmp
-			injector::MakeCALL(image.base + 0x49043A,
-				reinterpret_cast<void*>(ctx.gameBase + 0x48FBB0), true); //call
-			injector::MakeNOP(image.base + 0x49043F, 12, true); //nop
-			injector::MakeCALL(image.base + 0x48F558,
-				reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
-			injector::MakeJMP(image.base + 0x4903D4,
-				reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
+			// The original patched these LoadDLCs call/jump sites by RVA. Each
+			// signature below is the research-08 candidate that verifies as exactly
+			// one hit at its site on this build; the gate is unchanged. Sites are
+			// scanned in ascending order, before any of them is written.
+			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 4C 24 ?? 51 8D 94 24 ?? ?? ?? ?? 52"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x48F558
+				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
+				// the original patches this site twice; keep the duplicate write
+				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
+			}
+			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x49035C
+				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x4903B8), true); //jmp
+			}
+			if (auto p = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x4903D4
+				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
+				// duplicate write kept
+				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
+			}
+			if (auto p = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x49040E
+				injector::MakeJMP(site, reinterpret_cast<void*>(ctx.gameBase + 0x49042C), true); //jmp
+			}
+			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x49043A
+				injector::MakeCALL(site, reinterpret_cast<void*>(ctx.gameBase + 0x48FBB0), true); //call
+			}
+			if (auto p = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); p.size() > 0)
+			{
+				auto* site = p.get(0).get<std::uint8_t>(); // 0x49043F
+				injector::MakeNOP(site, 12, true); //nop
+			}
 		}
 	}
 	Trace("LocalSettingsPath");
@@ -10130,7 +10214,8 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint16_t>(match, 0xC033u, true); //patch
+			injector::WriteMemory<std::uint8_t>(match, kXorEaxOpcode, true);       //xor
+			injector::WriteMemory<std::uint8_t>(match + 1, kXorEaxEaxModrm, true); // eax,eax
 		}
 	}
 	Trace("SkipMenu");
@@ -10203,7 +10288,13 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::MakeRET(injector::raw_ptr(match), 8, true); //ret 8
+			// The original writes exactly three bytes here: C2 08 over the two
+			// opcode bytes and 00 over the byte after the immediate. injector::
+			// MakeRET is NOT equivalent: its header stores the opcode through a
+			// 4-byte int store, so it also zeroes match+3 (0x83 on 1.0.8.0, the
+			// first byte of the next instruction). Keep the three-byte form.
+			injector::WriteMemory<std::uint16_t>(injector::raw_ptr(match), 0x08C2u, true); //ret 8
+			injector::WriteMemory<std::uint8_t>(injector::raw_ptr(match + 2), 0x00u, true); //ret 8
 		}
 	}
 	Trace("TryToSkipAllErrors");
@@ -10421,7 +10512,11 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			if (auto pattern = Pattern(image, "F3 0F 11 44 24 1C 0F 84 9E 00 00 00"); pattern.size() > 0)
 			{
 				auto* site = pattern.get(0).get<std::uint8_t>(6);
-				injector::WriteMemory<std::uint32_t>(site, 0x009E840Fu, true); //jz rel32
+				// `0F 84 9E 00 00 00` = je +0x9E; the arm rewrites the first four
+				// bytes (the sixth was already 0).
+				injector::WriteMemory<std::uint8_t>(site, kJeRel32First, true);      // 0F
+				injector::WriteMemory<std::uint8_t>(site + 1, kJeRel32Second, true); // 84
+				injector::WriteMemory<std::uint16_t>(site + 2, 0x009Eu, true);       // +0x9E
 				injector::WriteMemory<std::uint8_t>(site + 4, 0x00u, true); //jz rel32
 			}
 		}
@@ -10706,8 +10801,12 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint32_t>(match + 5, 0xC06E0F66u, true); //patch
-			injector::WriteMemory<std::uint32_t>(match + 33, 0xC06E0F66u, true); //patch
+			injector::WriteMemoryRaw(injector::raw_ptr(match + 5),
+			                         const_cast<std::uint8_t*>(kMovdXmm0Eax),
+			                         sizeof(kMovdXmm0Eax), true); //movd xmm0, eax
+			injector::WriteMemoryRaw(injector::raw_ptr(match + 33),
+			                         const_cast<std::uint8_t*>(kMovdXmm0Eax),
+			                         sizeof(kMovdXmm0Eax), true); //movd xmm0, eax
 			injector::MakeNOP(match + 3, 2, true); //nop
 			injector::MakeNOP(match + 31, 2, true); //nop
 		}
@@ -10716,8 +10815,12 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint32_t>(match + 5, 0xC06E0F66u, true); //patch
-			injector::WriteMemory<std::uint32_t>(match + 33, 0xC06E0F66u, true); //patch
+			injector::WriteMemoryRaw(injector::raw_ptr(match + 5),
+			                         const_cast<std::uint8_t*>(kMovdXmm0Eax),
+			                         sizeof(kMovdXmm0Eax), true); //movd xmm0, eax
+			injector::WriteMemoryRaw(injector::raw_ptr(match + 33),
+			                         const_cast<std::uint8_t*>(kMovdXmm0Eax),
+			                         sizeof(kMovdXmm0Eax), true); //movd xmm0, eax
 			injector::MakeNOP(match + 3, 2, true); //nop
 			injector::MakeNOP(match + 31, 2, true); //nop
 		}
@@ -10726,7 +10829,9 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint32_t>(match + 5, 0xC86E0F66u, true); //patch
+			injector::WriteMemoryRaw(injector::raw_ptr(match + 5),
+			                         const_cast<std::uint8_t*>(kMovdXmm1Eax),
+			                         sizeof(kMovdXmm1Eax), true); //movd xmm1, eax
 			injector::MakeNOP(match + 3, 2, true); //nop
 		}
 

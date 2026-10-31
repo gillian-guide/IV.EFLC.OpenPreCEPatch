@@ -17,6 +17,7 @@
 
 #include "common.h"
 
+#include "injector/injector.hpp"
 #include "patches.h"
 #include "useless_checks.h"
 #include "xlive/xliveless.h"
@@ -292,6 +293,21 @@ int Run()
 	CHECK(ClassifyGameBuild(1130) == GameBuild::v1130);
 	CHECK(ClassifyGameBuild(12043) == GameBuild::v12043);
 	CHECK(ClassifyGameBuild(9999) == GameBuild::unknown);
+
+	// injector::MakeRET is NOT a three-byte store: its header writes the opcode
+	// through a 4-byte int, so `ret 8` also zeroes the byte after the immediate.
+	// The TeleportProtection site must leave that byte alone and therefore stores
+	// C2 08 and 00 itself; pin both shapes so the difference cannot be lost.
+	{
+		std::uint8_t api[6] = {0x83, 0x83, 0x83, 0x83, 0x83, 0x83};
+		injector::MakeRET(api, 8, false);
+		CHECK(api[0] == 0xC2 && api[1] == 0x08 && api[2] == 0x00 && api[3] == 0x00);
+
+		std::uint8_t site[4] = {0x83, 0x83, 0x83, 0x83};
+		injector::WriteMemory<std::uint16_t>(site, 0x08C2u, false);
+		injector::WriteMemory<std::uint8_t>(site + 2, 0x00u, false);
+		CHECK(site[0] == 0xC2 && site[1] == 0x08 && site[2] == 0x00 && site[3] == 0x83);
+	}
 
 	std::uint32_t compact = 0;
 	CHECK(ComposeGameVersion(1, 0, 8, 0, compact) && compact == 1080);

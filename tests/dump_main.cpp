@@ -286,6 +286,11 @@ int RunOrderingCheck(std::uint8_t* image, std::uint32_t size, const ConfigDocume
 			                     "written\n", site);
 			++failures;
 		}
+		// These two calls survive only because RestoreDeathMusic runs AFTER
+		// RemoveUselessChecks. Run it first and the tables' 5-byte nops overwrite
+		// both, so the opcode byte would be 0x90 instead of 0xE8: this is what
+		// distinguishes the two orders (the third call is destroyed either way).
+		failures += expectByte(site, 0xE8, "a RestoreDeathMusic call surviving RemoveUselessChecks");
 	}
 
 	// RemoveUselessChecks off: both arms must apply. This is the control that
