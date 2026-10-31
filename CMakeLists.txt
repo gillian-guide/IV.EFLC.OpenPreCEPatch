@@ -12,6 +12,11 @@ option(ZP_BUILD_TESTS "Build the native tests" ON)
 option(ZP_BUILD_DUMP "Build the write-set dump tool" OFF)
 option(ZP_BUILD_STATE_DUMP "Build the offline Runtime State driver (Gate 3)" OFF)
 option(ZP_LINK_MAP "Emit a linker .map for the ASI (development aid, not shipped)" OFF)
+# Diagnostics are opt-in: the release ASI is built without them and writes no
+# trace log. ZP_TRACE_INSTALLS names every installer arm; ZP_TRACE_WRITES also
+# logs every game write through the trace injector.
+option(ZP_TRACE_INSTALLS "Log every installer arm to ZolikaPatch.trace.log" OFF)
+option(ZP_TRACE_WRITES "Log every game write to ZolikaPatch.trace.log (trace injector)" OFF)
 
 if(ZP_BUILD_TESTS OR ZP_BUILD_DUMP OR ZP_LINK_MAP)
   enable_testing()
@@ -38,7 +43,8 @@ endforeach()
 set(ZP_MODULE_UNITS
   source/common.ixx
   source/useless_checks.ixx
-  source/catalogue.ixx)
+  source/catalogue.ixx
+  source/launcher.ixx)
 
 set(ZP_SOURCES
   ${ZP_EXT_PATTERNS}/Hooking.Patterns.cpp
@@ -87,6 +93,12 @@ if(ZP_BUILD_ASI)
     target_link_options(ZolikaPatch PRIVATE /MAP)
   endif()
   set_target_properties(ZolikaPatch PROPERTIES PREFIX "" SUFFIX ".asi")
+  if(ZP_TRACE_INSTALLS)
+    target_compile_definitions(ZolikaPatch PRIVATE ZP_TRACE_INSTALLS)
+  endif()
+  if(ZP_TRACE_WRITES)
+    target_compile_definitions(ZolikaPatch PRIVATE ZP_TRACE_INSTALLS ZP_TRACE_WRITES)
+  endif()
   # Body-byte proof: the write-set dump only calls the installers, so it cannot
   # see a hook body. With the linker map available, compare every `@exact` body
   # in kAbiBodies instruction-for-instruction with the original ASI (capstone),

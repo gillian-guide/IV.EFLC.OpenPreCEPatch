@@ -28,7 +28,10 @@ The same file holds the small support modules the loader needs (INI reader, game
 | file | responsibility |
 | --- | --- |
 | `src/dllmain.cpp` | loader, INI feature blocks, build classification, config parser, model hash, signature scanner, map writes, catalogue, vehicle lights, IVMenuAPI/ZMenuIV, re-created globals, hook bodies and their VA table, and the inline option blocks in loader order |
-| `src/useless_checks.cpp`, `src/useless_checks.h` | RemoveUselessChecks: the original handler's three write shapes over its five RVA tables and 23 singles |
+| `source/useless_checks.ixx` | RemoveUselessChecks module: the original handler's three write shapes over its five RVA tables and 23 singles |
+| `source/catalogue.ixx` | model-catalogue module: count, index and name-hash lookups over the generated table |
+| `source/launcher.ixx` | the launch-slot rewrite bytes and the `LaunchGTAIV.exe\0` scan signature |
+| `source/common.hxx`, `source/common.ixx` | shared includes and the shared plausibility bounds |
 | `src/useless_checks_data.inc` | generated: the five original RVA arrays and the single-write rows (`tools/extract_useless_checks.py`) |
 | `src/xlive/xliveless.cpp` | SkipLauncher/DFA/ROM stages and file-API hooks |
 | `src/catalogue_data.cpp` | the 38,455-entry model catalogue (data) |
@@ -82,6 +85,17 @@ The cross-option rules are ordinary `if` conditions in the blocks that need them
 `tools/verify_bodies.py` proves the bodies offline. A body carries `@exact 0xVA` when it is a byte-level transcription; the tool finds it in the linker map (build the ASI with `ZP_LINK_MAP=ON`), disassembles it and compares it instruction-for-instruction with the original ASI at the reference VA. Module addresses are not blanked out blindly: internal branch targets are compared as body-relative deltas, every other module operand is bound original↔port with a required bijection, and the bindings `src/rebased.h` documents must agree by symbol name. Compiled C++ replacements are reported as INFO with the original function's disassembled extent and the source comment that documents them, never as byte-equal. It runs as the `zp_body_proof` CTest and as the `verify_bodies` target.
 
 Recovered game-image offsets that no safe signature covers are typed as `GameRva` (`value` plus `site()`), with the build, original function and instruction in the constant's provenance comment. `tools/magic_numbers.py` classifies every hex literal in the hand-written sources (named / documented / transcribed-asm) and fails on anything unclassified.
+
+## Diagnostics
+
+The release ASI is silent: `ZP_TRACE_INSTALLS` and `ZP_TRACE_WRITES` are opt-in
+compile definitions (CMake options of the same names, both default OFF), so
+`Trace`/`TraceBoot` compile to no-ops and no `ZolikaPatch.trace.log` is written.
+Configure with `-DZP_TRACE_INSTALLS=ON` to log every installer arm, and with
+`-DZP_TRACE_WRITES=ON` to also log every game write through the trace injector
+(`tests/trace_injector`). Both are diagnostic builds; neither changes the write
+set. The manual `ZolikaPatch.vcxproj` build is the other way to get the trace
+build (it defines the same macros when configured to).
 
 ## Hash salts
 

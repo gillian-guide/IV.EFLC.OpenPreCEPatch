@@ -8,6 +8,8 @@
 // `source/` (one logical piece per .ixx); this TU keeps the entry point and the
 // installer pipeline.
 
+#include "pch.h"
+
 #include "common.hxx"
 
 #include "common.h"
@@ -18,6 +20,7 @@
 import zp.common;
 import zp.useless_checks;
 import zp.catalogue;
+import zp.launcher;
 
 char iniPath[MAX_PATH];
 
@@ -299,17 +302,6 @@ constexpr std::uint32_t kSaveMagic = static_cast<std::uint32_t>('S') |
                                      (static_cast<std::uint32_t>('E') << 24);
 static_assert(kSaveMagic == 0x45564153u);
 
-// "PlayGTAIV.exe" followed by the two zero bytes the original leaves in place.
-constexpr char kLauncherNamePatch[16] = {'p', 'l', 'a', 'y', 'G', 'T', 'A', 'I',
-                                         'V', '.', 'e', 'x', 'e', '\0', 'e', '\0'};
-
-// The two launch slots hold the ASCII text "LaunchGTAIV.exe\0". One 16-byte
-// scan finds them on the five builds the original's table covered; the gate is
-// load-bearing (1.0.0.4 and 1.0.1.0 also match twice and EFLC once, and the
-// original never wrote those builds). Provenance: research 11 §3.4, verified
-// on all eleven game images on disk.
-constexpr char kLauncherSlotSignature[] =
-    "4C 61 75 6E 63 68 47 54 41 49 56 2E 65 78 65 00";
 
 bool bDFAInstalled = false;
 
@@ -667,13 +659,13 @@ void ApplyLaunchWithPlayGTAIV(GameBuild build, GameImage image, INI<>& ini)
 	// launcher needs both slots, so this uses the multi-hit helper explicitly.
 	const ModuleView view{image.base, image.size};
 	std::vector<const std::uint8_t*> sites;
-	if (FindAllPatterns(view, kLauncherSlotSignature, sites) == 0)
+	if (FindAllPatterns(view, zp::kLauncherSlotSignature, sites) == 0)
 		return;
 	for (const std::uint8_t* site : sites)
 	{
 		injector::WriteMemoryRaw(const_cast<std::uint8_t*>(site),
-		                         const_cast<char*>(kLauncherNamePatch),
-		                         sizeof(kLauncherNamePatch), true); // launcher name
+		                         const_cast<char*>(zp::kLauncherNamePatch.data()),
+		                         sizeof(zp::kLauncherNamePatch), true); // launcher name
 	}
 }
 

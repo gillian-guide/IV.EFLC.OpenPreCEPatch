@@ -21,6 +21,7 @@
 #include "patches.h"
 import zp.useless_checks;
 import zp.catalogue;
+import zp.launcher;
 #include "xlive/xliveless.h"
 
 namespace
@@ -457,6 +458,15 @@ int Run()
 	CHECK(zp::ModelNameFromHash(GameHash("police")) == "police");
 	CHECK(zp::ModelNameFromHash(GameHash("ztype")) == "ztype");
 	CHECK(zp::ModelNameFromHash(0) == "**UNKNOWN**");
+
+	// The launch-slot rewrite must write the original's capital-P bytes exactly.
+	{
+		const std::string_view expected{"PlayGTAIV.exe\0e\0", 16};
+		CHECK(zp::kLauncherNamePatch.size() == expected.size());
+		CHECK(std::string_view(zp::kLauncherNamePatch.data(),
+		                       zp::kLauncherNamePatch.size()) == expected);
+		CHECK(zp::kLauncherSlotSignature == "4C 61 75 6E 63 68 47 54 41 49 56 2E 65 78 65 00");
+	}
 
 	// ---- vehicle-light tables ---------------------------------------------
 	{

@@ -50,9 +50,8 @@ def write_models(names: list[str]) -> None:
         "// model id and the name is what the MP spawn probes print. Regenerate with",
         "// tools/extract_data.py --models.",
         "",
-        "#include <cstddef>",
+        '#include "catalogue_data.h"',
         "",
-        "extern const char* const kModelNames[];",
         "const char* const kModelNames[] = {",
     ]
     for name in names:
@@ -61,7 +60,7 @@ def write_models(names: list[str]) -> None:
     out += [
         "};",
         "",
-        "extern const std::size_t kModelNameCount = sizeof(kModelNames) / sizeof(kModelNames[0]);",
+        "const std::size_t kModelNameCount = sizeof(kModelNames) / sizeof(kModelNames[0]);",
         f'static_assert(kModelNameCount == 0x9637, "model catalogue must keep all {MODEL_COUNT:,} entries");',
         "",
         "",

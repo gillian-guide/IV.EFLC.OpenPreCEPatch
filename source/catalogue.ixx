@@ -10,10 +10,9 @@ module;
 #include "common.hxx"
 #include "common.h"
 
-// Defined in catalogue_data.cpp (the plain generated data TU). Declared in the
-// global module fragment so the symbols keep their global-module linkage.
-extern const char* const kModelNames[];
-extern const std::size_t kModelNameCount;
+// Defined in catalogue_data.cpp (the plain generated data TU); the header is
+// included in the global fragment so the symbols keep global-module linkage.
+#include "catalogue_data.h"
 
 export module zp.catalogue;
 

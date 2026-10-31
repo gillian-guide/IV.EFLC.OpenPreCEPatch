@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 // The multiplayer model-name catalogue, in the original ASI's table order.
 // Extracted from the game's model table; 38,455 entries. The index is the
 // model id and the name is what the MP spawn probes print. Regenerate with
@@ -8,7 +8,8 @@
 
 
 
-extern const char* const kModelNames[];
+#include "catalogue_data.h"
+
 const char* const kModelNames[] = {
   "01_wires_mh1",
   "02ground_mh8",
@@ -38467,7 +38468,7 @@ const char* const kModelNames[] = {
   "ztype",
 };
 
-extern const std::size_t kModelNameCount = sizeof(kModelNames) / sizeof(kModelNames[0]);
+const std::size_t kModelNameCount = sizeof(kModelNames) / sizeof(kModelNames[0]);
 static_assert(kModelNameCount == 0x9637, "model catalogue must keep all 38,455 entries");
 
 
