@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.28)
 project(ZolikaPatch LANGUAGES CXX)
 
 # Static CRT, like the shipped ASI: the mod runs inside the game process, and the
@@ -31,6 +31,13 @@ foreach(dir ${ZP_EXT_INJECTOR} ${ZP_EXT_PATTERNS})
   endif()
 endforeach()
 
+# FusionFix-style module units (one logical piece per .ixx). The shipped ASI is
+# 32-bit and the write-set dump is a 64-bit tool with its own injector shim, so
+# the same units are compiled into two module libraries with different include
+# paths and definitions; no target links both.
+set(ZP_MODULE_UNITS
+  source/common.ixx)
+
 set(ZP_SOURCES
   ${ZP_EXT_PATTERNS}/Hooking.Patterns.cpp
   src/catalogue_data.cpp
@@ -52,11 +59,25 @@ if(WIN32)
 endif()
 set_target_properties(zp PROPERTIES CXX_EXTENSIONS OFF)
 
+# The ASI-side module library. CXX_SCAN_FOR_MODULES makes CMake scan the .ixx
+# files and propagate their BMIs to the consumers.
+add_library(zp_modules STATIC)
+set_target_properties(zp_modules PROPERTIES CXX_SCAN_FOR_MODULES ON CXX_EXTENSIONS OFF)
+target_sources(zp_modules PUBLIC FILE_SET CXX_MODULES FILES ${ZP_MODULE_UNITS})
+target_include_directories(zp_modules PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/source
+                                              ${CMAKE_CURRENT_SOURCE_DIR}/src
+                                              ${ZP_EXT_INJECTOR}
+                                              ${ZP_EXT_PATTERNS})
+target_compile_features(zp_modules PUBLIC cxx_std_23)
+target_compile_definitions(zp_modules PUBLIC UNICODE _UNICODE NOMINMAX)
+target_link_libraries(zp PUBLIC zp_modules)
+
 if(ZP_BUILD_ASI)
   if(NOT WIN32)
     message(FATAL_ERROR "ZP_BUILD_ASI requires a Windows toolchain")
   endif()
   add_library(ZolikaPatch SHARED src/dllmain.cpp ZolikaPatch.def)
+  set_target_properties(ZolikaPatch PROPERTIES CXX_SCAN_FOR_MODULES ON)
   target_link_libraries(ZolikaPatch PRIVATE zp)
   target_link_options(ZolikaPatch PRIVATE
     /MACHINE:X86 /SUBSYSTEM:WINDOWS /BASE:0x10000000 /INCREMENTAL:NO)
@@ -103,9 +124,25 @@ if(ZP_BUILD_DUMP)
       "GTAIV.exe at its preferred base 0x400000, so the write-set dump would\n"
       "fault before producing an oracle.")
   endif()
+  # The same module units, compiled for the 64-bit tool: the dump injector shim
+  # must be the first include path, and the installer bodies see ZP_DUMP_TOOL.
+  add_library(zp_dump_modules STATIC)
+  set_target_properties(zp_dump_modules PROPERTIES CXX_SCAN_FOR_MODULES ON CXX_EXTENSIONS OFF)
+  target_sources(zp_dump_modules PUBLIC FILE_SET CXX_MODULES FILES ${ZP_MODULE_UNITS})
+  target_include_directories(zp_dump_modules BEFORE PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dump_injector)
+  target_include_directories(zp_dump_modules PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/source
+                                                    ${CMAKE_CURRENT_SOURCE_DIR}/src
+                                                    ${ZP_EXT_INJECTOR}
+                                                    ${ZP_EXT_PATTERNS})
+  target_compile_features(zp_dump_modules PUBLIC cxx_std_23)
+  target_compile_definitions(zp_dump_modules PUBLIC UNICODE _UNICODE NOMINMAX ZP_DUMP_TOOL)
+
   add_executable(zp_dump tests/dump_main.cpp tests/stub_bodies.cpp
                  ${ZP_EXT_PATTERNS}/Hooking.Patterns.cpp src/catalogue_data.cpp src/dllmain.cpp
                  src/useless_checks.cpp)
+  set_target_properties(zp_dump PROPERTIES CXX_SCAN_FOR_MODULES ON)
+  target_link_libraries(zp_dump PRIVATE zp_dump_modules)
   target_link_libraries(zp_dump PRIVATE version user32 shlwapi psapi)
   target_compile_features(zp_dump PRIVATE cxx_std_23)
   # /MAP is a development aid; ASLR stays on, because a fixed base would make the
@@ -137,6 +174,7 @@ endif()
 
 if(ZP_BUILD_TESTS)
   add_executable(zp_tests tests/test_main.cpp src/dllmain.cpp)
+  set_target_properties(zp_tests PROPERTIES CXX_SCAN_FOR_MODULES ON)
   target_link_libraries(zp_tests PRIVATE zp)
   # The dump harness maps GTAIV.exe at its preferred base 0x400000, so the test
   # executable must not occupy it.

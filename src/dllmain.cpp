@@ -1,51 +1,22 @@
-﻿#include "pch.h"
 // ZolikaPatch ASI entry point.
 //
 // Everything runs synchronously from DllMain: the DRM has already rewritten the
 // game's import-time code by the time a deferred worker would get to scan, so the
 // signatures have to be matched now.
 //
-// The file is also the project's whole support library - INI reading, game
-// identity, the signature wrapper, the mapped-image writes, the model catalogue,
-// the vehicle-light tables and the two menu integrations - because the mod is one
-// module and those pieces are only ever used from here.
+// The support library is being split into FusionFix-style modules under
+// `source/` (one logical piece per .ixx); this TU keeps the entry point and the
+// installer pipeline.
 
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <stdint.h>
-#include <tlhelp32.h>
-#include <winver.h>
-
-#include <bit>
-#include <cerrno>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <cwchar>
-#include <fstream>
-#include <iterator>
-#include <limits>
-#include <new>
-#include <string>
-#include <utility>
-#include <vector>
-
-#if defined(ZP_DUMP_TOOL)
-#include "../tests/dump_injector/injector/injector.hpp"
-#elif defined(ZP_TRACE_WRITES)
-#include "../tests/trace_injector/injector/injector.hpp"
-#else
-#include "injector/injector.hpp"
-#endif
-#include "Hooking.Patterns.h"
+#include "common.hxx"
 
 #include "common.h"
 #include "hooks.h"
 #include "patches.h"
 #include "rebased.h"
 #include "useless_checks.h"
-#include <initializer_list>
 #include "xlive/xliveless.h"
+import zp.common;
 
 char iniPath[MAX_PATH];
 
@@ -247,8 +218,6 @@ constexpr std::uint16_t kShadowPushB = 0x0104u;
 constexpr std::uint8_t kMinimizePauseTick = 0x06u;  // DoNotPauseOnMinimize
 constexpr std::size_t kSpawnsNameCapacity = 0x40u;  // ooc name buffer
 constexpr std::uint32_t kFlagBit4 = 1u << 4;               // object flag bit 4
-constexpr std::uintptr_t kMinPlausiblePointer = 0x10000u;  // below any mapping
-constexpr std::uintptr_t kUserModeCeiling = 0x80000000u;   // user-mode limit
 constexpr std::uint32_t kMaxModelCount = 0x100000u;        // model-table cap
 constexpr std::uint32_t kModelRegistryCountOffset = 0x14u; // +0: count
 constexpr std::uint32_t kModelEntryBoneOffset = 0x14u;     // name +0, bone +0x14
@@ -382,7 +351,7 @@ LONG WINAPI TraceFault(EXCEPTION_POINTERS* info)
 	for (int i = 0; i < 256; ++i)
 	{
 		const std::uintptr_t value = stack[i];
-		if (value < kMinPlausiblePointer)
+		if (value < zp::kMinPlausiblePointer)
 			continue;
 		MEMORY_BASIC_INFORMATION mbi{};
 		if (VirtualQuery(reinterpret_cast<const void*>(value), &mbi, sizeof(mbi)) == 0)
@@ -5277,11 +5246,11 @@ extern "C" void abi_driveby_fov_note_impl()
 	    static_cast<std::uintptr_t>(zpatch_driveby_resume) - 5u - kDrivebyResumeRva_1080;  // build-9 sig RVA
 	std::uint32_t count = 0;
 	std::uint32_t table = 0;
-	if (game_base > kMinPlausiblePointer && game_base < kUserModeCeiling)
+	if (game_base > zp::kMinPlausiblePointer && game_base < zp::kUserModeCeiling)
 	{
 		count = *reinterpret_cast<const std::uint32_t*>(game_base + kModelTableCountRva);
 		table = *reinterpret_cast<const std::uint32_t*>(game_base + kModelTablePointerRva);
-		if (table > kMinPlausiblePointer && count > 0u && count < kMaxModelCount)
+		if (table > zp::kMinPlausiblePointer && count > 0u && count < kMaxModelCount)
 		{
 			for (std::uint32_t i = 0; i < count; ++i)
 			{
