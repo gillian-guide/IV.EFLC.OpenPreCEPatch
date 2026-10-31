@@ -18,9 +18,12 @@
 
 namespace opp
 {
-    inline constexpr size_t kWordLength = 2;
+    inline constexpr size_t kWordLength = 2;   // sizeof(uint16_t), a PE word
     inline constexpr size_t kBranchLength = 5; // E8/E9 <rel32>
     inline constexpr uint8_t kCallOpcode = 0xE8;
+    // GTAIV.EFLC.FusionFix.asi's version probe: the fix compares the pair of
+    // dwords at module+0x20D3 / +0x20D7 (game.cpp ModuleLacksSignature), so this
+    // is the byte just after the second comparison's operand.
     inline constexpr uint32_t kFusionFixProbeRva = 0x20D7u + 4u;
 
     // The original's hook::pattern, over the image the drivers hand in. The

@@ -153,6 +153,19 @@ if(CMAKE_SIZEOF_VOID_P EQUAL 4)
             /SUBSYSTEM:CONSOLE
             /BASE:0x60000000)
         add_test(NAME opcep_tests COMMAND opcep_tests)
+
+        # The address-site table is a contract: every row must resolve to exactly
+        # one hit at the intended RVA on its gated build, or the conversion that
+        # replaced the RVA is wrong. The checker maps each on-disk executable
+        # from game_refs and fails on a miss, an extra hit or a moved site.
+        find_package(Python3 COMPONENTS Interpreter QUIET)
+        if(Python3_Interpreter_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/parity/address_sites.tsv")
+            add_test(NAME opcep_sigcheck
+                COMMAND ${Python3_EXECUTABLE}
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tools/opcep_sigcheck.py"
+                        --candidates "${CMAKE_CURRENT_SOURCE_DIR}/tests/parity/address_sites.tsv"
+                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+        endif()
     endif()
 
     install(TARGETS OpenPreCEPatch RUNTIME DESTINATION .)

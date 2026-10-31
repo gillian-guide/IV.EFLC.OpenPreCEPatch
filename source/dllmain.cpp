@@ -30,7 +30,7 @@ namespace
     constexpr uint32_t kUnsupportedVersionMin = 1201;
     constexpr uint32_t kUnsupportedVersionMax = 12999;
     constexpr DWORD kUnsupportedSleepMs = 500;
-    constexpr UINT kUnsupportedExitCode = 0x8000FFFFu;
+    constexpr UINT kUnsupportedExitCode = E_UNEXPECTED;  // 0x8000FFFF, the original
 
     struct LauncherPatch
     {

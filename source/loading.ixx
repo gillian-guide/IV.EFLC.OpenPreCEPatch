@@ -15,6 +15,7 @@ module;
 #include "rebased.h"
 #include "feature_registry.hxx"
 #include "helpers.hxx"
+#include "opcodes.hxx"
 
 export module loading;
 
@@ -42,7 +43,9 @@ namespace opp::features
         // unique prologue has been verified for them yet.
         if (ctx.Option("LoadDLCs", "1"))
         {
-            // Distance from the struct-fixup site to the loader callback entry.
+            // Distance from the struct-fixup site to the loader callback entry
+            // (1.0.6.0 0x4144D4->0x414560, 1.0.7.0 0x414274->0x414300,
+            // 1.0.8.0 0x4903D4->0x490460: the same 0x8C on every gated build).
             constexpr uintptr_t kDlcCallbackDelta = 0x8C;
             const GameImage& image = ctx.image;
 
@@ -102,6 +105,14 @@ namespace opp::features
         {
             const GameImage& image = ctx.image;
 
+            // Destinations as deltas from the site: +0x5C jumps into the same
+            // block, +0x1E skips the fixup (identical on 1.0.6.0/1.0.7.0), and
+            // the helper call is -0x70A on those builds / -0x88A on 1.0.8.0.
+            constexpr uintptr_t kJumpIntoSameBlock = 0x5C;
+            constexpr uintptr_t kJumpOverFixup = 0x1E;
+            constexpr uintptr_t kHelperCallBeforeSite = 0x70A;
+            constexpr uintptr_t kHelperCallBeforeSite1080 = 0x88A;
+
             const auto findSite = [&image](const char* signature) -> uint8_t* {
                 auto pattern = Pattern(image, signature);
                 return pattern.size() > 0 ? pattern.get(0).get<uint8_t>() : nullptr;
@@ -131,13 +142,13 @@ namespace opp::features
                 if (dummyCall != nullptr)
                     CallToBody(ctx, dummyCall, "abi_load_dlcs_dummy");
                 if (earlyJump != nullptr)
-                    JumpTo(ctx, earlyJump, earlyJump + 0x5C);
+                    JumpTo(ctx, earlyJump, earlyJump + kJumpIntoSameBlock);
                 if (structFixup != nullptr)
                     JumpToBody(ctx, structFixup, "abi_load_dlcs_struct_fixup");
                 if (skipFixupJump != nullptr)
-                    JumpTo(ctx, skipFixupJump, skipFixupJump + 0x1E);
+                    JumpTo(ctx, skipFixupJump, skipFixupJump + kJumpOverFixup);
                 if (helperCall != nullptr)
-                    CallTo(ctx, helperCall, helperCall - 0x70A);
+                    CallTo(ctx, helperCall, helperCall - kHelperCallBeforeSite);
                 if (tail != nullptr)
                     NopAt(ctx, tail, 12);
             }
@@ -160,13 +171,13 @@ namespace opp::features
                 if (dummyCall != nullptr)
                     CallToBody(ctx, dummyCall, "abi_load_dlcs_dummy");
                 if (earlyJump != nullptr)
-                    JumpTo(ctx, earlyJump, earlyJump + 0x5C);
+                    JumpTo(ctx, earlyJump, earlyJump + kJumpIntoSameBlock);
                 if (structFixup != nullptr)
                     JumpToBody(ctx, structFixup, "abi_load_dlcs_struct_fixup");
                 if (skipFixupJump != nullptr)
-                    JumpTo(ctx, skipFixupJump, skipFixupJump + 0x1E);
+                    JumpTo(ctx, skipFixupJump, skipFixupJump + kJumpOverFixup);
                 if (helperCall != nullptr)
-                    CallTo(ctx, helperCall, helperCall - 0x88A);
+                    CallTo(ctx, helperCall, helperCall - kHelperCallBeforeSite1080);
                 if (tail != nullptr)
                     NopAt(ctx, tail, 12);
             }
@@ -335,7 +346,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                WriteValue<uint8_t>(ctx, match + 8, 0xEBu);
+                WriteValue<uint8_t>(ctx, match + 8, opp::ops::kJmpRel8);
             }
         }
 

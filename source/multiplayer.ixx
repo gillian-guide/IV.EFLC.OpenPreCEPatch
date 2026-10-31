@@ -119,6 +119,8 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
+                // Each offset is the call instruction of one jump-table case;
+                // the body name carries that case's value.
                 CallToBody(ctx, match + 36, "abi_spawns_case_0x24");
                 CallToBody(ctx, match + 61, "abi_spawns_case_0x3D");
                 CallToBody(ctx, match + 86, "abi_spawns_case_0x56");

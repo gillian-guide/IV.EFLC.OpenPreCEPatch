@@ -15,6 +15,7 @@ module;
 #include "rebased.h"
 #include "feature_registry.hxx"
 #include "helpers.hxx"
+#include "opcodes.hxx"
 
 export module stability;
 
@@ -404,14 +405,18 @@ namespace opp::features
                 zpatch_garage_resume_a = MatchAddress(pattern, 6);
 
                 // Site A is at the function's mid-body anchor; the hook goes to
-                // the prologue (match-0x20), which starts with an 8-byte
-                // `movss xmm0, ds:X`, so the resume is match-0x18 and the float
-                // to reload is the dword that instruction's operand points at
-                // (match-0x1C).
-                zpatch_garage_entry_resume_a = MatchAddress(pattern, -0x18);
+                // the prologue, which starts with an 8-byte `movss xmm0, ds:X`,
+                // so the resume is just past it and the float to reload is the
+                // dword that instruction's operand points at.
+                constexpr ptrdiff_t kGarageEntryDelta = -0x20;
+                constexpr ptrdiff_t kGarageResumeDelta = kGarageEntryDelta + 8;
+                constexpr ptrdiff_t kGarageScaleOperandDelta = kGarageResumeDelta - 4;
+                static_assert(kGarageResumeDelta == -0x18);
+                static_assert(kGarageScaleOperandDelta == -0x1C);
+                zpatch_garage_entry_resume_a = MatchAddress(pattern, kGarageResumeDelta);
                 zpatch_garage_scale = *reinterpret_cast<const float*>(
                     static_cast<uintptr_t>(
-                        Field(pattern.get(0).get<uint8_t>(), -0x1C)));
+                        Field(pattern.get(0).get<uint8_t>(), kGarageScaleOperandDelta)));
             }
 
             if (auto pattern = Pattern(image, "0F B7 0E 50 51 E8"); pattern.size() > 0)
@@ -439,9 +444,11 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                // Site A is hooked at the function prologue (match-0x20); the
-                // body reloads the `xmm0` the skipped instruction sets.
-                JumpToBody(ctx, match - 0x20, "abi_garage_entry_a");
+                // Site A is hooked at the function prologue, 0x20 bytes before
+                // the anchor; the body reloads the `xmm0` the skipped
+                // instruction sets.
+                constexpr ptrdiff_t kGarageEntryDelta = -0x20;
+                JumpToBody(ctx, match + kGarageEntryDelta, "abi_garage_entry_a");
             }
 
             if (auto pattern = Pattern(image, "0F B7 0E 50 51 E8"); pattern.size() > 0)
@@ -515,7 +522,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                WriteValue<uint8_t>(ctx, match, 0xEBu);
+                WriteValue<uint8_t>(ctx, match, opp::ops::kJmpRel8);
             }
         }
 
@@ -812,8 +819,12 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                JumpToBody(ctx, match + 123, "abi_smpa60_tail_shim");
-                WriteValue<uint8_t>(ctx, match - 38, 0xEBu);
+                // The A60 branch's conditional jump sits 38 bytes before the
+                // anchor and 123 bytes after it is the tail the shim resumes at.
+                constexpr ptrdiff_t kSmpa60BranchDelta = -38;
+                constexpr ptrdiff_t kSmpa60TailDelta = 123;
+                JumpToBody(ctx, match + kSmpa60TailDelta, "abi_smpa60_tail_shim");
+                WriteValue<uint8_t>(ctx, match + kSmpa60BranchDelta, opp::ops::kJmpRel8);
             }
 
             if (auto pattern = Pattern(image, "8B 48 70 83 C0 40 50 51 8D 51 10"); pattern.size() > 0)
@@ -892,6 +903,9 @@ namespace opp::features
 
             if (ctx.build == GameBuild::v1070)
             {
+                // Entry points the shim jumps to, recovered per build: the fail
+                // block (site+0x4E), the ok block (site+0x6) and the LOD lookup
+                // function. No unique prologue is verified for the lookup yet.
                 zpatch_super_lod_fail = AddressOf(image.base + 0x4A3D37u);
                 zpatch_super_lod_ok = AddressOf(image.base + 0x4A3CEFu);
                 zpatch_super_lod_lookup = AddressOf(image.base + 0x58AAE0u);
@@ -899,6 +913,8 @@ namespace opp::features
 
             if (ctx.build == GameBuild::v1080)
             {
+                // Same three entry points on 1.0.8.0: fail = site+0x4E,
+                // ok = site+0x6, and the lookup function's own RVA.
                 zpatch_super_lod_fail = AddressOf(image.base + 0x540E67u);
                 zpatch_super_lod_ok = AddressOf(image.base + 0x540E1Fu);
                 zpatch_super_lod_lookup = AddressOf(image.base + 0x4DD2D0u);
@@ -950,7 +966,7 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                WriteValue<uint8_t>(ctx, match, 0xC3u);
+                WriteValue<uint8_t>(ctx, match, opp::ops::kRet);
             }
         }
 

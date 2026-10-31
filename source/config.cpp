@@ -170,9 +170,12 @@ namespace opp
 
     void Config::Parse(std::string_view bytes)
     {
-        // A UTF-8 BOM is skipped, like the mINI reader this replaces.
-        if (bytes.size() >= 3 && static_cast<uint8_t>(bytes[0]) == 0xEF &&
-            static_cast<uint8_t>(bytes[1]) == 0xBB && static_cast<uint8_t>(bytes[2]) == 0xBF)
+        // A UTF-8 BOM (EF BB BF) is skipped, like the mINI reader this replaces.
+        constexpr uint8_t kUtf8Bom[] = {0xEF, 0xBB, 0xBF};
+        if (bytes.size() >= std::size(kUtf8Bom) &&
+            static_cast<uint8_t>(bytes[0]) == kUtf8Bom[0] &&
+            static_cast<uint8_t>(bytes[1]) == kUtf8Bom[1] &&
+            static_cast<uint8_t>(bytes[2]) == kUtf8Bom[2])
             bytes.remove_prefix(3);
 
         struct Pending

@@ -6,7 +6,9 @@ namespace opp
 {
     namespace
     {
-        constexpr size_t kSignatureTokenWidth = 3;
+        constexpr size_t kSignatureTokenWidth = 3;  // "AA " per signature byte
+        constexpr uint32_t kByteMask = 0xFFu;       // one signature byte
+        constexpr uint32_t kNibbleMask = 0xFu;      // one hex digit
 
         bool IsWhite(char c) noexcept
         {
@@ -61,7 +63,7 @@ namespace opp
                 accumulated = accumulated * 16u + static_cast<uint32_t>(digit);
             }
 
-            value = static_cast<int>((negative ? 0u - accumulated : accumulated) & 0xFFu);
+            value = static_cast<int>((negative ? 0u - accumulated : accumulated) & kByteMask);
             return true;
         }
 
@@ -98,8 +100,8 @@ namespace opp
                 else
                 {
                     static const char kHex[] = "0123456789ABCDEF";
-                    out.push_back(kHex[(value >> 4) & 0xFu]);
-                    out.push_back(kHex[value & 0xFu]);
+                    out.push_back(kHex[(value >> 4) & kNibbleMask]);
+                    out.push_back(kHex[value & kNibbleMask]);
                 }
                 any = true;
             }

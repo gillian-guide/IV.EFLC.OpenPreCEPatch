@@ -760,18 +760,19 @@ namespace
         CHECK(opp::PatternAll(image, "DE AD BE EF").size() == 0);
 
         // End to end: the whole option pass over that image installs nothing.
-        // Every arm either does not match or is refused by the image check, so
-        // the image is byte-identical afterwards and the skips are reported.
+        // Every arm is a signature scan now (no arm writes a bare RVA), so a
+        // synthetic image matches nothing and no write is even attempted; the
+        // image must be byte-identical and no write may reach it.
         std::vector<uint8_t> clean(buffer.size(), 0xCC);
         const std::vector<uint8_t> untouched(clean.size(), 0xCC);
         const opp::GameImage clean_image{clean.data(), clean.size()};
         opp::PatchContext clean_ctx{clean_image,
                                     reinterpret_cast<uintptr_t>(clean.data()),
                                     opp::GameBuild::v1080, config};
-        const size_t skipped_before_pass = opp::ArmWritesSkipped();
+        const size_t applied_before_pass = opp::ArmWritesApplied();
         opp::PatchGame(opp::GameBuild::v1080, clean_image, config);
         CHECK(std::memcmp(clean.data(), untouched.data(), clean.size()) == 0);
-        CHECK(opp::ArmWritesSkipped() > skipped_before_pass);
+        CHECK(opp::ArmWritesApplied() == applied_before_pass);
     }
 
     void TestRelocateCalls()

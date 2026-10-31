@@ -15,6 +15,7 @@ module;
 #include "rebased.h"
 #include "feature_registry.hxx"
 #include "helpers.hxx"
+#include "opcodes.hxx"
 #include "steam_achievements.hxx"
 
 export module compatibility;
@@ -126,6 +127,14 @@ namespace opp::features
         // Every site is matched before the first write: the seven adjacent
         // one-byte NOPs live inside each other's windows, so a scan after a write
         // would silently lose the neighbours (the double-scan defect).
+        // Destination deltas from a scan to the trampoline the recovered jumps
+        // target: +0x87 skips the whole check (1.0.6.0 0x003982->0x003A09,
+        // 1.0.7.0 0x003962->0x0039E9) and +0x12 is 1.0.7.0's shorter skip
+        // (0x00389C->0x0038AE). Both are the same on every gated build.
+        constexpr uintptr_t kModCheckJumpDelta = 0x87;
+        constexpr uintptr_t kModCheckShortJumpDelta = 0x12;
+        // A cleared flag byte (the recovery's "the check is off" value).
+        constexpr uint8_t kFlagOff = 0x00;
         // The modded-file check instruction run carries seven one-byte stores.
         constexpr size_t kModCheckNopCount = 7;
         const auto findSite = [&image](const char* signature) -> uint8_t* {
@@ -153,20 +162,20 @@ namespace opp::features
                 findSite("74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F");
 
             if (jumpOverCheck != nullptr)
-                JumpTo(ctx, jumpOverCheck, jumpOverCheck + 0x87);
+                JumpTo(ctx, jumpOverCheck, jumpOverCheck + kModCheckJumpDelta);
             if (clearA != nullptr)
-                WriteValue<uint8_t>(ctx, clearA, 0x00u);
+                WriteValue<uint8_t>(ctx, clearA, kFlagOff);
             if (clearB != nullptr)
-                WriteValue<uint8_t>(ctx, clearB, 0x00u);
+                WriteValue<uint8_t>(ctx, clearB, kFlagOff);
             if (nopRun != nullptr)
             {
                 for (size_t i = 0; i < kModCheckNopCount; ++i)
                     NopAt(ctx, nopRun + i, 1);
             }
             if (shortJumpA != nullptr)
-                WriteValue<uint8_t>(ctx, shortJumpA, 0xEBu);
+                WriteValue<uint8_t>(ctx, shortJumpA, opp::ops::kJmpRel8);
             if (shortJumpB != nullptr)
-                WriteValue<uint8_t>(ctx, shortJumpB, 0xEBu);
+                WriteValue<uint8_t>(ctx, shortJumpB, opp::ops::kJmpRel8);
         }
 
         // Patch 7 (1070) modded-file checks: the same shape with two jumps, and
@@ -190,22 +199,22 @@ namespace opp::features
                 findSite("74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F");
 
             if (jumpOverCheckA != nullptr)
-                JumpTo(ctx, jumpOverCheckA, jumpOverCheckA + 0x12);
+                JumpTo(ctx, jumpOverCheckA, jumpOverCheckA + kModCheckShortJumpDelta);
             if (jumpOverCheckB != nullptr)
-                JumpTo(ctx, jumpOverCheckB, jumpOverCheckB + 0x87);
+                JumpTo(ctx, jumpOverCheckB, jumpOverCheckB + kModCheckJumpDelta);
             if (clearA != nullptr)
-                WriteValue<uint8_t>(ctx, clearA, 0x00u);
+                WriteValue<uint8_t>(ctx, clearA, kFlagOff);
             if (clearB != nullptr)
-                WriteValue<uint8_t>(ctx, clearB, 0x00u);
+                WriteValue<uint8_t>(ctx, clearB, kFlagOff);
             if (nopRun != nullptr)
             {
                 for (size_t i = 0; i < kModCheckNopCount; ++i)
                     NopAt(ctx, nopRun + i, 1);
             }
             if (shortJumpA != nullptr)
-                WriteValue<uint8_t>(ctx, shortJumpA, 0xEBu);
+                WriteValue<uint8_t>(ctx, shortJumpA, opp::ops::kJmpRel8);
             if (shortJumpB != nullptr)
-                WriteValue<uint8_t>(ctx, shortJumpB, 0xEBu);
+                WriteValue<uint8_t>(ctx, shortJumpB, opp::ops::kJmpRel8);
         }
     }
 
@@ -298,14 +307,15 @@ namespace opp::features
             HMODULE xlive = GetModuleHandleA("xlive.dll");
             if (xlive != nullptr)
             {
-                // The standalone ASI flips xlive.dll+0xF1605 from 0x74/0xEB to
-                // 0xEB. Keep the same pre-image check so a different xlive build
-                // is left untouched. The site is inside xlive.dll, not the game
-                // image, so the write goes through the module-scoped guard.
-                auto* site = reinterpret_cast<uint8_t*>(xlive) + 988677;
+                // The standalone ASI flips xlive.dll+0xF1605 (988677) from its
+                // jz or jmp to a jmp. Keep the same pre-image check so a
+                // different xlive build is left untouched. The site is inside
+                // xlive.dll, so the write goes through the module-scoped guard.
+                constexpr uintptr_t kXliveProtectionBranchRva = 0xF1605;
+                auto* site = reinterpret_cast<uint8_t*>(xlive) + kXliveProtectionBranchRva;
                 const uint8_t current = *site;
-                if (current == 0x74 || current == 0xEB)
-                    WriteModuleValue<uint8_t>(ctx, xlive, site, 0xEBu);
+                if (current == opp::ops::kJzRel8 || current == opp::ops::kJmpRel8)
+                    WriteModuleValue<uint8_t>(ctx, xlive, site, opp::ops::kJmpRel8);
             }
         }
 
