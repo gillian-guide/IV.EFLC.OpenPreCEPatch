@@ -1,6 +1,6 @@
 # Architecture
 
-The tree follows the original mod's own source layout: the project's sources live under `src/`, and the two vendored libraries are git submodules under `include/` (`include/injector/`, `include/Hooking.Patterns/`). `ZolikaPatch.sln` / `CMakeLists.txt` build the ASI from there; both add `include/injector/include` and `include/Hooking.Patterns` to the include path.
+The tree follows the original mod's own source layout: the project's sources live under `src/`, and the two vendored libraries are git submodules under `external/` (`external/injector/`, `external/Hooking.Patterns/`). `ZolikaPatch.sln` / `CMakeLists.txt` build the ASI from there; both add `external/injector/include` and `external/Hooking.Patterns` to the include path.
 
 ## Entry point
 
@@ -31,11 +31,11 @@ The same file holds the small support modules the loader needs (INI reader, game
 | `src/patch_data.cpp` | the RemoveUselessChecks NOP list (data) |
 | `src/xlive/xliveless.cpp` | SkipLauncher/DFA/ROM stages and file-API hooks |
 | `src/catalogue_data.cpp` | the 38,455-entry model catalogue (data) |
-| `include/Hooking.Patterns/Hooking.Patterns.cpp` | vendored signature scanner (submodule) |
+| `external/Hooking.Patterns/Hooking.Patterns.cpp` | vendored signature scanner (submodule) |
 | `src/ooc_payload.h` | original compressed OutOfCommission resource (static data) |
 | `data/finale2.sco` | decoded OutOfCommission script table for research |
 | `src/INI.h`, `src/common.h`, `src/hooks.h`, `src/patches.h`, `src/patch_data.h`, `src/rebased.h`, `src/xlive/xliveless.h` | declarations shared by those units |
-| `include/injector/include/injector/` | LINK/2012's memory-write library (submodule) |
+| `external/injector/include/injector/` | LINK/2012's memory-write library (submodule) |
 | `src/jitasm.h`, `src/Hooking.h`, `src/Hooking.cpp`, `src/Pool.h`, `src/StdInc.h` | carried from the original tree; not used by the recovered bodies |
 | `tests/test_main.cpp` | native assertions; no game files needed |
 

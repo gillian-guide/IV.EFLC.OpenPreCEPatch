@@ -36,7 +36,7 @@ build/msvc-x86/ZolikaPatch.asi        <- copy next to GTAIV.exe
 build/msvc-x86/ZolikaPatchTests.exe   <- native tests, no game needed
 ```
 
-`ZolikaPatch.vcxproj` is the ASI (DynamicLibrary, precompiled header `pch.h`, created by `pch.cpp`); `ZolikaPatchTests.vcxproj` builds the console tests. Both compile the sources under `src\` plus the vendored `include\Hooking.Patterns\Hooking.Patterns.cpp`, with `src\`, `include\injector\include` and `include\Hooking.Patterns` on the include path. The submodule's `.cpp` is built `NotUsing` the precompiled header, because upstream does not include `pch.h`.
+`ZolikaPatch.vcxproj` is the ASI (DynamicLibrary, precompiled header `pch.h`, created by `pch.cpp`); `ZolikaPatchTests.vcxproj` builds the console tests. Both compile the sources under `src\` plus the vendored `external\Hooking.Patterns\Hooking.Patterns.cpp`, with `src\`, `external\injector\include` and `external\Hooking.Patterns` on the include path. The submodule's `.cpp` is built `NotUsing` the precompiled header, because upstream does not include `pch.h`.
 
 Link settings that matter:
 
@@ -60,7 +60,7 @@ From the project root:
 build\build_msvc.cmd
 ```
 
-Run it from an **x86 Developer Command Prompt** (so `cl.exe` is on `PATH`), or pass the full path to `vcvars32.bat` as the first argument. It compiles the same sources into `build\msvc-x86\ZolikaPatch.asi`; no `.map` is emitted. The script uses the `src\` and `include\` include paths that match the current tree; an older copy assumed the sources sat next to `build\`.
+Run it from an **x86 Developer Command Prompt** (so `cl.exe` is on `PATH`), or pass the full path to `vcvars32.bat` as the first argument. It compiles the same sources into `build\msvc-x86\ZolikaPatch.asi`; no `.map` is emitted. The script uses the `src\` and `external\` include paths that match the current tree; an older copy assumed the sources sat next to `build\`.
 
 ## CMake
 

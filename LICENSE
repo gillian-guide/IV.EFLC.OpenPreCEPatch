@@ -32,7 +32,7 @@ is not entirely Gillian's work, and it claims nothing beyond that code:
   19 commits are merged into this repository's history as ancestors.
 - `injector` is **LINK/2012**'s; `Hooking.Patterns` and the `Hooking.*`
   framework are the **CitizenFX** project's; `jitasm.h` is **Takashi Tosaka**'s.
-  These are git submodules under `include/` and keep their own licences.
+  These are git submodules under `external/` and keep their own licences.
 - The extracted game data (`catalogue_data.cpp`, `ooc_payload.h`,
   `data/finale2.sco`) is the property of **Rockstar Games / Take-Two**.
 

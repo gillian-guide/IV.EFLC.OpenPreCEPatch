@@ -7,7 +7,7 @@ rem Usage: build_msvc.cmd [vcvars32.bat] [outdir]
 rem
 rem The sources live under ..\src (the layout follows the original mod's tree:
 rem loader, installers and hook bodies in their own folders); the two vendored
-rem libraries are git submodules under ..\include.
+rem libraries are git submodules under ..\external.
 setlocal EnableExtensions
 if not "%~1"=="" (
   call "%~1" >nul || (echo error: vcvars32 failed 1>&2 & exit /b 2)
@@ -19,21 +19,21 @@ where cl >nul 2>nul || (
 set "ROOT=%~dp0.."
 if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 set "SRC=%ROOT%\src"
-set "INCDIR=%ROOT%\include"
+set "EXTDIR=%ROOT%\external"
 set "OUT=%~2"
 if "%OUT%"=="" set "OUT=%ROOT%\build\msvc-x86"
 if not exist "%OUT%" mkdir "%OUT%"
 if not exist "%OUT%\obj" mkdir "%OUT%\obj"
-if not exist "%INCDIR%\injector\include\injector" (
+if not exist "%EXTDIR%\injector\include\injector" (
   echo error: submodules not checked out; run: git submodule update --init --recursive 1>&2
   exit /b 2
 )
-set "COMMON=/nologo /std:c++17 /O2 /EHsc /W3 /DUNICODE /D_UNICODE /DNDEBUG /DNOMINMAX /I"%SRC%" /I"%INCDIR%\injector\include" /I"%INCDIR%\Hooking.Patterns""
+set "COMMON=/nologo /std:c++17 /O2 /EHsc /W3 /DUNICODE /D_UNICODE /DNDEBUG /DNOMINMAX /I"%SRC%" /I"%EXTDIR%\injector\include" /I"%EXTDIR%\Hooking.Patterns""
 set "LDFLAGS=/link /MACHINE:X86 /SUBSYSTEM:WINDOWS /BASE:0x10000000 /INCREMENTAL:NO /DYNAMICBASE /NOLOGO"
 
 cl %COMMON% ^
   "%SRC%\dllmain.cpp" ^
-  "%INCDIR%\Hooking.Patterns\Hooking.Patterns.cpp" ^
+  "%EXTDIR%\Hooking.Patterns\Hooking.Patterns.cpp" ^
   "%SRC%\catalogue_data.cpp" ^
   "%SRC%\patch_data.cpp" ^
   "%SRC%\xlive\xliveless.cpp" ^

@@ -21,7 +21,7 @@
     <ClInclude Include="src\pch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\Hooking.Patterns\Hooking.Patterns.h">
+    <ClInclude Include="external\Hooking.Patterns\Hooking.Patterns.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\Hooking.h">
@@ -63,25 +63,25 @@
     <ClInclude Include="src\xlive\xliveless.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\injector\include\injector\assembly.hpp">
+    <ClInclude Include="external\injector\include\injector\assembly.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\injector\include\injector\calling.hpp">
+    <ClInclude Include="external\injector\include\injector\calling.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\injector\include\injector\gvm\gvm.hpp">
+    <ClInclude Include="external\injector\include\injector\gvm\gvm.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\injector\include\injector\gvm\translator.hpp">
+    <ClInclude Include="external\injector\include\injector\gvm\translator.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\injector\include\injector\hooking.hpp">
+    <ClInclude Include="external\injector\include\injector\hooking.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\injector\include\injector\injector.hpp">
+    <ClInclude Include="external\injector\include\injector\injector.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\injector\include\injector\utility.hpp">
+    <ClInclude Include="external\injector\include\injector\utility.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -92,7 +92,7 @@
     <ClCompile Include="src\pch.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="include\Hooking.Patterns\Hooking.Patterns.cpp">
+    <ClCompile Include="external\Hooking.Patterns\Hooking.Patterns.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\catalogue_data.cpp">

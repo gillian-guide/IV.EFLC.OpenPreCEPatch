@@ -6,7 +6,7 @@ The source follows the shape of the original mod: a signature scan, a size check
 python tools\style_lint.py --fail-on error
 ```
 
-Scope: the hand-written units (`dllmain.cpp`, `xlive/`, their headers, and `tests/`). Vendored code (the `injector` and `Hooking.Patterns` submodules under `include/`, plus `jitasm.h`, `Pool.h`, `StdInc.h`, `INI.h`) and generated data (`catalogue_data.cpp`, `patch_data.cpp`, `ooc_payload.h`) keep their own style.
+Scope: the hand-written units (`dllmain.cpp`, `xlive/`, their headers, and `tests/`). Vendored code (the `injector` and `Hooking.Patterns` submodules under `external/`, plus `jitasm.h`, `Pool.h`, `StdInc.h`, `INI.h`) and generated data (`catalogue_data.cpp`, `patch_data.cpp`, `ooc_payload.h`) keep their own style.
 
 ## Signature scans
 

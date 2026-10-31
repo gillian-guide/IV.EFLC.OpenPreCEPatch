@@ -23,10 +23,10 @@ ROOT = Path(__file__).resolve().parent.parent  # readable/
 SRC = ROOT / "src"
 
 # Vendored libraries (git submodules, never edited here) and generated data keep
-# their upstream shape. Vendored code lives under include/, outside the walked
+# their upstream shape. Vendored code lives under external/, outside the walked
 # roots below; the entries are kept explicit so the scope stays readable.
 EXCLUDED = (
-    "include/",
+    "external/",
     "src/jitasm.h",
     "src/Pool.h",
     "src/StdInc.h",

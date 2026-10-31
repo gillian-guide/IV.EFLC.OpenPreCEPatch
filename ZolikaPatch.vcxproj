@@ -43,13 +43,13 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <IncludePath>$(ProjectDir)src;$(ProjectDir)include\injector\include;$(ProjectDir)include\Hooking.Patterns;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)src;$(ProjectDir)external\injector\include;$(ProjectDir)external\Hooking.Patterns;$(IncludePath)</IncludePath>
     <TargetExt>.asi</TargetExt>
     <OutDir>$(ProjectDir)build\msvc-x86\</OutDir>
     <IntDir>$(ProjectDir)build\msvc-x86\obj\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <IncludePath>$(ProjectDir)src;$(ProjectDir)include\injector\include;$(ProjectDir)include\Hooking.Patterns;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)src;$(ProjectDir)external\injector\include;$(ProjectDir)external\Hooking.Patterns;$(IncludePath)</IncludePath>
     <TargetExt>.asi</TargetExt>
     <OutDir>$(ProjectDir)build\msvc-x86\</OutDir>
     <IntDir>$(ProjectDir)build\msvc-x86\obj\$(Configuration)\</IntDir>
@@ -99,15 +99,15 @@
   <ItemGroup>
     <ClInclude Include="src\framework.h" />
     <ClInclude Include="src\Hooking.h" />
-    <ClInclude Include="include\Hooking.Patterns\Hooking.Patterns.h" />
+    <ClInclude Include="external\Hooking.Patterns\Hooking.Patterns.h" />
     <ClInclude Include="src\INI.h" />
-    <ClInclude Include="include\injector\include\injector\assembly.hpp" />
-    <ClInclude Include="include\injector\include\injector\calling.hpp" />
-    <ClInclude Include="include\injector\include\injector\gvm\gvm.hpp" />
-    <ClInclude Include="include\injector\include\injector\gvm\translator.hpp" />
-    <ClInclude Include="include\injector\include\injector\hooking.hpp" />
-    <ClInclude Include="include\injector\include\injector\injector.hpp" />
-    <ClInclude Include="include\injector\include\injector\utility.hpp" />
+    <ClInclude Include="external\injector\include\injector\assembly.hpp" />
+    <ClInclude Include="external\injector\include\injector\calling.hpp" />
+    <ClInclude Include="external\injector\include\injector\gvm\gvm.hpp" />
+    <ClInclude Include="external\injector\include\injector\gvm\translator.hpp" />
+    <ClInclude Include="external\injector\include\injector\hooking.hpp" />
+    <ClInclude Include="external\injector\include\injector\injector.hpp" />
+    <ClInclude Include="external\injector\include\injector\utility.hpp" />
     <ClInclude Include="src\jitasm.h" />
     <ClInclude Include="src\pch.h" />
     <ClInclude Include="src\Pool.h" />
@@ -123,7 +123,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\dllmain.cpp" />
-    <ClCompile Include="include\Hooking.Patterns\Hooking.Patterns.cpp">
+    <ClCompile Include="external\Hooking.Patterns\Hooking.Patterns.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="src\catalogue_data.cpp" />

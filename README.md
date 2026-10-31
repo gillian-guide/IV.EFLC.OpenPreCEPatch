@@ -26,7 +26,7 @@ The launcher bypass is optional. Use it only with a legitimate game copy.
 
 ## Building
 
-`injector` and `Hooking.Patterns` are git submodules under `include/`, so clone recursively (or run `git submodule update --init --recursive` in an existing checkout):
+`injector` and `Hooking.Patterns` are git submodules under `external/`, so clone recursively (or run `git submodule update --init --recursive` in an existing checkout):
 
 ```bat
 git clone --recursive https://github.com/gillian-guide/ZolikaPatch.git

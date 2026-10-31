@@ -7,18 +7,18 @@ travel with them and apply to those files, not to the reconstruction.
 
 ## injector
 
-`include/injector` - https://github.com/ThirteenAG/injector, pinned to
-`fdd27705` (`include/injector/*.hpp`).
+`external/injector` - https://github.com/ThirteenAG/injector, pinned to
+`fdd27705` (`external/injector/include/injector/*.hpp`).
 
 Copyright (C) 2012-2014 LINK/2012 <dma_2012@hotmail.com>
 
 zlib-style license: permission is granted to use, alter and redistribute
 freely, provided the origin is not misrepresented and this notice is kept.
-The full text is at the top of `include/injector/injector.hpp`.
+The full text is at the top of `external/injector/include/injector/injector.hpp`.
 
 ## Hooking.Patterns
 
-`include/Hooking.Patterns` - https://github.com/ThirteenAG/Hooking.Patterns,
+`external/Hooking.Patterns` - https://github.com/ThirteenAG/Hooking.Patterns,
 pinned to `961c83cc`.
 
 Part of the CitizenFX project (https://citizen.re/), MIT licensed. The
