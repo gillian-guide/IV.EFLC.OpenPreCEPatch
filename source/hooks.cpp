@@ -10,6 +10,7 @@
 #include "hooks.h"
 #include "catalogue.hxx"
 #include "log.hxx"
+#include "opcodes.hxx"
 #include "pattern.hxx"
 #include "rebased.h"
 #include "driveby_seh.h"
@@ -1189,6 +1190,20 @@ void zpatch_tls_static_footer(uint32_t& guard) noexcept
 }
 }  // namespace
 
+namespace
+{
+// The GFWL update-window flags in xlive.dll. `83 0E 00 10` is
+// `or dword ptr [esi], 0x10000000`, the value the original stores at all four
+// sites (0x10000E83 little-endian). RVAs recovered from its writer.
+constexpr opp::ops::InstructionWindow<4> kGfwlWindowDisable{{0x83, 0x0E, 0x00, 0x10}};
+constexpr uint32_t kGfwlWindowDisableValue = opp::ops::PackedLowDword(kGfwlWindowDisable);
+static_assert(kGfwlWindowDisableValue == 0x10000E83u);
+constexpr uintptr_t kXliveUpdateFlag0Rva = 0x66F770u;
+constexpr uintptr_t kXliveUpdateFlag1Rva = 0x66F774u;
+constexpr uintptr_t kXliveSignInFlagRva = 0x6B5B50u;
+constexpr uintptr_t kXliveSignInFlag1Rva = 0x6B5B70u;
+}  // namespace
+
 extern "C" void abi_gfwl_patch() noexcept
 {
     if (zpatch_flag_patch4_modchecks)
@@ -1217,17 +1232,22 @@ extern "C" void abi_gfwl_patch() noexcept
     }
     if (zpatch_flag_gfwl_popup)
     {
-        // 0x10005421 writes xlive base + 0x66F770.. with no base check; with
-        // xlive.dll absent the base is 0 and the original faults on that page.
+        // @exact 0x10005421: four dword stores into xlive.dll's update-window
+        // flags, with no base check; with xlive.dll absent the base is 0 and the
+        // original faults on that page.
         const auto base = static_cast<uintptr_t>(zpatch_xlive_base);
         // Without xlive.dll there is no GFWL update popup to remove: the four
         // writes have no meaning at base 0, so the failsafe just skips them.
         if (zpatch_failsafe_skip("RemoveGFWLUpdatePopup xlive.dll", base == 0u))
             return;
-        wp_dword(reinterpret_cast<void*>(base + 6748016u), 0x10000E83u);
-        wp_dword(reinterpret_cast<void*>(base + 6748020u), 0x10000E83u);
-        wp_dword(reinterpret_cast<void*>(base + 7034320u), 0x10000E83u);
-        wp_dword(reinterpret_cast<void*>(base + 7034352u), 0x10000E83u);
+        wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlag0Rva),
+                 kGfwlWindowDisableValue);
+        wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlag1Rva),
+                 kGfwlWindowDisableValue);
+        wp_dword(reinterpret_cast<void*>(base + kXliveSignInFlagRva),
+                 kGfwlWindowDisableValue);
+        wp_dword(reinterpret_cast<void*>(base + kXliveSignInFlag1Rva),
+                 kGfwlWindowDisableValue);
     }
 }
 
@@ -1360,7 +1380,7 @@ extern "C" void abi_new_saves_convert(const char* path) noexcept
     if (p1 == nullptr) p1 = scan_game("74 37 80 3D ? ? ? ? 00 75 2E 8D 84 ? ? ? ? 00 6A 1E");
     if (p1 != nullptr)
         wp_byte(const_cast<uint8_t*>(p1),
-                zpatch_new_saves_flag9 != 0 ? 0xEB : 0x74);
+                zpatch_new_saves_flag9 != 0 ? opp::ops::kJmpRel8 : opp::ops::kJzRel8);
 
     // P2 (game 0x7D8C50): route the oversized read through the plugin's scratch
     // buffer, resize the read, and force/NOP the branch per the save format.
@@ -1374,15 +1394,28 @@ extern "C" void abi_new_saves_convert(const char* path) noexcept
         const auto original_target = static_cast<uint32_t>(
             reinterpret_cast<uintptr_t>(site) + 11u +
             static_cast<uint32_t>(original_rel));
-        wp_byte(site + 6, 0xE8);
-        const auto hook = static_cast<uint32_t>(
-            reinterpret_cast<uintptr_t>(&abi_new_saves_read_hook));
-        wp_dword(site + 7, hook - static_cast<uint32_t>(
-                                      reinterpret_cast<uintptr_t>(site + 6)) - 5u);
+        // The call at P2+6 already is E8+rel32; MakeCALL writes the same five
+        // bytes and keeps the original's read of the old destination first.
+        injector::MakeCALL(injector::raw_ptr(site + 6),
+                           injector::raw_ptr(&abi_new_saves_read_hook), true);
         if (zpatch_new_saves_loaddata == 0)
             zpatch_new_saves_loaddata = original_target;
-        wp_dword(site + 1, zpatch_new_saves_flag16 != 0 ? 3694u : 3262u);
-        wp_word(site - 5, zpatch_new_saves_flag16 != 0 ? 0x9090u : 0x2675u);
+
+        // The `push imm32` at P2+1 carries the load size: the old format reads
+        // 3262 bytes, the new one 3694.
+        constexpr uint32_t kOldSaveReadBytes = 3262;
+        constexpr uint32_t kNewSaveReadBytes = 3694;
+        wp_dword(site + 1, zpatch_new_saves_flag16 != 0 ? kNewSaveReadBytes
+                                                        : kOldSaveReadBytes);
+
+        // The `jnz rel8` five bytes before the call skips the load; for a new
+        // save it is a two-byte NOP instead (75 26 = jnz +0x26).
+        constexpr opp::ops::InstructionWindow<2> kSkipLoadBranch{{0x75, 0x26}};
+        static_assert(opp::ops::PackedLowWord(kSkipLoadBranch) == 0x2675u);
+        if (zpatch_new_saves_flag16 != 0)
+            injector::MakeNOP(injector::raw_ptr(site - 5), kSkipLoadBranch.Size(), true);
+        else
+            wp_word(site - 5, opp::ops::PackedLowWord(kSkipLoadBranch));
     }
 
     // P3 (game 0x8DA090): route the second LoadData call through the plugin body
@@ -1398,11 +1431,8 @@ extern "C" void abi_new_saves_convert(const char* path) noexcept
         const auto original_target = static_cast<uint32_t>(
             reinterpret_cast<uintptr_t>(site) + 11u +
             static_cast<uint32_t>(original_rel));
-        wp_byte(site + 6, 0xE8);
-        const auto hook = static_cast<uint32_t>(
-            reinterpret_cast<uintptr_t>(&abi_new_saves_p3_hook));
-        wp_dword(site + 7, hook - static_cast<uint32_t>(
-                                      reinterpret_cast<uintptr_t>(site + 6)) - 5u);
+        injector::MakeCALL(injector::raw_ptr(site + 6),
+                           injector::raw_ptr(&abi_new_saves_p3_hook), true);
         if (zpatch_new_saves_p3_orig == 0)
             zpatch_new_saves_p3_orig = original_target;
         int32_t third_rel = 0;
@@ -4078,27 +4108,67 @@ void zpatch_mf_advance_c() noexcept
         static_cast<uintptr_t>(zpatch_mf_x));
     const auto* y = reinterpret_cast<const int32_t*>(
         static_cast<uintptr_t>(zpatch_mf_y));
+    // The axis globals hold mouse units; 1/128 converts a unit to an angle.
+    constexpr double kMouseUnitsPerPixel = 1.0 / 128.0;
+    static_assert(kMouseUnitsPerPixel == 0.0078125);
     // sub_100241E0 evaluates Y first, then X, and dereferences both unguarded.
-    const bool zero = (static_cast<double>(*y) * 0.0078125 == 0.0) &&
-                      (static_cast<double>(*x) * 0.0078125 == 0.0);
-    struct Pair final
+    const bool zero = (static_cast<double>(*y) * kMouseUnitsPerPixel == 0.0) &&
+                      (static_cast<double>(*x) * kMouseUnitsPerPixel == 0.0);
+
+    // The three 8-byte windows sub_100241E0 writes into its resumed function
+    // (dword_10159C40 + these offsets): with both axes zero they store the pull
+    // angle into a vehicle field; otherwise they NOP the store and keep the
+    // following instruction. A window is one write so the pair cannot be seen
+    // half-applied.
+    constexpr uintptr_t kMouseAdvancePitchWindow = 52u;
+    constexpr uintptr_t kMouseAdvanceYawWindow = 94u;
+    constexpr uintptr_t kMouseAdvanceStoreWindow = 107u;
+
+    // The fields the pull angle lands in: pitch first, yaw one float later.
+    constexpr uint32_t kVehiclePitchField = 0x144u;
+    constexpr uint32_t kVehicleYawField = kVehiclePitchField + sizeof(float);
+    static_assert(kVehicleYawField == 0x148u);
+
+    constexpr opp::ops::InstructionWindow<8> kWritePitch =
+        opp::ops::MovssFieldStore(0x86, kVehiclePitchField);  // movss [esi+pitch], xmm0
+    static_assert(opp::ops::PackedLowDword(kWritePitch) == 0x86110FF3u);
+    static_assert(opp::ops::PackedHighDword(kWritePitch) == kVehiclePitchField);
+
+    constexpr opp::ops::InstructionWindow<8> kWriteYaw =
+        opp::ops::MovssFieldStore(0x8E, kVehicleYawField);  // movss [esi+yaw], xmm1
+    static_assert(opp::ops::PackedLowDword(kWriteYaw) == 0x8E110FF3u);
+    static_assert(opp::ops::PackedHighDword(kWriteYaw) == kVehicleYawField);
+
+    // fstp dword ptr [esi+yaw] followed by the first two bytes of the next
+    // instruction (8B 5C = mov ebx, [esp+...]).
+    constexpr opp::ops::InstructionWindow<8> kStoreYaw{
+        {0xD9, 0x9E, 0x48, 0x01, 0x00, 0x00, 0x8B, 0x5C}};
+    static_assert(opp::ops::PackedLowDword(kStoreYaw) == 0x01489ED9u);
+    static_assert(opp::ops::PackedHighDword(kStoreYaw) == 0x5C8B0000u);
+
+    // fstp st(0) + four NOPs + the same next-instruction bytes.
+    constexpr opp::ops::InstructionWindow<8> kDiscardYaw{
+        {0xDD, 0xD8, 0x90, 0x90, 0x90, 0x90, 0x8B, 0x5C}};
+    static_assert(opp::ops::PackedLowDword(kDiscardYaw) == 0x9090D8DDu);
+    static_assert(opp::ops::PackedHighDword(kDiscardYaw) == 0x5C8B9090u);
+
+    constexpr opp::ops::InstructionWindow<8> kNop = opp::ops::NopWindow<8>();
+    struct Window final
     {
         uintptr_t offset;
-        uint32_t first;
-        uint32_t second;
+        opp::ops::InstructionWindow<8> whenZero;
+        opp::ops::InstructionWindow<8> otherwise;
     };
-    const Pair pairs[3] =
-    {
-            {52u, zero ? 0x86110FF3u : 0x90909090u, zero ? 0x144u : 0x90909090u},
-            {94u, zero ? 0x8E110FF3u : 0x90909090u, zero ? 0x148u : 0x90909090u},
-            {107u, zero ? 0x01489ED9u : 0x9090D8DDu, zero ? 0x5C8B0000u : 0x5C8B9090u},
+    const Window windows[3] = {
+        {kMouseAdvancePitchWindow, kWritePitch, kNop},
+        {kMouseAdvanceYawWindow, kWriteYaw, kNop},
+        {kMouseAdvanceStoreWindow, kStoreYaw, kDiscardYaw},
     };
-    for (const Pair& pair : pairs)
+    for (const Window& window : windows)
     {
-        auto* target = reinterpret_cast<uint32_t*>(base + pair.offset);
-        // Each site is an 8-byte window: the instruction (or nops) plus its operand.
-        injector::WriteMemory<uint32_t>(target, pair.first, true);       // bytes 0..3
-        injector::WriteMemory<uint32_t>(target + 1, pair.second, true);  // bytes 4..7
+        const opp::ops::InstructionWindow<8>& value = zero ? window.whenZero : window.otherwise;
+        injector::WriteMemoryRaw(injector::raw_ptr(base + window.offset),
+                                 const_cast<uint8_t*>(value.bytes.data()), value.Size(), true);
     }
     zpatch_cookie_tail();
 }
@@ -5168,6 +5238,11 @@ CRITICAL_SECTION g_nms_lock;
 class NmsRegistry final
 {
 public:
+    // Reserved keys: a four-byte aligned pointer can be neither zero nor all
+    // ones. Public so the self-test names them instead of repeating literals.
+    static constexpr uint32_t kNmsEmpty = 0u;
+    static constexpr uint32_t kNmsErased = 0xFFFFFFFFu;
+
     bool insert(uint32_t key) noexcept
     {
         // 0 is the empty marker and 0xFFFFFFFF the erased marker; a four-byte
@@ -5218,8 +5293,6 @@ public:
     size_t capacity() const noexcept { return capacity_; }
 
 private:
-    static constexpr uint32_t kNmsEmpty = 0u;
-    static constexpr uint32_t kNmsErased = 0xFFFFFFFFu;
     static constexpr size_t kMinCapacity = 1024u;
 
     static size_t Probe(uint32_t key, size_t probe, size_t mask) noexcept
@@ -5378,12 +5451,17 @@ extern "C" bool zpatch_nms_registry_selftest() noexcept
     NmsRegistry registry;
     constexpr uint32_t kKeys = 20000u;
     uint32_t keys[kKeys];
-    uint32_t state = 0x12345678u;
+    // The key space is 28 bits of pointer shifted into 4-byte steps; the seed is
+    // the recovered self-test seed.
+    constexpr uint32_t kNmsKeyMask = (1u << 28) - 1u;
+    static_assert(kNmsKeyMask == 0x0FFFFFFFu);
+    constexpr uint32_t kSelfTestSeed = 0x1234'5678u;
+    uint32_t state = kSelfTestSeed;
     for (uint32_t i = 0; i < kKeys; ++i)
     {
         // Aligned, 4-byte-spaced pseudo-random pointers, like the real keys.
         state = state * 1664525u + 1013904223u;
-        keys[i] = (state & 0x0FFFFFFFu) * 16u;
+        keys[i] = (state & kNmsKeyMask) * 16u;
     }
 
     for (uint32_t i = 0; i < kKeys; ++i)
@@ -5397,8 +5475,8 @@ extern "C" bool zpatch_nms_registry_selftest() noexcept
 
     // The reserved keys are never members.
     if (registry.insert(0u)) return false;
-    if (registry.insert(0xFFFFFFFFu)) return false;
-    if (registry.contains(0u) || registry.contains(0xFFFFFFFFu)) return false;
+    if (registry.insert(NmsRegistry::kNmsErased)) return false;
+    if (registry.contains(0u) || registry.contains(NmsRegistry::kNmsErased)) return false;
 
     // Erase every other key; the rest must survive, including across the
     // tombstone-heavy table.
@@ -5416,7 +5494,8 @@ extern "C" bool zpatch_nms_registry_selftest() noexcept
         if (!registry.contains(keys[i])) return false;
 
     // Erasing a non-member changes nothing.
-    registry.erase(0xDEADBEE0u);
+    constexpr uint32_t kNotAMember = 0xDEAD'BEE0u;  // never inserted anywhere
+    registry.erase(kNotAMember);
     if (registry.size() != kKeys) return false;
 
     // Churn: repeated erase-all/re-insert cycles must stay bounded instead of

@@ -143,7 +143,7 @@ namespace opp
             reinterpret_cast<intptr_t>(destination) -
             reinterpret_cast<intptr_t>(site + kBranchLength));
         std::memcpy(bytes + 1, &displacement, sizeof(displacement));
-        injector::WriteMemoryRaw(site, bytes, sizeof(bytes), true);
+        injector::WriteMemoryRaw(injector::raw_ptr(site), bytes, sizeof(bytes), true);
     }
 
     inline void WriteCallNoRead(uint8_t* site, void* destination)
@@ -197,7 +197,7 @@ namespace opp
         (void)ctx;
         if (!ModuleSiteWritable(moduleBase, site, sizeof(T)))
             return;
-        injector::WriteMemory<T>(const_cast<void*>(site), value, true);
+        injector::WriteMemory<T>(injector::raw_ptr(const_cast<void*>(site)), value, true);
     }
 
     // Abi(name) with the skip log: nullptr means "no verified body for this
@@ -220,7 +220,8 @@ namespace opp
         }
         if (!SiteWritable(ctx, site, kBranchLength))
             return;
-        injector::MakeJMP(const_cast<void*>(site), target, true);
+        injector::MakeJMP(injector::raw_ptr(const_cast<void*>(site)), injector::raw_ptr(target),
+                          true);
     }
 
     inline void CallTo(PatchContext& ctx, const void* site, void* target)
@@ -232,7 +233,8 @@ namespace opp
         }
         if (!SiteWritable(ctx, site, kBranchLength))
             return;
-        injector::MakeCALL(const_cast<void*>(site), target, true);
+        injector::MakeCALL(injector::raw_ptr(const_cast<void*>(site)), injector::raw_ptr(target),
+                           true);
     }
 
     inline void JumpToBody(PatchContext& ctx, const void* site, const char* body)
@@ -251,14 +253,15 @@ namespace opp
     {
         if (!SiteWritable(ctx, site, length))
             return;
-        injector::MakeNOP(const_cast<void*>(site), length, true);
+        injector::MakeNOP(injector::raw_ptr(const_cast<void*>(site)), length, true);
     }
 
     inline void WriteRaw(PatchContext& ctx, const void* site, const void* data, size_t length)
     {
         if (!SiteWritable(ctx, site, length))
             return;
-        injector::WriteMemoryRaw(const_cast<void*>(site), const_cast<void*>(data), length, true);
+        injector::WriteMemoryRaw(injector::raw_ptr(const_cast<void*>(site)),
+                                     const_cast<void*>(data), length, true);
     }
 
     template <typename T>
@@ -266,7 +269,7 @@ namespace opp
     {
         if (!SiteWritable(ctx, site, sizeof(T)))
             return;
-        injector::WriteMemory<T>(const_cast<void*>(site), value, true);
+        injector::WriteMemory<T>(injector::raw_ptr(const_cast<void*>(site)), value, true);
     }
 
     // Counters for the install summary line: writes applied and writes skipped
