@@ -1,9 +1,9 @@
-[submodule "includes/injector"]
-	path = includes/injector
+[submodule "external/injector"]
+	path = external/injector
 	url = https://github.com/ThirteenAG/injector
-[submodule "includes/hooking"]
-	path = includes/hooking
+[submodule "external/hooking"]
+	path = external/hooking
 	url = https://github.com/ThirteenAG/Hooking.Patterns
-[submodule "includes/inireader"]
-	path = includes/inireader
+[submodule "external/inireader"]
+	path = external/inireader
 	url = https://github.com/ThirteenAG/IniReader

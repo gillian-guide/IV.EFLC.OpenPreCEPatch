@@ -28,7 +28,7 @@ option(OPCEP_BUILD_PARITY_DUMP "Build the 64-bit parity dump tool" ON)
 set(OPCEP_DIST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin" CACHE PATH
     "Directory for the shipped OpenPreCEPatch output")
 
-set(OPCEP_INCLUDES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/includes")
+set(OPCEP_EXTERNAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external")
 
 # One file per subsystem; the .ixx files are C++23 module interfaces exposed by
 # the core library through a CXX_MODULES file set.
@@ -66,7 +66,7 @@ set(OPCEP_CORE_SOURCES
     source/rebased.cpp
     source/vehicle_lights.cpp
     source/data/model_catalogue.cpp
-    includes/hooking/Hooking.Patterns.cpp
+    external/hooking/Hooking.Patterns.cpp
 )
 
 # Shared compiler contract for every target in this tree.
@@ -81,9 +81,9 @@ function(opcep_configure_target target)
     target_include_directories(${target} PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/source")
     target_include_directories(${target} SYSTEM PUBLIC
-        "${OPCEP_INCLUDES_DIR}/injector/include"
-        "${OPCEP_INCLUDES_DIR}/hooking"
-        "${OPCEP_INCLUDES_DIR}/inireader")
+        "${OPCEP_EXTERNAL_DIR}/injector/include"
+        "${OPCEP_EXTERNAL_DIR}/hooking"
+        "${OPCEP_EXTERNAL_DIR}/inireader")
     target_compile_definitions(${target} PUBLIC
         UNICODE
         _UNICODE
@@ -207,5 +207,5 @@ endif()
 
 message(STATUS "OpenPreCEPatch ${PROJECT_VERSION}: C++${CMAKE_CXX_STANDARD}, "
                "${CMAKE_GENERATOR} platform ${CMAKE_VS_PLATFORM_NAME}")
-message(STATUS "Vendor submodules: ${OPCEP_INCLUDES_DIR}")
+message(STATUS "Vendor submodules: ${OPCEP_EXTERNAL_DIR}")
 message(STATUS "Dist output: ${OPCEP_DIST_DIR}")

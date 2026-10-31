@@ -77,7 +77,7 @@ cmake --build --preset x64-release
 
 `build.bat` wraps the x86 configure/build/test sequence; `CMakePresets.json` has the
 presets CI uses (`x86`, `x64`, `x86-release`, `x64-release`). The MSVC settings that
-matter (C++23 modules, static CRT, `/BASE:0x10000000`, the `includes/` submodules) are
+matter (C++23 modules, static CRT, `/BASE:0x10000000`, the `external/` submodules) are
 in `CMakeLists.txt`, and `.github/workflows/msvc_x86.yml` is the exact CI invocation.
 
 

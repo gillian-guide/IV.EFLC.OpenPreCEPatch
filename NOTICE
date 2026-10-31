@@ -30,9 +30,9 @@ companion repository and is attributed there.
 
 ## Vendored libraries (git submodules)
 
-- `includes/injector` — LINK/2012 and ThirteenAG, zlib license.
-- `includes/hooking` — CitizenFX and ThirteenAG, MIT license.
-- `includes/inireader` — ThirteenAG, MIT license.
+- `external/injector` — LINK/2012 and ThirteenAG, zlib license.
+- `external/hooking` — CitizenFX and ThirteenAG, MIT license.
+- `external/inireader` — ThirteenAG, MIT license.
 
 Their license texts are kept in their own submodule trees.
 

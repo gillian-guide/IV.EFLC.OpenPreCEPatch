@@ -16,7 +16,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if not exist "includes\injector\include\injector\injector.hpp" (
+if not exist "external\injector\include\injector\injector.hpp" (
     echo [build] Vendor submodules are missing.
     echo [build] Run: git submodule update --init --recursive
     popd
