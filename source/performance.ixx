@@ -284,16 +284,16 @@ namespace
     public:
         PerformanceFeatures()
         {
-            RegisterFeature(15, "PublishNewMemorySystem", &PublishNewMemorySystem);
-            RegisterFeature(68, "InstallHighFPSSpeedupFix", &InstallHighFPSSpeedupFix);
-            RegisterFeature(69, "InstallImprovedShaderStreaming", &InstallImprovedShaderStreaming);
-            RegisterFeature(80, "InstallNewMemorySystem", &InstallNewMemorySystem);
-            RegisterFeature(135, "InstallFastLoading", &InstallFastLoading);
-            RegisterFeature(138, "InstallIncreaseVehicleModelLimit", &InstallIncreaseVehicleModelLimit);
-            RegisterFeature(141, "InstallStartupTimeFix", &InstallStartupTimeFix);
-            RegisterFeature(142, "InstallIncreasePtrNodes", &InstallIncreasePtrNodes);
-            RegisterFeature(143, "InstallIncreaseVehicleStructLimit", &InstallIncreaseVehicleStructLimit);
-            RegisterFeature(145, "InstallNoLoadingSleep", &InstallNoLoadingSleep);
+            RegisterFeature({Phase::publish, "PublishNewMemorySystem", &PublishNewMemorySystem});
+            RegisterFeature({Phase::install, "InstallHighFPSSpeedupFix", &InstallHighFPSSpeedupFix});
+            RegisterFeature({Phase::install, "InstallImprovedShaderStreaming", &InstallImprovedShaderStreaming});
+            RegisterFeature({Phase::install, "InstallNewMemorySystem", &InstallNewMemorySystem, {"PublishNewMemorySystem"}});
+            RegisterFeature({Phase::install, "InstallFastLoading", &InstallFastLoading});
+            RegisterFeature({Phase::install, "InstallIncreaseVehicleModelLimit", &InstallIncreaseVehicleModelLimit});
+            RegisterFeature({Phase::install, "InstallStartupTimeFix", &InstallStartupTimeFix});
+            RegisterFeature({Phase::install, "InstallIncreasePtrNodes", &InstallIncreasePtrNodes});
+            RegisterFeature({Phase::install, "InstallIncreaseVehicleStructLimit", &InstallIncreaseVehicleStructLimit});
+            RegisterFeature({Phase::install, "InstallNoLoadingSleep", &InstallNoLoadingSleep});
         }
     } performanceFeatures;
 } // namespace

@@ -270,13 +270,13 @@ namespace
     public:
         CompatibilityFeatures()
         {
-            RegisterFeature(34, "PublishRemoveModChecks", &PublishRemoveModChecks);
-            RegisterFeature(47, "InstallAllowHashesForIDE", &InstallAllowHashesForIDE);
-            RegisterFeature(83, "InstallRemoveModChecks", &InstallRemoveModChecks);
-            RegisterFeature(93, "InstallRemoveRGSCLoginRequirement", &InstallRemoveRGSCLoginRequirement);
-            RegisterFeature(100, "InstallSavegameFix", &InstallSavegameFix);
-            RegisterFeature(148, "InstallGFWLProtectionDisabler", &InstallGFWLProtectionDisabler);
-            RegisterFeature(149, "InstallSteamAchievements", &InstallSteamAchievements);
+            RegisterFeature({Phase::publish, "PublishRemoveModChecks", &PublishRemoveModChecks});
+            RegisterFeature({Phase::install, "InstallAllowHashesForIDE", &InstallAllowHashesForIDE});
+            RegisterFeature({Phase::install, "InstallRemoveModChecks", &InstallRemoveModChecks, {"PublishRemoveModChecks"}});
+            RegisterFeature({Phase::install, "InstallRemoveRGSCLoginRequirement", &InstallRemoveRGSCLoginRequirement});
+            RegisterFeature({Phase::install, "InstallSavegameFix", &InstallSavegameFix});
+            RegisterFeature({Phase::install, "InstallGFWLProtectionDisabler", &InstallGFWLProtectionDisabler});
+            RegisterFeature({Phase::install, "InstallSteamAchievements", &InstallSteamAchievements});
         }
     } compatibilityFeatures;
 } // namespace

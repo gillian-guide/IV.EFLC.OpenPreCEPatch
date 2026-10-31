@@ -237,11 +237,11 @@ namespace
     public:
         InputFeatures()
         {
-            RegisterFeature(29, "PublishDrivebyFOVFix", &PublishDrivebyFOVFix);
-            RegisterFeature(41, "PublishMouseFix", &PublishMouseFix);
-            RegisterFeature(112, "InstallDrivebyFOVFix", &InstallDrivebyFOVFix);
-            RegisterFeature(124, "InstallMouseFix", &InstallMouseFix);
-            RegisterFeature(147, "InstallVSyncFix", &InstallVSyncFix);
+            RegisterFeature({Phase::publish, "PublishDrivebyFOVFix", &PublishDrivebyFOVFix});
+            RegisterFeature({Phase::publish, "PublishMouseFix", &PublishMouseFix});
+            RegisterFeature({Phase::install, "InstallDrivebyFOVFix", &InstallDrivebyFOVFix, {"PublishDrivebyFOVFix"}});
+            RegisterFeature({Phase::install, "InstallMouseFix", &InstallMouseFix, {"PublishMouseFix"}});
+            RegisterFeature({Phase::install, "InstallVSyncFix", &InstallVSyncFix});
         }
     } inputFeatures;
 } // namespace

@@ -278,14 +278,14 @@ namespace
     public:
         LoadingFeatures()
         {
-            RegisterFeature(12, "PublishLoadDLCs", &PublishLoadDLCs);
-            RegisterFeature(14, "PublishNewFilesCompatibility", &PublishNewFilesCompatibility);
-            RegisterFeature(16, "PublishNewSavesCompatibility", &PublishNewSavesCompatibility);
-            RegisterFeature(71, "InstallLoadDLCs", &InstallLoadDLCs);
-            RegisterFeature(79, "InstallNewFilesCompatibility", &InstallNewFilesCompatibility);
-            RegisterFeature(81, "InstallNewSavesCompatibility", &InstallNewSavesCompatibility);
-            RegisterFeature(98, "InstallSCOSignatureFix", &InstallSCOSignatureFix);
-            RegisterFeature(146, "InstallOverrideGTADatPath", &InstallOverrideGTADatPath);
+            RegisterFeature({Phase::publish, "PublishLoadDLCs", &PublishLoadDLCs});
+            RegisterFeature({Phase::publish, "PublishNewFilesCompatibility", &PublishNewFilesCompatibility});
+            RegisterFeature({Phase::publish, "PublishNewSavesCompatibility", &PublishNewSavesCompatibility});
+            RegisterFeature({Phase::install, "InstallLoadDLCs", &InstallLoadDLCs, {"PublishLoadDLCs"}});
+            RegisterFeature({Phase::install, "InstallNewFilesCompatibility", &InstallNewFilesCompatibility, {"PublishNewFilesCompatibility"}});
+            RegisterFeature({Phase::install, "InstallNewSavesCompatibility", &InstallNewSavesCompatibility, {"PublishNewSavesCompatibility"}});
+            RegisterFeature({Phase::install, "InstallSCOSignatureFix", &InstallSCOSignatureFix});
+            RegisterFeature({Phase::install, "InstallOverrideGTADatPath", &InstallOverrideGTADatPath});
         }
     } loadingFeatures;
 } // namespace

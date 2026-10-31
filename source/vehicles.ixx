@@ -892,26 +892,26 @@ namespace
     public:
         VehiclesFeatures()
         {
-            RegisterFeature(5, "PublishCopSirensFlag", &PublishCopSirensFlag);
-            RegisterFeature(11, "PublishHighFPSBikePhysicsFix", &PublishHighFPSBikePhysicsFix);
-            RegisterFeature(17, "PublishNoLiveryLimit", &PublishNoLiveryLimit);
-            RegisterFeature(22, "PublishPopupHeadlightsFlag", &PublishPopupHeadlightsFlag);
-            RegisterFeature(38, "PublishMovingSteeringWheelSupport", &PublishMovingSteeringWheelSupport);
-            RegisterFeature(39, "PublishShakingEngineBlock", &PublishShakingEngineBlock);
-            RegisterFeature(40, "PublishMovingPlaneParts", &PublishMovingPlaneParts);
-            RegisterFeature(50, "InstallBikeFeetFix", &InstallBikeFeetFix);
-            RegisterFeature(51, "InstallBikePhoneAnimsFix", &InstallBikePhoneAnimsFix);
-            RegisterFeature(57, "InstallCopSirensFlag", &InstallCopSirensFlag);
-            RegisterFeature(61, "InstallEpisodicVehicleSupport", &InstallEpisodicVehicleSupport);
-            RegisterFeature(62, "InstallEpisodicWeaponSupport", &InstallEpisodicWeaponSupport);
-            RegisterFeature(67, "InstallHighFPSBikePhysicsFix", &InstallHighFPSBikePhysicsFix);
-            RegisterFeature(82, "InstallNoLiveryLimit", &InstallNoLiveryLimit);
-            RegisterFeature(89, "InstallPoliceEpisodicWeaponSupport", &InstallPoliceEpisodicWeaponSupport);
-            RegisterFeature(90, "InstallPopupHeadlightsFlag", &InstallPopupHeadlightsFlag);
-            RegisterFeature(105, "InstallTBoGTHeliHeightLimit", &InstallTBoGTHeliHeightLimit);
-            RegisterFeature(121, "InstallMovingSteeringWheelSupport", &InstallMovingSteeringWheelSupport);
-            RegisterFeature(122, "InstallShakingEngineBlock", &InstallShakingEngineBlock);
-            RegisterFeature(123, "InstallMovingPlaneParts", &InstallMovingPlaneParts);
+            RegisterFeature({Phase::publish, "PublishCopSirensFlag", &PublishCopSirensFlag});
+            RegisterFeature({Phase::publish, "PublishHighFPSBikePhysicsFix", &PublishHighFPSBikePhysicsFix});
+            RegisterFeature({Phase::publish, "PublishNoLiveryLimit", &PublishNoLiveryLimit});
+            RegisterFeature({Phase::publish, "PublishPopupHeadlightsFlag", &PublishPopupHeadlightsFlag});
+            RegisterFeature({Phase::publish, "PublishMovingSteeringWheelSupport", &PublishMovingSteeringWheelSupport});
+            RegisterFeature({Phase::publish, "PublishShakingEngineBlock", &PublishShakingEngineBlock});
+            RegisterFeature({Phase::publish, "PublishMovingPlaneParts", &PublishMovingPlaneParts});
+            RegisterFeature({Phase::install, "InstallBikeFeetFix", &InstallBikeFeetFix});
+            RegisterFeature({Phase::install, "InstallBikePhoneAnimsFix", &InstallBikePhoneAnimsFix});
+            RegisterFeature({Phase::install, "InstallCopSirensFlag", &InstallCopSirensFlag, {"PublishCopSirensFlag"}});
+            RegisterFeature({Phase::install, "InstallEpisodicVehicleSupport", &InstallEpisodicVehicleSupport});
+            RegisterFeature({Phase::install, "InstallEpisodicWeaponSupport", &InstallEpisodicWeaponSupport});
+            RegisterFeature({Phase::install, "InstallHighFPSBikePhysicsFix", &InstallHighFPSBikePhysicsFix, {"PublishHighFPSBikePhysicsFix"}});
+            RegisterFeature({Phase::install, "InstallNoLiveryLimit", &InstallNoLiveryLimit, {"PublishNoLiveryLimit"}});
+            RegisterFeature({Phase::install, "InstallPoliceEpisodicWeaponSupport", &InstallPoliceEpisodicWeaponSupport});
+            RegisterFeature({Phase::install, "InstallPopupHeadlightsFlag", &InstallPopupHeadlightsFlag, {"PublishPopupHeadlightsFlag"}});
+            RegisterFeature({Phase::install, "InstallTBoGTHeliHeightLimit", &InstallTBoGTHeliHeightLimit});
+            RegisterFeature({Phase::install, "InstallMovingSteeringWheelSupport", &InstallMovingSteeringWheelSupport, {"PublishMovingSteeringWheelSupport"}});
+            RegisterFeature({Phase::install, "InstallShakingEngineBlock", &InstallShakingEngineBlock, {"PublishShakingEngineBlock"}});
+            RegisterFeature({Phase::install, "InstallMovingPlaneParts", &InstallMovingPlaneParts, {"PublishMovingPlaneParts"}});
         }
     } vehiclesFeatures;
 } // namespace

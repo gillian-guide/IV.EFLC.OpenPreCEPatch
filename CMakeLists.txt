@@ -57,6 +57,7 @@ set(OPCEP_CORE_SOURCES
     source/ini_import.cpp
     source/log.cpp
     source/menu.cpp
+    source/order.cpp
     source/patches.cpp
     source/pattern.cpp
     source/steam_achievements.cpp
@@ -139,7 +140,8 @@ if(CMAKE_SIZEOF_VOID_P EQUAL 4)
         add_executable(opcep_tests tests/test_main.cpp)
         opcep_configure_target(opcep_tests)
         target_compile_definitions(opcep_tests PRIVATE
-            OPCEP_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data/plugins")
+            OPCEP_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data/plugins"
+            OPCEP_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
         target_link_libraries(opcep_tests PRIVATE
             "$<LINK_LIBRARY:WHOLE_ARCHIVE,opcep_core>"
             version user32 shlwapi)

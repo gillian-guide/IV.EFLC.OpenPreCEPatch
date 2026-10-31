@@ -261,13 +261,13 @@ namespace
     public:
         MultiplayerFeatures()
         {
-            RegisterFeature(9, "PublishFreezeGunFix", &PublishFreezeGunFix);
-            RegisterFeature(35, "PublishFreezeCarFix", &PublishFreezeCarFix);
-            RegisterFeature(49, "InstallBetterMPSync", &InstallBetterMPSync);
-            RegisterFeature(65, "InstallFreezeGunFix", &InstallFreezeGunFix);
-            RegisterFeature(91, "InstallRemoveAllWeaponsProtection", &InstallRemoveAllWeaponsProtection);
-            RegisterFeature(106, "InstallTeleportProtection", &InstallTeleportProtection);
-            RegisterFeature(118, "InstallFreezeCarFix", &InstallFreezeCarFix);
+            RegisterFeature({Phase::publish, "PublishFreezeGunFix", &PublishFreezeGunFix});
+            RegisterFeature({Phase::publish, "PublishFreezeCarFix", &PublishFreezeCarFix});
+            RegisterFeature({Phase::install, "InstallBetterMPSync", &InstallBetterMPSync});
+            RegisterFeature({Phase::install, "InstallFreezeGunFix", &InstallFreezeGunFix, {"PublishFreezeGunFix"}});
+            RegisterFeature({Phase::install, "InstallRemoveAllWeaponsProtection", &InstallRemoveAllWeaponsProtection});
+            RegisterFeature({Phase::install, "InstallTeleportProtection", &InstallTeleportProtection});
+            RegisterFeature({Phase::install, "InstallFreezeCarFix", &InstallFreezeCarFix, {"PublishFreezeCarFix"}});
         }
     } multiplayerFeatures;
 } // namespace

@@ -2,35 +2,42 @@
 
 #include "feature_registry.hxx"
 
-#include <algorithm>
+#include "log.hxx"
 
 namespace opp
 {
     namespace
     {
-        std::vector<Feature>& Registry()
+        std::vector<FeatureRegistration>& Registry()
         {
-            static std::vector<Feature> registry;
+            static std::vector<FeatureRegistration> registry;
             return registry;
+        }
+
+        std::vector<Feature> ComputeOrder()
+        {
+            const OrderResult result = BuildOrder(Registry());
+            for (const std::string& diagnostic : result.diagnostics)
+                Log("%s", diagnostic.c_str());
+            if (!result.valid)
+            {
+                // A programming error (a cycle or a name the schedule does not
+                // know) must not install a partial, order-dependent patch set.
+                Log("install: refused, order invalid");
+                return {};
+            }
+            return result.order;
         }
     } // namespace
 
-    void RegisterFeature(int order, const char* name, void (*install)(PatchContext&))
+    void RegisterFeature(const FeatureRegistration& feature)
     {
-        Registry().push_back({order, name, install});
+        Registry().push_back(feature);
     }
 
     const std::vector<Feature>& RegisteredFeatures()
     {
-        static const bool sorted = []() {
-            std::vector<Feature>& registry = Registry();
-            std::sort(registry.begin(), registry.end(),
-                      [](const Feature& left, const Feature& right) {
-                          return left.order < right.order;
-                      });
-            return true;
-        }();
-        (void)sorted;
-        return Registry();
+        static const std::vector<Feature> order = ComputeOrder();
+        return order;
     }
 } // namespace opp

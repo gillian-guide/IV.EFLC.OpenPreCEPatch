@@ -553,8 +553,135 @@ namespace
     {
         const auto& features = opp::RegisteredFeatures();
         CHECK(features.size() == 122);
+
+        // Phases never go backwards: every publish precedes every install.
         for (size_t i = 1; i < features.size(); ++i)
-            CHECK(features[i - 1].order < features[i].order);
+            CHECK(static_cast<int>(features[i - 1].phase) <=
+                  static_cast<int>(features[i].phase));
+
+        // The effective order is the frozen shipping order (captured from the
+        // integer-ordered registry before this refactor). A reorder is a
+        // behaviour change and must update the golden in the same commit.
+        std::FILE* file = std::fopen(OPCEP_SOURCE_DIR "/tests/order_golden.txt", "rb");
+        CHECK(file != nullptr);
+        if (file)
+        {
+            std::vector<std::string> golden;
+            char line[256];
+            while (std::fgets(line, sizeof(line), file))
+            {
+                std::string name(line);
+                while (!name.empty() && (name.back() == '\n' || name.back() == '\r'))
+                    name.pop_back();
+                if (!name.empty())
+                    golden.push_back(name);
+            }
+            std::fclose(file);
+
+            CHECK(golden.size() == features.size());
+            for (size_t i = 0; i < features.size() && i < golden.size(); ++i)
+            {
+                if (features[i].name == golden[i])
+                    continue;
+                // One line per divergence, with the neighbour that proves where
+                // the sequence split.
+                std::fprintf(stderr,
+                             "order: #%zu expected %s, got %s (previous %s)\n", i,
+                             golden[i].c_str(), features[i].name,
+                             i ? features[i - 1].name : "-");
+                ++failures;
+                break;
+            }
+        }
+    }
+
+    void TestOrderDiagnostics()
+    {
+        const auto noop = [](opp::PatchContext&) {};
+        const auto find = [](const opp::OrderResult& result, const char* text) {
+            for (const std::string& diagnostic : result.diagnostics)
+            {
+                if (diagnostic.find(text) != std::string::npos)
+                    return true;
+            }
+            return false;
+        };
+
+        // A consistent two-arm graph orders by the shipping schedule.
+        {
+            const std::vector<opp::FeatureRegistration> features = {
+                {opp::Phase::install, "InstallSCOSignatureFix", noop},
+                {opp::Phase::install, "InstallLoadDLCs", noop},
+            };
+            const opp::OrderResult result = opp::BuildOrder(features);
+            CHECK(result.valid);
+            CHECK(result.order.size() == 2);
+            CHECK(result.order[0].name == std::string_view("InstallLoadDLCs"));
+            CHECK(result.order[1].name == std::string_view("InstallSCOSignatureFix"));
+
+            // Reversed registration must produce the same order.
+            const std::vector<opp::FeatureRegistration> reversed = {features[1], features[0]};
+            const opp::OrderResult again = opp::BuildOrder(reversed);
+            CHECK(again.order.size() == 2);
+            CHECK(again.order[0].name == std::string_view("InstallLoadDLCs"));
+        }
+
+        // A cycle fails closed and names the path.
+        {
+            std::vector<opp::FeatureRegistration> features = {
+                {opp::Phase::install, "InstallLoadDLCs", noop, {"InstallSCOSignatureFix"}},
+                {opp::Phase::install, "InstallSCOSignatureFix", noop, {"InstallLoadDLCs"}},
+            };
+            const opp::OrderResult result = opp::BuildOrder(features);
+            CHECK(!result.valid);
+            CHECK(result.order.empty());
+            CHECK(find(result, "cycle"));
+        }
+
+        // A missing `After` target is a soft edge; a missing `Requires` target
+        // skips the arm.
+        {
+            std::vector<opp::FeatureRegistration> features = {
+                {opp::Phase::install, "InstallLoadDLCs", noop, {"NotAnArm"}},
+                {opp::Phase::install, "InstallSCOSignatureFix", noop, {}, {"NotAnArm"}},
+            };
+            const opp::OrderResult result = opp::BuildOrder(features);
+            CHECK(result.valid);
+            CHECK(result.order.size() == 1);
+            CHECK(result.order[0].name == std::string_view("InstallLoadDLCs"));
+            CHECK(find(result, "requires NotAnArm (absent)"));
+        }
+
+        // A dependency that points backwards across phases is a programming
+        // error, not a silent reorder.
+        {
+            std::vector<opp::FeatureRegistration> features = {
+                {opp::Phase::publish, "PublishLoadDLCs", noop, {"InstallLoadDLCs"}},
+                {opp::Phase::install, "InstallLoadDLCs", noop},
+            };
+            const opp::OrderResult result = opp::BuildOrder(features);
+            CHECK(!result.valid);
+            CHECK(find(result, "phase inversion"));
+        }
+
+        // Duplicate and unknown names are refused, never deduplicated silently.
+        {
+            std::vector<opp::FeatureRegistration> features = {
+                {opp::Phase::install, "InstallLoadDLCs", noop},
+                {opp::Phase::install, "InstallLoadDLCs", noop},
+            };
+            const opp::OrderResult result = opp::BuildOrder(features);
+            CHECK(!result.valid);
+            CHECK(find(result, "duplicate feature"));
+        }
+        {
+            std::vector<opp::FeatureRegistration> features = {
+                {opp::Phase::install, "InstallNotInSchedule", noop},
+            };
+            const opp::OrderResult result = opp::BuildOrder(features);
+            CHECK(!result.valid);
+            CHECK(find(result, "not in the shipping schedule"));
+        }
     }
 
     void TestArmFailsafes()
@@ -711,6 +838,7 @@ int main()
     TestVehicleLights();
     TestMenu();
     TestFeatureOrder();
+    TestOrderDiagnostics();
     TestArmFailsafes();
     TestRelocateCalls();
     TestHooks();

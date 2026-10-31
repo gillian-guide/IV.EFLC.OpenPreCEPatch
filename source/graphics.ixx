@@ -900,31 +900,31 @@ namespace
     public:
         GraphicsFeatures()
         {
-            RegisterFeature(3, "PublishBuildingDynamicShadows", &PublishBuildingDynamicShadows);
-            RegisterFeature(6, "PublishDualVehicleHeadlights", &PublishDualVehicleHeadlights);
-            RegisterFeature(7, "PublishEmissiveLerpFix", &PublishEmissiveLerpFix);
-            RegisterFeature(32, "PublishCarPartsShadowFix", &PublishCarPartsShadowFix);
-            RegisterFeature(33, "PublishForceCarHeadlightShadows", &PublishForceCarHeadlightShadows);
-            RegisterFeature(36, "PublishCarDynamicShadowFix", &PublishCarDynamicShadowFix);
-            RegisterFeature(44, "PublishCutsceneFixes", &PublishCutsceneFixes);
-            RegisterFeature(53, "InstallBuildingAlphaFix", &InstallBuildingAlphaFix);
-            RegisterFeature(54, "InstallBuildingDynamicShadows", &InstallBuildingDynamicShadows);
-            RegisterFeature(58, "InstallDualVehicleHeadlights", &InstallDualVehicleHeadlights);
-            RegisterFeature(59, "InstallEmissiveLerpFix", &InstallEmissiveLerpFix);
-            RegisterFeature(64, "InstallForceShadowsOnObjects", &InstallForceShadowsOnObjects);
-            RegisterFeature(70, "InstallInfiniteCarBottomDistance", &InstallInfiniteCarBottomDistance);
-            RegisterFeature(94, "InstallRemoveStaticCarShadows", &InstallRemoveStaticCarShadows);
-            RegisterFeature(95, "InstallRemoveStaticCutsceneCarShadows", &InstallRemoveStaticCutsceneCarShadows);
-            RegisterFeature(97, "InstallReversingLightFix", &InstallReversingLightFix);
-            RegisterFeature(115, "InstallCarPartsShadowFix", &InstallCarPartsShadowFix);
-            RegisterFeature(116, "InstallForceCarHeadlightShadows", &InstallForceCarHeadlightShadows);
-            RegisterFeature(119, "InstallCarDynamicShadowFix", &InstallCarDynamicShadowFix);
-            RegisterFeature(127, "InstallCutsceneFixes", &InstallCutsceneFixes);
-            RegisterFeature(129, "InstallCarDecalsFix", &InstallCarDecalsFix);
-            RegisterFeature(131, "InstallCarDynamicShadowFixNoE", &InstallCarDynamicShadowFixNoE);
-            RegisterFeature(137, "InstallCarPartsShadowFixStandalone", &InstallCarPartsShadowFixStandalone);
-            RegisterFeature(140, "InstallNoImpostorHeightCutoff", &InstallNoImpostorHeightCutoff);
-            RegisterFeature(144, "InstallNoLODLightHeightCutoff", &InstallNoLODLightHeightCutoff);
+            RegisterFeature({Phase::publish, "PublishBuildingDynamicShadows", &PublishBuildingDynamicShadows});
+            RegisterFeature({Phase::publish, "PublishDualVehicleHeadlights", &PublishDualVehicleHeadlights});
+            RegisterFeature({Phase::publish, "PublishEmissiveLerpFix", &PublishEmissiveLerpFix});
+            RegisterFeature({Phase::publish, "PublishCarPartsShadowFix", &PublishCarPartsShadowFix});
+            RegisterFeature({Phase::publish, "PublishForceCarHeadlightShadows", &PublishForceCarHeadlightShadows});
+            RegisterFeature({Phase::publish, "PublishCarDynamicShadowFix", &PublishCarDynamicShadowFix});
+            RegisterFeature({Phase::publish, "PublishCutsceneFixes", &PublishCutsceneFixes});
+            RegisterFeature({Phase::install, "InstallBuildingAlphaFix", &InstallBuildingAlphaFix});
+            RegisterFeature({Phase::install, "InstallBuildingDynamicShadows", &InstallBuildingDynamicShadows, {"PublishBuildingDynamicShadows"}});
+            RegisterFeature({Phase::install, "InstallDualVehicleHeadlights", &InstallDualVehicleHeadlights, {"PublishDualVehicleHeadlights"}});
+            RegisterFeature({Phase::install, "InstallEmissiveLerpFix", &InstallEmissiveLerpFix, {"PublishEmissiveLerpFix"}});
+            RegisterFeature({Phase::install, "InstallForceShadowsOnObjects", &InstallForceShadowsOnObjects});
+            RegisterFeature({Phase::install, "InstallInfiniteCarBottomDistance", &InstallInfiniteCarBottomDistance});
+            RegisterFeature({Phase::install, "InstallRemoveStaticCarShadows", &InstallRemoveStaticCarShadows});
+            RegisterFeature({Phase::install, "InstallRemoveStaticCutsceneCarShadows", &InstallRemoveStaticCutsceneCarShadows});
+            RegisterFeature({Phase::install, "InstallReversingLightFix", &InstallReversingLightFix});
+            RegisterFeature({Phase::install, "InstallCarPartsShadowFix", &InstallCarPartsShadowFix, {"PublishCarPartsShadowFix"}});
+            RegisterFeature({Phase::install, "InstallForceCarHeadlightShadows", &InstallForceCarHeadlightShadows, {"PublishForceCarHeadlightShadows"}});
+            RegisterFeature({Phase::install, "InstallCarDynamicShadowFix", &InstallCarDynamicShadowFix, {"PublishCarDynamicShadowFix"}});
+            RegisterFeature({Phase::install, "InstallCutsceneFixes", &InstallCutsceneFixes, {"PublishCutsceneFixes"}});
+            RegisterFeature({Phase::install, "InstallCarDecalsFix", &InstallCarDecalsFix});
+            RegisterFeature({Phase::install, "InstallCarDynamicShadowFixNoE", &InstallCarDynamicShadowFixNoE});
+            RegisterFeature({Phase::install, "InstallCarPartsShadowFixStandalone", &InstallCarPartsShadowFixStandalone});
+            RegisterFeature({Phase::install, "InstallNoImpostorHeightCutoff", &InstallNoImpostorHeightCutoff});
+            RegisterFeature({Phase::install, "InstallNoLODLightHeightCutoff", &InstallNoLODLightHeightCutoff});
         }
     } graphicsFeatures;
 } // namespace

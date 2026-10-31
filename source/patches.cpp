@@ -31,7 +31,27 @@ namespace opp
     {
         PatchContext ctx{image, reinterpret_cast<uintptr_t>(image.base), build, config};
 
-        for (const Feature& feature : RegisteredFeatures())
+        const std::vector<Feature>& features = RegisteredFeatures();
+        size_t publishes = 0;
+        size_t installs = 0;
+        for (const Feature& feature : features)
+        {
+            if (feature.phase == Phase::publish)
+                ++publishes;
+            else if (feature.phase == Phase::install)
+                ++installs;
+        }
+        Log("order: %zu features (%zu publish, %zu install)", features.size(), publishes,
+            installs);
+        if (features.empty())
+        {
+            // ComputeOrder refuses an invalid graph; installing nothing is the
+            // fail-closed outcome and the reason is already in the log.
+            Log("install: no arms ran");
+            return;
+        }
+
+        for (const Feature& feature : features)
         {
             if (observer.begin != nullptr)
                 observer.begin(observer.user, feature.name);

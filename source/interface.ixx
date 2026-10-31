@@ -97,8 +97,8 @@ namespace
     public:
         InterfaceFeatures()
         {
-            RegisterFeature(86, "InstallPipeBombDropIconSupport", &InstallPipeBombDropIconSupport);
-            RegisterFeature(130, "InstallRestoreDeathMusic", &InstallRestoreDeathMusic);
+            RegisterFeature({Phase::install, "InstallPipeBombDropIconSupport", &InstallPipeBombDropIconSupport});
+            RegisterFeature({Phase::install, "InstallRestoreDeathMusic", &InstallRestoreDeathMusic});
         }
     } interfaceFeatures;
 } // namespace
