@@ -338,6 +338,79 @@ int Run()
 		CHECK(!ParseConfig("[Options]\nMouseFix\n", bad));
 		CHECK(ParseConfig("", bad));
 	}
+	{
+		// Lookup rules the reader shares with the shipped one: last value wins,
+		// duplicate section blocks merge, section/key case matters, values are
+		// trimmed but quotes are not stripped, and an empty value is stored.
+		ConfigDocument config;
+		CHECK(ParseConfig("[Options]\r\nA=1\r\nA=2\r\nA=3\r\n[Other]\r\nA=9\r\n"
+		                  "[Options]\r\nB=4\r\nC=\r\n D = 5 \r\ncasekey=1\r\nCaseKey=2\r\n"
+		                  "Q=\"text\"\r\n# comment\r\n; comment\r\n",
+		                  config));
+		CHECK(config.find("Options", "A")->value == "3");
+		CHECK(config.find("Other", "A")->value == "9");
+		CHECK(config.find("Options", "B")->value == "4"); // second block merged
+		CHECK(config.find("Options", "C") != nullptr);    // empty value is stored
+		CHECK(config.find("Options", "C")->value.empty());
+		CHECK(config.find("Options", "D")->value == "5"); // both sides trimmed
+		CHECK(config.find("Options", "casekey")->value == "1");
+		CHECK(config.find("Options", "CaseKey")->value == "2");
+		CHECK(config.find("Options", "Q")->value == "\"text\""); // quotes kept verbatim
+		CHECK(config.find("options", "A") == nullptr);           // section case matters
+		CHECK(config.find("Options", "Missing") == nullptr);
+
+		// A line that is not a comment and has no '=' rejects the whole file: the
+		// reader's strict grammar (the original dropped unknown lines instead).
+		ConfigDocument slash;
+		CHECK(!ParseConfig("[Options]\n// c\nA=1\n", slash));
+
+		// Missing file: not loaded, so the loader skips every install.
+		std::remove("readable_missing.ini");
+		ConfigDocument missing;
+		CHECK(!LoadConfig("readable_missing.ini", missing));
+		CHECK(missing.entries.empty());
+		INI<> generic("readable_missing.ini");
+		CHECK(!generic.loaded());
+	}
+	{
+		// The O(1) index must answer exactly like the reverse scan it replaced,
+		// including duplicate keys, and appended entries must still shadow the
+		// file (the per-option isolation and Patch7 compatibility paths append).
+		std::string text = "[Options]\n";
+		for (int i = 0; i < 2000; ++i)
+			text += "Key" + std::to_string(i % 700) + "=" + std::to_string(i) + "\n";
+		text += "[Tables]\n";
+		for (int i = 0; i < 500; ++i)
+			text += "Row" + std::to_string(i) + "=v" + std::to_string(i) + "\n";
+		ConfigDocument config;
+		CHECK(ParseConfig(text, config));
+		CHECK(config.indexed == config.entries.size());
+
+		const auto reference = [&config](std::string_view section, std::string_view key) {
+			for (std::size_t i = config.entries.size(); i > 0; --i)
+			{
+				if (config.entries[i - 1].section == section && config.entries[i - 1].key == key)
+					return static_cast<const ConfigEntry*>(&config.entries[i - 1]);
+			}
+			return static_cast<const ConfigEntry*>(nullptr);
+		};
+		for (int i = 0; i < 700; ++i)
+		{
+			const std::string key = "Key" + std::to_string(i);
+			const ConfigEntry* want = reference("Options", key);
+			CHECK(want != nullptr);
+			CHECK(config.find("Options", key) == want); // same (last) entry
+		}
+		CHECK(config.find("Options", "Missing") == nullptr);
+		CHECK(config.find("Tables", "Row499")->value == "v499");
+		CHECK(ReadIniString(config, "Tables", "Row0") != nullptr);
+
+		config.entries.push_back({"Options", "Key1", "forced"});
+		CHECK(config.find("Options", "Key1")->value == "forced");
+		ConfigDocument copy = config; // the dump's per-option isolation copies
+		CHECK(copy.find("Options", "Key1")->value == "forced");
+		CHECK(copy.find("Tables", "Row499")->value == "v499");
+	}
 
 	// ---- catalogue ---------------------------------------------------------
 	CHECK(ModelCatalogSize() == 38455);

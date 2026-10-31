@@ -13,6 +13,7 @@
 // default, and an option runs only when its value parses to exactly 1.
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -28,6 +29,18 @@ struct ConfigEntry
 struct ConfigDocument
 {
 	std::vector<ConfigEntry> entries;
+
+	// Open-addressed (section, key) index over `entries`: a slot holds the
+	// entry's index + 1, 0 is empty. Built once after the parse, so a lookup is
+	// O(1) instead of a reverse scan of all ~2,100 entries (the table loader
+	// alone asks ~2,000 times at start-up). Entries appended after the parse are
+	// not indexed; find() scans those first so an append still shadows the file.
+	std::vector<std::uint32_t> index;
+	std::size_t indexed = 0;
+
+	// Indexes the entries current at parse time. Never throws (on allocation
+	// failure the index stays empty and find() falls back to the reverse scan).
+	void BuildIndex() noexcept;
 
 	// Duplicate keys keep their file order; lookup is last-value-wins.
 	const ConfigEntry* find(std::string_view section, std::string_view key) const noexcept;

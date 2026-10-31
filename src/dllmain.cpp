@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 // ZolikaPatch ASI entry point.
 //
 // Everything runs synchronously from DllMain: the DRM has already rewritten the
@@ -679,13 +679,107 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID /*reserved*/)
 // ZolikaPatch.ini
 // ---------------------------------------------------------------------------
 
+namespace
+{
+// FNV-1a over the section and key, separated so ("a","bc") and ("ab","c") differ.
+std::uint64_t ConfigKeyHash(std::string_view section, std::string_view key) noexcept
+{
+	std::uint64_t hash = 0xcbf29ce484222325ull;
+	for (const char c : section)
+	{
+		hash ^= static_cast<unsigned char>(c);
+		hash *= 0x100000001b3ull;
+	}
+	hash ^= 0xFFu;
+	hash *= 0x100000001b3ull;
+	for (const char c : key)
+	{
+		hash ^= static_cast<unsigned char>(c);
+		hash *= 0x100000001b3ull;
+	}
+	return hash;
+}
+} // namespace
+
+void ConfigDocument::BuildIndex() noexcept
+{
+	index.clear();
+	indexed = 0;
+	try
+	{
+		if (entries.empty() || entries.size() > 0xFFFFFFF0u)
+			return;
+		std::size_t cells = 16;
+		while (cells < entries.size() * 2)
+			cells <<= 1;
+		index.assign(cells, 0);
+		const std::size_t mask = cells - 1;
+		for (std::size_t i = 0; i < entries.size(); ++i)
+		{
+			const ConfigEntry& entry = entries[i];
+			std::size_t slot = static_cast<std::size_t>(ConfigKeyHash(entry.section, entry.key)) & mask;
+			for (;;)
+			{
+				const std::uint32_t stored = index[slot];
+				if (stored == 0)
+				{
+					index[slot] = static_cast<std::uint32_t>(i + 1);
+					break;
+				}
+				const ConfigEntry& existing = entries[stored - 1];
+				if (existing.section == entry.section && existing.key == entry.key)
+				{
+					// The reader is last-value-wins: repoint the slot at the newer one.
+					index[slot] = static_cast<std::uint32_t>(i + 1);
+					break;
+				}
+				slot = (slot + 1) & mask;
+			}
+		}
+		indexed = entries.size();
+	}
+	catch (...)
+	{
+		// No index: find() falls back to the reverse scan (slower, same result).
+		index.clear();
+		indexed = 0;
+	}
+}
+
 const ConfigEntry* ConfigDocument::find(std::string_view section, std::string_view key) const noexcept
 {
-	// The original's map is last-value-wins, so walk backwards.
-	for (auto entry = entries.rbegin(); entry != entries.rend(); ++entry)
+	// Entries appended after the parse shadow the file (the Patch7 compatibility
+	// append and the write-set dump's per-option isolation) and are not indexed.
+	for (std::size_t i = entries.size(); i > indexed; --i)
 	{
-		if (entry->section == section && entry->key == key)
-			return &*entry;
+		const ConfigEntry& entry = entries[i - 1];
+		if (entry.section == section && entry.key == key)
+			return &entry;
+	}
+
+	if (!index.empty())
+	{
+		const std::size_t mask = index.size() - 1;
+		std::size_t slot = static_cast<std::size_t>(ConfigKeyHash(section, key)) & mask;
+		for (std::size_t probes = 0; probes < index.size(); ++probes)
+		{
+			const std::uint32_t stored = index[slot];
+			if (stored == 0)
+				break; // an empty slot ends the probe chain
+			const ConfigEntry& entry = entries[stored - 1];
+			if (entry.section == section && entry.key == key)
+				return &entry;
+			slot = (slot + 1) & mask;
+		}
+		return nullptr; // the index covers every parsed entry
+	}
+
+	// Hand-built documents and a failed index build: the original's reverse scan.
+	for (std::size_t i = indexed; i > 0; --i)
+	{
+		const ConfigEntry& entry = entries[i - 1];
+		if (entry.section == section && entry.key == key)
+			return &entry;
 	}
 	return nullptr;
 }
@@ -746,6 +840,7 @@ bool ParseConfig(std::string_view text, ConfigDocument& output) noexcept
 			parsed.entries.push_back({section, std::string(key), std::string(value)});
 		}
 
+		parsed.BuildIndex();
 		output = std::move(parsed);
 		return true;
 	}
@@ -1347,27 +1442,98 @@ std::string_view ModelNameFromHash(std::uint32_t hash) noexcept
 // vehicle light tables
 // ---------------------------------------------------------------------------
 
+namespace
+{
+// One row of the two 512-slot tables: "Car<N>Name" or "Car<N>Angle"/"Car<N>Offset",
+// N in 1..512, no leading zero. Anything else in the section is ignored, exactly
+// like the per-slot lookups this replaces.
+struct VehicleLightKey
+{
+	std::size_t slot; // 0-based
+	bool isName;
+};
+
+bool ParseVehicleLightKey(std::string_view key, std::string_view valueSuffix,
+                          VehicleLightKey& output) noexcept
+{
+	constexpr std::string_view kPrefix = "Car";
+	if (key.size() <= kPrefix.size() || key.substr(0, kPrefix.size()) != kPrefix)
+		return false;
+
+	std::size_t at = kPrefix.size();
+	const std::size_t digits = at;
+	std::size_t number = 0;
+	while (at < key.size() && key[at] >= '0' && key[at] <= '9')
+	{
+		number = number * 10 + static_cast<std::size_t>(key[at] - '0');
+		if (number > 512)
+			return false;
+		++at;
+	}
+	if (at == digits || number == 0)
+		return false;
+	if (at - digits > 1 && key[digits] == '0')
+		return false; // "Car01Name" never matched a slot before; keep that
+
+	const std::string_view rest = key.substr(at);
+	if (rest == "Name")
+		output = {number - 1, true};
+	else if (rest == valueSuffix)
+		output = {number - 1, false};
+	else
+		return false;
+	return true;
+}
+} // namespace
+
 PatchResult LoadVehicleLightTables(const ConfigDocument& config,
                                    VehicleLightTables& output) noexcept
 {
 	try
 	{
 		VehicleLightTables parsed;
-		const char* sections[] = {"PopupLightAngles", "HeadlightConeOffsets"};
-		const char* suffixes[] = {"Angle", "Offset"};
+		constexpr std::string_view kSections[] = {"PopupLightAngles", "HeadlightConeOffsets"};
+		constexpr std::string_view kValueSuffixes[] = {"Angle", "Offset"};
 
-		for (unsigned table = 0; table < std::size(sections); ++table)
+		// One pass over the document: the original asks 2 x 512 key pairs, but
+		// the section only ever holds those rows, so walk them once and keep the
+		// last entry per key (the reader's last-value-wins rule).
+		const ConfigEntry* names[std::size(kSections)][512]{};
+		const ConfigEntry* values[std::size(kSections)][512]{};
+		for (const ConfigEntry& entry : config.entries)
+		{
+			std::size_t table = std::size(kSections);
+			for (std::size_t candidate = 0; candidate < std::size(kSections); ++candidate)
+			{
+				if (entry.section == kSections[candidate])
+				{
+					table = candidate;
+					break;
+				}
+			}
+			if (table == std::size(kSections))
+				continue;
+
+			VehicleLightKey key{};
+			if (!ParseVehicleLightKey(entry.key, kValueSuffixes[table], key))
+				continue;
+			if (key.isName)
+				names[table][key.slot] = &entry;
+			else
+				values[table][key.slot] = &entry;
+		}
+
+		for (std::size_t table = 0; table < std::size(kSections); ++table)
 		{
 			auto& slots = table == 0 ? parsed.popupAngles : parsed.headlightOffsets;
-			for (unsigned i = 0; i < slots.size(); ++i)
+			for (std::size_t i = 0; i < slots.size(); ++i)
 			{
-				const auto prefix = "Car" + std::to_string(i + 1);
-				const ConfigEntry* name = config.find(sections[table], prefix + "Name");
-				if (!name || name->value.empty())
-					continue;
+				const ConfigEntry* name = names[table][i];
+				if (name == nullptr || name->value.empty())
+					continue; // no row (an empty name is not a row, as before)
 
-				const ConfigEntry* value = config.find(sections[table], prefix + suffixes[table]);
-				if (!value)
+				const ConfigEntry* value = values[table][i];
+				if (value == nullptr)
 					return {PatchResultCode::parse_error, "missing vehicle light value"};
 
 				char* end = nullptr;
