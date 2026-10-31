@@ -901,23 +901,39 @@ namespace opp::features
         {
             const GameImage& image = ctx.image;
 
+            // The shim's three targets are derived from the arm's own site scan
+            // and the lookup function's entry scan: the fail/ok blocks sit 0x4E
+            // and 6 bytes past the site on both gated builds (verified on
+            // 1.0.7.0 and 1.0.8.0), and the lookup window is unique (proved with
+            // tools/opcep_sigcheck.py). The build gate keeps both scans on the
+            // build the original patched.
+            constexpr uintptr_t kSuperLodFailDelta = 0x4E;
+            constexpr uintptr_t kSuperLodOkDelta = 0x6;
+            const auto findSite = [&image](const char* signature) -> uint8_t* {
+                auto pattern = Pattern(image, signature);
+                return pattern.size() > 0 ? pattern.get(0).get<uint8_t>() : nullptr;
+            };
+
             if (ctx.build == GameBuild::v1070)
             {
-                // Entry points the shim jumps to, recovered per build: the fail
-                // block (site+0x4E), the ok block (site+0x6) and the LOD lookup
-                // function. No unique prologue is verified for the lookup yet.
-                zpatch_super_lod_fail = AddressOf(image.base + 0x4A3D37u);
-                zpatch_super_lod_ok = AddressOf(image.base + 0x4A3CEFu);
-                zpatch_super_lod_lookup = AddressOf(image.base + 0x58AAE0u);
+                if (auto* site = findSite("F6 40 ?? ?? 74 ?? 85 ED 0F 85 ?? ?? ?? ?? 55 6A ?? E8 ?? ?? ?? ?? 8B F8"))
+                {
+                    zpatch_super_lod_fail = AddressOf(site + kSuperLodFailDelta);
+                    zpatch_super_lod_ok = AddressOf(site + kSuperLodOkDelta);
+                }
+                if (auto* lookup = findSite("8B 44 24 04 89 44 24 04 66 A1 44 C2 F2 00 66 85 C0 76 3E 8B"))
+                    zpatch_super_lod_lookup = AddressOf(lookup);
             }
 
             if (ctx.build == GameBuild::v1080)
             {
-                // Same three entry points on 1.0.8.0: fail = site+0x4E,
-                // ok = site+0x6, and the lookup function's own RVA.
-                zpatch_super_lod_fail = AddressOf(image.base + 0x540E67u);
-                zpatch_super_lod_ok = AddressOf(image.base + 0x540E1Fu);
-                zpatch_super_lod_lookup = AddressOf(image.base + 0x4DD2D0u);
+                if (auto* site = findSite("F6 40 ?? ?? 74 ?? 85 ED 0F 85 ?? ?? ?? ?? 55 6A ?? E8 ?? ?? ?? ?? 8B F8"))
+                {
+                    zpatch_super_lod_fail = AddressOf(site + kSuperLodFailDelta);
+                    zpatch_super_lod_ok = AddressOf(site + kSuperLodOkDelta);
+                }
+                if (auto* lookup = findSite("8B 44 24 04 89 44 24 04 66 A1 E0 E9 F3 00 66 85 C0 76 3E 8B"))
+                    zpatch_super_lod_lookup = AddressOf(lookup);
             }
         }
 

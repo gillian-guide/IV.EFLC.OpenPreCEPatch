@@ -49,6 +49,14 @@ namespace opp::features
             constexpr uintptr_t kDlcCallbackDelta = 0x8C;
             const GameImage& image = ctx.image;
 
+            // The two helpers the discovery loop calls are entries too, so the
+            // publish scans them (unique 24/16-byte windows, proved with
+            // tools/opcep_sigcheck.py) and stores the RVA the body rebases.
+            const auto AsRva = [&ctx](const void* address) {
+                return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(address) -
+                                             ctx.gameBase);
+            };
+
             const auto publishCallback = [&ctx](hook::pattern& pattern) {
                 if (pattern.size() == 0)
                     return;
@@ -61,24 +69,30 @@ namespace opp::features
             {
                 if (auto pattern = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8"); pattern.size() > 0)
                     publishCallback(pattern);
-                DlcRegisterRva() = 0x004136E0u;  // 1.0.6.0 register helper
-                DlcApplyRva() = 0x00414080u;     // 1.0.6.0 apply helper
+                if (auto pattern = Pattern(image, "81 EC 0C 02 00 00 A1 40 2F F4 00 33 C4 89 84 24 08 02 00 00 53 55 56 57"); pattern.size() > 0)
+                    DlcRegisterRva() = AsRva(pattern.get(0).get<uint8_t>());
+                if (auto pattern = Pattern(image, "51 53 8B D9 0F B7 8B 50 01 00 00 55 56 33 ED 85"); pattern.size() > 0)
+                    DlcApplyRva() = AsRva(pattern.get(0).get<uint8_t>());
             }
 
             if (ctx.build == GameBuild::v1070)
             {
                 if (auto pattern = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E 5B"); pattern.size() > 0)
                     publishCallback(pattern);
-                DlcRegisterRva() = 0x00413480u;  // 1.0.7.0 register helper
-                DlcApplyRva() = 0x00413E20u;     // 1.0.7.0 apply helper
+                if (auto pattern = Pattern(image, "81 EC 0C 02 00 00 A1 40 3F F4 00 33 C4 89 84 24 08 02 00 00 53 55 56 57"); pattern.size() > 0)
+                    DlcRegisterRva() = AsRva(pattern.get(0).get<uint8_t>());
+                if (auto pattern = Pattern(image, "51 53 8B D9 0F B7 8B 50 01 00 00 55 56 33 ED 85"); pattern.size() > 0)
+                    DlcApplyRva() = AsRva(pattern.get(0).get<uint8_t>());
             }
 
             if (ctx.build == GameBuild::v1080)
             {
                 if (auto pattern = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6"); pattern.size() > 0)
                     publishCallback(pattern);
-                DlcRegisterRva() = 0x0048F440u;  // 1.0.8.0 register helper
-                DlcApplyRva() = 0x0048FE00u;     // 1.0.8.0 apply helper
+                if (auto pattern = Pattern(image, "81 EC 0C 02 00 00 A1 40 2C F6 00 33 C4 89 84 24 08 02 00 00 53 55 56 8B"); pattern.size() > 0)
+                    DlcRegisterRva() = AsRva(pattern.get(0).get<uint8_t>());
+                if (auto pattern = Pattern(image, "51 53 8B D9 0F B7 8B 50 01 00 00 55 56 33 ED 85"); pattern.size() > 0)
+                    DlcApplyRva() = AsRva(pattern.get(0).get<uint8_t>());
             }
         }
 
