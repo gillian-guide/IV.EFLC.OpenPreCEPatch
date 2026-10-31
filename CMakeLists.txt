@@ -42,6 +42,10 @@ endforeach()
 # paths and definitions; no target links both.
 set(ZP_MODULE_UNITS
   source/common.ixx
+  source/game.ixx
+  source/patch.ixx
+  source/log.ixx
+  source/config.ixx
   source/useless_checks.ixx
   source/catalogue.ixx
   source/launcher.ixx)
