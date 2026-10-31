@@ -86,7 +86,7 @@ CONVERTED_BODIES = [
      "compiled port of sub_100241E0: write the three 8-byte resume windows "
      "(kResumeWindows) selected by the both-axes-zero predicate; the window bytes are "
      "named and static_assert-pinned in the source"),
-    ("ApplySkipLauncher", 0x10045CE0, "0x10045CE0", "src/xlive/xliveless.cpp",
+    ("ApplySkipLauncher", 0x10045CE0, "0x10045CE0", "source/xliveless.cpp",
      "compiled port of the original launcher pass 0x10045CE0 plus the DFA (0x10004850) "
      "and ROM (0x10004620) installers; the recovered rows are byte arrays in the source "
      "and the stages are covered by the native tests"),

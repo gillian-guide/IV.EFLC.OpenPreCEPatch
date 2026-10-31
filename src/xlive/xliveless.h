@@ -133,10 +133,11 @@ constexpr bool HasStage(SkipLauncherStage set, SkipLauncherStage stage) noexcept
 
 // Applies the patches selected by `stages` to `image`. Missing signatures are
 // skipped, never guessed, exactly like the original; the hook stages need
-// `resolve` and do not run without it.
+// `resolve` and do not run without it. Every caller names its stages: the old
+// `= all` default cannot be repeated in the module's exported declaration
+// (MSVC C2572 in the implementation unit), and no caller relied on it.
 PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* resolver_user,
-                              SkipLauncherReport& report,
-                              SkipLauncherStage stages = SkipLauncherStage::all) noexcept;
+                              SkipLauncherReport& report, SkipLauncherStage stages) noexcept;
 
 // Windows hook bodies; the resolver feeds ApplySkipLauncher and the ROM service
 // starts from rom_reset (the original 0x10004570 -> 0x100043D0 path).

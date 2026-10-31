@@ -43,7 +43,7 @@ void ApplyNewSavesCompatibility(const PatchContext& ctx);
 void ApplyRemoveRGSCLoginRequirement(const PatchContext& ctx);
 void ApplySavegameFix(const PatchContext& ctx);
 void ApplySkipIntro(const PatchContext& ctx);
-void ApplySkipLauncher(const PatchContext& ctx);
+void ApplySkipLauncherOption(const PatchContext& ctx);
 void ApplySkipMenu(const PatchContext& ctx);
 void ApplyBenchmarkFix(const PatchContext& ctx);
 void ApplyRemoveGFWLUpdatePopup(const PatchContext& ctx);
@@ -567,7 +567,7 @@ void ApplySkipIntro(const PatchContext& ctx)
 	}
 }
 
-void ApplySkipLauncher(const PatchContext& ctx)
+void ApplySkipLauncherOption(const PatchContext& ctx)
 {
 	Trace("SkipLauncher");
 	// SkipLauncher: 7 literals

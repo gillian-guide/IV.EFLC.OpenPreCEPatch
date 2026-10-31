@@ -1,30 +1,27 @@
-#include "pch.h"
-// SkipLauncher: XLivelessAddon's launcher/DRM bypass as reimplemented by
-// ZolikaPatch 7.65. The tables follow the original handlers' order: the main
-// signature table (0x10045CE0), the two multi-hit collectors, the DFA file-API
-// hooks (0x10004850) and the ROM message-window patches (0x10004620).
-#include "xliveless.h"
+// zp.xliveless implementation: the recovered tables, the launcher/DLC installers
+// and the reimplemented hook bodies (the Win32 half is the shipped mod's
+// CreateFile/ROM-window path).
 
-#include <cstdint>
-#include <cstring>
-#include <vector>
+module;
 
-#include "injector/injector.hpp"
-
-#include "Hooking.Patterns.h"
+#include "common.hxx"
 #include "common.h"
+#include "patches.h"
+#include "xlive/xliveless.h"
 
 #if defined(_WIN32)
-#include <windows.h>
-
 #include <atomic>
 #endif
+
+module zp.xliveless;
+
+import zp.common;
+import zp.patch;
 
 namespace
 {
 constexpr std::uint8_t kNopByte = 0x90;
 constexpr std::uint8_t kJumpOpcode = 0xE9;
-constexpr std::size_t kDwordLength = 4;
 constexpr std::uint16_t kCollectorStubLength = 4;
 
 template <typename T, std::size_t N>

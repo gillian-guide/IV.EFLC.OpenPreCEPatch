@@ -656,7 +656,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 	ApplySMPA60Fix(ctx);
 	ApplySavegameFix(ctx);
 	ApplySkipIntro(ctx);
-	ApplySkipLauncher(ctx);
+	ApplySkipLauncherOption(ctx);
 	ApplySkipMenu(ctx);
 	ApplySpeedupBugFix(ctx);
 	ApplyTBoGTHeliHeightLimit(ctx);

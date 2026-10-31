@@ -64,10 +64,17 @@ set(ZP_MODULE_UNITS
   source/misc.ixx
 )
 
+# ASI-only units: the SkipLauncher implementation is the shipped launcher stage
+# (32-bit hook bodies, a naked ROM body), so it belongs to the ASI-side module
+# library only. The write-set dump links its own stand-ins
+# (tests/stub_bodies.cpp) and must not see this unit.
+set(ZP_ASI_MODULE_UNITS
+  source/xliveless.ixx
+)
+
 set(ZP_SOURCES
   ${ZP_EXT_PATTERNS}/Hooking.Patterns.cpp
   src/catalogue_data.cpp
-  src/xlive/xliveless.cpp
 )
 
 # The shared runtime support library. EXCLUDE_FROM_ALL: the write-set dump
@@ -88,8 +95,9 @@ set_target_properties(zp PROPERTIES CXX_EXTENSIONS OFF)
 # files and propagate their BMIs to the consumers.
 add_library(zp_modules STATIC)
 set_target_properties(zp_modules PROPERTIES CXX_SCAN_FOR_MODULES ON CXX_EXTENSIONS OFF)
-target_sources(zp_modules PUBLIC FILE_SET CXX_MODULES FILES ${ZP_MODULE_UNITS})
-target_sources(zp_modules PRIVATE source/hook_bodies.cpp)
+target_sources(zp_modules PUBLIC FILE_SET CXX_MODULES FILES ${ZP_MODULE_UNITS}
+                                                        ${ZP_ASI_MODULE_UNITS})
+target_sources(zp_modules PRIVATE source/hook_bodies.cpp source/xliveless.cpp)
 target_include_directories(zp_modules PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/source
                                               ${CMAKE_CURRENT_SOURCE_DIR}/src
                                               ${ZP_EXT_INJECTOR}
