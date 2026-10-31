@@ -27,6 +27,7 @@ obj/
 CMakeUserPresets.json
 
 # Logs and local config
+opcep_legacy_log/
 *.log
 .env
 data/plugins/IV.EFLC.OpenPreCEPatch.local.ini

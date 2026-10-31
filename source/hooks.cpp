@@ -609,7 +609,7 @@ extern "C" char abi_death_music_install() noexcept
         auto* site = reinterpret_cast<uint8_t*>(
             static_cast<uintptr_t>(zpatch_death_music_site) + 1);
         injector::WriteMemory<uint8_t>(  // push imm8
-            site, static_cast<uint8_t>(std::rand() % 5 + 1), true);
+            injector::raw_ptr(site), static_cast<uint8_t>(std::rand() % 5 + 1), true);
     }
     return 1;
 }
@@ -623,15 +623,15 @@ namespace
 // the result is ignored and the write happens anyway (an unmapped target faults).
 void wp_byte(void* address, uint8_t value) noexcept
 {
-    injector::WriteMemory<uint8_t>(address, value, true);  // byte store
+    injector::WriteMemory<uint8_t>(injector::raw_ptr(address), value, true);  // byte store
 }
 void wp_dword(void* address, uint32_t value) noexcept
 {
-    injector::WriteMemory<uint32_t>(address, value, true);  // dword store
+    injector::WriteMemory<uint32_t>(injector::raw_ptr(address), value, true);  // dword store
 }
 void wp_word(void* address, uint16_t value) noexcept
 {
-    injector::WriteMemory<uint16_t>(address, value, true);  // word store
+    injector::WriteMemory<uint16_t>(injector::raw_ptr(address), value, true);  // word store
 }
 const uint8_t* scan_game(std::string_view signature) noexcept
 {

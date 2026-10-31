@@ -259,6 +259,16 @@ namespace opp
         injector::MakeNOP(injector::raw_ptr(const_cast<void*>(site)), length, true);
     }
 
+    // A `ret` (C3) or `ret N` (C2 imm16) through the same guarded write as the
+    // other helpers. injector::MakeRET stores the opcode and the immediate at
+    // their exact widths, so the encoded instruction is one or three bytes.
+    inline void MakeReturn(PatchContext& ctx, const void* site, uint16_t pop = 0)
+    {
+        if (!SiteWritable(ctx, site, pop ? 3u : 1u))
+            return;
+        injector::MakeRET(injector::raw_ptr(const_cast<void*>(site)), pop, true);
+    }
+
     inline void WriteRaw(PatchContext& ctx, const void* site, const void* data, size_t length)
     {
         if (!SiteWritable(ctx, site, length))

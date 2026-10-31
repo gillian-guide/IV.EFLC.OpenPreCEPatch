@@ -260,13 +260,8 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                // `ret 8`: C2 08 00. injector::MakeRET is not used here: its
-                // opcode store deduces a 4-byte int and would zero the fourth
-                // byte (a vendored-header defect, recorded in findings.md).
-                constexpr opp::ops::InstructionWindow<3> kReturnPop8{
-                    {0xC2, 0x08, 0x00}};
-                static_assert(opp::ops::PackedLowWord(kReturnPop8) == 0x08C2u);
-                WriteRaw(ctx, match, kReturnPop8.bytes.data(), kReturnPop8.Size());
+                // `ret 8`: C2 08 00, through the guarded helper.
+                MakeReturn(ctx, match, 8);
             }
         }
 

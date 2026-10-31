@@ -1017,6 +1017,27 @@ namespace
         CHECK(AbiByName("abi_spawns_case_0x24") != nullptr);
     }
 
+    void TestMakeReturn()
+    {
+        // injector::MakeRET must write exactly the instruction: one byte for
+        // `ret`, three for `ret N`. It used to pass the opcode as an int, which
+        // stored four bytes and clobbered the bytes after the site.
+        uint8_t buffer[8];
+        std::memset(buffer, 0xCC, sizeof(buffer));
+        injector::MakeRET(buffer, 0, true);
+        CHECK(buffer[0] == 0xC3);
+        CHECK(buffer[1] == 0xCC);
+        CHECK(buffer[2] == 0xCC);
+
+        std::memset(buffer, 0xCC, sizeof(buffer));
+        injector::MakeRET(buffer, 8, true);
+        CHECK(buffer[0] == 0xC2);
+        CHECK(buffer[1] == 0x08);
+        CHECK(buffer[2] == 0x00);
+        CHECK(buffer[3] == 0xCC);
+        CHECK(buffer[4] == 0xCC);
+    }
+
     void TestHooks()
     {
         CHECK(HookBodyCount() > 100);
@@ -1050,6 +1071,7 @@ int main()
     TestArmFailsafes();
     TestLauncherNamePatch();
     TestRelocateCalls();
+    TestMakeReturn();
     TestHookBodyRegistry();
     TestHooks();
 
