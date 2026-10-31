@@ -154,6 +154,7 @@ def scan(path: pathlib.Path, rel: str):
     asm_exact = False
     function_exact = False
     enum_pending = False
+    assert_inside = False
     comment_above = ""
 
     for number, raw in enumerate(lines, 1):
@@ -172,6 +173,8 @@ def scan(path: pathlib.Path, rel: str):
         if asm_inside is not None and brace < asm_inside:
             asm_inside = None
 
+        if ASSERT.match(code):
+            assert_inside = True
         opens = code.count("{")
         closes = code.count("}")
         net = opens - closes
@@ -206,7 +209,7 @@ def scan(path: pathlib.Path, rel: str):
                 named = True
             if NAMED_DECL.match(code):
                 named = True
-            if ASSERT.match(code):
+            if ASSERT.match(code) or assert_inside:
                 named = True
             if MACRO.match(code):
                 named = True
@@ -228,6 +231,8 @@ def scan(path: pathlib.Path, rel: str):
             })
 
         brace += net
+        if assert_inside and ");" in code:
+            assert_inside = False
         comment_above = comment.strip() if comment else ""
     return findings
 

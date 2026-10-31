@@ -6491,6 +6491,27 @@ struct ResumeWindow final
 	std::array<std::uint8_t, 8> otherwise;
 };
 
+// The recovered byte sequences (research 07 §3.1.1, original sub_100241E0).
+// The body verifier reports this compiled replacement as INFO; these asserts are
+// its byte proof for the data it writes, so a change is a compile error.
+constexpr bool BytesEqual(const std::array<std::uint8_t, 8>& left,
+                          const std::array<std::uint8_t, 8>& right) noexcept
+{
+	for (std::size_t i = 0; i < left.size(); ++i)
+		if (left[i] != right[i]) return false;
+	return true;
+}
+static_assert(BytesEqual(kPitchStore, std::array<std::uint8_t, 8>{
+                                          0xF3, 0x0F, 0x11, 0x86, 0x44, 0x01, 0x00, 0x00}));
+static_assert(BytesEqual(kYawStore, std::array<std::uint8_t, 8>{
+                                        0xF3, 0x0F, 0x11, 0x8E, 0x48, 0x01, 0x00, 0x00}));
+static_assert(BytesEqual(kEightNops, std::array<std::uint8_t, 8>{
+                                         kNop, kNop, kNop, kNop, kNop, kNop, kNop, kNop}));
+static_assert(BytesEqual(kYawFpuStore, std::array<std::uint8_t, 8>{
+                                           0xD9, 0x9E, 0x48, 0x01, 0x00, 0x00, 0x8B, 0x5C}));
+static_assert(BytesEqual(kYawFpuNops, std::array<std::uint8_t, 8>{
+                                          0xDD, 0xD8, kNop, kNop, kNop, kNop, 0x8B, 0x5C}));
+
 constexpr ResumeWindow kResumeWindows[] = {
     {kPitchWindow, kPitchStore, kEightNops},
     {kYawWindow, kYawStore, kEightNops},
