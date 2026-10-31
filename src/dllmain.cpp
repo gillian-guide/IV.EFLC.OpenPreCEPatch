@@ -153,25 +153,17 @@ constexpr std::uint32_t kSaveMagic = static_cast<std::uint32_t>('S') |
                                      (static_cast<std::uint32_t>('E') << 24);
 static_assert(kSaveMagic == 0x45564153u);
 
-struct LauncherPatch
-{
-	GameBuild build;
-	std::uint32_t first;
-	std::uint32_t second;
-};
-
-// The two sites LaunchWithPlayGTAIV rewrites per build.
-constexpr LauncherPatch kLauncherPatches[] = {
-	{GameBuild::v1000, 10421308u, 10025484u},
-	{GameBuild::v1040, 10396036u, 10344608u},
-	{GameBuild::v1060, 10456896u, 11129048u},
-	{GameBuild::v1070, 10461040u, 11133208u},
-	{GameBuild::v1080, 10815736u, 10855908u},
-};
-
 // "PlayGTAIV.exe" followed by the two zero bytes the original leaves in place.
 constexpr char kLauncherNamePatch[16] = {'p', 'l', 'a', 'y', 'G', 'T', 'A', 'I',
                                          'V', '.', 'e', 'x', 'e', '\0', 'e', '\0'};
+
+// The two launch slots hold the ASCII text "LaunchGTAIV.exe\0". One 16-byte
+// scan finds them on the five builds the original's table covered; the gate is
+// load-bearing (1.0.0.4 and 1.0.1.0 also match twice and EFLC once, and the
+// original never wrote those builds). Provenance: research 11 §3.4, verified
+// on all eleven game images on disk.
+constexpr char kLauncherSlotSignature[] =
+    "4C 61 75 6E 63 68 47 54 41 49 56 2E 65 78 65 00";
 
 bool bDFAInstalled = false;
 
@@ -503,30 +495,36 @@ bool IsPlayGTAIVRunning()
 	return FindGameProcess() != 0;
 }
 
-void ApplyLaunchWithPlayGTAIV(GameBuild build, std::uint8_t* moduleBase, INI<>& ini)
+void ApplyLaunchWithPlayGTAIV(GameBuild build, GameImage image, INI<>& ini)
 {
 	if (!Option(ini, "LaunchWithPlayGTAIV", "0"))
 		return;
 	if (!IsPlayGTAIVRunning())
 		return;
 
-	std::uint32_t sites[2]{};
-	for (const LauncherPatch& patch : kLauncherPatches)
+	// The original's table covers exactly these five builds; keep that gate
+	// verbatim (the scan also hits builds the original never touched).
+	switch (build)
 	{
-		if (patch.build == build)
-		{
-			sites[0] = patch.first;
-			sites[1] = patch.second;
-			break;
-		}
-	}
-	if (!sites[0])
+	case GameBuild::v1000:
+	case GameBuild::v1040:
+	case GameBuild::v1060:
+	case GameBuild::v1070:
+	case GameBuild::v1080:
+		break;
+	default:
 		return;
+	}
 
-	// The two slots hold the launcher name this arm rewrites.
-	for (const std::uint32_t site : sites)
+	// Collect every hit before writing: the write destroys the string a re-scan
+	// would need (research 11 §3.4).
+	std::vector<const std::uint8_t*> sites;
+	if (FindAllPatterns({image.base, image.size}, kLauncherSlotSignature, sites) == 0)
+		return;
+	for (const std::uint8_t* site : sites)
 	{
-		injector::WriteMemoryRaw(moduleBase + site, const_cast<char*>(kLauncherNamePatch),
+		injector::WriteMemoryRaw(const_cast<std::uint8_t*>(site),
+		                         const_cast<char*>(kLauncherNamePatch),
 		                         sizeof(kLauncherNamePatch), true); // launcher name
 	}
 }
@@ -639,7 +637,7 @@ void SetStuff()
 	TraceBoot("patchgame");
 	PatchGame(build, gameImage, config);
 
-	ApplyLaunchWithPlayGTAIV(build, moduleBase, ini);
+	ApplyLaunchWithPlayGTAIV(build, GameImage{moduleBase, nt->OptionalHeader.SizeOfImage}, ini);
 }
 } // namespace
 
