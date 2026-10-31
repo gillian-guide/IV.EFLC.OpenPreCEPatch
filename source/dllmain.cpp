@@ -21,8 +21,8 @@
 #include <fstream>
 #include <mutex>
 
-import common;
-import settings;
+import opp.common;
+import opp.settings;
 
 namespace
 {

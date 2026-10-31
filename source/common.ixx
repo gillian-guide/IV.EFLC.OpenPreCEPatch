@@ -7,7 +7,7 @@ module;
 
 #include "common.hxx"
 
-export module common;
+export module opp.common;
 
 export using ::opp::GameBuild;
 export using ::opp::GameImage;

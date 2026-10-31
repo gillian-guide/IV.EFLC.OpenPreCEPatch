@@ -18,10 +18,10 @@ module;
 #include "opcodes.hxx"
 #include "steam_achievements.hxx"
 
-export module compatibility;
+export module opp.compatibility;
 
-import common;
-import settings;
+import opp.common;
+import opp.settings;
 
 namespace opp::features
 {

@@ -18,10 +18,10 @@ module;
 #include "opcodes.hxx"
 #include "log.hxx"
 
-export module graphics;
+export module opp.graphics;
 
-import common;
-import settings;
+import opp.common;
+import opp.settings;
 
 namespace opp::features
 {

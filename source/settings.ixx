@@ -11,7 +11,7 @@ module;
 #include "fusionfix_compat.hxx"
 #include "ini_import.hxx"
 
-export module settings;
+export module opp.settings;
 
 export using ::opp::Config;
 export using ::opp::EnsureConfigFile;

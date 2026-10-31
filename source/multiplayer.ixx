@@ -17,10 +17,10 @@ module;
 #include "helpers.hxx"
 #include "opcodes.hxx"
 
-export module multiplayer;
+export module opp.multiplayer;
 
-import common;
-import settings;
+import opp.common;
+import opp.settings;
 
 namespace opp::features
 {

@@ -16,10 +16,10 @@ module;
 #include "feature_registry.hxx"
 #include "helpers.hxx"
 
-export module interface;
+export module opp.interface;
 
-import common;
-import settings;
+import opp.common;
+import opp.settings;
 
 namespace opp::features
 {

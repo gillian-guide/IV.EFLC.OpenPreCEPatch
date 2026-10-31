@@ -17,10 +17,10 @@ module;
 #include "helpers.hxx"
 #include "opcodes.hxx"
 
-export module performance;
+export module opp.performance;
 
-import common;
-import settings;
+import opp.common;
+import opp.settings;
 
 namespace opp::features
 {
