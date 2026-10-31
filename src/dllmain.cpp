@@ -6196,12 +6196,82 @@ extern "C" void abi_mf_angle_step();
 
 namespace
 {
+// The game stores the mouse axes as 1/128 fixed point (2^-7); multiplying by the
+// scale is exact, so `v * scale == 0.0` is `v == 0`.
+constexpr double kAxisScale = 0.0078125;
+
+// Vehicle fields the resume windows store to (the original's +0x144 / +0x148).
+constexpr std::size_t kResumePitchOffset = 0x144;
+constexpr std::size_t kResumeYawOffset = kResumePitchOffset + sizeof(float);
+static_assert(kResumeYawOffset == 0x148);
+
+// The three windows are resume-relative offsets (resume = the MouseFix handler's
+// published match+0x756, dword_10159C40), not function-relative: they are stable
+// only because the shape after the hook point is build-invariant.
+constexpr std::size_t kPitchWindow = 52;
+constexpr std::size_t kYawWindow = 94;
+constexpr std::size_t kYawFpuWindow = 107;
+
+// `movss dword ptr [esi+disp], xmmN` = F3 0F 11 /r <disp32>. /r 0x86 is xmm0,
+// 0x8E is xmm1; both use the disp32 form (mod = 10, r/m = 110b = esi).
+constexpr std::array<std::uint8_t, 8> MovssToEsi(std::uint8_t modrm, std::size_t field) noexcept
+{
+	return {0xF3,
+	        0x0F,
+	        0x11,
+	        modrm,
+	        static_cast<std::uint8_t>(field & 0xFF),
+	        static_cast<std::uint8_t>((field >> 8) & 0xFF),
+	        static_cast<std::uint8_t>((field >> 16) & 0xFF),
+	        static_cast<std::uint8_t>((field >> 24) & 0xFF)};
+}
+
+// 8x nop: the window's disabled form.
+constexpr std::uint8_t kNop = 0x90;
+constexpr std::array<std::uint8_t, 8> kEightNops = {kNop, kNop, kNop, kNop,
+                                                    kNop, kNop, kNop, kNop};
+
+// Window 0: store pitch from xmm0 (8 bytes exactly: prefix, opcode, modrm, disp32).
+constexpr std::array<std::uint8_t, 8> kPitchStore = MovssToEsi(0x86, kResumePitchOffset);
+// Window 1: store yaw from xmm1.
+constexpr std::array<std::uint8_t, 8> kYawStore = MovssToEsi(0x8E, kResumeYawOffset);
+// Window 2: `fstp dword ptr [esi+148h]` (D9 9E + disp32) then `8B 5C`, the head of
+// the next instruction, which never changes.
+constexpr std::array<std::uint8_t, 8> kYawFpuStore = {
+    0xD9,
+    0x9E,
+    static_cast<std::uint8_t>(kResumeYawOffset & 0xFF),
+    static_cast<std::uint8_t>((kResumeYawOffset >> 8) & 0xFF),
+    static_cast<std::uint8_t>((kResumeYawOffset >> 16) & 0xFF),
+    static_cast<std::uint8_t>((kResumeYawOffset >> 24) & 0xFF),
+    0x8B,
+    0x5C};
+// Window 2's disabled form is NOT nop fill: DD D8 is `fstp st(0)`. The enclosing
+// routine pushes one x87 value and pops it later, so the pop must stay or the x87
+// stack overflows after eight calls. Bytes 6-7 are the preserved next instruction.
+constexpr std::array<std::uint8_t, 8> kYawFpuNops = {0xDD, 0xD8, kNop, kNop,
+                                                     kNop, kNop, 0x8B, 0x5C};
+
+struct ResumeWindow final
+{
+	std::size_t offset;
+	std::array<std::uint8_t, 8> bothAxesZero;
+	std::array<std::uint8_t, 8> otherwise;
+};
+
+constexpr ResumeWindow kResumeWindows[] = {
+    {kPitchWindow, kPitchStore, kEightNops},
+    {kYawWindow, kYawStore, kEightNops},
+    {kYawFpuWindow, kYawFpuStore, kYawFpuNops},
+};
+
 void zpatch_mf_advance_c() noexcept
 {
 	// sub_100241E0: when both mouse axes are zero, patch three 8-byte windows of
 	// the resumed game function (dword_10159C40 + 52/94/107) with the "pull"
-	// constants; otherwise NOP-ish them out. VirtualProtect failures are ignored
-	// like the original (a null resume would fault; unreachable once installed).
+	// stores; otherwise write their disabled forms. VirtualProtect failures are
+	// ignored like the original (a null resume would fault; unreachable once
+	// installed).
 	const auto base = static_cast<std::uintptr_t>(zpatch_mf_resume_b);
 	// sub_100241E0 dereferences the resume slot unconditionally.
 	const auto* x = reinterpret_cast<const std::int32_t*>(
@@ -6209,29 +6279,14 @@ void zpatch_mf_advance_c() noexcept
 	const auto* y = reinterpret_cast<const std::int32_t*>(
 	    static_cast<std::uintptr_t>(zpatch_mf_y));
 	// sub_100241E0 evaluates Y first, then X, and dereferences both unguarded.
-	const bool zero = (static_cast<double>(*y) * 0.0078125 == 0.0) &&
-	                  (static_cast<double>(*x) * 0.0078125 == 0.0);
-	struct Pair final
+	const bool zero = (static_cast<double>(*y) * kAxisScale == 0.0) &&
+	                  (static_cast<double>(*x) * kAxisScale == 0.0);
+	for (const ResumeWindow& window : kResumeWindows)
 	{
-		std::uintptr_t offset;
-		std::uint32_t first;
-		std::uint32_t second;
-	};
-	const Pair pairs[3] =
-	{
-			{52u, zero ? 0x86110FF3u : 0x90909090u, zero ? 0x144u : 0x90909090u},
-			{94u, zero ? 0x8E110FF3u : 0x90909090u, zero ? 0x148u : 0x90909090u},
-			{107u, zero ? 0x01489ED9u : 0x9090D8DDu, zero ? 0x5C8B0000u : 0x5C8B9090u},
-	};
-	for (const Pair& pair : pairs)
-	{
-		// Each site is an 8-byte window: the instruction (or nops) plus its
-		// operand. One store keeps the window from being half-written.
-		std::uint8_t window[sizeof(std::uint32_t) * 2]{};
-		std::memcpy(window, &pair.first, sizeof(pair.first));
-		std::memcpy(window + sizeof(pair.first), &pair.second, sizeof(pair.second));
-		injector::WriteMemoryRaw(injector::raw_ptr(base + pair.offset), window, sizeof(window),
-		                         true); //write
+		const auto& bytes = zero ? window.bothAxesZero : window.otherwise;
+		// One 8-byte store keeps the window from being half-written.
+		injector::WriteMemoryRaw(injector::raw_ptr(base + window.offset),
+		                         const_cast<std::uint8_t*>(bytes.data()), bytes.size(), true); //write
 	}
 	zpatch_cookie_tail();
 }
@@ -7704,6 +7759,12 @@ namespace
 	constexpr std::size_t kWordLength = 2;
 	constexpr std::size_t kBranchLength = 5; // E8/E9 <rel32>
 	constexpr std::uint8_t kCallOpcode = 0xE8;
+	// The other instruction bytes the arms write. An opcode is not data: name it
+	// so `0xEB` at a site reads as "jmp rel8" and not as a magic number.
+	constexpr std::uint8_t kShortJmpOpcode = 0xEB; // jmp rel8
+	constexpr std::uint8_t kRetOpcode = 0xC3;
+	constexpr std::uint8_t kMovEaxOpcode = 0xB8;   // mov eax, imm32
+	constexpr std::uint8_t kPushadOpcode = 0x60;
 	constexpr std::uint32_t kFusionFixProbeRva = 0x20D7u + 4u;
 
 	bool bMenuIntegration = false;
@@ -9139,7 +9200,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match + 7, 0xEBu, true); //jmp
+			injector::WriteMemory<std::uint8_t>(match + 7, kShortJmpOpcode, true); //jmp
 		}
 	}
 	Trace("FreezeGunFix");
@@ -9193,7 +9254,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 
 			injector::MakeNOP(match - 7, 2, true); //nop
 			injector::MakeNOP(match + 3, 2, true); //nop
-			injector::WriteMemory<std::uint8_t>(match + 224, 0xEBu, true); //jmp
+			injector::WriteMemory<std::uint8_t>(match + 224, kShortJmpOpcode, true); //jmp
 			injector::MakeNOP(match + 231, 2, true); //nop
 			injector::MakeNOP(match + 367, 2, true); //nop
 			injector::MakeNOP(match + 377, 2, true); //nop
@@ -9231,7 +9292,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			{
 				// `jmp +0x2A` written as its two bytes (there is no short-jump API).
 				auto* site = pattern.get(0).get<std::uint8_t>(3);
-				injector::WriteMemory<std::uint8_t>(site, 0xEBu, true);     //jmp
+				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true);     //jmp
 				injector::WriteMemory<std::uint8_t>(site + 1, 0x2Au, true); // +0x2A
 			}
 		}
@@ -9337,7 +9398,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match, 0xEBu, true); //jmp
+			injector::WriteMemory<std::uint8_t>(match, kShortJmpOpcode, true); //jmp
 		}
 	}
 	Trace("MiscFixes");
@@ -9350,35 +9411,35 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match, 0xEBu, true); //jmp
+			injector::WriteMemory<std::uint8_t>(match, kShortJmpOpcode, true); //jmp
 		}
 
 		if (auto pattern = Pattern(image, "75 28 6A 00 6A 00 68 ? ? ? ? E8 ? ? ? ? 83 C4 0C"); pattern.size() > 0)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match, 0xEBu, true); //jmp
+			injector::WriteMemory<std::uint8_t>(match, kShortJmpOpcode, true); //jmp
 		}
 
 		if (auto pattern = Pattern(image, "81 EC ? ? ? ? A1 ? ? ? ? 33 C4 89 84 24 ? ? ? ? 53 ? 6A 3C 33 DB 8D 44 24 ? 53 50 E8"); pattern.size() > 0)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match, 0xC3u, true); //ret
+			injector::WriteMemory<std::uint8_t>(match, kRetOpcode, true); //ret
 		}
 
 		if (auto pattern = Pattern(image, "83 C4 ? 3B 46 20"); pattern.size() > 0)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match + 12, 0xEBu, true); //jmp
+			injector::WriteMemory<std::uint8_t>(match + 12, kShortJmpOpcode, true); //jmp
 		}
 
 		if (auto pattern = Pattern(image, "83 F8 01 75 30 A3"); pattern.size() > 0)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match, 0xB8u, true); //patch
+			injector::WriteMemory<std::uint8_t>(match, kMovEaxOpcode, true); //patch
 			injector::WriteMemory<std::uint32_t>(match + 1, 0x00000001u, true); //patch
 		}
 
@@ -9387,7 +9448,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
 			// `jmp +0xC9` written as its two bytes (there is no short-jump API).
-			injector::WriteMemory<std::uint8_t>(match, 0xEBu, true);      //jmp
+			injector::WriteMemory<std::uint8_t>(match, kShortJmpOpcode, true);      //jmp
 			injector::WriteMemory<std::uint8_t>(match + 1, 0xC9u, true);  // +0xC9
 		}
 
@@ -9396,7 +9457,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
 			// `jmp +0x0D` written as its two bytes (there is no short-jump API).
-			injector::WriteMemory<std::uint8_t>(match, 0xEBu, true);      //jmp
+			injector::WriteMemory<std::uint8_t>(match, kShortJmpOpcode, true);      //jmp
 			injector::WriteMemory<std::uint8_t>(match + 1, 0x0Du, true);  // +0x0D
 		}
 
@@ -9404,7 +9465,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match + 6, 0xEBu, true); //jmp
+			injector::WriteMemory<std::uint8_t>(match + 6, kShortJmpOpcode, true); //jmp
 		}
 
 		if (auto pattern = Pattern(image, "FF 15 ? ? ? ? 85 C0 75 04 32"); pattern.size() > 0)
@@ -9530,8 +9591,8 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			injector::MakeNOP(image.base + 0x0042EB, 1, true); //nop
 			injector::MakeNOP(image.base + 0x0042EC, 1, true); //nop
 			injector::MakeNOP(image.base + 0x0042ED, 1, true); //nop
-			injector::WriteMemory<std::uint8_t>(image.base + 0x00392E, 0xEBu, true); //jmp
-			injector::WriteMemory<std::uint8_t>(image.base + 0x003A14, 0xEBu, true); //jmp
+			injector::WriteMemory<std::uint8_t>(image.base + 0x00392E, kShortJmpOpcode, true); //jmp
+			injector::WriteMemory<std::uint8_t>(image.base + 0x003A14, kShortJmpOpcode, true); //jmp
 		}
 
 		if (ctx.build == GameBuild::v1070)
@@ -9549,8 +9610,8 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			injector::MakeNOP(image.base + 0x0042CB, 1, true); //nop
 			injector::MakeNOP(image.base + 0x0042CC, 1, true); //nop
 			injector::MakeNOP(image.base + 0x0042CD, 1, true); //nop
-			injector::WriteMemory<std::uint8_t>(image.base + 0x00390E, 0xEBu, true); //jmp
-			injector::WriteMemory<std::uint8_t>(image.base + 0x0039F4, 0xEBu, true); //jmp
+			injector::WriteMemory<std::uint8_t>(image.base + 0x00390E, kShortJmpOpcode, true); //jmp
+			injector::WriteMemory<std::uint8_t>(image.base + 0x0039F4, kShortJmpOpcode, true); //jmp
 		}
 	}
 	Trace("PathNodeCrashFix");
@@ -9656,7 +9717,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
 			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_popup_headlights), true); //jmp
-			injector::WriteMemory<std::uint8_t>(match + 10, static_cast<std::uint8_t>(0xEBu), true); //jmp
+			injector::WriteMemory<std::uint8_t>(match + 10, kShortJmpOpcode, true); //jmp
 			injector::WriteMemory<std::uint32_t>(match + 82, AddressOf(&zpatch_popup_angle), true); //patch
 		}
 
@@ -9672,7 +9733,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
 			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_popup_headlights_edx), true); //jmp
-			injector::WriteMemory<std::uint8_t>(match + 10, static_cast<std::uint8_t>(0xEBu), true); //jmp
+			injector::WriteMemory<std::uint8_t>(match + 10, kShortJmpOpcode, true); //jmp
 			injector::WriteMemory<std::uint32_t>(match + 82, AddressOf(&zpatch_popup_angle), true); //patch
 		}
 	}
@@ -9734,7 +9795,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match + 6, 0xEBu, true); //jmp
+			injector::WriteMemory<std::uint8_t>(match + 6, kShortJmpOpcode, true); //jmp
 		}
 	}
 	Trace("RemoveStaticCutsceneCarShadows");
@@ -9747,7 +9808,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match + 6, 0xEBu, true); //jmp
+			injector::WriteMemory<std::uint8_t>(match + 6, kShortJmpOpcode, true); //jmp
 		}
 	}
 	Trace("ReversingLightFix");
@@ -9760,7 +9821,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match + 8, 0x60u, true); //patch
+			injector::WriteMemory<std::uint8_t>(match + 8, kPushadOpcode, true); //patch
 		}
 	}
 	Trace("SCOSignatureFix");
@@ -9773,7 +9834,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match - 32, 0xEBu, true); //jmp
+			injector::WriteMemory<std::uint8_t>(match - 32, kShortJmpOpcode, true); //jmp
 		}
 	}
 	Trace("SMPA60Fix");
@@ -9787,7 +9848,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
 			injector::MakeJMP(match + 123, reinterpret_cast<void*>(&abi_smpa60_tail_shim), true); //jmp
-			injector::WriteMemory<std::uint8_t>(match - 38, 0xEBu, true); //jmp
+			injector::WriteMemory<std::uint8_t>(match - 38, kShortJmpOpcode, true); //jmp
 		}
 
 		if (auto pattern = Pattern(image, "8B 48 70 83 C0 40 50 51 8D 51 10"); pattern.size() > 0)
@@ -9885,7 +9946,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match + 223, 0xEBu, true); //jmp
+			injector::WriteMemory<std::uint8_t>(match + 223, kShortJmpOpcode, true); //jmp
 		}
 
 		if (auto pattern = Pattern(image, "8B 56 1C 3B 56 20 ? ? 6A 00 6A 00"); pattern.size() > 0)
@@ -9978,7 +10039,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match, 0xC3u, true); //ret
+			injector::WriteMemory<std::uint8_t>(match, kRetOpcode, true); //ret
 		}
 	}
 	Trace("VRAMFix");
@@ -10124,9 +10185,9 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match + 6, static_cast<std::uint8_t>(0xEBu), true); //jmp
+			injector::WriteMemory<std::uint8_t>(match + 6, kShortJmpOpcode, true); //jmp
 			injector::MakeJMP(match + 95, reinterpret_cast<void*>(match + 476), true); //jmp
-			injector::WriteMemory<std::uint8_t>(match + 379, static_cast<std::uint8_t>(0xEBu), true); //jmp
+			injector::WriteMemory<std::uint8_t>(match + 379, kShortJmpOpcode, true); //jmp
 			injector::WriteMemory<std::uint32_t>(match + 211, AddressOf(&zpatch_fchs_offset), true); //patch
 		}
 
@@ -10271,7 +10332,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			if (auto pattern = Pattern(image, "83 E0 0F 83 F8 03 75 17 F6 86 6C 02 00 00 04"); pattern.size() > 0)
 			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6), 0xEBu, true); //jmp
+				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6), kShortJmpOpcode, true); //jmp
 			}
 		}
 
@@ -10550,7 +10611,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			if (pattern.size() == 0)
 				pattern = Pattern(image, "74 0B 83 7C 24 2C 03");
 			if (pattern.size() > 0)
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(), 0xEBu, true); //jmp
+				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(), kShortJmpOpcode, true); //jmp
 		}
 	}
 	Trace("RemoveGFWLUpdatePopup");
@@ -10710,14 +10771,14 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			if (auto pattern = Pattern(image, "83 F8 04 C6 44 24 0E 00 75 0F"); pattern.size() > 0)
 			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(8), 0xEBu, true); //jmp
+				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(8), kShortJmpOpcode, true); //jmp
 			}
 		}
 
 		{
 			if (auto pattern = Pattern(image, "83 FA 04 75 0C"); pattern.size() > 0)
 			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(3), 0xEBu, true); //jmp
+				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(3), kShortJmpOpcode, true); //jmp
 			}
 		}
 	}
