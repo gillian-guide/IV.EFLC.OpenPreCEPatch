@@ -3,6 +3,7 @@ build/
 build*/
 bin/
 release/
+dist/
 out/
 obj/
 *.zip
@@ -39,3 +40,5 @@ __pycache__/
 
 # Companion XLivelessAddon checkout lives in its own repository
 xlivelessaddon/
+companion/
+companion-build/

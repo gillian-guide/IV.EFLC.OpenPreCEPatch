@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   x86:
-    name: Windows x86 (shipped ASI)
+    name: Windows x86 (shipped ASI + XLivelessAddon)
     runs-on: windows-latest
 
     steps:
@@ -30,10 +30,21 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
+      - name: Checkout XLivelessAddon companion
+        uses: actions/checkout@v7
+        with:
+          repository: gillian-guide/XLivelessAddon
+          path: companion/XLivelessAddon
+          submodules: recursive
+          fetch-depth: 1
+
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
           python-version: "3.x"
+
+      - name: Add MSBuild
+        uses: microsoft/setup-msbuild@v3
 
       - name: Check generated INI template
         run: python tools/gen_ini_template.py --check
@@ -47,14 +58,66 @@ jobs:
       - name: Test
         run: ctest --preset x86-release
 
-      - name: Upload ASI
+      - name: Build XLivelessAddon companion
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $companion = 'companion/XLivelessAddon'
+          Write-Host "XLivelessAddon commit: $(git -C $companion rev-parse --short HEAD)"
+
+          if (Test-Path "$companion/CMakeLists.txt") {
+            # The fork build. Configuring directly (instead of using its preset)
+            # keeps the workflow independent of the installed VS generator.
+            cmake -S $companion -B companion-build -A Win32
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            cmake --build companion-build --config Release -- /m
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } else {
+            # Legacy XLivelessAddon layout (Visual Studio solution only).
+            msbuild "$companion/XLivelessAddon.sln" /m `
+              /p:Configuration=Release /p:Platform=x86 /p:PlatformToolset=v143
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Package release zip
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = 'dist'
+          New-Item -ItemType Directory -Force $dist | Out-Null
+
+          Copy-Item 'bin/IV.EFLC.OpenPreCEPatch.asi' $dist
+          Copy-Item 'bin/IV.EFLC.OpenPreCEPatch.ini' $dist
+          Copy-Item 'readme.md', 'LICENSE', 'CREDITS.md', 'NOTICE' $dist
+
+          $asi = Get-ChildItem -Path 'companion-build', 'companion/XLivelessAddon' `
+            -Recurse -Filter 'XLivelessAddon.asi' -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $asi) { throw 'XLivelessAddon.asi was not produced by the companion build' }
+          Copy-Item $asi.FullName (Join-Path $dist 'XLivelessAddon.asi')
+
+          $ini = Get-ChildItem -Path 'companion-build', 'companion/XLivelessAddon' `
+            -Recurse -Filter 'XLivelessAddon.ini' -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $ini) { throw 'XLivelessAddon.ini was not found in the companion repository' }
+          Copy-Item $ini.FullName (Join-Path $dist 'XLivelessAddon.ini')
+
+          Compress-Archive -Path (Join-Path $dist '*') `
+            -DestinationPath (Join-Path $dist 'OpenPreCEPatch.zip') -Force
+          Get-ChildItem $dist | Select-Object Name, Length
+
+      - name: Upload release zip
         uses: actions/upload-artifact@v7
         with:
-          name: IV.EFLC.OpenPreCEPatch
-          path: |
-            bin/IV.EFLC.OpenPreCEPatch.asi
-            bin/IV.EFLC.OpenPreCEPatch.ini
-            bin/IV.EFLC.OpenPreCEPatch.map
+          name: OpenPreCEPatch
+          path: dist/OpenPreCEPatch.zip
+          if-no-files-found: error
+
+      - name: Upload linker map
+        uses: actions/upload-artifact@v7
+        with:
+          name: IV.EFLC.OpenPreCEPatch.map
+          path: bin/IV.EFLC.OpenPreCEPatch.map
           if-no-files-found: error
 
   x64-parity:
