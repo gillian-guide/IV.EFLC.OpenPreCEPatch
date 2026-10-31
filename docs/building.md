@@ -16,7 +16,7 @@ modules (`.ixx`); both CMake and the compiler scan them.
 ## Quick start
 
 ```bat
-git clone --recursive https://github.com/OpenZDecomp/OpenPreCEPatch
+git clone --recursive https://github.com/SandeMC/IV.EFLC.OpenPreCEPatch
 cd OpenPreCEPatch
 cmake --preset x86
 cmake --build --preset x86-release

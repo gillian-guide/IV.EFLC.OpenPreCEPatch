@@ -1,6 +1,6 @@
 # OpenPreCEPatch
 
-[![Build](https://github.com/OpenZDecomp/OpenPreCEPatch/actions/workflows/msvc_x86.yml/badge.svg)](https://github.com/OpenZDecomp/OpenPreCEPatch/actions/workflows/msvc_x86.yml)
+[![Build](https://github.com/SandeMC/IV.EFLC.OpenPreCEPatch/actions/workflows/msvc_x86.yml/badge.svg)](https://github.com/SandeMC/IV.EFLC.OpenPreCEPatch/actions/workflows/msvc_x86.yml)
 
 OpenPreCEPatch is the community successor to **ZolikaPatch**, the GTA IV / Episodes
 from Liberty City quality-of-life and crash-fix plugin. It keeps the original
@@ -111,7 +111,7 @@ Requirements: Windows 10/11, Visual Studio 2022 17.10+ (or newer) with the
 **x86** C++ toolchain, CMake 3.31+, and the submodules checked out.
 
 ```bat
-git clone --recursive https://github.com/OpenZDecomp/OpenPreCEPatch
+git clone --recursive https://github.com/SandeMC/IV.EFLC.OpenPreCEPatch
 cd OpenPreCEPatch
 cmake --preset x86
 cmake --build --preset x86-release
