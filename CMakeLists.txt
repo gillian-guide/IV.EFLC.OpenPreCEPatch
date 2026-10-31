@@ -154,10 +154,22 @@ if(CMAKE_SIZEOF_VOID_P EQUAL 4)
             /BASE:0x60000000)
         add_test(NAME opcep_tests COMMAND opcep_tests)
 
+        # Every option's absent-key default must equal the shipped INI value, so
+        # deleting a line behaves like the shipped configuration. The table is
+        # regenerated from the call sites and compared here; no game images are
+        # needed, so this runs in CI as well.
+        find_package(Python3 COMPONENTS Interpreter QUIET)
+        if(Python3_Interpreter_FOUND)
+            add_test(NAME opcep_option_defaults
+                COMMAND ${Python3_EXECUTABLE}
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_option_defaults.py"
+                        --check
+                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+        endif()
+
         # The address-site checker needs the on-disk game images (game_refs, not
         # part of this repository), so it is only registered where they exist;
         # CI without them must not report a false failure.
-        find_package(Python3 COMPONENTS Interpreter QUIET)
         if(Python3_Interpreter_FOUND
            AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/parity/address_sites.tsv"
            AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../game_refs/GTAIV.exe")

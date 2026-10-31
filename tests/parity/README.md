@@ -51,7 +51,22 @@ mismatch instead of silently changing the numbers.
   outside `.text` would change a cell, so `--check` guards that too (none do on
   the 1080 image: the executable-range change is a zero-diff PASS).
 - An improvement that changes the write set must be attributed to one arm and
-  the delta stated in `docs/improvements-log.md`.
+  the delta stated in `docs/improvements.md`.
+
+The cross-build oracle is `tests/parity/crossbuild-baseline/`: one write set per
+on-disk executable (nine builds) for the shipped defaults and an all-options-on
+INI, produced by `python tools/opcep_crossbuild.py --capture <dir>` at a known
+commit. `--check <dir>` diffs the current tree against it. Both oracles pin the
+PlayGTAIV process probe (`OPCEP_LAUNCHER_PROBE=1`) so the launcher write is
+observable; they cover install-time game-image writes only (not hook bodies and
+not `xlive.dll`, which `TestRemoveGFWLUpdatePopupSites` covers).
+
+`address_sites.tsv` is the address-proof table: each row is an install site or a
+published target, validated against the on-disk images by
+`tools/opcep_sigcheck.py`. It is maintained beside the source, not generated from
+it; the RemoveModChecks NOP rows use per-byte anchors while the arm uses one
+instruction anchor plus offsets, so a row must be re-derived together with the
+arm when either changes.
 - Never update the golden to hide an unexplained delta. Use the attribution
   files to trace the byte to an arm first.
 

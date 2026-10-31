@@ -210,7 +210,8 @@ extern "C" uint8_t zpatch_flag_death_music;      // byte_10159B86
 extern "C" uint8_t zpatch_flag_patch4_modchecks; // byte_10159C14
 extern "C" uint8_t zpatch_flag_gfwl_popup;       // byte_10159B87
 extern "C" uint8_t zpatch_flag_debug_spawns;     // byte_10159C15
-extern "C" uint8_t zpatch_flag_donotpause;       // byte_1015AD43 (menu-toggleable)
+// No zpatch_flag_donotpause: the pause-on-focus-loss fix is not installed by
+// this tree (the declaration had no definition and no user).
 // RestoreDeathMusic: the lazily resolved game site of "6A 06 68 ? ? ? ? 8D 8C"
 // (dword_101A84B8) whose push immediate is randomized to a track 1..5.
 extern "C" uint32_t zpatch_death_music_site;  // dword_101A84B8
@@ -360,11 +361,8 @@ extern "C" char zpatch_ooc_fmt_b[];           // "me%sy%c%c%p,%d,%c%c%s"
 // HighQualityReflections: the resume (match+0x13) and builder (match + *(match+0xF)
 // + 0x13) the callback publishes, the register-dump scratch, and the two argument
 // globals (flags = 0x11D; mode = the BSS slot the original never writes, so 0).
-extern "C" uint32_t zpatch_hqr_resume;   // dword_10159CFC
-extern "C" uint32_t zpatch_hqr_builder;  // dword_10159D04
-extern "C" uint32_t zpatch_hqr_dump[8];  // dword_10159CE8..10159CF0
-extern "C" uint32_t zpatch_hqr_flags;    // dword_10158060 = 0x11D
-extern "C" uint32_t zpatch_hqr_mode;     // dword_10159CE0 (stays 0)
+// No zpatch_hqr_* globals: HighQualityReflections is not implemented in this
+// tree, so its slots had declarations with no definitions or users.
 // CutsceneFixes chain B: the worker's two publishes, the body's accumulator and
 // the read-only constants it compares against (original .rdata/.data bits).
 extern "C" uint32_t zpatch_cutscene_target;   // dword_1015BDE4

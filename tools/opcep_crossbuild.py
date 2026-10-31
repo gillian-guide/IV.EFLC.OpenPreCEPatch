@@ -16,6 +16,7 @@ Each capture is one file per (build, ini) with the dump's canonical
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -70,9 +71,13 @@ def render_ini(value: str) -> str:
 
 
 def run(exe: Path, game: Path, ini: Path, out: Path, build: int) -> None:
+    env = os.environ.copy()
+    # The launcher write is gated by a process probe the harness cannot satisfy.
+    env["OPCEP_LAUNCHER_PROBE"] = "1"
     result = subprocess.run(
         [str(exe), str(game), str(ini), str(out), "--build", str(build)],
         cwd=str(ROOT),
+        env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )

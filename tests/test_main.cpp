@@ -13,6 +13,7 @@
 #include "helpers.hxx"
 #include "hooks.h"
 #include "ini_import.hxx"
+#include "log.hxx"
 #include "menu.hxx"
 #include "patches.hxx"
 #include "pattern.hxx"
@@ -22,6 +23,8 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -295,6 +298,49 @@ namespace
         CHECK(opp::UnsupportedLegacyKeys().size() == 7);
         CHECK(opp::CompanionLegacyKeys().size() == 7);
         std::filesystem::remove_all(dir);
+    }
+
+    void TestRemoveGFWLUpdatePopupSites()
+    {
+        // The four xlive.dll dwords the original's RemoveGFWLUpdatePopup handler
+        // zeroes (0x10005421) must stay at the recovered RVAs. A previous rename
+        // used 0x6B5B50/0x6B5B70 (wrong by 0x580) and the game-image write-set
+        // tools could not see it because xlive.dll is not the game image.
+        CHECK(::kXliveUpdateFlag0Rva == 6748016u);
+        CHECK(::kXliveUpdateFlag1Rva == 6748020u);
+        CHECK(::kXliveUpdateFlag2Rva == 7034320u);
+        CHECK(::kXliveUpdateFlag3Rva == 7034352u);
+        CHECK(::kXliveUpdateFlag0Rva == 0x66F770u);
+        CHECK(::kXliveUpdateFlag1Rva == ::kXliveUpdateFlag0Rva + 4u);
+        CHECK(::kXliveUpdateFlag2Rva == 0x6B55D0u);
+        CHECK(::kXliveUpdateFlag3Rva == ::kXliveUpdateFlag2Rva + 0x20u);
+    }
+
+    void TestLegacyUnsupportedLogged()
+    {
+        // The production load path calls EnsureConfigFile without a report; the
+        // dropped-key line must still reach the log (a previous version logged
+        // only when the test asked for a report).
+        const std::filesystem::path dir = "opcep_legacy_log";
+        std::filesystem::remove_all(dir);
+        std::filesystem::create_directories(dir);
+        WriteFile(dir / "ZolikaPatch.ini",
+                  "[Options]\nMouseFix=0\nRemoveUselessChecks=1\nNoPhysicsSleep=1\n");
+
+        const std::filesystem::path log = dir / "opcep_test.log";
+        opp::OpenLog(log);
+        const std::filesystem::path created = opp::EnsureConfigFile(dir);
+        CHECK(created == dir / "IV.EFLC.OpenPreCEPatch.ini");
+
+        std::ifstream input(log, std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(input)),
+                               std::istreambuf_iterator<char>());
+        CHECK(text.find("legacy key RemoveUselessChecks not imported") != std::string::npos);
+        CHECK(text.find("legacy key NoPhysicsSleep not imported") != std::string::npos);
+        CHECK(text.find("MouseFix") == std::string::npos);  // carried over, not logged
+
+        std::error_code ignored;
+        std::filesystem::remove_all(dir, ignored);
     }
 
     void TestFusionFixGate()
@@ -819,6 +865,49 @@ namespace
         CHECK(opp::ArmWritesApplied() == applied_before_pass);
     }
 
+    void TestLauncherNamePatch()
+    {
+        // LaunchWithPlayGTAIV rewrites the game's two "LaunchGTAIV.exe" name
+        // slots to the 16 bytes the original's strcpy_s leaves there:
+        // "PlayGTAIV.exe\0" followed by the old name's surviving "e\0".
+        std::vector<uint8_t> image;
+        BuildSyntheticPe(image);
+        const char launch_name[] = "LaunchGTAIV.exe";
+        std::memcpy(image.data() + 0x1100, launch_name, sizeof(launch_name));
+        std::memcpy(image.data() + 0x2100, launch_name, sizeof(launch_name));
+
+        const std::filesystem::path ini = "opcep_launcher.ini";
+        WriteFile(ini, "[Options]\nLaunchWithPlayGTAIV = 1\n");
+        const opp::Config config(ini);
+        opp::SetLauncherProbeOverride(true);
+        opp::PatchContext ctx{{image.data(), image.size()},
+                              reinterpret_cast<uintptr_t>(image.data()),
+                              opp::GameBuild::v1080, config};
+        opp::ApplyLaunchWithPlayGTAIV(ctx);
+        opp::SetLauncherProbeOverride(false);
+        for (const size_t offset : {0x1100u, 0x2100u})
+        {
+            const uint8_t* slot = image.data() + offset;
+            CHECK(std::memcmp(slot, "PlayGTAIV.exe", 13) == 0);
+            CHECK(slot[13] == 0);
+            CHECK(slot[14] == 'e');
+            CHECK(slot[15] == 0);
+        }
+
+        // Wrong build: the gate keeps both slots untouched.
+        std::vector<uint8_t> other;
+        BuildSyntheticPe(other);
+        std::memcpy(other.data() + 0x2100, launch_name, sizeof(launch_name));
+        opp::SetLauncherProbeOverride(true);
+        opp::PatchContext other_ctx{{other.data(), other.size()},
+                                    reinterpret_cast<uintptr_t>(other.data()),
+                                    opp::GameBuild::v1110, config};
+        opp::ApplyLaunchWithPlayGTAIV(other_ctx);
+        opp::SetLauncherProbeOverride(false);
+        CHECK(std::memcmp(other.data() + 0x2100, launch_name, sizeof(launch_name)) == 0);
+        std::filesystem::remove(ini);
+    }
+
     void TestRelocateCalls()
     {
         // A tiny "function" with two call rel32 instructions to fix up.
@@ -875,7 +964,9 @@ int main()
     TestShippedTemplate();
     TestIniImport();
     TestLegacyUnsupportedKeys();
+    TestLegacyUnsupportedLogged();
     TestFusionFixGate();
+    TestRemoveGFWLUpdatePopupSites();
     TestExecutableView();
     TestPatternScan();
     TestGame();
@@ -886,6 +977,7 @@ int main()
     TestFeatureOrder();
     TestOrderDiagnostics();
     TestArmFailsafes();
+    TestLauncherNamePatch();
     TestRelocateCalls();
     TestHooks();
 

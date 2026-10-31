@@ -8,6 +8,7 @@
     },
     "all-on": {
       "arms": {
+        "ApplyLaunchWithPlayGTAIV": 26,
         "InstallAimProjectileCrashFix": 5,
         "InstallAllowHashesForIDE": 5,
         "InstallBadPlayerModelCrashFix": 5,
@@ -84,11 +85,12 @@
         "InstallWantedLevelCrashFix": 5
       },
       "file": "writesets/all-on.txt",
-      "sha256": "4d12a6ace54afacf85e8b72f6e797b35998fd583db5c100962d851934ba8cbc3",
-      "writes": 844
+      "sha256": "ad9c966dd8decba975b30e205725d1f206b1359bec2addc0b3c0e9f8bae42663",
+      "writes": 870
     },
     "defaults": {
       "arms": {
+        "ApplyLaunchWithPlayGTAIV": 26,
         "InstallAimProjectileCrashFix": 5,
         "InstallAllowHashesForIDE": 5,
         "InstallBadPlayerModelCrashFix": 5,
@@ -144,11 +146,12 @@
         "InstallWantedLevelCrashFix": 5
       },
       "file": "writesets/defaults.txt",
-      "sha256": "ea562643aff3058f198a86e5d4ab8aca9f5bfccef160bcb3851d9434830f48a3",
-      "writes": 502
+      "sha256": "cf969c21ecce7c1f36461d742c2ffb66bdbda60ecbe0ce3cdda2942357cdce3e",
+      "writes": 528
     },
     "legacy": {
       "arms": {
+        "ApplyLaunchWithPlayGTAIV": 26,
         "InstallAimProjectileCrashFix": 5,
         "InstallAllowHashesForIDE": 5,
         "InstallBadPlayerModelCrashFix": 5,
@@ -214,8 +217,8 @@
         "InstallWantedLevelCrashFix": 5
       },
       "file": "writesets/legacy.txt",
-      "sha256": "cba98fe44752bdd640f24bbba0a8f3e5e42de86a57704bbf4aecd9ddccd81f7b",
-      "writes": 799
+      "sha256": "af2be7973942650f1a0dd06b8b929738d5a6b23e44543ce87ebec29725483c4b",
+      "writes": 825
     },
     "option:AimProjectileCrashFix": {
       "arms": {
@@ -810,15 +813,19 @@
       "writes": 2
     },
     "option:LaunchWithPlayGTAIV": {
-      "arms": {},
-      "delta_arms": {},
+      "arms": {
+        "ApplyLaunchWithPlayGTAIV": 26
+      },
+      "delta_arms": {
+        "ApplyLaunchWithPlayGTAIV": 26
+      },
       "delta_base": "all-off",
       "delta_file": "deltas/option_LaunchWithPlayGTAIV.txt",
-      "delta_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "delta_writes": 0,
+      "delta_sha256": "7410d92dde957c399dfd99051782196f98b3ef68da336035007c8d4a491dade7",
+      "delta_writes": 26,
       "file": "writesets/option_LaunchWithPlayGTAIV.txt",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "writes": 0
+      "sha256": "68bf67d1138b9ebe92981df0e628da45b0d5cfe9d508a08d650bbfc74824cf98",
+      "writes": 26
     },
     "option:LoadDLCs": {
       "arms": {
@@ -1436,22 +1443,24 @@
     },
     "section:COMPATIBILITY": {
       "arms": {
+        "ApplyLaunchWithPlayGTAIV": 26,
         "InstallNewFilesCompatibility": 13,
         "InstallNewSavesCompatibility": 5,
         "InstallSavegameFix": 42
       },
       "delta_arms": {
+        "ApplyLaunchWithPlayGTAIV": 26,
         "InstallNewFilesCompatibility": 13,
         "InstallNewSavesCompatibility": 5,
         "InstallSavegameFix": 42
       },
       "delta_base": "all-off",
       "delta_file": "deltas/section_COMPATIBILITY.txt",
-      "delta_sha256": "0a7e6dbe7cc9491a2b5accc1ec6320b4ffe5654bf61e1c0e89c1b99f6b71f0e8",
-      "delta_writes": 60,
+      "delta_sha256": "ac3eff66121987f55ebb6c8ebda6a408eb4ef599c458a53fe56a9fa37fac763a",
+      "delta_writes": 86,
       "file": "writesets/section_COMPATIBILITY.txt",
-      "sha256": "f223bd63942e97a3c74dfcf6d259eaa21f21c76e26f954ce6df84215ac87f1b6",
-      "writes": 60
+      "sha256": "bc1d8b4441da5f8e8152aa79a1fb2335c0efe80eae9831797d9e32a99c52a42b",
+      "writes": 86
     },
     "section:EPISODIC": {
       "arms": {

@@ -169,7 +169,16 @@ def main() -> int:
                         help="report arms whose gate is wider or narrower than the recovered gate")
     args = parser.parse_args()
 
-    recovered = json.loads((DOCS / "version-matrix.json").read_text(encoding="utf-8"))
+    matrix_path = DOCS / "version-matrix.json"
+    if not matrix_path.exists():
+        print(
+            f"error: {matrix_path} is missing. It is the recovered applicability "
+            "dump the generator renders from (not checked in; see "
+            "docs/improvements.md). Nothing was written.",
+            file=sys.stderr,
+        )
+        return 2
+    recovered = json.loads(matrix_path.read_text(encoding="utf-8"))
     arms = parse_arms()
     # The HeadlightConeOffsets tables and OverrideGTADatPathTo are config values,
     # not installs: they have no arm and no handler, so they are not options with

@@ -936,17 +936,15 @@ extern "C" const void* abi_vehicle_component(const void* registry,
     if (guarded && registry == nullptr) return nullptr;
     const auto* entries = *reinterpret_cast<const uint8_t* const*>(registry);
     if (guarded && entries == nullptr) return nullptr;
-    // The registry's component count is its uint16 at +0x14; the array itself
-    // starts immediately after it.
-    constexpr size_t kComponentCountOffset = 0x14;
+    // The registry's component count is its uint16 at +0x14.
+    constexpr size_t kComponentArrayOffset = 0x14;
     const auto count = *reinterpret_cast<const uint16_t*>(
-        static_cast<const uint8_t*>(registry) + kComponentCountOffset);
+        static_cast<const uint8_t*>(registry) + kComponentArrayOffset);
     for (uint16_t i = 0; i < count; ++i)
     {
-        // A component entry is 0xE0 bytes; the registry's array starts at +0x14.
-    constexpr size_t kComponentEntrySize = 0xE0;
-    constexpr size_t kComponentArrayOffset = 0x14;
-    const auto* entry = entries + static_cast<size_t>(i) * kComponentEntrySize;
+        // A component entry is 0xE0 bytes.
+        constexpr size_t kComponentEntrySize = 0xE0;
+        const auto* entry = entries + static_cast<size_t>(i) * kComponentEntrySize;
         const char* candidate = *reinterpret_cast<const char* const*>(entry);
         if (guarded && candidate == nullptr) continue;
         if (_stricmp(candidate, name) == 0) return entry;
@@ -1034,13 +1032,13 @@ extern "C" uint32_t abi_steer_body() noexcept
         const uint32_t ped = *reinterpret_cast<const uint32_t*>(
             base + 4u * static_cast<uint32_t>(model));
         if (guarded && ped == 0u) return nullptr;
-    // The chain is ped+0x0 -> [ped+0x8] -> [+0xB4] -> [+0xC]; each link is a
-    // pointer the original dereferences unguarded when the folded guard is off.
-    constexpr size_t kVehicleChainFirstOffset = 8;
-    constexpr size_t kVehicleChainSecondOffset = 0xB4;
-    constexpr size_t kVehicleChainRegistryOffset = 0xC;
+        // The chain is ped -> [ped+0x8] -> [+0xB4] -> [+0xC]; each link is a
+        // pointer the original dereferences unguarded.
+        constexpr size_t kVehicleChainFirstOffset = 8;
+        constexpr size_t kVehicleChainSecondOffset = 0xB4;
+        constexpr size_t kVehicleChainRegistryOffset = 0xC;
         const uint32_t p1 = *reinterpret_cast<const uint32_t*>(
-            static_cast<uintptr_t>(ped) + 8);
+            static_cast<uintptr_t>(ped) + kVehicleChainFirstOffset);
         if (guarded && p1 == 0u) return nullptr;
         const uint32_t p2 = *reinterpret_cast<const uint32_t*>(
             static_cast<uintptr_t>(p1) + kVehicleChainSecondOffset);
@@ -1248,10 +1246,8 @@ namespace
 constexpr opp::ops::InstructionWindow<4> kGfwlWindowDisable{{0x83, 0x0E, 0x00, 0x10}};
 constexpr uint32_t kGfwlWindowDisableValue = opp::ops::PackedLowDword(kGfwlWindowDisable);
 static_assert(kGfwlWindowDisableValue == 0x10000E83u);
-constexpr uintptr_t kXliveUpdateFlag0Rva = 0x66F770u;
-constexpr uintptr_t kXliveUpdateFlag1Rva = 0x66F774u;
-constexpr uintptr_t kXliveSignInFlagRva = 0x6B5B50u;
-constexpr uintptr_t kXliveSignInFlag1Rva = 0x6B5B70u;
+// The four flag RVAs live in hooks.h (kXliveUpdateFlag0Rva .. 3) so the test
+// suite can pin them; they are the original handler's decimal immediates.
 }  // namespace
 
 extern "C" void abi_gfwl_patch() noexcept
@@ -1294,9 +1290,9 @@ extern "C" void abi_gfwl_patch() noexcept
                  kGfwlWindowDisableValue);
         wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlag1Rva),
                  kGfwlWindowDisableValue);
-        wp_dword(reinterpret_cast<void*>(base + kXliveSignInFlagRva),
+        wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlag2Rva),
                  kGfwlWindowDisableValue);
-        wp_dword(reinterpret_cast<void*>(base + kXliveSignInFlag1Rva),
+        wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlag3Rva),
                  kGfwlWindowDisableValue);
     }
 }

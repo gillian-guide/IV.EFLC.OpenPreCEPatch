@@ -326,28 +326,28 @@ namespace opp
             const std::string text = BuildFromLegacy(reader);
 
             // Anything the template has no row for cannot be carried over. Name
-            // it instead of letting the old setting silently disappear.
-            if (report != nullptr)
+            // it instead of letting the old setting silently disappear. The log
+            // line is unconditional (the production path passes no report); the
+            // report, when asked for, also collects the keys.
+            const std::vector<std::string> templateKeys = TemplateKeys();
+            for (const std::string& key : LegacyKeys(legacyText))
             {
-                const std::vector<std::string> templateKeys = TemplateKeys();
-                for (const std::string& key : LegacyKeys(legacyText))
-                {
-                    if (IsVehicleTableRow(key) ||
-                        std::binary_search(templateKeys.begin(), templateKeys.end(), key) ||
-                        Contains(kRemappedLegacyKeys, key))
-                        continue;
+                if (IsVehicleTableRow(key) ||
+                    std::binary_search(templateKeys.begin(), templateKeys.end(), key) ||
+                    Contains(kRemappedLegacyKeys, key))
+                    continue;
 
-                    std::string reason;
-                    if (Contains(kUnsupportedLegacyKeys, key))
-                        reason = "not implemented in OpenPreCEPatch";
-                    else if (Contains(kCompanionLegacyKeys, key))
-                        reason = "provided by the XLivelessAddon companion";
-                    else
-                        reason = "no row in the grouped INI";
+                std::string reason;
+                if (Contains(kUnsupportedLegacyKeys, key))
+                    reason = "not implemented in OpenPreCEPatch";
+                else if (Contains(kCompanionLegacyKeys, key))
+                    reason = "provided by the XLivelessAddon companion";
+                else
+                    reason = "no row in the grouped INI";
 
-                    Log("ini: legacy key %s not imported (%s)", key.c_str(), reason.c_str());
+                Log("ini: legacy key %s not imported (%s)", key.c_str(), reason.c_str());
+                if (report != nullptr)
                     report->dropped.push_back({key, std::move(reason)});
-                }
             }
 
             if (WriteText(own, text))

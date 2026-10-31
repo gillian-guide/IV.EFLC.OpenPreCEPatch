@@ -2,7 +2,7 @@
 
 [![Build](https://github.com/gillian-guide/IV.EFLC.OpenPreCEPatch/actions/workflows/msvc_x86.yml/badge.svg)](https://github.com/gillian-guide/IV.EFLC.OpenPreCEPatch/actions/workflows/msvc_x86.yml)
 
-OpenPreCEPatch is an open-source successor to [ZolikaPatch](https://github.com/gillian-guide/ZolikaPatch), the GTA IV / Episodes from Liberty City quality-of-life and crash-fix plugin. It implements the fixes and features listed in `data/plugins/IV.EFLC.OpenPreCEPatch.ini` (one row per option, generated into `docs/features.md`), rewrites them as readable, maintainable C++23, and modernises the loader, hooking and configuration layers around the same signature data, as well as introduces improvements to some unreliable code.
+OpenPreCEPatch is an open-source successor to [ZolikaPatch](https://github.com/gillian-guide/ZolikaPatch), the GTA IV / Episodes from Liberty City quality-of-life and crash-fix plugin. It implements the options listed in `data/plugins/IV.EFLC.OpenPreCEPatch.ini` (one row per option; original options this tree does not implement are listed below), rewrites them as readable, maintainable C++23, and modernises the loader, hooking and configuration layers around the same signature data, as well as introduces improvements to some unreliable code.
 
 The mod targets improvements to the PreCE experience to bring closer parity to CE, as well as improve general stability and improve the multiplayer experience. Features that exist in FusionFix are already gated and are intentionally not reimplemented in this mod.
 
@@ -13,8 +13,9 @@ The mod also carries the standalone `GFWLProtectionDisabler2019` patch and a rei
 ## Original options that are not implemented
 
 An old `ZolikaPatch.ini` is imported key by key into the grouped file. These
-original options have no row there on purpose, and the import logs each one it
-cannot carry over instead of dropping it silently:
+original options have no row there on purpose; the import writes one
+`legacy key ... not imported` line per dropped key to `IV.EFLC.OpenPreCEPatch.log`
+and lists them in the report the loader keeps (`LegacyImportReport`):
 
 | option | why |
 | --- | --- |
@@ -58,7 +59,7 @@ If an old `ZolikaPatch.ini` is present and `IV.EFLC.OpenPreCEPatch.ini` is not, 
 Requirements: Windows 10/11, Visual Studio 2022 17.10+ (or newer) with the **x86** C++ toolchain, CMake 3.31+, and the submodules checked out.
 
 ```bat
-git clone --recursive https://github.com/SandeMC/IV.EFLC.OpenPreCEPatch
+git clone --recursive https://github.com/gillian-guide/IV.EFLC.OpenPreCEPatch
 cd OpenPreCEPatch
 cmake --preset x86
 cmake --build --preset x86-release
@@ -74,7 +75,10 @@ cmake --preset x64
 cmake --build --preset x64-release
 ```
 
-`build.bat` wraps the x86 configure/build/test sequence. See [docs/building.md](docs/building.md) for the target list, the MSVC settings that matter and the submodule layout.
+`build.bat` wraps the x86 configure/build/test sequence; `CMakePresets.json` has the
+presets CI uses (`x86`, `x64`, `x86-release`, `x64-release`). The MSVC settings that
+matter (C++23 modules, static CRT, `/BASE:0x10000000`, the `includes/` submodules) are
+in `CMakeLists.txt`, and `.github/workflows/msvc_x86.yml` is the exact CI invocation.
 
 
 ## Credits

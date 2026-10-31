@@ -469,7 +469,7 @@ namespace opp::features
         // had in the game image after the copy moves.
         constexpr uint32_t kCutsceneCalls[] = {
             0x00Eu, 0x01Du, 0x092u, 0x0E9u, 0x0F1u, 0x101u, 0x118u,
-            0x127u, 0x13Cu, 0x233u, 0x24Cu, 0x286u, 0x29Au,  // 14 offsets total
+            0x127u, 0x13Cu, 0x233u, 0x24Cu, 0x286u, 0x29Au,  // 13 offsets total
         };
 
         // The copy's own `call rel32`s only reach their targets if it lives

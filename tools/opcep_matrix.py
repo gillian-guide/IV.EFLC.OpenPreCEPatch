@@ -344,7 +344,10 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--keep", action="store_true", help="keep temporary INIs under .scratch")
     args = parser.parse_args(argv)
 
-    env_overrides: dict[str, str] = {}
+    # The launcher write is gated by the original's PlayGTAIV process probe.
+    # The offline harness has no such process, so the dump reads this variable;
+    # pinning it here is what puts the launcher cell in the write-set matrix.
+    env_overrides: dict[str, str] = {"OPCEP_LAUNCHER_PROBE": "1"}
     for item in args.env:
         if "=" not in item:
             parser.error(f"--env expects NAME=VALUE, got {item!r}")

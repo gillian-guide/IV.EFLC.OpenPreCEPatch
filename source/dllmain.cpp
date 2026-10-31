@@ -30,32 +30,15 @@ namespace
     constexpr uint32_t kUnsupportedVersionMin = 1201;
     constexpr uint32_t kUnsupportedVersionMax = 12999;
     constexpr DWORD kUnsupportedSleepMs = 500;
-    constexpr UINT kUnsupportedExitCode = E_UNEXPECTED;  // 0x8000FFFF, the original
-
-    struct LauncherPatch
-    {
-        opp::GameBuild build;
-        uint32_t first;
-        uint32_t second;
-    };
-
-    constexpr LauncherPatch kLauncherPatches[] = {
-        {opp::GameBuild::v1000, 10421308u, 10025484u},
-        {opp::GameBuild::v1040, 10396036u, 10344608u},
-        {opp::GameBuild::v1060, 10456896u, 11129048u},
-        {opp::GameBuild::v1070, 10461040u, 11133208u},
-        {opp::GameBuild::v1080, 10815736u, 10855908u},
-    };
-
-    // "PlayGTAIV.exe" followed by the two zero bytes the original leaves in place.
-    constexpr char kLauncherNamePatch[16] = {'p', 'l', 'a', 'y', 'G', 'T', 'A', 'I',
-                                             'V', '.', 'e', 'x', 'e', '\0', 'e', '\0'};
+    // 0x8000FFFF is E_UNEXPECTED; spelled as a UINT to avoid a signed/unsigned
+    // conversion warning. It is the exit code the original passes to
+    // TerminateProcess.
+    constexpr UINT kUnsupportedExitCode = 0x8000FFFFu;
 
     std::filesystem::path modulePath;
     std::filesystem::path moduleFile;
     std::filesystem::path configPath;
     HMODULE hSelf = nullptr;
-    bool bDFAInstalled = false;
     std::once_flag g_once;
 
     bool IsSameModule(HMODULE module, HMODULE self) noexcept
@@ -131,35 +114,6 @@ namespace
         MessageBoxA(nullptr, opp::kZMenuRejectText, opp::kZMenuRejectCaption,
                     opp::kZMenuRejectFlags);
         TerminateProcess(GetCurrentProcess(), opp::kZMenuTerminateExitCode);
-    }
-
-    void ApplyLaunchWithPlayGTAIV(opp::GameBuild build, uint8_t* moduleBase,
-                                  const opp::Config& config)
-    {
-        if (!config.Option("LaunchWithPlayGTAIV", "0"))
-            return;
-        if (opp::FindGameProcess() == 0)
-            return;
-
-        uint32_t sites[2]{};
-        for (const LauncherPatch& patch : kLauncherPatches)
-        {
-            if (patch.build == build)
-            {
-                sites[0] = patch.first;
-                sites[1] = patch.second;
-                break;
-            }
-        }
-        if (!sites[0])
-            return;
-
-        for (const uint32_t site : sites)
-        {
-            injector::WriteMemoryRaw(moduleBase + site,
-                                     const_cast<char*>(kLauncherNamePatch),
-                                     sizeof(kLauncherNamePatch), true);
-        }
     }
 
     void LoadVehicleTables(const opp::Config& config)
@@ -344,8 +298,6 @@ namespace
 
         opp::PatchGame(build, gameImage, config);
         opp::Log("install: option pass complete");
-
-        ApplyLaunchWithPlayGTAIV(build, moduleBase, config);
     }
 
     void Initialize(HMODULE module)

@@ -76,23 +76,29 @@ namespace opp
     bool ModuleSiteWritable(const void* moduleBase, const void* site,
                             size_t length) noexcept
     {
-        if (moduleBase == nullptr || site == nullptr || length == 0)
+        const auto reject = [site](const char* reason) {
+            LogSkippedWrite(site, reason);
             return false;
+        };
+        if (moduleBase == nullptr || site == nullptr || length == 0)
+            return reject("no module base or empty write");
         MEMORY_BASIC_INFORMATION info{};
         if (VirtualQuery(site, &info, sizeof(info)) == 0)
-            return false;
+            return reject("site is not a mapped address");
         if (info.State != MEM_COMMIT)
-            return false;
+            return reject("site is not committed");
         if ((info.Protect & (PAGE_GUARD | PAGE_NOACCESS)) != 0)
-            return false;
+            return reject("site is a guard/no-access page");
         // One module image is one allocation, so the allocation base identifies
         // the module and RegionSize bounds the write.
         if (info.AllocationBase != moduleBase)
-            return false;
+            return reject("site is outside the module");
         const auto address = reinterpret_cast<uintptr_t>(site);
         const auto region_end =
             reinterpret_cast<uintptr_t>(info.BaseAddress) + info.RegionSize;
-        return address + length <= region_end;
+        if (address + length > region_end)
+            return reject("write crosses the module end");
+        return true;
     }
 
     void* AbiTarget(const char* name) noexcept
@@ -132,8 +138,8 @@ namespace opp
     void TraceArm(const char* name)
     {
         g_currentArm = name != nullptr ? name : "?";
-        // Runtime opt-in (TraceInstallArms): the log names the arm before it
-        // runs, so a crash during the install pass leaves the last arm visible.
+        // The log names every arm before it runs, so a crash during the install
+        // pass leaves the last arm visible.
         Log("arm %s", name);
 #if defined(OPCEP_TRACE_INSTALLS)
         static std::FILE* log = std::fopen("IV.EFLC.OpenPreCEPatch.trace.log", "a");

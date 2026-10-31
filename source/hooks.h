@@ -17,18 +17,23 @@ uintptr_t ResolveHookBody(uint32_t reference_va, void* user) noexcept;
 // Number of reference VAs with a live-ready body (for reporting).
 size_t HookBodyCount() noexcept;
 
-// The AddOptionsInMenu integration (original loader tail): with IVMenuAPI.asi
-// loaded it registers the Death Music and Pause On Focus Loss toggles through
-// AddIVMenuOption and installs the RestoreDeathMusic hooks even with the INI key
-// off. The callbacks read/write the same option flags the INI sets.
-extern "C" void zpatch_menu_prime_focus_loss() noexcept;
-extern "C" uint8_t abi_menu_death_get() noexcept;
-extern "C" void abi_menu_death_set(uint32_t, uint32_t) noexcept;
-extern "C" uint8_t abi_menu_focus_get() noexcept;
-extern "C" void abi_menu_focus_set(uint32_t, uint32_t) noexcept;
+// The four xlive.dll dwords RemoveGFWLUpdatePopup zeroes (original handler
+// 0x10005421). Values are the original's own decimal immediates:
+// 6748016, 6748020, 7034320, 7034352. The pairs are 4 bytes apart; a rename or
+// re-base must keep these exact (pinned by TestRemoveGFWLUpdatePopupSites).
+inline constexpr uintptr_t kXliveUpdateFlag0Rva = 0x66F770u;  // 6748016
+inline constexpr uintptr_t kXliveUpdateFlag1Rva = 0x66F774u;  // 6748020
+inline constexpr uintptr_t kXliveUpdateFlag2Rva = 0x6B55D0u;  // 7034320
+inline constexpr uintptr_t kXliveUpdateFlag3Rva = 0x6B55F0u;  // 7034352
+static_assert(kXliveUpdateFlag0Rva == 6748016u);
+static_assert(kXliveUpdateFlag1Rva == 6748020u);
+static_assert(kXliveUpdateFlag2Rva == 7034320u);
+static_assert(kXliveUpdateFlag3Rva == 7034352u);
 
-// LocalSettingsPath: captures the CWD and arms the four-byte call slot the
-// retargeted game call goes through (the original has a static constructor).
+// The AddOptionsInMenu integration is not implemented in this tree: the five
+// callbacks that used to be declared here had no definitions, so they were
+// removed rather than advertised.
+
 extern "C" void zpatch_local_settings_capture_cwd() noexcept;
 
 // OutOfCommissionFix offline self-test: decodes the embedded finale2.sco blob,
