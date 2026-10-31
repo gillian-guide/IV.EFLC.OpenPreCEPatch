@@ -76,4 +76,44 @@ inline void* MakeJMP(void* at, const void* destination, bool unprotect)
 	WriteBranch(at, destination, unprotect, 0xE9);
 	return at;
 }
+
+// The translation-free pointer wrapper the real header exposes (a no-op here:
+// the dump never translates addresses).
+inline void* raw_ptr(void* p) { return p; }
+inline const void* raw_ptr(const void* p) { return p; }
+template <typename T>
+inline T* raw_ptr(T* p) { return p; }
+
+// The subset of memory_pointer_raw the call sites use.
+struct MemoryPointerRaw
+{
+	void* p;
+
+	template <typename T>
+	T* get() const { return static_cast<T*>(p); }
+	std::uintptr_t as_int() const { return reinterpret_cast<std::uintptr_t>(p); }
+	operator void*() const { return p; }
+};
+
+// The destination of the rel32 at `at` (E8/E9 operand form): at + size + rel.
+inline MemoryPointerRaw ReadRelativeOffset(void* at, std::size_t size, bool unprotect)
+{
+	std::int32_t relative = 0;
+	std::memcpy(&relative, at, size);
+	return {static_cast<std::uint8_t*>(at) + size + relative};
+}
+
+// C3, or C2 <pop> + a two-byte stack adjustment.
+inline void MakeRET(void* at, std::uint16_t pop, bool unprotect)
+{
+	if (pop == 0)
+	{
+		const std::uint8_t ret = 0xC3;
+		WriteMemoryRaw(at, &ret, sizeof(ret), unprotect);
+		return;
+	}
+	std::uint8_t bytes[3] = {0xC2, 0, 0};
+	std::memcpy(bytes + 1, &pop, sizeof(pop));
+	WriteMemoryRaw(at, bytes, sizeof(bytes), unprotect);
+}
 } // namespace injector

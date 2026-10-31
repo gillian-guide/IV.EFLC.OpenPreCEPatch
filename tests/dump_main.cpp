@@ -240,6 +240,7 @@ int RunOrderingCheck(std::uint8_t* image, std::uint32_t size, const ConfigDocume
 		return 1;
 	}
 	const char* all[] = {"RemoveUselessChecks", "MiscFixes", "RestoreDeathMusic"};
+	int failures = 0;
 
 	const auto pass = [&](const char* const* enabled, std::size_t count) {
 		std::memcpy(image, pristine.data(), size);
@@ -262,7 +263,6 @@ int RunOrderingCheck(std::uint8_t* image, std::uint32_t size, const ConfigDocume
 	// RemoveUselessChecks on: both installs must be suppressed.
 	if (!pass(all, 3))
 		return 1;
-	int failures = 0;
 	failures += expectByte(kMiscFixesScanByte, 0x90, "the RemoveUselessChecks byte");
 	failures += expectByte(kDeathMusicScanByte, 0x32, "the RemoveUselessChecks byte");
 	failures += expectByte(kMiscFixesPatchByte, 0x74, "MiscFixes' patch byte");
@@ -303,8 +303,8 @@ int RunOrderingCheck(std::uint8_t* image, std::uint32_t size, const ConfigDocume
 		++failures;
 	}
 
-	std::fprintf(stderr, "zp_dump: ordering: %s\n", failures == 0 ? "ok" : "FAIL");
-	return failures == 0 ? 0 : 1;
+	std::fprintf(stderr, "zp_dump: ordering: %s\n", failures != 0 ? "FAIL" : "ok");
+	return failures != 0 ? 1 : 0;
 }
 
 int main(int argc, char** argv)

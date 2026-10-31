@@ -490,12 +490,16 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 				auto* site = hookSite.get(0).get<std::uint8_t>() + install.offset;
 				if (!InBounds(image, site, kBranchLength))
 					return {PatchResultCode::out_of_bounds, "site out of bounds"};
-				injector::WriteMemory<std::uint8_t>(site, install.opcode, true);  //E8/E9
-				injector::WriteMemory<std::uint32_t>(  //rel32
-				    site + 1,
-				    static_cast<std::uint32_t>(
-				        destination - (reinterpret_cast<std::uintptr_t>(site) + kBranchLength)),
-				    true);
+				// The table's opcode is only ever E8/E9 (SkipLauncherInstall), so
+				// this is the original's call/jump choice written the injector way.
+				if (install.opcode == kCallOpcode)
+					injector::MakeCALL(injector::raw_ptr(site),
+					                   injector::raw_ptr(reinterpret_cast<void*>(destination)),
+					                   true); //call
+				else
+					injector::MakeJMP(injector::raw_ptr(site),
+					                  injector::raw_ptr(reinterpret_cast<void*>(destination)),
+					                  true); //jmp
 				++applied;
 			}
 			return {};
@@ -530,14 +534,11 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 					auto* site = hits.get(target.index).get<std::uint8_t>();
 					if (!InBounds(image, site, kBranchLength))
 						return {PatchResultCode::out_of_bounds, "site out of bounds"};
-					injector::WriteMemory<std::uint8_t>(site, kJumpOpcode, true);  //jmp
-					injector::WriteMemory<std::uint32_t>(  //rel32
-					    site + 1,
-					    static_cast<std::uint32_t>(
-					        reinterpret_cast<std::uintptr_t>(
-					            targetPattern.get(0).get<std::uint8_t>()) -
-					        (reinterpret_cast<std::uintptr_t>(site) + kBranchLength)),
-					    true);
+					injector::MakeJMP(
+					    injector::raw_ptr(site),
+					    injector::raw_ptr(reinterpret_cast<void*>(
+					        targetPattern.get(0).get<std::uint8_t>())),
+					    true); //jmp
 					++report.collectedInstalls;
 				}
 			}

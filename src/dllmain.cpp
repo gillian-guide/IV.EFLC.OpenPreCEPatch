@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 // ZolikaPatch ASI entry point.
 //
 // Everything runs synchronously from DllMain: the DRM has already rewritten the
@@ -2762,8 +2762,10 @@ extern "C" void abi_menu_focus_set(std::uint32_t, std::uint32_t value) noexcept
 	zpatch_flag_donotpause = value == 0 ? 1u : 0u;
 	// No null check: a failed prime scan leaves the saved site null and the
 	// original's 2-byte write faults at 0.
-	wp_word(g_focus_loss_site,
-	        zpatch_flag_donotpause != 0 ? 0x9090u : g_focus_loss_original);
+	if (zpatch_flag_donotpause != 0)
+		injector::MakeNOP(injector::raw_ptr(g_focus_loss_site), 2, true); //nop
+	else
+		wp_word(g_focus_loss_site, g_focus_loss_original);
 }
 
 // The 0x104-byte path buffer the original's LocalSettingsPath helpers use.
@@ -3317,20 +3319,18 @@ extern "C" void abi_new_saves_convert(const char* path) noexcept
 	if (p2 != nullptr)
 	{
 		auto* site = const_cast<std::uint8_t*>(p2);
-		std::int32_t original_rel = 0;
-		std::memcpy(&original_rel, site + 7, 4);
 		const auto original_target = static_cast<std::uint32_t>(
-		    reinterpret_cast<std::uintptr_t>(site) + 11u +
-		    static_cast<std::uint32_t>(original_rel));
-		wp_byte(site + 6, 0xE8);
-		const auto hook = static_cast<std::uint32_t>(
-		    reinterpret_cast<std::uintptr_t>(&abi_new_saves_read_hook));
-		wp_dword(site + 7, hook - static_cast<std::uint32_t>(
-		                              reinterpret_cast<std::uintptr_t>(site + 6)) - 5u);
+		    injector::ReadRelativeOffset(injector::raw_ptr(site + 7), 4, true).as_int());
+		injector::MakeCALL(injector::raw_ptr(site + 6),
+		                   injector::raw_ptr(reinterpret_cast<void*>(&abi_new_saves_read_hook)),
+		                   true); //call
 		if (zpatch_new_saves_loaddata == 0)
 			zpatch_new_saves_loaddata = original_target;
 		wp_dword(site + 1, zpatch_new_saves_flag16 != 0 ? 3694u : 3262u);
-		wp_word(site - 5, zpatch_new_saves_flag16 != 0 ? 0x9090u : 0x2675u);
+		if (zpatch_new_saves_flag16 != 0)
+			injector::MakeNOP(injector::raw_ptr(site - 5), 2, true); //nop
+		else
+			wp_word(site - 5, 0x2675u);
 	}
 
 	// P3 (game 0x8DA090): route the second LoadData call through the plugin body
@@ -3341,23 +3341,15 @@ extern "C" void abi_new_saves_convert(const char* path) noexcept
 	if (p3 != nullptr)
 	{
 		auto* site = const_cast<std::uint8_t*>(p3);
-		std::int32_t original_rel = 0;
-		std::memcpy(&original_rel, site + 7, 4);
 		const auto original_target = static_cast<std::uint32_t>(
-		    reinterpret_cast<std::uintptr_t>(site) + 11u +
-		    static_cast<std::uint32_t>(original_rel));
-		wp_byte(site + 6, 0xE8);
-		const auto hook = static_cast<std::uint32_t>(
-		    reinterpret_cast<std::uintptr_t>(&abi_new_saves_p3_hook));
-		wp_dword(site + 7, hook - static_cast<std::uint32_t>(
-		                              reinterpret_cast<std::uintptr_t>(site + 6)) - 5u);
+		    injector::ReadRelativeOffset(injector::raw_ptr(site + 7), 4, true).as_int());
+		injector::MakeCALL(injector::raw_ptr(site + 6),
+		                   injector::raw_ptr(reinterpret_cast<void*>(&abi_new_saves_p3_hook)),
+		                   true); //call
 		if (zpatch_new_saves_p3_orig == 0)
 			zpatch_new_saves_p3_orig = original_target;
-		std::int32_t third_rel = 0;
-		std::memcpy(&third_rel, site + 30, 4);
 		zpatch_new_saves_loaddata = static_cast<std::uint32_t>(
-		    reinterpret_cast<std::uintptr_t>(site) + 30u +
-		    static_cast<std::uint32_t>(third_rel) + 4u);
+		    injector::ReadRelativeOffset(injector::raw_ptr(site + 30), 4, true).as_int());
 	}
 }
 
@@ -6067,10 +6059,13 @@ void zpatch_mf_advance_c() noexcept
 	};
 	for (const Pair& pair : pairs)
 	{
-		auto* target = reinterpret_cast<std::uint32_t*>(base + pair.offset);
-		// Each site is an 8-byte window: the instruction (or nops) plus its operand.
-		injector::WriteMemory<std::uint32_t>(target, pair.first, true);       // bytes 0..3
-		injector::WriteMemory<std::uint32_t>(target + 1, pair.second, true);  // bytes 4..7
+		// Each site is an 8-byte window: the instruction (or nops) plus its
+		// operand. One store keeps the window from being half-written.
+		std::uint8_t window[sizeof(std::uint32_t) * 2]{};
+		std::memcpy(window, &pair.first, sizeof(pair.first));
+		std::memcpy(window + sizeof(pair.first), &pair.second, sizeof(pair.second));
+		injector::WriteMemoryRaw(injector::raw_ptr(base + pair.offset), window, sizeof(window),
+		                         true); //write
 	}
 	zpatch_cookie_tail();
 }
@@ -9068,7 +9063,10 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			if (auto pattern = Pattern(image, "0F 2F D0 76 25 0F 28 C2"); pattern.size() > 0)
 			{
-				injector::WriteMemory<std::uint16_t>(pattern.get(0).get<std::uint8_t>(3), 0x2AEBu, true); //patch
+				// `jmp +0x2A` written as its two bytes (there is no short-jump API).
+				auto* site = pattern.get(0).get<std::uint8_t>(3);
+				injector::WriteMemory<std::uint8_t>(site, 0xEBu, true);     //jmp
+				injector::WriteMemory<std::uint8_t>(site + 1, 0x2Au, true); // +0x2A
 			}
 		}
 	}
@@ -9222,14 +9220,18 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint16_t>(match, 0xC9EBu, true); //patch
+			// `jmp +0xC9` written as its two bytes (there is no short-jump API).
+			injector::WriteMemory<std::uint8_t>(match, 0xEBu, true);      //jmp
+			injector::WriteMemory<std::uint8_t>(match + 1, 0xC9u, true);  // +0xC9
 		}
 
 		if (auto pattern = Pattern(image, "C7 05 ? ? ? ? 03 00 00 00 33 C0 5E 59 C3 C7"); pattern.size() > 0)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint16_t>(match, 0x0DEBu, true); //patch
+			// `jmp +0x0D` written as its two bytes (there is no short-jump API).
+			injector::WriteMemory<std::uint8_t>(match, 0xEBu, true);      //jmp
+			injector::WriteMemory<std::uint8_t>(match + 1, 0x0Du, true);  // +0x0D
 		}
 
 		if (auto pattern = Pattern(image, "C7 06 ? ? ? ? 74 19"); pattern.size() > 0)
@@ -9797,8 +9799,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint16_t>(match, 0x08C2u, true); //ret 8
-			injector::WriteMemory<std::uint8_t>(match + 2, 0x00u, true); //ret 8
+			injector::MakeRET(injector::raw_ptr(match), 8, true); //ret 8
 		}
 	}
 	Trace("TryToSkipAllErrors");
@@ -10134,10 +10135,12 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			{
 				auto* match = pattern.get(0).get<std::uint8_t>();
 
-				const std::int32_t rel = static_cast<std::int32_t>(*pattern.get(0).get<std::uint32_t>(2)) + 1;
-				std::uint8_t bytes[5] = {0xE9u};
-				std::memcpy(bytes + 1, &rel, sizeof(rel));
-				injector::WriteMemoryRaw(match, bytes, sizeof(bytes), true); //write
+				// The jz's own destination, re-encoded as a 5-byte jmp (rel32+1
+				// falls out of dest-(match+5)); the old instruction's sixth byte
+				// is left untouched, as before.
+				const auto* target = reinterpret_cast<std::uint8_t*>(
+				    injector::ReadRelativeOffset(injector::raw_ptr(match + 2), 4, true).as_int());
+				injector::MakeJMP(injector::raw_ptr(match), injector::raw_ptr(target), true); //jmp
 			}
 
 			if (auto pattern = Pattern(image, "51 68 04 05 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
