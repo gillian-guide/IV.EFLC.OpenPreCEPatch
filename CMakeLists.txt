@@ -37,6 +37,8 @@ set(OPCEP_MODULES
     source/log.ixx
     source/patch.ixx
     source/pipeline.ixx
+    source/config.ixx
+    source/steam.ixx
     source/game.ixx
     source/settings.ixx
     source/stability.ixx
@@ -52,11 +54,8 @@ set(OPCEP_MODULES
 
 set(OPCEP_CORE_SOURCES
     source/catalogue.cpp
-    source/config.cpp
     source/hooks.cpp
     source/menu.cpp
-    source/steam_achievements.cpp
-    source/vehicle_lights.cpp
     source/data/model_catalogue.cpp
     external/hooking/Hooking.Patterns.cpp
 )

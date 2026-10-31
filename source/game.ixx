@@ -19,6 +19,8 @@ module;
 
 export module opp.game;
 
+import opp.common;
+
 export namespace opp
 {
     // The build classifier's shared helpers (declared here, not in common.hxx:
@@ -740,8 +742,8 @@ uint32_t& DlcApplyRva() noexcept
 }
 
 // Rebases a value that addresses the original module, keyed by INI option.
-// opp::RecordDumpPointer (dump-tool only) is declared by helpers.hxx in the
-// global module fragment above, so its definition in dump_main.cpp matches.
+// opp_record_dump_pointer (dump-tool only) is declared by opp.common; the dump
+// tool defines it with C linkage.
 
 namespace
 {
@@ -749,7 +751,7 @@ namespace
     {
 #if defined(OPCEP_DUMP_TOOL)
         if (value != 0)
-            opp::RecordDumpPointer(static_cast<uint32_t>(value));
+            opp_record_dump_pointer(static_cast<uint32_t>(value));
 #endif
         return value;
     }

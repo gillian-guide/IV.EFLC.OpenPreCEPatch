@@ -1,29 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The settings module: INI creation/import, the parsed option document, the
-// typed value readers and the FusionFix compatibility gate. The section order is
-// exported as the table it is, so an importer sees the lookup policy without
-// reading config.cpp.
+// The settings module: the INI document, the typed value readers, the FusionFix
+// compatibility gate and the first-run/legacy import. `opp.settings` is the
+// façade the feature modules and dllmain import for every INI question; it
+// re-exports opp.config so one import covers the whole contract.
 
 module;
 
-#include "config.hxx"
-
 export module opp.settings;
 
-export using ::opp::Config;
-export using ::opp::EnsureConfigFile;
-export using ::opp::DetectFusionFix;
-export using ::opp::SetFusionFixPresent;
-export using ::opp::FusionFixPresent;
-export using ::opp::IsFusionFixGated;
-export using ::opp::FusionFixGateReason;
-
-// The typed, non-throwing value readers.
-export using ::opp::FlagExactlyOne;
-export using ::opp::IntResult;
-export using ::opp::IntStatus;
-export using ::opp::ParseIntPrefix;
-
-// The section table the option lookup walks, in order.
-export using ::opp::OptionSections;
+export import opp.config;

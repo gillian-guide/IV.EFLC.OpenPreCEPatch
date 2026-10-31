@@ -1,5 +1,42 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
+// Steam achievement mirror, implemented independently of the game-code
+// detours used by the standalone SteamAchievements.asi.
+//
+// It hooks xlive.dll!XUserWriteAchievements (ordinal 5278, a 3-argument
+// __stdcall) in the game's import table as soon as the install pass runs, calls
+// the original first (so GFWL achievements and xliveless's local achievement
+// store keep working), and mirrors each achievement id to Steam's
+// ISteamUserStats. Because the hook sits at the GFWL API boundary, other
+// game-code patches (TryToSkipAllErrors, VSyncFix) cannot move or overwrite the
+// site.
+//
+// SteamAPI_Init runs on a worker thread after the loader lock is released; ids
+// written before it finishes are queued and replayed, so no write is lost.
+
+module;
+
+#include "common.hxx"
+#include <windows.h>
+#include <cstdio>
+#include <cstring>
+
+export module opp.steam;
+
+import opp.common;
+import opp.log;
+
+export namespace opp
+{
+    // Installs the XUserWriteAchievements import hook and starts the Steam
+    // initialisation worker. Returns false when steam_api.dll/Steam is
+    // unavailable or the import is absent; the game then keeps its normal
+    // GFWL-only behaviour.
+    bool InstallSteamAchievementsBridge(GameImage image) noexcept;
+} // namespace opp
+
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
 // Steam achievement mirror.
 //
 // The game writes GFWL achievements through xlive.dll's
@@ -17,15 +54,6 @@
 // returns `ret 0x10`, pops four bytes the caller owns and shifts every argument
 // by one slot - the game then loops over a stack pointer as the achievement
 // count and faults. Keep this in sync with the import, not with the old ASI.
-
-#include "steam_achievements.hxx"
-
-import opp.log;
-
-#include <windows.h>
-
-#include <cstdio>
-#include <cstring>
 
 namespace opp
 {

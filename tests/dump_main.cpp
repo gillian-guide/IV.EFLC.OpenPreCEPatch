@@ -5,8 +5,6 @@
 // want to diff an INI's effect without launching the game.
 
 #include "common.hxx"
-import opp.pipeline;
-import opp.game;
 
 #include <algorithm>
 #include <cstdio>
@@ -20,6 +18,9 @@ import opp.game;
 #include <unordered_set>
 #include <vector>
 
+import opp.game;
+import opp.pipeline;
+
 namespace opp
 {
     namespace
@@ -30,15 +31,16 @@ namespace opp
             return pointers;
         }
     } // namespace
-
-    // Recorded by AddressOf / FindGlobalValue / FindGlobalSymbol under
-    // OPCEP_DUMP_TOOL. The dump canonicalises these operands after the pass:
-    // their numeric value depends on this tool's module layout, not behaviour.
-    void RecordDumpPointer(uint32_t value)
-    {
-        DumpPointers().push_back(value);
-    }
 } // namespace opp
+
+// Recorded by AddressOf / FindGlobalValue / FindGlobalSymbol under
+// OPCEP_DUMP_TOOL. The dump canonicalises these operands after the pass:
+// their numeric value depends on this tool's module layout, not behaviour.
+// C linkage so the modules (opp.common declares it) and this plain TU agree.
+extern "C" void opp_record_dump_pointer(uint32_t value)
+{
+    opp::DumpPointers().push_back(value);
+}
 
 namespace
 {

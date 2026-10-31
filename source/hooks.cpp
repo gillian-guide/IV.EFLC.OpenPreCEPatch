@@ -6,11 +6,8 @@
 // original destination VA. Resumes are tail-jumped, never called.
 
 #include "common.hxx"
-import opp.patch;
-import opp.game;
 #include "hooks.h"
 #include "catalogue.hxx"
-import opp.log;
 #include "opcodes.hxx"
 #include "rebased.h"
 #include "driveby_seh.h"
@@ -26,6 +23,11 @@ import opp.log;
 #include <new>
 #include <string>
 #include <xmmintrin.h>
+
+import opp.common;
+import opp.game;
+import opp.log;
+import opp.patch;
 
 // ---------------------------------------------------------------------------
 // Hook bodies: the game jumps or calls straight into these.

@@ -11,7 +11,6 @@
 module;
 
 #include "common.hxx"
-#include "config.hxx"
 #include "rebased.h"
 #include <cstddef>
 #include <cstdint>
@@ -31,6 +30,7 @@ module;
 export module opp.pipeline;
 
 import opp.common;
+import opp.config;
 import opp.game;
 import opp.log;
 import opp.patch;

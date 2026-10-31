@@ -12,7 +12,7 @@ module;
 #include "hooks.h"
 #include "rebased.h"
 #include "opcodes.hxx"
-#include "steam_achievements.hxx"
+import opp.steam;
 
 export module opp.compatibility;
 

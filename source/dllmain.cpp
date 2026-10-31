@@ -5,14 +5,9 @@
 // deferred worker would get to scan, so signatures have to be matched now.
 
 #include "common.hxx"
-import opp.pipeline;
-import opp.patch;
-import opp.game;
 #include "hooks.h"
-import opp.log;
 #include "menu.hxx"
 #include "rebased.h"
-#include "vehicle_lights.hxx"
 
 #include <cstdlib>
 #include <filesystem>
@@ -20,7 +15,12 @@ import opp.log;
 #include <mutex>
 
 import opp.common;
+import opp.game;
+import opp.log;
+import opp.patch;
+import opp.pipeline;
 import opp.settings;
+import opp.vehicles;
 
 namespace
 {

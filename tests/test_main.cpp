@@ -6,14 +6,8 @@
 
 #include "catalogue.hxx"
 #include "common.hxx"
-#include "config.hxx"
-import opp.pipeline;
-import opp.patch;
-import opp.game;
 #include "hooks.h"
-import opp.log;
 #include "menu.hxx"
-#include "vehicle_lights.hxx"
 
 #include <cmath>
 #include <cstdio>
@@ -23,6 +17,14 @@ import opp.log;
 #include <iterator>
 #include <string>
 #include <vector>
+
+import opp.common;
+import opp.config;
+import opp.game;
+import opp.log;
+import opp.patch;
+import opp.pipeline;
+import opp.vehicles;
 
 
 namespace

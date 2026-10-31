@@ -24,6 +24,7 @@ module;
 
 export module opp.patch;
 
+import opp.common;
 import opp.game;
 import opp.log;
 
@@ -143,7 +144,7 @@ export namespace opp
     {
         const auto value = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(pointer));
 #if defined(OPCEP_DUMP_TOOL)
-        RecordDumpPointer(value);
+        opp_record_dump_pointer(value);
 #endif
         return value;
     }
