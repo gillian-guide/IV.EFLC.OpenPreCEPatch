@@ -51,13 +51,39 @@ namespace opp
             return;
         }
 
+        std::optional<Phase> currentPhase;
+        size_t phaseApplied = 0;
+        size_t phaseSkipped = 0;
+
         for (const Feature& feature : features)
         {
+            // One line per phase boundary plus one per phase end: a crash in the
+            // install pass leaves the phase visible, not just the last arm.
+            if (!currentPhase || feature.phase != *currentPhase)
+            {
+                if (currentPhase)
+                {
+                    Log("phase %s: %zu applied, %zu skipped", PhaseName(*currentPhase),
+                        ArmWritesApplied() - phaseApplied,
+                        ArmWritesSkipped() - phaseSkipped);
+                }
+                currentPhase = feature.phase;
+                phaseApplied = ArmWritesApplied();
+                phaseSkipped = ArmWritesSkipped();
+                Log("phase %s", PhaseName(feature.phase));
+            }
+
             if (observer.begin != nullptr)
                 observer.begin(observer.user, feature.name);
             feature.install(ctx);
             if (observer.end != nullptr)
                 observer.end(observer.user, feature.name);
+        }
+        if (currentPhase)
+        {
+            Log("phase %s: %zu applied, %zu skipped", PhaseName(*currentPhase),
+                ArmWritesApplied() - phaseApplied,
+                ArmWritesSkipped() - phaseSkipped);
         }
 
         // One line for the whole pass: the number of writes that reached the

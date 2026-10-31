@@ -163,7 +163,7 @@ namespace opp
         BuildIndex();
     }
 
-    std::span<const std::string_view> Config::OptionSections() noexcept
+    std::span<const std::string_view> OptionSections() noexcept
     {
         return kOptionSections;
     }

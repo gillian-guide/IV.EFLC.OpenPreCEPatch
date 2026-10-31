@@ -50,6 +50,12 @@ namespace opp
     // The original's option gate (std::stoi(value) == 1, without the throw).
     bool FlagExactlyOne(std::string_view text) noexcept;
 
+    // The grouped layout, in search order: a key is resolved in the first section
+    // of this list that contains it. [Options] stays first so an old flat
+    // ZolikaPatch.ini keeps working unchanged. Keys are expected to be unique
+    // across the searched sections (checked by the test suite).
+    [[nodiscard]] std::span<const std::string_view> OptionSections() noexcept;
+
     class Config final
     {
     public:
@@ -85,12 +91,6 @@ namespace opp
         // Number of present values that did not parse as integers (each used
         // the option default). Reported once at the end of the config load.
         [[nodiscard]] size_t InvalidValues() const noexcept { return invalidValues_; }
-
-        // The grouped layout, in search order: a key is resolved in the first
-        // section of this list that contains it. [Options] stays first so an old
-        // flat ZolikaPatch.ini keeps working unchanged. Keys are expected to be
-        // unique across the searched sections (checked by the test suite).
-        [[nodiscard]] static std::span<const std::string_view> OptionSections() noexcept;
 
     private:
         struct Entry

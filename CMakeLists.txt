@@ -35,6 +35,9 @@ set(OPCEP_INCLUDES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/includes")
 set(OPCEP_MODULES
     source/common.ixx
     source/settings.ixx
+    source/order.ixx
+    source/pattern.ixx
+    source/pipeline.ixx
     source/stability.ixx
     source/performance.ixx
     source/graphics.ixx

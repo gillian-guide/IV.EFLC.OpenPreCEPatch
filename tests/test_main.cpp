@@ -156,7 +156,7 @@ namespace
               "common:/data/gta.dat");
 
         // The section policy is data: [Options] first, then the subsystem groups.
-        const auto sections = opp::Config::OptionSections();
+        const auto sections = opp::OptionSections();
         CHECK(sections.size() == 15);
         CHECK(sections.front() == "Options");
         CHECK(sections.back() == "DEBUG");
@@ -177,7 +177,7 @@ namespace
         CHECK(file != nullptr);
         if (file)
         {
-            const auto sections = opp::Config::OptionSections();
+            const auto sections = opp::OptionSections();
             std::string current;
             std::vector<std::pair<std::string, std::string>> seen;
             char line[512];
