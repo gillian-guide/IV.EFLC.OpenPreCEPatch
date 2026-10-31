@@ -18,10 +18,8 @@ struct UselessCheckSingle
 	std::uint8_t byte;
 };
 
-// The original handler, applied at the two points the port currently uses: the
-// RVA tables first thing in PatchGame, the singles after
-// RemoveStaticCutsceneCarShadows. Both write only on builds 5 (v1040), 8 (v1070)
-// and 9 (v1080); every other build writes nothing. The caller owns the
-// RemoveUselessChecks INI gate, exactly like the other arms.
-void ApplyUselessCheckTables(GameBuild build, GameImage image);
-void ApplyUselessCheckSingles(GameBuild build, GameImage image);
+// The original handler, applied at one point: the singles first, then the
+// build's RVA tables. Writes only on builds 5 (v1040), 8 (v1070) and 9 (v1080);
+// every other build writes nothing. The caller owns the RemoveUselessChecks INI
+// gate, exactly like the other arms.
+void ApplyRemoveUselessChecks(GameBuild build, GameImage image);

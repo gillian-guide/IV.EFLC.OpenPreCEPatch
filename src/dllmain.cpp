@@ -7701,14 +7701,6 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 	PatchContext ctx{image, reinterpret_cast<std::uintptr_t>(image.base), build,
 	                  config};
 
-	// RemoveUselessChecks' RVA tables run before every scan: the original applies
-	// them early too, and two later signatures only stay broken because these
-	// bytes are already NOPs when those arms scan (tests/dump_main.cpp guards the
-	// order).
-	Trace("RemoveUselessChecks tables");
-	if (ctx.Option("RemoveUselessChecks", "0"))
-		ApplyUselessCheckTables(ctx.build, ctx.image);
-
 	// Publish every slot before any arm writes a site: a site write can
 	// overwrite the signature a later arm's slot publish scans for.
 	Trace("publish BadPlayerModelCrashFix");
@@ -8581,6 +8573,15 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_building_dynamic_shadows), true); //jmp
 		}
 	}
+	// RemoveUselessChecks: the original handler applies its singles and its RVA
+	// tables in one go, as the loader's 27th option read (right after
+	// BuildingDynamicShadows). The port's arm list is alphabetical, so this is
+	// the nearest equivalent slot. The early position is load-bearing: the tables
+	// overwrite one fixed byte of MiscFixes' and RestoreDeathMusic's signatures,
+	// so those two later installs are suppressed exactly as in the original.
+	Trace("RemoveUselessChecks");
+	if (ctx.Option("RemoveUselessChecks", "0"))
+		ApplyRemoveUselessChecks(ctx.build, ctx.image);
 	Trace("CollisionDeadlockFix");
 	// CollisionDeadlockFix: 1 sigjump
 	if (ctx.Option("CollisionDeadlockFix", "1"))
@@ -9581,12 +9582,6 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 			injector::WriteMemory<std::uint8_t>(match + 6, 0xEBu, true); //jmp
 		}
 	}
-	// RemoveUselessChecks' singles: the original applies them with the tables,
-	// the port currently keeps them at this later point. Byte-neutral (the audit
-	// proved no arm scans or writes a single) and re-proved by the dump.
-	Trace("RemoveUselessChecks singles");
-	if (ctx.Option("RemoveUselessChecks", "0"))
-		ApplyUselessCheckSingles(ctx.build, ctx.image);
 	Trace("ReversingLightFix");
 	// ReversingLightFix: 1 literal
 	if (ctx.Option("ReversingLightFix", "1"))

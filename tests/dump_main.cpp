@@ -122,7 +122,32 @@ std::vector<HookBodyStand> HookBodyStands()
 	return stands;
 }
 
+// The installer keys and their per-arm defaults (generated).
+struct OptionKey
+{
+	const char* key;
+	const char* defaultValue;
+};
+#include "option_keys.inc"
 
+// The repository INI with every known key forced off, then `enabled` forced on:
+// isolates a set of arms from whatever the config file happens to contain.
+ConfigDocument IsolateOptions(const ConfigDocument& base, const char* const* enabled,
+                              std::size_t enabledCount)
+{
+	ConfigDocument config = base;
+	for (std::size_t i = 0; i < kOptionKeyCount; ++i)
+		config.entries.push_back({"Options", kOptionKeys[i].key, "0"});
+	for (std::size_t i = 0; i < enabledCount; ++i)
+		config.entries.push_back({"Options", enabled[i], "1"});
+	return config;
+}
+
+bool HasMatch(const std::uint8_t* image, std::uint32_t size, const char* signature)
+{
+	Match match;
+	return FindPattern(ModuleView{image, size}, signature, match);
+}
 // Rewrite every branch this pass wrote to a hook body so its displacement names
 // the body's reference VA instead of the stub's load address. Byte-for-byte this
 // keeps the installer's decisions and drops the tool's own layout from the
@@ -179,11 +204,116 @@ static bool RunPass(std::uint8_t* image, std::uint32_t size, const ConfigDocumen
 	}
 }
 
+// Ordering guard: RemoveUselessChecks must stay ahead of MiscFixes and
+// RestoreDeathMusic, as in the original loader. Its tables overwrite one fixed
+// byte of each of their signatures (MiscFixes' `E8` at match+9 = 0x90631
+// becomes 0x90, RestoreDeathMusic's `E8` at match+0 = 0x41E53A becomes 0x32),
+// so with all three enabled both arms must find no match and leave their own
+// patch byte untouched: 0x74 at 0x90628 for MiscFixes, and RestoreDeathMusic's
+// third CALL (at 0x41E53A) absent. With RemoveUselessChecks off both arms must
+// apply. Moving RemoveUselessChecks after them re-enables both installs and
+// fails here.
+int RunOrderingCheck(std::uint8_t* image, std::uint32_t size, const ConfigDocument& config)
+{
+	constexpr const char* kMiscFixesSignature =
+	    "74 05 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 83 C4 04 B9";
+	constexpr const char* kDeathMusicSignature = "E8 ? ? ? ? 84 C0 74 C6 8B BE";
+	// Build 9 (1.0.8.0) sites.
+	constexpr std::uint32_t kMiscFixesPatchByte = 0x90628; // the `74` MiscFixes turns into EB
+	constexpr std::uint32_t kMiscFixesScanByte = 0x90631;  // the `E8` RemoveUselessChecks NOPs
+	constexpr std::uint32_t kDeathMusicScanByte = 0x41E53A; // the `E8` RemoveUselessChecks patches
+	// RestoreDeathMusic's other two CALLs, which run after RemoveUselessChecks.
+	constexpr std::uint32_t kDeathMusicCalls[] = {0x41E3B8, 0x41E4FC};
+
+	if (size <= kMiscFixesScanByte + kBranchBytes)
+	{
+		std::fprintf(stderr, "zp_dump: ordering: image too small\n");
+		return 1;
+	}
+	const std::vector<std::uint8_t> pristine(image, image + size);
+	// The two anchor bytes prove the image is the build these RVAs belong to.
+	if (pristine[kMiscFixesScanByte] != 0xE8 || pristine[kDeathMusicScanByte] != 0xE8)
+	{
+		std::fprintf(stderr, "zp_dump: ordering: image is not 1.0.8.0 (0x%X=%02X, 0x%X=%02X)\n",
+		             kMiscFixesScanByte, pristine[kMiscFixesScanByte], kDeathMusicScanByte,
+		             pristine[kDeathMusicScanByte]);
+		return 1;
+	}
+	const char* all[] = {"RemoveUselessChecks", "MiscFixes", "RestoreDeathMusic"};
+
+	const auto pass = [&](const char* const* enabled, std::size_t count) {
+		std::memcpy(image, pristine.data(), size);
+		const ConfigDocument isolated = IsolateOptions(config, enabled, count);
+		DWORD code = 0;
+		void* where = nullptr;
+		if (RunPass(image, size, &isolated, code, where))
+			return true;
+		std::fprintf(stderr, "zp_dump: ordering: pass faulted %08lX at %p\n", code, where);
+		return false;
+	};
+	const auto expectByte = [&](std::uint32_t site, std::uint8_t want, const char* what) {
+		if (image[site] == want)
+			return 0;
+		std::fprintf(stderr, "zp_dump: ordering: %s at 0x%X is %02X, expected %02X\n", what, site,
+		             image[site], want);
+		return 1;
+	};
+
+	// RemoveUselessChecks on: both installs must be suppressed.
+	if (!pass(all, 3))
+		return 1;
+	int failures = 0;
+	failures += expectByte(kMiscFixesScanByte, 0x90, "the RemoveUselessChecks byte");
+	failures += expectByte(kDeathMusicScanByte, 0x32, "the RemoveUselessChecks byte");
+	failures += expectByte(kMiscFixesPatchByte, 0x74, "MiscFixes' patch byte");
+	if (HasMatch(image, size, kMiscFixesSignature))
+	{
+		std::fprintf(stderr,
+		             "zp_dump: ordering: MiscFixes' signature still matches with RemoveUselessChecks on\n");
+		++failures;
+	}
+	if (HasMatch(image, size, kDeathMusicSignature))
+	{
+		std::fprintf(stderr, "zp_dump: ordering: RestoreDeathMusic's signature still matches with "
+		                     "RemoveUselessChecks on\n");
+		++failures;
+	}
+	for (const std::uint32_t site : kDeathMusicCalls)
+	{
+		if (std::memcmp(image + site, pristine.data() + site, kBranchBytes) == 0)
+		{
+			std::fprintf(stderr, "zp_dump: ordering: RestoreDeathMusic's call at 0x%X was not "
+			                     "written\n", site);
+			++failures;
+		}
+	}
+
+	// RemoveUselessChecks off: both arms must apply. This is the control that
+	// proves the suppression above is due to the tables, not to the arms.
+	if (!pass(all + 1, 2))
+		return 1;
+	failures += expectByte(kMiscFixesPatchByte, 0xEB, "MiscFixes' patch byte with RC off");
+	failures += expectByte(kMiscFixesScanByte, 0xE8, "the untouched signature byte");
+	if (std::memcmp(image + kDeathMusicScanByte, pristine.data() + kDeathMusicScanByte,
+	                kBranchBytes) == 0)
+	{
+		std::fprintf(stderr,
+		             "zp_dump: ordering: RestoreDeathMusic's call at 0x%X was not written with RC off\n",
+		             kDeathMusicScanByte);
+		++failures;
+	}
+
+	std::fprintf(stderr, "zp_dump: ordering: %s\n", failures == 0 ? "ok" : "FAIL");
+	return failures == 0 ? 0 : 1;
+}
+
 int main(int argc, char** argv)
 {
 	if (argc < 2)
 	{
-		std::fprintf(stderr, "usage: zp_dump [--per-option] <out.txt> [ZolikaPatch.ini]\n");
+		std::fprintf(stderr,
+		             "usage: zp_dump [--per-option] <out.txt> [ZolikaPatch.ini]\n"
+		             "       zp_dump --ordering [ZolikaPatch.ini]\n");
 		return 1;
 	}
 
@@ -228,6 +358,7 @@ int main(int argc, char** argv)
 	std::memcpy(image, file_image.data(), size);
 
 	const bool perOption = argc >= 3 && std::strcmp(argv[1], "--per-option") == 0;
+	const bool ordering = std::strcmp(argv[1], "--ordering") == 0;
 	const char* ini = perOption ? (argc >= 4 ? argv[3] : "game_refs/ZolikaPatch.ini")
 	                            : (argc >= 3 ? argv[2] : "game_refs/ZolikaPatch.ini");
 	ConfigDocument config;
@@ -240,27 +371,22 @@ int main(int argc, char** argv)
 	std::fprintf(stderr, "zp_dump: module base %p\n",
 	             static_cast<void*>(GetModuleHandleA(nullptr)));
 
+	// Ordering guard (see RunOrderingCheck).
+	if (ordering)
+		return RunOrderingCheck(image, size, config);
+
 	// --per-option: run each arm alone (every other key forced to 0) and print
 	// "option rva byte" so a divergence can be attributed to one installer.
 	if (perOption)
 	{
-		struct OptionKey
-		{
-			const char* key;
-			const char* defaultValue;
-		};
-#include "option_keys.inc"
-
 		std::FILE* perOut = std::fopen(argv[2], "wb");
 		if (!perOut)
 			return 5;
 		const std::vector<HookBodyStand> stands = HookBodyStands();
 		for (std::size_t i = 0; i < kOptionKeyCount; ++i)
 		{
-			ConfigDocument single = config;
-			for (std::size_t j = 0; j < kOptionKeyCount; ++j)
-				single.entries.push_back({"Options", kOptionKeys[j].key, "0"});
-			single.entries.push_back({"Options", kOptionKeys[i].key, "1"});
+			const char* enabled[] = {kOptionKeys[i].key};
+			ConfigDocument single = IsolateOptions(config, enabled, 1);
 
 			std::memcpy(image, file_image.data(), size);
 			PatchGame(GameBuild::v1080, GameImage{image, size}, single);

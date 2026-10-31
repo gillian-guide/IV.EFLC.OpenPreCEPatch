@@ -234,8 +234,7 @@ int Run()
 		{
 			std::vector<std::uint8_t> buffer(0x1000000u, 0); // above the largest RVA
 			const GameImage image{buffer.data(), buffer.size()};
-			ApplyUselessCheckTables(want.build, image);
-			ApplyUselessCheckSingles(want.build, image);
+			ApplyRemoveUselessChecks(want.build, image);
 
 			std::size_t positions = 0;
 			std::uint64_t hash = 0xcbf29ce484222325ull;
@@ -262,8 +261,7 @@ int Run()
 		{
 			std::vector<std::uint8_t> buffer(0x1000000u, 0);
 			const GameImage image{buffer.data(), buffer.size()};
-			ApplyUselessCheckTables(build, image);
-			ApplyUselessCheckSingles(build, image);
+			ApplyRemoveUselessChecks(build, image);
 			for (std::uint8_t byte : buffer)
 				CHECK(byte == 0);
 		}

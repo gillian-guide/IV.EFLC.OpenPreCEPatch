@@ -102,7 +102,11 @@ if(ZP_BUILD_DUMP)
     add_test(NAME zp_dump_full
              COMMAND zp_dump ${CMAKE_CURRENT_BINARY_DIR}/dump-full.txt
                      ${CMAKE_CURRENT_SOURCE_DIR}/ZolikaPatch.ini)
-    set_tests_properties(zp_dump_full PROPERTIES
+    # The ordering guard: RemoveUselessChecks must stay ahead of MiscFixes and
+    # RestoreDeathMusic (its tables destroy both signatures, as in the original).
+    add_test(NAME zp_dump_ordering
+             COMMAND zp_dump --ordering ${CMAKE_CURRENT_SOURCE_DIR}/ZolikaPatch.ini)
+    set_tests_properties(zp_dump_full zp_dump_ordering PROPERTIES
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   endif()
 endif()

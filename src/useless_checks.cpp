@@ -76,38 +76,24 @@ void SweepSingles(GameImage image, const UselessCheckSingle* rows, std::size_t c
 }
 } // namespace
 
-void ApplyUselessCheckTables(GameBuild build, GameImage image)
+void ApplyRemoveUselessChecks(GameBuild build, GameImage image)
 {
+	// The handler's order: the singles first, then that build's tables.
 	switch (build)
 	{
 	case GameBuild::v1080:
+		SweepSingles(image, kUselessSingles9, std::size(kUselessSingles9));
 		SweepNop5(image, kUselessBuild9Nop5, std::size(kUselessBuild9Nop5));
 		SweepBytes(image, kUselessBuild9MovAl1, std::size(kUselessBuild9MovAl1), kMovAl1);
 		SweepBytes(image, kUselessBuild9XorAlAl, std::size(kUselessBuild9XorAlAl), kXorAlAl);
 		break;
 	case GameBuild::v1070:
+		SweepSingles(image, kUselessSingles8, std::size(kUselessSingles8));
 		SweepNop5(image, kUselessBuild8Nop5, std::size(kUselessBuild8Nop5));
 		break;
 	case GameBuild::v1040:
-		SweepNop5(image, kUselessBuild5Nop5, std::size(kUselessBuild5Nop5));
-		break;
-	default:
-		break;
-	}
-}
-
-void ApplyUselessCheckSingles(GameBuild build, GameImage image)
-{
-	switch (build)
-	{
-	case GameBuild::v1080:
-		SweepSingles(image, kUselessSingles9, std::size(kUselessSingles9));
-		break;
-	case GameBuild::v1070:
-		SweepSingles(image, kUselessSingles8, std::size(kUselessSingles8));
-		break;
-	case GameBuild::v1040:
 		SweepSingles(image, kUselessSingles5, std::size(kUselessSingles5));
+		SweepNop5(image, kUselessBuild5Nop5, std::size(kUselessBuild5Nop5));
 		break;
 	default:
 		break;
