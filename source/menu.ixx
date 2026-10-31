@@ -1,10 +1,14 @@
-// zp.menu - the IVMenuAPI integration and the ZMenuIV compatibility guard.
+// zp.menu - the IVMenuAPI integration.
 //
 // With `AddOptionsInMenu` on the shipped mod loads IVMenuAPI.asi once, registers
 // the Death Music and Pause On Focus Loss toggles through AddIVMenuOption and
 // installs RestoreDeathMusic's hooks even with its INI key off; the callbacks it
-// passes are the ABI bodies in the hook bodies. The ZMenuIV guard follows the
-// config object's construction and exits the process below its minimum version.
+// passes are the ABI bodies in the hook bodies.
+//
+// The ZMenuIV compatibility guard is *not* here: it is a generic startup guard
+// (ask the loaded menu for its version and refuse below the minimum), so
+// `ZMenuVersionGuard` lives in `src/dllmain.cpp` with the rest of the startup
+// sequence, and this module keeps only the menu API's probing and registration.
 
 module;
 
@@ -24,8 +28,6 @@ MenuProbeResult MenuIntegrationProbe(MenuIntegrationState& state, bool loadSucce
 const MenuRegistration* MenuRegistrations(std::size_t& count) noexcept;
 
 std::size_t RegisterMenuOptions() noexcept;
-
-ZMenuGuardResult ZMenuVersionGuard(std::uint32_t& version) noexcept;
 }  // export
 
 namespace
@@ -105,23 +107,4 @@ std::size_t RegisterMenuOptions() noexcept
 			++total;
 	}
 	return total;
-}
-
-ZMenuGuardResult ZMenuVersionGuard(std::uint32_t& version) noexcept
-{
-	version = 0;
-	const HMODULE module = GetModuleHandleA(kZMenuModuleName);
-	if (!module)
-		return ZMenuGuardResult::module_absent;
-
-	const auto getVersion = reinterpret_cast<int(__cdecl*)(std::uint32_t*, std::uint32_t*)>(
-		reinterpret_cast<void*>(GetProcAddress(module, kZMenuProcName)));
-	if (!getVersion)
-		return ZMenuGuardResult::export_absent;
-
-	// The export reports two dwords; only the first is compared.
-	std::uint32_t out = 0;
-	(void)getVersion(&version, &out); // the original ignores the result
-	return ZMenuVersionAccepted(version) ? ZMenuGuardResult::version_ok
-	                                     : ZMenuGuardResult::version_rejected;
 }

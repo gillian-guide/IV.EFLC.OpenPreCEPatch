@@ -509,6 +509,32 @@ void SetStuff()
 }
 } // namespace
 
+// ---- startup guards ------------------------------------------------------
+//
+// Generic startup logic, not a feature: the ZMenuIV guard asks the loaded menu
+// for its version and `EnforceZMenuVersion` above turns a rejection into the
+// original's message box and exit. The probe stays at global scope because the
+// native tests drive it directly.
+
+ZMenuGuardResult ZMenuVersionGuard(std::uint32_t& version) noexcept
+{
+	version = 0;
+	const HMODULE module = GetModuleHandleA(kZMenuModuleName);
+	if (!module)
+		return ZMenuGuardResult::module_absent;
+
+	const auto getVersion = reinterpret_cast<int(__cdecl*)(std::uint32_t*, std::uint32_t*)>(
+		reinterpret_cast<void*>(GetProcAddress(module, kZMenuProcName)));
+	if (!getVersion)
+		return ZMenuGuardResult::export_absent;
+
+	// The export reports two dwords; only the first is compared.
+	std::uint32_t out = 0;
+	(void)getVersion(&version, &out); // the original ignores the result
+	return ZMenuVersionAccepted(version) ? ZMenuGuardResult::version_ok
+	                                     : ZMenuGuardResult::version_rejected;
+}
+
 #if defined(ZP_PARITY_DRIVER)
 // Offline state driver only (readable/tests/state_dump.cpp); never compiled into
 // the shipped ASI. The driver must run the loader's own INI/flags arm and its
