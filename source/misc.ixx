@@ -19,9 +19,6 @@ export module zp.misc;
 
 import zp.common;
 import zp.game;
-import zp.patch;
-import zp.log;
-import zp.catalogue;
 import zp.useless_checks;
 
 export
