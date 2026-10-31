@@ -8,8 +8,6 @@
 module;
 
 #include "config.hxx"
-#include "fusionfix_compat.hxx"
-#include "ini_import.hxx"
 
 export module opp.settings;
 

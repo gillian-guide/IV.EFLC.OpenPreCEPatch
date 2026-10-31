@@ -45,11 +45,23 @@ A site outside the game image, a write that would leave it, or a branch whose
 body did not resolve is a logged skip instead of a fault. On a healthy image
 every check passes, so the write set is byte-identical to the unchecked form.
 
-## Config: one parse, no exception, no allocation per read
+## Config: the bundled IniReader, one parse, no exception, no allocation per read
 
-`source/config.cpp` parses the INI once into a NUL-terminated arena plus an open
-addressed index. `Config::Option` resolves in O(1) with no allocation and never
-throws.
+`source/config.cpp` reads the file with the bundled IniReader
+(`external/inireader`, the mINI reader the original loader used) exactly once,
+then copies the parsed document into a NUL-terminated arena plus an open
+addressed section/key index. `Config::Option` resolves in O(1) with no
+allocation and never throws. The reader gained three read-only enumeration
+methods (`GetSections`/`GetKeys`/`GetRawValue`, local submodule commit
+`9a1c3fa`) so the facade can copy the document once instead of doing one map
+lookup per key; `GetKeys` deduplicates and `GetRawValue` returns the last value,
+which is mINI's last-duplicate-wins answer.
+
+The custom mINI reimplementation is gone: the grammar is now the bundled
+reader's by construction, including its inline-comment rule (a space-preceded
+`;`, `//` or `#` starts a comment after the first `=`; without the space it is
+part of the value). `TestConfigSemantics` pins the CRLF, duplicate-key,
+duplicate-section, quote, escaped-`=`, whole-line and inline comment cases.
 
 The original (and this tree before the change) did
 `std::stoi(value, nullptr, 10)` inside `DllMain`, so a bare `Key=` or
@@ -62,9 +74,15 @@ not parse and used the option default` summarises it once per run.
 Everything a legal INI can observe is unchanged: the section search order
 (`Options` first, then the subsystem groups), last-duplicate-wins, the
 exactly-`1` gate with `std::stoi`'s base-10 prefix grammar (`"1abc"` is 1,
-`"0x2"` is 0), quoting, and the space-preceded inline-comment rule of the mINI
-reader this replaces. Tests: `TestConfig`, `TestConfigSemantics`, `TestIntPrefix`,
-`TestShippedTemplate` in `tests/test_main.cpp`.
+`"0x2"` is 0), quoting, BOM/CRLF, and the whole-line `;`/`#`/`//` comments.
+Tests: `TestConfig`, `TestConfigSemantics` (including the CRLF and inline-comment
+cases), `TestIntPrefix`, `TestShippedTemplate` in `tests/test_main.cpp`.
+
+The first-run creation/legacy import (`EnsureConfigFile`, the legacy key tables)
+and the FusionFix overlap gate live in the same `config.hxx`/`config.cpp` pair:
+they answer the same "what does this INI say?" question, and folding them there
+deleted `ini_import.*`, `fusionfix_compat.*` and the interim `ini_file.*`
+wrapper (the bundled reader is used directly, no extra plain TU).
 
 ## Launcher slots: exactly the original's two
 

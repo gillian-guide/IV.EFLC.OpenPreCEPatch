@@ -51,12 +51,9 @@ set(OPCEP_CORE_SOURCES
     source/catalogue.cpp
     source/config.cpp
     source/feature_registry.cpp
-    source/fusionfix_compat.cpp
     source/game.cpp
     source/helpers.cpp
     source/hooks.cpp
-    source/ini_file.cpp
-    source/ini_import.cpp
     source/menu.cpp
     source/order.cpp
     source/patches.cpp

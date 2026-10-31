@@ -7,8 +7,6 @@
 #include "common.hxx"
 #include "game.hxx"
 #include "hooks.h"
-#include "fusionfix_compat.hxx"
-#include "ini_import.hxx"
 import opp.log;
 #include "menu.hxx"
 #include "patches.hxx"

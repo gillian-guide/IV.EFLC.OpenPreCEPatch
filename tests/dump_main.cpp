@@ -8,7 +8,6 @@
 #include "feature_registry.hxx"
 #include "game.hxx"
 #include "patches.hxx"
-#include "ini_import.hxx"
 
 #include <algorithm>
 #include <cstdio>

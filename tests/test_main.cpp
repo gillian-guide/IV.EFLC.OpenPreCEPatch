@@ -8,11 +8,9 @@
 #include "common.hxx"
 #include "config.hxx"
 #include "feature_registry.hxx"
-#include "fusionfix_compat.hxx"
 #include "game.hxx"
 #include "helpers.hxx"
 #include "hooks.h"
-#include "ini_import.hxx"
 import opp.log;
 #include "menu.hxx"
 #include "patches.hxx"
@@ -148,6 +146,35 @@ namespace
         CHECK(!config.Has("STABILITY", "onlysecond"));
         CHECK(config.InvalidValues() >= 2);                 // Empty + Bad
         std::filesystem::remove(path);
+
+        // CRLF: the bundled reader drops the CR, so the values stay clean.
+        const std::filesystem::path crlf = "opcep_semantics_crlf.ini";
+        WriteFile(crlf, "[Options]\r\nCrlf = 1\r\nText = a b\r\n");
+        opp::Config windows(crlf);
+        CHECK(windows.loaded());
+        CHECK(windows.Option("Crlf", "0"));
+        CHECK(windows.String("Options", "Text", "") == "a b");
+        std::filesystem::remove(crlf);
+
+        // mINI's inline comment rule: a space-preceded `;`, `//` or `#` starts a
+        // comment and is stripped after the first `=`; without the space it is
+        // part of the value (TestConfig's NoSpace case).
+        const std::filesystem::path comments = "opcep_semantics_comments.ini";
+        WriteFile(comments,
+                  "[Options]\n"
+                  "Hash = 1 # note\n"
+                  "Semi = 1 ; note\n"
+                  "Slash = 1 // note\n"
+                  "// whole-line slash\n"
+                  "# whole-line hash\n"
+                  "; whole-line semi\n");
+        opp::Config commented(comments);
+        CHECK(commented.loaded());
+        CHECK(commented.Option("Hash", "0"));
+        CHECK(commented.Option("Semi", "0"));
+        CHECK(commented.Option("Slash", "0"));
+        CHECK(!commented.Has("Options", "// whole-line slash"));
+        std::filesystem::remove(comments);
 
         // A missing file loads nothing and every option keeps its default.
         opp::Config missing("opcep_semantics_missing.ini");

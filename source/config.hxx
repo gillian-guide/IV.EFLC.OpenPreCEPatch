@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// INI access. The file is parsed once at load into a stable, NUL-terminated
-// arena plus a hash index, so every option read is an O(1) lookup with no
-// allocation and no exception. The grammar is the vendored mINI reader's
-// (ThirteenAG/IniReader), which is what this tree used before: section/key are
-// case-sensitive, the last duplicate wins, a whole-line comment starts with
-// `;`, `#` or `//`, an inline comment must be preceded by a space and is
-// stripped only after the first `=`, values are trimmed of surrounding
-// whitespace and of one matching quote pair, and a UTF-8 BOM is skipped.
+// INI access. The file is parsed once by the bundled IniReader
+// (external/inireader, the mINI reader the original loader used) and copied into
+// a stable, NUL-terminated arena plus a hash index, so every option read is an
+// O(1) lookup with no allocation and no exception. The grammar is mINI's by
+// construction, not a reimplementation: section/key are case-sensitive, the
+// last duplicate wins, a whole-line comment starts with `;`, `#` or `//`, an
+// inline comment (`;`, `//` or `#`) is stripped only when preceded by a space
+// and only after the first `=`, one matching quote pair is stripped from a
+// value, and a UTF-8 BOM/CRLF is tolerated.
 //
 // Option semantics stay the original's: a present value is enabled when it
 // parses to exactly 1 (std::stoi's base-10 prefix grammar: "1abc" is 1), and an
@@ -15,6 +16,11 @@
 // threw std::invalid_argument out of DllMain for `Key=` or `Key=abc`; that is
 // the fault this tree replaces with a logged fallback to the same default
 // (improvements.md, "install-time failsafes").
+//
+// This header also declares the two INI-adjacent pieces the original loader had
+// elsewhere: the FusionFix overlap gate (an option FusionFix already patches is
+// forced off) and the first-run creation/legacy import of the grouped INI.
+// Both are part of answering "what does this INI say?" and live in config.cpp.
 
 #pragma once
 
@@ -100,7 +106,7 @@ namespace opp
             std::string_view value;
         };
 
-        void Parse(std::string_view bytes);
+        void Load();
         void BuildIndex();
         [[nodiscard]] const char* Find(std::string_view section,
                                        std::string_view key) const noexcept;
@@ -117,4 +123,58 @@ namespace opp
         mutable size_t invalidValues_{};
         bool loaded_{};
     };
+
+    // -----------------------------------------------------------------------
+    // FusionFix overlap gate
+    // -----------------------------------------------------------------------
+
+    struct FusionFixConflict
+    {
+        const char* option;
+        const char* reason;
+    };
+
+    const FusionFixConflict* FusionFixConflicts(size_t& count) noexcept;
+
+    // Looks for a FusionFix ASI in the module directory (and for a loaded
+    // module). Records the result for Config::Option.
+    bool DetectFusionFix(const std::filesystem::path& moduleDirectory);
+
+    void SetFusionFixPresent(bool present) noexcept;
+    bool FusionFixPresent() noexcept;
+
+    bool IsFusionFixGated(const char* option) noexcept;
+    const char* FusionFixGateReason(const char* option) noexcept;
+
+    // -----------------------------------------------------------------------
+    // First-run INI creation and legacy import
+    // -----------------------------------------------------------------------
+
+    // The outcome of a legacy import: one entry per legacy option key that could
+    // not be carried into the grouped file, with the reason.
+    struct LegacyImportReport
+    {
+        struct DroppedKey
+        {
+            std::string key;
+            std::string reason;
+        };
+        std::vector<DroppedKey> dropped;
+    };
+
+    // Resolve the config path next to the ASI. Creates the grouped file from an
+    // old flat file, or from the template when neither exists. Falls back to the
+    // old file if the new one cannot be written. When `report` is set, the keys
+    // the import could not carry over are recorded there.
+    std::filesystem::path EnsureConfigFile(const std::filesystem::path& moduleDirectory,
+                                           LegacyImportReport* report = nullptr);
+
+    // Original options this tree does not implement. A legacy INI that sets one
+    // is imported with the key left out and a log line, never silently.
+    std::span<const std::string_view> UnsupportedLegacyKeys() noexcept;
+
+    // Original options owned by the XLivelessAddon companion module, which reads
+    // the same legacy keys from its own INI. Listed separately so the log does
+    // not call them "unimplemented".
+    std::span<const std::string_view> CompanionLegacyKeys() noexcept;
 } // namespace opp
