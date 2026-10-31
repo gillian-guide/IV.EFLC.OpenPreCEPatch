@@ -1,12 +1,14 @@
 // Stub hook bodies for the write-set dump tool: the dump only needs their
 // addresses (they appear as jump targets), never their code - the real
-// bodies are 32-bit assembly.
+// bodies are 32-bit assembly. stub_bodies.h is the declaration list; including
+// it here makes the compiler check every definition against it.
 #include "pch.h"
 
 #include <cstdint>
 
 #include "common.h"
 #include "xlive/xliveless.h"
+#include "stub_bodies.h"
 
 void abi_aim_projectile_crash_fix() {}
 void abi_bad_player_model() {}

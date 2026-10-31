@@ -1,6 +1,9 @@
 #pragma once
 
-#if !defined(_MSC_VER) || !defined(_M_IX86)
+// The ASI is 32-bit. The x64 write-set dump (ZP_DUMP_TOOL) never runs this
+// header's resolver - it only needs dllmain's include list to compile - so it
+// may include it; that keeps the ASI path's guard strict.
+#if !defined(_MSC_VER) || (!defined(_M_IX86) && !defined(ZP_DUMP_TOOL))
 #error driveby_seh.h is the MSVC x86 SEH path
 #endif
 

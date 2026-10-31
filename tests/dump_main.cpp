@@ -12,6 +12,8 @@
 #include <iterator>
 #include <vector>
 
+#include <psapi.h>
+
 #include "common.h"
 #include "patches.h"
 
@@ -26,6 +28,10 @@ constexpr std::size_t kMinPeSize = 0x100;
 constexpr std::uint32_t kMaxImageSize = 0x10000000u;
 constexpr unsigned kFaultFrameCount = 16;
 constexpr std::size_t kSparePage = 0x1000;
+// A rel32 branch: one opcode byte and a four-byte displacement.
+constexpr std::uint32_t kBranchBytes = 5;
+constexpr std::uint8_t kCallOpcode = 0xE8;
+constexpr std::uint8_t kJumpOpcode = 0xE9;
 
 bool MapPeImage(const char* path, std::vector<std::uint8_t>& image, std::uint32_t& imageBase,
                 std::uint32_t& sizeOfImage)
@@ -92,6 +98,67 @@ static void* g_frames[kFaultFrameCount]{};
 static unsigned short g_frameCount = 0;
 static void* g_target = nullptr;
 
+// The hook-body table under ZP_DUMP_TOOL (see dllmain.cpp): a body's address in
+// the tool is a load-time value, so the dump canonicalises the branches it wrote
+// to the body's reference VA. Without that the oracle would change whenever the
+// tool's own layout did.
+extern std::size_t DumpHookBodyCount() noexcept;
+extern std::uint32_t DumpHookBodyReference(std::size_t index) noexcept;
+extern std::uintptr_t DumpHookBodyAddress(std::size_t index) noexcept;
+
+namespace
+{
+struct HookBodyStand
+{
+	std::uintptr_t address;     // where the stub sits in this process
+	std::uint32_t referenceVa;  // the destination the original ASI uses
+};
+
+std::vector<HookBodyStand> HookBodyStands()
+{
+	std::vector<HookBodyStand> stands;
+	for (std::size_t i = 0; i < DumpHookBodyCount(); ++i)
+		stands.push_back({DumpHookBodyAddress(i), DumpHookBodyReference(i)});
+	return stands;
+}
+
+
+// Rewrite every branch this pass wrote to a hook body so its displacement names
+// the body's reference VA instead of the stub's load address. Byte-for-byte this
+// keeps the installer's decisions and drops the tool's own layout from the
+// oracle; a body branch the installer did not write is left alone.
+void CanonicaliseHookBodyBranches(std::uint8_t* image, const std::uint8_t* pristine,
+                                  std::uintptr_t imageBase, std::uint32_t size,
+                                  const std::vector<HookBodyStand>& stands)
+{
+	for (std::uint32_t offset = 0; offset + kBranchBytes <= size; ++offset)
+	{
+		const std::uint8_t opcode = image[offset];
+		if (opcode != kCallOpcode && opcode != kJumpOpcode)
+			continue;
+		const bool written = opcode != pristine[offset] ||
+		                     std::memcmp(image + offset + 1, pristine + offset + 1,
+		                                 kBranchBytes - 1) != 0;
+		if (!written)
+			continue;
+		std::int32_t relative = 0;
+		std::memcpy(&relative, image + offset + 1, sizeof(relative));
+		// An x86 branch encodes a 32-bit displacement; compare the truncated
+		// destination, exactly as the CPU resolves it.
+		const std::uint32_t next = imageBase + offset + kBranchBytes;
+		const std::uint32_t destination = next + static_cast<std::uint32_t>(relative);
+		for (const HookBodyStand& stand : stands)
+		{
+			if (destination != static_cast<std::uint32_t>(stand.address))
+				continue;
+			const auto canonical = static_cast<std::int32_t>(stand.referenceVa - next);
+			std::memcpy(image + offset + 1, &canonical, sizeof(canonical));
+			break;
+		}
+	}
+}
+} // namespace
+
 static bool RunPass(std::uint8_t* image, std::uint32_t size, const ConfigDocument* config,
                     DWORD& code, void*& where)
 {
@@ -116,7 +183,7 @@ int main(int argc, char** argv)
 {
 	if (argc < 2)
 	{
-		std::fprintf(stderr, "usage: zp_dump <out.txt> [ZolikaPatch.ini]\n");
+		std::fprintf(stderr, "usage: zp_dump [--per-option] <out.txt> [ZolikaPatch.ini]\n");
 		return 1;
 	}
 
@@ -137,7 +204,25 @@ int main(int argc, char** argv)
 	                 size + kSparePage, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
 	if (!image)
 	{
-		std::fprintf(stderr, "zp_dump: cannot map at 0x%X (err=%lu)\n", imageBase, GetLastError());
+		// 487 is ERROR_INVALID_ADDRESS: something (a Win32 process's heap and
+		// loader mappings, or another image) already owns the low range. Describe
+		// what covers the base so the failure is diagnosable from the log.
+		MEMORY_BASIC_INFORMATION region{};
+		std::fprintf(stderr, "zp_dump: cannot map at 0x%X (err=%lu), module base %p\n", imageBase,
+		             GetLastError(), static_cast<void*>(GetModuleHandleA(nullptr)));
+		if (VirtualQuery(reinterpret_cast<void*>(static_cast<std::uintptr_t>(imageBase)), &region,
+		                 sizeof(region)))
+		{
+			char mapped[MAX_PATH]{};
+			GetMappedFileNameA(GetCurrentProcess(),
+			                   reinterpret_cast<void*>(static_cast<std::uintptr_t>(imageBase)), mapped,
+			                   sizeof(mapped));
+			std::fprintf(stderr, "zp_dump: 0x%X is state=%lu type=%lu in %p..%p file=%s\n",
+			             imageBase, region.State, region.Type, region.BaseAddress,
+			             static_cast<void*>(static_cast<std::uint8_t*>(region.BaseAddress) +
+			                                region.RegionSize),
+			             mapped[0] ? mapped : "(anonymous)");
+		}
 		return 3;
 	}
 	std::memcpy(image, file_image.data(), size);
@@ -169,6 +254,7 @@ int main(int argc, char** argv)
 		std::FILE* perOut = std::fopen(argv[2], "wb");
 		if (!perOut)
 			return 5;
+		const std::vector<HookBodyStand> stands = HookBodyStands();
 		for (std::size_t i = 0; i < kOptionKeyCount; ++i)
 		{
 			ConfigDocument single = config;
@@ -178,6 +264,7 @@ int main(int argc, char** argv)
 
 			std::memcpy(image, file_image.data(), size);
 			PatchGame(GameBuild::v1080, GameImage{image, size}, single);
+			CanonicaliseHookBodyBranches(image, file_image.data(), imageBase, size, stands);
 			for (std::size_t b = 0; b < size; ++b)
 			{
 				if (image[b] != file_image[b])
@@ -212,6 +299,7 @@ int main(int argc, char** argv)
 	std::FILE* out = std::fopen(argv[1], "wb");
 	if (!out)
 		return 5;
+	CanonicaliseHookBodyBranches(image, pristine.data(), imageBase, size, HookBodyStands());
 	std::size_t changed = 0;
 	for (std::size_t i = 0; i < size; ++i)
 	{

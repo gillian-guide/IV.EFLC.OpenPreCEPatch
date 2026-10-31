@@ -47,9 +47,44 @@
 
 char iniPath[MAX_PATH];
 
+#if defined(ZP_DUMP_TOOL)
+// The write-set tool's own image (see IsToolPointer below).
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+#endif
+
 namespace
 {
 const char* kOptionsSection = "Options";
+
+#if defined(ZP_DUMP_TOOL)
+// The dump never runs the game, so a pointer into the tool itself can never be
+// used there. Publishing one would only record where the tool happened to load,
+// which is not part of the installer logic, so the dump substitutes a fixed
+// stand-in: the write still shows up, at the same site, with a value that does
+// not depend on the tool's layout.
+constexpr std::uint32_t kDumpToolPointer = 0xD0000000u;
+
+bool IsToolPointer(std::uintptr_t address) noexcept
+{
+	const auto* base = reinterpret_cast<const std::uint8_t*>(&__ImageBase);
+	const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+	const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+	const std::uintptr_t start = reinterpret_cast<std::uintptr_t>(base);
+	return address >= start && address < start + nt->OptionalHeader.SizeOfImage;
+}
+#endif
+
+// A value an installer publishes for the game. The dump (ZP_DUMP_TOOL)
+// substitutes a fixed stand-in for its own addresses; in the ASI every value is
+// published unchanged.
+std::uintptr_t PublishedAddress(std::uintptr_t value) noexcept
+{
+#if defined(ZP_DUMP_TOOL)
+	return IsToolPointer(value) ? std::uintptr_t{kDumpToolPointer} : value;
+#else
+	return value;
+#endif
+}
 
 // The whitespace Trim and the signature parser skip: space, tab, CR, LF, FF, VT.
 bool IsWhite(char c)
@@ -1870,20 +1905,20 @@ std::uint32_t& DlcApplyRva() noexcept
 std::uintptr_t FindGlobalValue(std::string_view option) noexcept
 {
 	if (option == "StartupTimeFix")
-		return reinterpret_cast<std::uintptr_t>(&g_startup_time);
+		return PublishedAddress(reinterpret_cast<std::uintptr_t>(&g_startup_time));
 	if (option == "VSyncFix")
-		return reinterpret_cast<std::uintptr_t>(&g_vsync_flag);
+		return PublishedAddress(reinterpret_cast<std::uintptr_t>(&g_vsync_flag));
 	if (option == "OverrideGTADatPath")
-		return reinterpret_cast<std::uintptr_t>(zpatch_override_gta_dat_path);
+		return PublishedAddress(reinterpret_cast<std::uintptr_t>(zpatch_override_gta_dat_path));
 	// PopupHeadlightsFlag: the `fld` operand at +82 now loads our pi/2 float.
 	if (option == "PopupHeadlightsFlag")
-		return reinterpret_cast<std::uintptr_t>(&zpatch_popup_angle);
+		return PublishedAddress(reinterpret_cast<std::uintptr_t>(&zpatch_popup_angle));
 	// ForceCarHeadlightShadows: the operand at +211 now loads our 2.0f dword.
 	if (option == "ForceCarHeadlightShadows")
-		return reinterpret_cast<std::uintptr_t>(&zpatch_fchs_offset);
+		return PublishedAddress(reinterpret_cast<std::uintptr_t>(&zpatch_fchs_offset));
 	// LocalSettingsPath: the path-helper call goes through our 4-byte slot.
 	if (option == "LocalSettingsPath")
-		return reinterpret_cast<std::uintptr_t>(&zpatch_local_saves_slot);
+		return PublishedAddress(reinterpret_cast<std::uintptr_t>(&zpatch_local_saves_slot));
 	return 0;
 }
 
@@ -1892,9 +1927,9 @@ std::uintptr_t FindGlobalValue(std::string_view option) noexcept
 std::uintptr_t FindGlobalSymbol(std::string_view symbol) noexcept
 {
 	if (symbol == "zpatch_local_iv_suffix")
-		return reinterpret_cast<std::uintptr_t>(zpatch_local_iv_suffix);
+		return PublishedAddress(reinterpret_cast<std::uintptr_t>(zpatch_local_iv_suffix));
 	if (symbol == "zpatch_episode_flag")
-		return reinterpret_cast<std::uintptr_t>(&zpatch_episode_flag);
+		return PublishedAddress(reinterpret_cast<std::uintptr_t>(&zpatch_episode_flag));
 	return 0;
 }
 
@@ -2191,6 +2226,11 @@ constexpr std::size_t kVehicleRollOffset = 0x1F04;
 constexpr std::size_t kVehicleHeaveOffset = 0x1F00;
 constexpr std::uint32_t kModelTablePointerRva = 0x150FDD0u;
 constexpr std::uint32_t kModelTableCountRva = 0x150FDD4u;
+
+// The bodies below are 32-bit assembly. The x64 write-set dump never runs
+// them - it only needs their addresses, which tests/stub_bodies.cpp provides -
+// so the whole assembly region is compiled out for it.
+#if !defined(ZP_DUMP_TOOL)
 
 extern "C"
 {
@@ -7320,6 +7360,15 @@ std::uintptr_t zpatch_nms_vtable[24] =
 };
 }  // extern "C"
 
+#endif  // !ZP_DUMP_TOOL — assembly bodies are ASI-only; the dump uses stubs
+
+#if defined(ZP_DUMP_TOOL)
+// The dump links tests/stub_bodies.cpp in place of the assembly region above:
+// the installer arms name each body, and the table needs a declaration for
+// every stand-in address it hands out.
+#include "../tests/stub_bodies.h"
+#endif
+
 struct AbiBody final
 {
 	std::uint32_t reference_va;
@@ -7461,6 +7510,28 @@ std::size_t HookBodyCount() noexcept
 	return sizeof(kAbiBodies) / sizeof(kAbiBodies[0]);
 }
 
+#if defined(ZP_DUMP_TOOL)
+// Write-set dump support. A branch the installer writes to a hook body encodes
+// the body's address *in the tool*, which is not part of the installer logic:
+// the dump canonicalises those displacements to the body's reference VA so its
+// output does not depend on where the tool happens to load. (The stub bodies
+// still exist because the arms name them directly.)
+std::size_t DumpHookBodyCount() noexcept
+{
+	return HookBodyCount();
+}
+
+std::uint32_t DumpHookBodyReference(std::size_t index) noexcept
+{
+	return kAbiBodies[index].reference_va;
+}
+
+std::uintptr_t DumpHookBodyAddress(std::size_t index) noexcept
+{
+	return reinterpret_cast<std::uintptr_t>(kAbiBodies[index].address);
+}
+#endif  // ZP_DUMP_TOOL
+
 #endif  // _WIN32
 
 // ---------------------------------------------------------------------------
@@ -7536,7 +7607,8 @@ namespace
 	// A pointer as the dword the game and the injector expect (the ASI is x86).
 	std::uint32_t AddressOf(const void* pointer)
 	{
-		return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(pointer));
+		return static_cast<std::uint32_t>(
+		    PublishedAddress(reinterpret_cast<std::uintptr_t>(pointer)));
 	}
 
 	bool InImage(const GameImage& image, std::uintptr_t address)

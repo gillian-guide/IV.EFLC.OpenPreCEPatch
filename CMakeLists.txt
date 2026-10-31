@@ -13,6 +13,10 @@ option(ZP_BUILD_DUMP "Build the write-set dump tool" OFF)
 option(ZP_BUILD_STATE_DUMP "Build the offline Runtime State driver (Gate 3)" OFF)
 option(ZP_LINK_MAP "Emit a linker .map for the ASI (development aid, not shipped)" OFF)
 
+if(ZP_BUILD_TESTS OR ZP_BUILD_DUMP)
+  enable_testing()
+endif()
+
 # Third-party headers and the scanner are git submodules (see .gitmodules),
 # checked out under external/.
 set(ZP_EXT_INJECTOR ${CMAKE_CURRENT_SOURCE_DIR}/external/injector/include)
@@ -32,7 +36,10 @@ set(ZP_SOURCES
   src/xlive/xliveless.cpp
 )
 
-add_library(zp STATIC ${ZP_SOURCES})
+# The shared runtime support library. EXCLUDE_FROM_ALL: the write-set dump
+# recompiles the sources it needs against its own 64-bit injector shim, so a
+# dump-only configure must not build the 32-bit xliveless module.
+add_library(zp STATIC EXCLUDE_FROM_ALL ${ZP_SOURCES})
 target_include_directories(zp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src
                                      ${ZP_EXT_INJECTOR}
                                      ${ZP_EXT_PATTERNS})
@@ -59,14 +66,28 @@ if(ZP_BUILD_ASI)
 endif()
 
 # Write-set dump: applies the installers to a mapped copy of the game image so
-# the result can be diffed against the reference implementation. 64-bit so the
-# image can be mapped at its preferred base 0x400000.
+# the result can be diffed against the reference implementation. It must be a
+# 64-bit process: a Win32 process has its heap/loader in the low address space
+# (from 0x004D0000 up), so the 25 MB image cannot be mapped at its preferred
+# base 0x400000 there (VirtualAlloc fails with ERROR_INVALID_ADDRESS, 487).
+# The hook bodies are 32-bit assembly, so dllmain.cpp compiles them out under
+# ZP_DUMP_TOOL and tests/stub_bodies.cpp supplies their addresses instead.
 if(ZP_BUILD_DUMP)
-  add_executable(zp_dump tests/dump_main.cpp
+  if(CMAKE_SIZEOF_VOID_P LESS 8)
+    message(FATAL_ERROR
+      "zp_dump must be built 64-bit (-A x64): a Win32 process cannot map\n"
+      "GTAIV.exe at its preferred base 0x400000, so the write-set dump would\n"
+      "fault before producing an oracle.")
+  endif()
+  add_executable(zp_dump tests/dump_main.cpp tests/stub_bodies.cpp
                  ${ZP_EXT_PATTERNS}/Hooking.Patterns.cpp src/catalogue_data.cpp src/dllmain.cpp
                  src/patch_data.cpp)
-  target_link_libraries(zp_dump PRIVATE version user32 shlwapi)
+  target_link_libraries(zp_dump PRIVATE version user32 shlwapi psapi)
   target_compile_features(zp_dump PRIVATE cxx_std_17)
+  # /MAP is a development aid; ASLR stays on, because a fixed base would make the
+  # loader place other mappings over 0x400000 (observed: a 72 KB anonymous mapping
+  # at 0x400000, VirtualAlloc fails 487). The dump is layout-independent anyway:
+  # it canonicalises hook-body branch destinations to their reference VAs.
   target_link_options(zp_dump PRIVATE /MAP)
   # The dump uses a 64-bit-safe injector shim (the real one is 32-bit only).
   target_include_directories(zp_dump BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/dump_injector)
@@ -74,10 +95,19 @@ if(ZP_BUILD_DUMP)
                                              ${ZP_EXT_INJECTOR}
                                              ${ZP_EXT_PATTERNS})
   target_compile_definitions(zp_dump PRIVATE UNICODE _UNICODE NOMINMAX ZP_DUMP_TOOL)
+  # The oracle is only meaningful with the real image present. Run from the
+  # source tree so the dump finds ../game_refs/GTAIV.exe, and use the
+  # repository's own INI (not the live one) so the config is reproducible.
+  if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs/GTAIV.exe)
+    add_test(NAME zp_dump_full
+             COMMAND zp_dump ${CMAKE_CURRENT_BINARY_DIR}/dump-full.txt
+                     ${CMAKE_CURRENT_SOURCE_DIR}/ZolikaPatch.ini)
+    set_tests_properties(zp_dump_full PROPERTIES
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+  endif()
 endif()
 
 if(ZP_BUILD_TESTS)
-  enable_testing()
   add_executable(zp_tests tests/test_main.cpp src/dllmain.cpp)
   target_link_libraries(zp_tests PRIVATE zp)
   # The dump harness maps GTAIV.exe at its preferred base 0x400000, so the test
