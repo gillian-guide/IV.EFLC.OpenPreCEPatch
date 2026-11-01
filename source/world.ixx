@@ -28,6 +28,8 @@ void ApplyNoPhysicsSleep(const PatchContext& ctx);
 void ApplyIncreasePtrNodes(const PatchContext& ctx);
 }  // export
 
+// The raised pool sizes: 320,000 nodes for the `6A 08` site, 64,000 for the two
+// `6A 10`/`6A 14` sites (original literals 0x4E200 / 0xFA00).
 constexpr std::uint32_t kPtrNodeCount = 320'000u;       // 0x4E200
 constexpr std::uint32_t kPtrNodeCountAlt = 64'000u;     // 0xFA00
 

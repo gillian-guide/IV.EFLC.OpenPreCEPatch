@@ -53,6 +53,8 @@ bool ParseConfig(std::string_view text, ConfigDocument& output) noexcept;
 const char* ReadIniString(const ConfigDocument& config, const char* section, const char* key) noexcept;
 const char* ReadIniString(const ConfigDocument& config, const char* key) noexcept;
 
+// The empty template argument list is the original source's spelling
+// (`INI<> ini(...)`); the dummy parameter exists only so that spelling works.
 template <typename = void>
 class INI
 {

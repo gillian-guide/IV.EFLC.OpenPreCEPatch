@@ -1,6 +1,7 @@
 #pragma once
-// The option pass (`PatchGame`) and the loader preamble, run in the original
-// loader's order.
+// The option pass (`PatchGame`) and the loader preamble. The arms run in this
+// tree's own order (derived from the recovered loader, not identical to it;
+// docs/architecture.md, "Option blocks").
 
 #include <cstddef>
 #include <cstdint>

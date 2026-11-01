@@ -37,6 +37,17 @@ constexpr std::uint8_t kShortJmpOpcode = 0xEBu; // jmp rel8
 constexpr std::uint8_t kUselessChecksMiscByte = 0x90u;
 constexpr std::uint8_t kUselessChecksDeathByte = 0x32u;
 constexpr std::uint32_t kMaxImageSize = 0x10000000u;
+// IMAGE_OPTIONAL_HEADER32 / IMAGE_FILE_HEADER / IMAGE_SECTION_HEADER fields the
+// mapper reads. The dump parses the raw file, so these are WinNT.h offsets.
+constexpr std::size_t kOptionalImageBase = 28;
+constexpr std::size_t kOptionalSizeOfImage = 56;
+constexpr std::size_t kOptionalSizeOfHeaders = 60;
+constexpr std::size_t kCoffSizeOfOptionalHeader = 16;
+constexpr std::size_t kCoffNumberOfSections = 2;
+constexpr std::size_t kSectionVirtualSize = 8;
+constexpr std::size_t kSectionVirtualAddress = 12;
+constexpr std::size_t kSectionSizeOfRawData = 16;
+constexpr std::size_t kSectionPointerToRawData = 20;
 constexpr unsigned kFaultFrameCount = 16;
 constexpr std::size_t kSparePage = 0x1000;
 // A rel32 branch: one opcode byte and a four-byte displacement.
@@ -72,9 +83,9 @@ bool MapPeImage(const char* path, std::vector<std::uint8_t>& image, std::uint32_
 		return false;
 	const std::size_t coff = e_lfanew + kPeSignatureSize;
 	const std::size_t optional = coff + kCoffHeaderSize;
-	imageBase = rd32(optional + 28);
-	sizeOfImage = rd32(optional + 56);
-	const std::uint32_t sizeOfHeaders = rd32(optional + 60);
+	imageBase = rd32(optional + kOptionalImageBase);
+	sizeOfImage = rd32(optional + kOptionalSizeOfImage);
+	const std::uint32_t sizeOfHeaders = rd32(optional + kOptionalSizeOfHeaders);
 	if (sizeOfImage == 0 || sizeOfImage > kMaxImageSize)
 		return false;
 
@@ -82,17 +93,17 @@ bool MapPeImage(const char* path, std::vector<std::uint8_t>& image, std::uint32_
 	std::memcpy(image.data(), file.data(),
 	            sizeOfHeaders < file.size() ? sizeOfHeaders : file.size());
 	// IMAGE_SECTION_HEADERs follow COFF + SizeOfOptionalHeader, 40 bytes each.
-	const std::size_t sectionTable = optional + rd16(coff + 16);
+	const std::size_t sectionTable = optional + rd16(coff + kCoffSizeOfOptionalHeader);
 	for (std::size_t sh = sectionTable,
-	                 end = sectionTable + rd16(coff + 2) * kSectionHeaderSize;
+	                 end = sectionTable + rd16(coff + kCoffNumberOfSections) * kSectionHeaderSize;
 	     sh < end; sh += kSectionHeaderSize)
 	{
 		if (sh + kSectionHeaderSize > file.size())
 			return false;
-		const std::uint32_t vsize = rd32(sh + 8);
-		const std::uint32_t vaddr = rd32(sh + 12);
-		const std::uint32_t rsize = rd32(sh + 16);
-		const std::uint32_t rptr = rd32(sh + 20);
+		const std::uint32_t vsize = rd32(sh + kSectionVirtualSize);
+		const std::uint32_t vaddr = rd32(sh + kSectionVirtualAddress);
+		const std::uint32_t rsize = rd32(sh + kSectionSizeOfRawData);
+		const std::uint32_t rptr = rd32(sh + kSectionPointerToRawData);
 		const std::uint32_t count = rsize < vsize ? rsize : vsize;
 		if (count && vaddr + count <= sizeOfImage && rptr + count <= file.size())
 			std::memcpy(image.data() + vaddr, file.data() + rptr, count);

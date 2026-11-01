@@ -119,7 +119,6 @@ enum class SkipLauncherStage : std::uint8_t
 	main = 1,
 	dfa = 2,
 	rom = 4,
-	all = 7,
 };
 constexpr SkipLauncherStage operator|(SkipLauncherStage a, SkipLauncherStage b) noexcept
 {

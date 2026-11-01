@@ -78,7 +78,7 @@ MenuProbeResult MenuIntegrationProbe(MenuIntegrationState& state, bool loadSucce
 
 const MenuRegistration* MenuRegistrations(std::size_t& count) noexcept
 {
-	count = sizeof(kMenuRegistrations) / sizeof(kMenuRegistrations[0]);
+	count = std::size(kMenuRegistrations);
 	return kMenuRegistrations;
 }
 

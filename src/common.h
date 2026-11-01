@@ -134,10 +134,14 @@ struct VehicleLightValue
 	bool populated{};
 };
 
+// Both light tables have 512 slots: the original's two 512-iteration INI loops
+// (sub_100523C0).
+inline constexpr std::size_t kVehicleLightSlotCount = 512;
+
 struct VehicleLightTables
 {
-	std::array<VehicleLightValue, 512> popupAngles{};      // radians
-	std::array<VehicleLightValue, 512> headlightOffsets{};
+	std::array<VehicleLightValue, kVehicleLightSlotCount> popupAngles{};  // radians
+	std::array<VehicleLightValue, kVehicleLightSlotCount> headlightOffsets{};
 };
 
 // FUN_100523c0's two 512-slot INI loops. Missing model names leave holes; the
@@ -149,15 +153,20 @@ PatchResult LoadVehicleLightTables(const ConfigDocument&, VehicleLightTables&);
 // adapter keeps those lookups free of any pointer into GTA IV.
 using ModelIndexResolver = int (*)(std::uint32_t, void*);
 
+// The original's on-disk default for the popup angle: pi/2 rounded to float
+// (0x3FC90FDB).
+constexpr float kDefaultPopupAngleRadians = 1.5707963705062866f;
+
 struct PopupLightSelection
 {
-	float angleRadians{1.5707963705062866f};
+	float angleRadians{kDefaultPopupAngleRadians};
 	bool supported{};
 };
 
-PopupLightSelection SelectPopupLight(const VehicleLightTables&,
-                                     const std::array<std::uint32_t, 512>& supportedModels,
-                                     int modelIndex, ModelIndexResolver, void* context = nullptr) noexcept;
+PopupLightSelection SelectPopupLight(
+    const VehicleLightTables&,
+    const std::array<std::uint32_t, kVehicleLightSlotCount>& supportedModels, int modelIndex,
+    ModelIndexResolver, void* context = nullptr) noexcept;
 float SelectHeadlightOffset(const VehicleLightTables&, int modelIndex, ModelIndexResolver,
                             void* context = nullptr) noexcept;
 

@@ -3,6 +3,8 @@
 // SkipLauncher: XLivelessAddon's launcher/DRM bypass as reimplemented by
 // ZolikaPatch 7.65. The tables follow the original handlers' order: the main
 // signature table (0x10045CE0), the two multi-hit collectors, the DFA file-API
+// hooks (0x10004850), the DFA collector tail and the ROM message-window hooks
+// (0x10004620).
 //
 // The tables and the hook bodies live in `source/xliveless.cpp`, the module's
 // implementation unit: MSVC rejects a naked `__declspec` body in an imported

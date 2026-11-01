@@ -39,6 +39,9 @@ namespace
 {
 // The parser index cannot address more than this many entries (slot = entry+1).
 constexpr std::size_t kMaxIndexEntries = 0xFFFFFFF0u;
+// Mixed into the hash between the section and the key, so ("a","bc") and
+// ("ab","c") cannot collide.
+constexpr std::uint64_t kSectionKeySeparator = 0xFFu;
 }  // namespace
 
 namespace
@@ -55,7 +58,7 @@ std::uint64_t ConfigKeyHash(std::string_view section, std::string_view key) noex
 		hash ^= static_cast<unsigned char>(c);
 		hash *= kFnvPrime;
 	}
-	hash ^= kByteMask;
+	hash ^= kSectionKeySeparator;
 	hash *= kFnvPrime;
 	for (const char c : key)
 	{
@@ -252,5 +255,7 @@ const char* ReadIniString(const ConfigDocument& config, const char* key) noexcep
 
 bool Option(INI<>& ini, const char* key, const char* defaultValue)
 {
+	// The original uses std::stoi here, so a non-numeric value throws out of the
+	// loader instead of reading as "off"; that fault is preserved, not guarded.
 	return std::stoi(ini.get(key, defaultValue), nullptr, 10) == 1;
 }

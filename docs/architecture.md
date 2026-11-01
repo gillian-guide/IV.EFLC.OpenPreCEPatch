@@ -23,7 +23,7 @@ SetStuff
   phase 7  LaunchWithPlayGTAIV
 ```
 
-The support code is split into modules under `source/`: `common`, `game`, `patch`, `log`, `config`, `catalogue`, `vehicle_lights`, `menu`, `launcher`, `useless_checks`, `hook_bodies` (the rebased globals, the 97 hook bodies and the resolver), `xliveless` (SkipLauncher/DFA/ROM) and one module per feature group (`vehicles`, `graphics`, `stability`, `audio`, `input`, `loading`, `mission`, `world`, `multiplayer`, `misc`). Types the plain TU and the headers name stay in `src/*.h`; the modules move implementations and export the declarations.
+The support code is split into modules under `source/`: `common`, `game`, `patch`, `log`, `config`, `catalogue`, `vehicle_lights`, `menu`, `launcher`, `useless_checks`, `hook_bodies` (the rebased globals, the 107 hook bodies and the resolver), `xliveless` (SkipLauncher/DFA/ROM) and one module per feature group (`vehicles`, `graphics`, `stability`, `audio`, `input`, `loading`, `mission`, `world`, `multiplayer`, `misc`). Types the plain TU and the headers name stay in `src/*.h`; the modules move implementations and export the declarations.
 
 ## Files
 

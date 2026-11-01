@@ -57,6 +57,7 @@ void ApplyRestoreDeathMusic(const PatchContext& ctx)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
+			// The store the signature matches follows the call site by 13 bytes.
 			injector::MakeCALL(match - 13, reinterpret_cast<void*>(&abi_death_music_install), true); //call
 		}
 

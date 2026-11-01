@@ -28,19 +28,11 @@ export namespace zp
 [[nodiscard]] std::string_view ModelNameFromHash(std::uint32_t hash) noexcept;
 }  // namespace zp
 
-namespace
-{
-std::size_t ModelCatalogSizeImpl() noexcept
-{
-	return kModelNameCount;
-}
-}  // namespace
-
 namespace zp
 {
 std::size_t ModelCatalogSize() noexcept
 {
-	return ModelCatalogSizeImpl();
+	return kModelNameCount;
 }
 
 std::string_view ModelCatalogName(std::size_t index) noexcept

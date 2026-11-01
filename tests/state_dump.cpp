@@ -12,8 +12,7 @@
 // plus the meta keys state_diff's pointer normalisation reads (image_host,
 // image_size, module_base). The executable links with /BASE:0x60000000 so the
 // 0x400000 window is free; if the map still fails it falls back to the heap and
-// relocates the one embedded game pointer the installers read back, like
-// tools/phase3/p3_dump.cpp does.
+// relocates the one embedded game pointer the installers read back, like the reference driver does.
 //
 // Usage: zp_state_dump <game.exe> <build-ordinal> <ini> <out.txt>
 //
@@ -60,8 +59,18 @@ constexpr std::uint32_t kSyntheticHookBase = 0x7F000000u;  // tagged hook VA
 constexpr std::uint32_t kSyntheticHookStride = 0x100u;
 constexpr std::uint8_t kNibbleMask = 0x0Fu;
 constexpr std::uint32_t kMaxImageSize = 0x10000000u;
-constexpr std::uint32_t kGameImageBase = 0x400000u;
 constexpr std::uint32_t kGameVaCeiling = 0x10000000u;
+// IMAGE_OPTIONAL_HEADER32 / IMAGE_FILE_HEADER / IMAGE_SECTION_HEADER fields the
+// mapper reads from the raw file (WinNT.h offsets).
+constexpr std::size_t kOptionalImageBase = 28;
+constexpr std::size_t kOptionalSizeOfImage = 56;
+constexpr std::size_t kOptionalSizeOfHeaders = 60;
+constexpr std::size_t kCoffSizeOfOptionalHeader = 16;
+constexpr std::size_t kCoffNumberOfSections = 2;
+constexpr std::size_t kSectionVirtualSize = 8;
+constexpr std::size_t kSectionVirtualAddress = 12;
+constexpr std::size_t kSectionSizeOfRawData = 16;
+constexpr std::size_t kSectionPointerToRawData = 20;
 constexpr std::size_t kSparePage = 0x1000;
 constexpr std::size_t kAllocationGranularity = 0x10000u;
 // IMAGE_OPTIONAL_HEADER32.DataDirectory: 8-byte RVA+size entries, base relocs at 5.
@@ -106,9 +115,9 @@ bool MapPeImage(const char* path, std::vector<std::uint8_t>& image, std::uint32_
 		return false;
 	const std::size_t coff = e_lfanew + kPeSignatureSize;
 	const std::size_t optional = coff + kCoffHeaderSize;
-	imageBase = rd32(optional + 28);
-	sizeOfImage = rd32(optional + 56);
-	const std::uint32_t sizeOfHeaders = rd32(optional + 60);
+	imageBase = rd32(optional + kOptionalImageBase);
+	sizeOfImage = rd32(optional + kOptionalSizeOfImage);
+	const std::uint32_t sizeOfHeaders = rd32(optional + kOptionalSizeOfHeaders);
 	if (sizeOfImage == 0 || sizeOfImage > kMaxImageSize)
 		return false;
 
@@ -116,17 +125,17 @@ bool MapPeImage(const char* path, std::vector<std::uint8_t>& image, std::uint32_
 	std::memcpy(image.data(), file.data(),
 	            sizeOfHeaders < file.size() ? sizeOfHeaders : file.size());
 	// IMAGE_SECTION_HEADERs follow COFF + SizeOfOptionalHeader, 40 bytes each.
-	const std::size_t sectionTable = optional + rd16(coff + 16);
+	const std::size_t sectionTable = optional + rd16(coff + kCoffSizeOfOptionalHeader);
 	for (std::size_t sh = sectionTable,
-	                 end = sectionTable + rd16(coff + 2) * kSectionHeaderSize;
+	                 end = sectionTable + rd16(coff + kCoffNumberOfSections) * kSectionHeaderSize;
 	     sh < end; sh += kSectionHeaderSize)
 	{
 		if (sh + kSectionHeaderSize > file.size())
 			return false;
-		const std::uint32_t vsize = rd32(sh + 8);
-		const std::uint32_t vaddr = rd32(sh + 12);
-		const std::uint32_t rsize = rd32(sh + 16);
-		const std::uint32_t rptr = rd32(sh + 20);
+		const std::uint32_t vsize = rd32(sh + kSectionVirtualSize);
+		const std::uint32_t vaddr = rd32(sh + kSectionVirtualAddress);
+		const std::uint32_t rsize = rd32(sh + kSectionSizeOfRawData);
+		const std::uint32_t rptr = rd32(sh + kSectionPointerToRawData);
 		const std::uint32_t count = rsize < vsize ? rsize : vsize;
 		if (count && vaddr + count <= sizeOfImage && rptr + count <= file.size())
 			std::memcpy(image.data() + vaddr, file.data() + rptr, count);
@@ -147,9 +156,9 @@ void RelocateEmbeddedGamePointers(std::uint8_t* image, std::size_t size)
 			continue;
 		auto* field = reinterpret_cast<std::uint32_t*>(image + i - 4);
 		const std::uint32_t value = *field;
-		if (value >= kGameImageBase && value < kGameImageBase + size)
+		if (value >= kGtaImageBase && value < kGtaImageBase + size)
 			*field = static_cast<std::uint32_t>(
-			    reinterpret_cast<std::uintptr_t>(image) + (value - kGameImageBase));
+			    reinterpret_cast<std::uintptr_t>(image) + (value - kGtaImageBase));
 	}
 }
 
@@ -210,14 +219,14 @@ std::size_t ApplyBaseRelocations(std::uint8_t* image, std::size_t size, std::uin
 // The game process has its image address space mapped, so preserved-fault reads
 // and writes to a game VA succeed there. The driver maps only the image bytes;
 // commit the target page on demand so the differential observes the same
-// behaviour instead of dying. Copied from tools/phase3/p3_dump.cpp.
+// behaviour instead of dying. Mirrors the reference driver.
 LONG CALLBACK MapGamePageOnFault(EXCEPTION_POINTERS* info)
 {
 	if (info->ExceptionRecord->ExceptionCode != EXCEPTION_ACCESS_VIOLATION)
 		return EXCEPTION_CONTINUE_SEARCH;
 	const auto va =
 	    static_cast<std::uintptr_t>(info->ExceptionRecord->ExceptionInformation[1]);
-	if (va < kGameImageBase || va >= kGameVaCeiling)
+	if (va < kGtaImageBase || va >= kGameVaCeiling)
 		return EXCEPTION_CONTINUE_SEARCH;
 	void* page = reinterpret_cast<void*>(
 	    va & ~static_cast<std::uintptr_t>(kAllocationGranularity - 1));
@@ -426,7 +435,7 @@ int main(int argc, char** argv)
 	// two by reference VA instead of calling the port side "unmapped".
 	if (zpatch_local_saves_slot != 0)
 		header << "A " << std::showbase << std::hex << zpatch_local_saves_slot
-		       << " 0x10051320" << std::dec << "\n";  // hooks.cpp: original sub_10051320
+		       << " 0x10051320" << std::dec << "\n";  // original sub_10051320
 
 	for (std::size_t i = 0; i < kParityGlobalCount; ++i)
 	{

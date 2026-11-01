@@ -34,10 +34,10 @@ export
 PatchResult LoadVehicleLightTables(const ConfigDocument& config,
                                    VehicleLightTables& output);
 
-PopupLightSelection SelectPopupLight(const VehicleLightTables& tables,
-                                     const std::array<std::uint32_t, 512>& supportedModels,
-                                     int modelIndex, ModelIndexResolver resolve,
-                                     void* context) noexcept;
+PopupLightSelection SelectPopupLight(
+    const VehicleLightTables& tables,
+    const std::array<std::uint32_t, kVehicleLightSlotCount>& supportedModels, int modelIndex,
+    ModelIndexResolver resolve, void* context) noexcept;
 
 float SelectHeadlightOffset(const VehicleLightTables& tables, int modelIndex,
                             ModelIndexResolver resolve, void* context) noexcept;
@@ -45,6 +45,13 @@ float SelectHeadlightOffset(const VehicleLightTables& tables, int modelIndex,
 
 namespace
 {
+// The popup table is written in degrees and read in radians; the original
+// multiplies by pi and then divides by 180 in double (that order matters for
+// the last bit), then stores a float.
+constexpr double kPi = 3.141592653589793;
+// FUN_1001AD20's value when no [HeadlightConeOffsets] row matches.
+constexpr float kDefaultHeadlightOffset = 2.0f;
+
 // One row of the two 512-slot tables: "Car<N>Name" or "Car<N>Angle"/"Car<N>Offset",
 // N in 1..512, no leading zero. Anything else in the section is ignored, exactly
 // like the per-slot lookups this replaces.
@@ -67,7 +74,7 @@ bool ParseVehicleLightKey(std::string_view key, std::string_view valueSuffix,
 	while (at < key.size() && key[at] >= '0' && key[at] <= '9')
 	{
 		number = number * 10 + static_cast<std::size_t>(key[at] - '0');
-		if (number > 512)
+		if (number > kVehicleLightSlotCount)
 			return false;
 		++at;
 	}
@@ -97,8 +104,8 @@ PatchResult LoadVehicleLightTables(const ConfigDocument& config,
 	// One pass over the document: the original asks 2 x 512 key pairs, but
 	// the section only ever holds those rows, so walk them once and keep the
 	// last entry per key (the reader's last-value-wins rule).
-	const ConfigEntry* names[std::size(kSections)][512]{};
-	const ConfigEntry* values[std::size(kSections)][512]{};
+	const ConfigEntry* names[std::size(kSections)][kVehicleLightSlotCount]{};
+	const ConfigEntry* values[std::size(kSections)][kVehicleLightSlotCount]{};
 	for (const ConfigEntry& entry : config.entries)
 	{
 		std::size_t table = std::size(kSections);
@@ -143,8 +150,7 @@ PatchResult LoadVehicleLightTables(const ConfigDocument& config,
 			VehicleLightValue& slot = slots[i];
 			slot.modelHash = GameHash(name->value);
 			slot.populated = true;
-			slot.value = table == 0 ? static_cast<float>(numeric * 3.141592653589793 / 180.0)
-			                        : numeric;
+			slot.value = table == 0 ? static_cast<float>(numeric * kPi / 180.0) : numeric;
 		}
 	}
 
@@ -152,10 +158,10 @@ PatchResult LoadVehicleLightTables(const ConfigDocument& config,
 	return {};
 }
 
-PopupLightSelection SelectPopupLight(const VehicleLightTables& tables,
-                                     const std::array<std::uint32_t, 512>& supportedModels,
-                                     int modelIndex, ModelIndexResolver resolve,
-                                     void* context) noexcept
+PopupLightSelection SelectPopupLight(
+    const VehicleLightTables& tables,
+    const std::array<std::uint32_t, kVehicleLightSlotCount>& supportedModels, int modelIndex,
+    ModelIndexResolver resolve, void* context) noexcept
 {
 	PopupLightSelection result;
 	if (!resolve || modelIndex < 0)
@@ -193,7 +199,7 @@ float SelectHeadlightOffset(const VehicleLightTables& tables, int modelIndex,
                             ModelIndexResolver resolve, void* context) noexcept
 {
 	if (!resolve || modelIndex < 0)
-		return 2.0f;
+		return kDefaultHeadlightOffset;
 
 	// FUN_1001ad20 stops at the first zero hash rather than skipping holes.
 	for (const VehicleLightValue& entry : tables.headlightOffsets)
@@ -203,5 +209,5 @@ float SelectHeadlightOffset(const VehicleLightTables& tables, int modelIndex,
 		if (entry.populated && resolve(entry.modelHash, context) == modelIndex)
 			return entry.value;
 	}
-	return 2.0f;
+	return kDefaultHeadlightOffset;
 }

@@ -69,6 +69,10 @@ constexpr std::uint32_t kHashFinalMultiplier = 0x8001u;
 constexpr unsigned kHashShiftA = 6;
 constexpr unsigned kHashShiftB = 11;
 constexpr std::uint32_t kHashBias = 2;
+// The shipped hash's post-loop multiplier and its reserved-value floor: the game
+// treats 0 as "no hash", so 0 and 1 are bumped by kHashBias.
+constexpr std::uint32_t kHashPreShiftMultiplier = 9u;
+constexpr std::uint32_t kHashReservedMax = 1u;
 constexpr std::uint32_t kCompatibilityFirstValue = 0xC7C47589u;
 constexpr std::uint32_t kCompatibilitySecondValue = 0x00002446u;
 constexpr std::uint32_t kVsFixedFileInfoSignature = 0xfeef04bdu;
@@ -127,6 +131,9 @@ std::uint32_t ParseDecOrHex(std::string_view text)
 	return negative ? 0u - value : value;
 }
 
+// 0x10003E50's name hash: case-folded, backslashes folded to '/', a quoted
+// string stops at its closing quote, and the folded value runs through the
+// multiply/xor chain below.
 std::uint32_t HashText(std::string_view text)
 {
 	const bool quoted = !text.empty() && text.front() == '"';
@@ -147,10 +154,10 @@ std::uint32_t HashText(std::string_view text)
 		value = (value >> kHashShiftA) ^ value;
 	}
 
-	value *= 9u;
+	value *= kHashPreShiftMultiplier;
 	value = (value >> kHashShiftB) ^ value;
 	value *= kHashFinalMultiplier;
-	return value > 1u ? value : value + kHashBias;
+	return value > kHashReservedMax ? value : value + kHashBias;
 }
 
 

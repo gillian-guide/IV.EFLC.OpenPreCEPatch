@@ -471,7 +471,7 @@ void SetStuff()
 	PatchGame(build, gameImage, config);
 
 	// Phase 7: the post-install tail (the PlayGTAIV launcher slots).
-	ApplyLaunchWithPlayGTAIV(build, GameImage{moduleBase, nt->OptionalHeader.SizeOfImage}, ini);
+	ApplyLaunchWithPlayGTAIV(build, gameImage, ini);
 }
 } // namespace
 

@@ -94,13 +94,13 @@ std::size_t PatternLength(std::string_view normalized) noexcept
 // 16) and compares the low byte; "?" and "??" are the only wildcards. A few
 // signatures carry three-digit tokens such as "485", which the original reads as
 // 0x85 - reproducing that here matters.
-bool ParseToken(std::string_view token, int& value, bool& wildcard)
+void ParseToken(std::string_view token, int& value, bool& wildcard)
 {
 	if (token == "?" || token == "??")
 	{
 		wildcard = true;
 		value = 0;
-		return true;
+		return;
 	}
 
 	wildcard = false;
@@ -136,7 +136,6 @@ bool ParseToken(std::string_view token, int& value, bool& wildcard)
 	}
 
 	value = static_cast<int>((negative ? 0u - accumulated : accumulated) & kByteMask);
-	return true;
 }
 
 // Re-emit the pattern as the strict "AA ?? BB" form Hooking.Patterns expects.
@@ -423,10 +422,9 @@ void WriteCallNoRead(std::uint8_t* site, void* destination)
 	WriteBranchNoRead(site, kCallOpcode, destination);
 }
 
-// The FusionFix compatibility probe: a build of the fix we cannot share a
-// module with keeps its own bytes at 0x20D3/0x20D7.
-// The FusionFix compatibility probe's site (the original reads 0x20D3/0x20D7).
-constexpr std::uint32_t kFusionFixProbeRva = 0x20D7u + 4u;
+// The FusionFix compatibility probe. ModuleLacksSignature reads the two dwords
+// at 0x20D3/0x20D7, so the image must be at least 0x20DB bytes to be probed.
+constexpr std::uint32_t kFusionFixProbeImageSize = 0x20D7u + 4u;
 
 bool FusionFixGateClosed()
 {
@@ -434,7 +432,7 @@ bool FusionFixGateClosed()
 	if (module == nullptr)
 		return false;
 	const auto* image = reinterpret_cast<const std::uint8_t*>(module);
-	return ModuleLacksSignature(image, kFusionFixProbeRva);
+	return ModuleLacksSignature(image, kFusionFixProbeImageSize);
 }
 
 bool NewFilesConflictModulesPresent()
