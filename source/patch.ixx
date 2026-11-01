@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// opp.patch - signature scanning, the guarded arm writes and the hook-body
-// registry.
+// opp.patch - signature scanning, the guarded arm writes and the body ABI.
 //
 // This is the FusionFix-minimal patch module: pattern normalisation and
 // scanning (pattern.hxx/.cpp), the helpers every install arm uses to write
 // (helpers.hxx/.cpp): the guarded SiteWritable/JumpTo/CallTo/NopAt/WriteValue/
 // WriteRaw wrappers, the Pattern/PatternAll wrappers, the arm trace and the
-// applied/skipped counters, the hook-body registry the feature modules
-// register into, and the body helpers several modules call (the runtime-pointer
-// failsafe, the guarded stores and scanner, the one-time scan guard, the /GS
-// cookie tail, the formatter and the native-script call layer).
+// applied/skipped counters, the body helpers several modules call (the spawn
+// formatter, the native-script call layer and the secure-copy slot) and the
+// resolver the x64 parity dump uses for OPP_BODY.
 
 module;
 
@@ -59,44 +57,12 @@ export namespace opp
 
 export namespace opp
 {
-    // ---------------------------------------------------------------------
-    // The hook-body registry
-    //
-    // Every body is defined by the feature module that owns it and registered
-    // here at static-init time with its installer name and, where the original
-    // handler had one, its reference VA (provenance, not an install address).
-    // The installer resolves a body by name; the native tests also resolve a
-    // reference VA back to its body.
-    // ---------------------------------------------------------------------
-    using HookBody = void (*)();
-
-    struct HookBodyRow
-    {
-        const char* name;
-        uint32_t reference_va;  // original handler VA, or 0 when only the name is used
-        HookBody body;
-    };
-
-    // Registration is a bounded copy: no allocation and no work beyond the
-    // copy, so it is safe during static initialization under the loader lock.
-    void RegisterHookBodies(const HookBodyRow* rows, size_t count) noexcept;
-
-    template <size_t N>
-    inline void RegisterHookBodies(const HookBodyRow (&rows)[N]) noexcept
-    {
-        RegisterHookBodies(rows, N);
-    }
-
-    // Rows with a reference VA: the count the installer reports as "bodies".
-    size_t HookBodyCount() noexcept;
-
-    // The body for a reference VA (0 when the VA has no registered body).
-    uintptr_t ResolveHookBody(uint32_t reference_va, void* user = nullptr) noexcept;
-
-    // The installer's name lookup. A set resolver wins: the x64 parity dump
-    // installs its original-VA table through it and never links a real body.
-    void* AbiByName(const char* name) noexcept;
-
+    // The x64 parity dump's body resolver. Hook bodies are 32-bit only, so the
+    // dump cannot link them; OPP_BODY(name) (hooks.h) asks this resolver for the
+    // ORIGINAL handler VA instead, which is what the installer's rel32 must point
+    // at for a byte-for-byte comparison. tests/dump_stubs.cpp installs the table
+    // in a static initializer; the 32-bit ASI never sets a resolver (its
+    // OPP_BODY expands to the body's real address).
     using AbiResolver = void* (*)(const char* name);
     void SetAbiResolver(AbiResolver resolver) noexcept;
 } // namespace opp
@@ -281,16 +247,8 @@ export namespace opp
         injector::WriteMemory<T>(injector::raw_ptr(const_cast<void*>(site)), value, true);
     }
 
-    // Abi(name) with the skip log: nullptr means "no verified body for this
-    // destination", which the caller turns into a skip.
-    void* AbiTarget(const char* name) noexcept;
-
     // One skip line for a write that never reached the image.
     void SkipArmWrite(const char* reason) noexcept;
-
-    // Address of a machine-level body by name. Prefer AbiTarget/JumpToBody/
-    // CallToBody, which also guard the write.
-    inline void* Abi(const char* name) { return AbiByName(name); }
 
     inline void JumpTo(PatchContext& ctx, const void* site, void* target)
     {
@@ -316,18 +274,6 @@ export namespace opp
             return;
         injector::MakeCALL(injector::raw_ptr(const_cast<void*>(site)), injector::raw_ptr(target),
                            true);
-    }
-
-    inline void JumpToBody(PatchContext& ctx, const void* site, const char* body)
-    {
-        if (void* const target = AbiTarget(body))
-            JumpTo(ctx, site, target);
-    }
-
-    inline void CallToBody(PatchContext& ctx, const void* site, const char* body)
-    {
-        if (void* const target = AbiTarget(body))
-            CallTo(ctx, site, target);
     }
 
     inline void NopAt(PatchContext& ctx, const void* site, size_t length)
@@ -689,20 +635,6 @@ namespace opp
         return true;
     }
 
-    void* AbiTarget(const char* name) noexcept
-    {
-        void* const target = AbiByName(name);
-        if (target == nullptr)
-        {
-            // A withheld or unverified body: the original handler's install is
-            // skipped when its destination has no live body.
-            Log("arm %s: skip install: no body for %s", g_currentArm,
-                name != nullptr ? name : "(null)");
-            ++g_writesSkipped;
-        }
-        return target;
-    }
-
     void SkipArmWrite(const char* reason) noexcept
     {
         LogSkippedWrite(nullptr, reason);
@@ -778,85 +710,35 @@ extern "C" bool zpatch_relocate_calls(void* destination, const void* source,
 
 
 // ---------------------------------------------------------------------------
-// The hook-body registry
+// The x64 parity dump's body resolver
 // ---------------------------------------------------------------------------
 namespace opp
 {
     namespace
     {
-        // 134 rows today; the cap has room for a new body without a reallocation
-        // (which would be illegal inside DllMain's load path).
-        constexpr size_t kMaxHookBodies = 256;
-
-        HookBodyRow g_hookBodies[kMaxHookBodies];
-        size_t g_hookBodyCount = 0;
         AbiResolver g_abiResolver = nullptr;
     } // namespace
-
-    void RegisterHookBodies(const HookBodyRow* rows, size_t count) noexcept
-    {
-        if (rows == nullptr)
-            return;
-        for (size_t i = 0; i < count; ++i)
-        {
-            if (g_hookBodyCount == kMaxHookBodies)
-            {
-                Log("bodies: registry full, ignoring %s",
-                    rows[i].name != nullptr ? rows[i].name : "(null)");
-                return;
-            }
-            g_hookBodies[g_hookBodyCount++] = rows[i];
-        }
-    }
-
-    size_t HookBodyCount() noexcept
-    {
-        // Rows with a reference VA: the count the installer reports as "bodies".
-        size_t count = 0;
-        for (size_t i = 0; i < g_hookBodyCount; ++i)
-        {
-            if (g_hookBodies[i].reference_va != 0u)
-                ++count;
-        }
-        return count;
-    }
-
-    uintptr_t ResolveHookBody(uint32_t reference_va, void*) noexcept
-    {
-        if (reference_va == 0u)
-            return 0;
-        for (size_t i = 0; i < g_hookBodyCount; ++i)
-        {
-            if (g_hookBodies[i].reference_va == reference_va)
-                return reinterpret_cast<uintptr_t>(g_hookBodies[i].body);
-        }
-        return 0;
-    }
 
     void SetAbiResolver(AbiResolver resolver) noexcept
     {
         g_abiResolver = resolver;
     }
 
-    // Name-based lookup for the installers: the same rows the reference-VA
-    // lookup walks, so a body cannot be added to one and forgotten in the other.
-    void* AbiByName(const char* name) noexcept
+    void* ResolveDumpBody(const char* name) noexcept
     {
-        if (g_abiResolver != nullptr)
-        {
-            if (void* const resolved = g_abiResolver(name))
-                return resolved;
-        }
-        if (name == nullptr)
+        if (g_abiResolver == nullptr || name == nullptr)
             return nullptr;
-        for (size_t i = 0; i < g_hookBodyCount; ++i)
-        {
-            if (std::strcmp(g_hookBodies[i].name, name) == 0)
-                return reinterpret_cast<void*>(g_hookBodies[i].body);
-        }
-        return nullptr;
+        return g_abiResolver(name);
     }
 } // namespace opp
+
+// The hooks.h OPP_BODY hook for 32-bit-less hosts. The x86 build never calls it
+// (its OPP_BODY is the body's own address); the x64 parity dump reaches the
+// resolver that tests/dump_stubs.cpp installs.
+extern "C" void* OppDumpBody(const char* name) noexcept
+{
+    return opp::ResolveDumpBody(name);
+}
 
 // ---------------------------------------------------------------------------
 // Shared body helpers (32-bit only): the bounded formatter, the native-script

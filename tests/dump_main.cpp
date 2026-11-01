@@ -271,13 +271,20 @@ int main(int argc, char** argv)
     if (argc == 4 && std::strcmp(argv[1], "--import-legacy") == 0)
         return ImportLegacy(argv[2], argv[3]);
 
-    // Print the effective install order, one name per line. The order golden in
-    // tests/order_golden.txt is captured with this mode; a pure refactor must
-    // produce the same list.
+    // Print the effective install order, one name per line, tier by tier. The
+    // order golden in tests/order_golden.txt is captured with this mode; a pure
+    // refactor must produce the same list.
     if (argc == 2 && std::strcmp(argv[1], "--order") == 0)
     {
-        for (const opp::Feature& feature : opp::RegisteredFeatures())
-            std::printf("%s\n", feature.name);
+        for (const opp::Event* event : {&opp::PublishEvent(), &opp::InstallEvent(),
+                                        &opp::PostEvent()})
+        {
+            for (size_t i = 0; i < event->size(); ++i)
+            {
+                if (const char* name = event->name(i))
+                    std::printf("%s\n", name);
+            }
+        }
         return 0;
     }
 

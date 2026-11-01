@@ -88,6 +88,16 @@ __declspec(naked) void zpatch_spawns_cookie_check_ecx()
         int 29h
     }
 }
+
+// RemoveRGSCLoginRequirement (compatibility) installs this body and
+// NewMemorySystem's allocator vtable (performance) names it, so it lives here
+// with the other external-linkage naked bodies.
+__declspec(naked) int __cdecl abi_rgsc_login_removed()
+{
+    __asm {
+        mov al, 1
+        ret
+    }
+}
 }  // extern "C"
 #endif  // !defined(_WIN64)
-

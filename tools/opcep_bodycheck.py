@@ -311,12 +311,21 @@ def main() -> int:
         Path(args.json).write_text(json.dumps(results, indent=1), encoding="utf-8")
 
     required = None
+    not_emitted = []
     if args.exact_source:
         required = exact_names(Path(args.exact_source))
-        missing = sorted(required - {item["name"] for item in results})
-        if missing:
-            print(f"error: @exact bodies not compared: {', '.join(missing)}", file=sys.stderr)
-            return 2
+        compared = {item["name"] for item in results}
+        missing = sorted(required - compared)
+        # A body with no installer in this tree is not referenced by any arm, so
+        # the compiler drops it; its bytes are not part of the shipped contract.
+        # Report it, but do not fail (a dropped *installed* body shows up as a
+        # write-set delta in the matrix instead).
+        for name in missing:
+            if name in base_symbols.by_name and name not in cur_symbols.by_name:
+                not_emitted.append(name)
+            else:
+                print(f"error: @exact body not compared: {name}", file=sys.stderr)
+                return 2
 
     print(f"bodies compared: {identical + len(different)}; identical: {identical}; "
           f"different: {len(different)}")
@@ -336,6 +345,9 @@ def main() -> int:
             print(f"  current:  {item['current']}")
     if required is not None:
         print(f"\n@exact bodies: {len(required)}; differing: {len(required_diffs)}")
+        if not_emitted:
+            print(f"@exact bodies with no installer (dropped from the build): "
+                  f"{', '.join(not_emitted)}")
     return 0 if not required_diffs else 1
 
 

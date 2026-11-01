@@ -2,15 +2,14 @@
 #pragma once
 // Hook bodies and the C ABI they share.
 //
-// Each body lives in the feature module that installs it and registers its name
-// and reference VA with opp.patch at static-init time; the installer resolves a
-// body by name. Only the symbols that more than one module needs are declared
-// here:
-//   * the shared body helpers (the runtime-pointer failsafe, guarded stores and
-//     the game scanner, the one-time scan guard, the /GS cookie tail, the
-//     bounded formatter and the native-script call layer), defined by opp.patch;
+// Each body lives in the feature module whose arms install it; the arm takes the
+// body's address directly through OPP_BODY (no name table). Only the symbols
+// that more than one module needs are declared here:
+//   * the shared body helpers that were genuine out-of-line calls (the bounded
+//     formatter, the native-script call layer, the secure-copy slot), defined by
+//     opp.patch — the helpers the bodies inline live in body_helpers.inc;
 //   * the bodies another module's data references by address (NewMemorySystem's
-//     allocator vtable names three bodies other modules own);
+//     allocator vtable names bodies other modules own);
 //   * the bodies the native test suite drives directly.
 // Nothing here is exported by a module; the definitions are C-linkage bodies in
 // module purviews, which the linker resolves by name.
@@ -20,6 +19,17 @@
 #include <string_view>
 
 #if defined(_WIN32)
+
+// A body's address for an installer write. The shipping build uses the body
+// itself; the 64-bit parity dump cannot link 32-bit bodies, so it asks the
+// resolver (installed by tests/dump_stubs.cpp through opp::SetAbiResolver) for
+// the ORIGINAL handler VA instead.
+extern "C" void* OppDumpBody(const char* name) noexcept;
+#if defined(_WIN64)
+#define OPP_BODY(fn) OppDumpBody(#fn)
+#else
+#define OPP_BODY(fn) reinterpret_cast<void*>(&fn)
+#endif
 
 // ---------------------------------------------------------------------------
 // Shared body constants
@@ -94,6 +104,7 @@ extern "C" const char* zpatch_bpm_model_name(uint32_t hash) noexcept;
 // defined next to the vtable (a naked body in an imported module's interface
 // fails C2488); performance registers that row itself.
 extern "C" int __cdecl abi_better_mp_sync();
+extern "C" int __cdecl abi_rgsc_login_removed();
 extern "C" int __stdcall abi_savegame_fix_null(int, int);
 
 // ---------------------------------------------------------------------------

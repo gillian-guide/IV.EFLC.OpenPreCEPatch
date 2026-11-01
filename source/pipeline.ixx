@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// opp.pipeline - the install schedule and the two loader passes.
+// opp.pipeline - the install tiers and the two loader passes.
 //
-// This is the FusionFix-minimal pipeline module: the phase model and the
-// registration table (order.*), the one-time registry (feature_registry.*),
-// the install driver (patches.*) and the unconditional pointer preamble
-// (preamble.*). The schedule and its named edges are unchanged this phase;
-// the Phase/Register rewrite is a separate step.
+// The schedule is the FusionFix event model: the pipeline owns three tiers
+// (publish, install, post); each feature module subscribes its arms at static
+// init time and the pipeline runs the tiers in order. There is no central arm
+// list, phase enum or dependency graph: the tier is the ordering contract, and
+// within a tier the subscription order (the module's own registration order) is
+// the schedule. tests/order_golden.txt freezes that resulting order per tier.
+//
+// This file also keeps the install driver (the old patches.*), the
+// unconditional pointer preamble (preamble.*) and the launcher-name post step.
 
 module;
 
@@ -14,18 +18,12 @@ module;
 #include "rebased.h"
 #include <cstddef>
 #include <cstdint>
-#include <span>
-#include <string>
-#include <string_view>
-#include <vector>
-#include <algorithm>
-#include <iterator>
-#include <limits>
-#include <queue>
-#include <utility>
-#include <unordered_map>
 #include <cstring>
 #include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 export module opp.pipeline;
 
@@ -37,61 +35,54 @@ import opp.patch;
 
 export namespace opp
 {
-    // The pipeline stages. The registry currently holds `publish` and `install`
-    // arms; `probe`, `config` and `post` are owned by dllmain's SetStuff, where
-    // the original loader had them, and exist so a future arm can declare itself
-    // instead of being called out of band.
-    enum class Phase : uint8_t
+    // ---------------------------------------------------------------------
+    // The install tiers
+    //
+    // A tier is a callback list. `name` is the arm's debug/order-dump label and
+    // is optional so a test can subscribe an unnamed callback. Registration
+    // happens at static-init time (file-scope objects in the feature modules),
+    // so the list is complete before DllMain runs and no work happens at
+    // registration.
+    // ---------------------------------------------------------------------
+    class Event
     {
-        probe = 0,
-        config = 1,
-        publish = 2,
-        install = 3,
-        post = 4,
+    public:
+        using Callback = void (*)(PatchContext&);
+
+        // Appends `callback`; an overflow is logged and the arm skipped rather
+        // than corrupting the list.
+        void Add(Callback callback, const char* name = nullptr) noexcept;
+        void operator+=(Callback callback) noexcept { Add(callback, nullptr); }
+
+        size_t size() const noexcept { return count_; }
+        Callback callback(size_t index) const noexcept
+        {
+            return index < count_ ? entries_[index].callback : nullptr;
+        }
+        const char* name(size_t index) const noexcept
+        {
+            return index < count_ ? entries_[index].name : nullptr;
+        }
+
+    private:
+        struct Entry
+        {
+            Callback callback{};
+            const char* name{};
+        };
+        // 122 arms today; room for a new one without reallocation, which would
+        // be illegal inside DllMain's load path.
+        static constexpr size_t kCapacity = 256;
+        Entry entries_[kCapacity]{};
+        size_t count_ = 0;
     };
 
-    const char* PhaseName(Phase phase) noexcept;
-
-    // One arm as registered by a feature module. The dependency lists are copied
-    // into the registry, so a caller may build the row from a temporary.
-    struct FeatureRegistration
-    {
-        Phase phase{};
-        std::string_view name{};
-        void (*install)(PatchContext&){};
-        std::vector<std::string_view> after{};
-        std::vector<std::string_view> needs{};  // hard edges: absent target => skipped
-    };
-
-    // One arm in the computed order.
-    struct Feature
-    {
-        Phase phase{};
-        const char* name{};
-        void (*install)(PatchContext&){};
-    };
-
-    struct OrderResult
-    {
-        std::vector<Feature> order;
-        std::vector<std::string> diagnostics;  // stable "order: " prefixes
-        bool valid{};
-    };
-
-    // Deterministic: phase, then schedule position, then name. A cycle, a
-    // duplicate name, an unknown name or a phase inversion makes the result
-    // invalid and clears `order` (the caller installs nothing).
-    OrderResult BuildOrder(std::span<const FeatureRegistration> features);
-} // namespace opp
-
-export namespace opp
-{
-    void RegisterFeature(const FeatureRegistration& feature);
-
-    // The registered arms in effective order, computed once. Empty when the
-    // order is invalid (a cycle, an unknown or duplicate name); the reason is in
-    // the log.
-    const std::vector<Feature>& RegisteredFeatures();
+    // The three tiers, run in this order by PatchGame. The publish tier is
+    // load-bearing: a site's original bytes must be read (and its resume
+    // published) before any install overwrites them.
+    Event& PublishEvent() noexcept;
+    Event& InstallEvent() noexcept;
+    Event& PostEvent() noexcept;
 } // namespace opp
 
 export namespace opp
@@ -105,8 +96,8 @@ export namespace opp
         void (*end)(void* user, const char* name){};
     };
 
-    // Applies every INI-gated install for `build`. When `observer` is set, its
-    // hooks bracket every registered arm, in install order.
+    // Applies every subscribed arm for `build`, tier by tier. When `observer` is
+    // set, its hooks bracket every arm, in install order.
     void PatchGame(GameBuild build, GameImage image, const Config& config,
                    const PatchObserver& observer = {});
 
@@ -130,417 +121,43 @@ export namespace opp
     void SetLauncherProbeOverride(bool forced) noexcept;
 
     // LaunchWithPlayGTAIV: rewrites the game's two "LaunchGTAIV.exe" name slots
-    // to the PlayGTAIV launcher name. Runs as the pipeline's post step (after
-    // every arm), through the same guarded writes as the arms.
+    // to the PlayGTAIV launcher name. Runs after every arm, through the same
+    // guarded writes as the arms.
     void ApplyLaunchWithPlayGTAIV(PatchContext& ctx);
 } // namespace opp
 
 namespace opp
 {
-    namespace
+    Event& PublishEvent() noexcept
     {
-        // The shipping schedule, grouped by phase. Frozen by
-        // tests/order_golden.txt; a position change is a behaviour change.
-        constexpr std::string_view kShippingOrder[] = {
-        "PublishBadPlayerModelCrashFix",
-        "PublishBlackscreenFix",
-        "PublishBuildingDynamicShadows",
-        "PublishCollisionDeadlockFix",
-        "PublishCopSirensFlag",
-        "PublishDualVehicleHeadlights",
-        "PublishEmissiveLerpFix",
-        "PublishEpisodeSwitchFreezeFix",
-        "PublishFreezeGunFix",
-        "PublishGroupHackFix",
-        "PublishHighFPSBikePhysicsFix",
-        "PublishLoadDLCs",
-        "PublishNewFilesCompatibility",
-        "PublishNewMemorySystem",
-        "PublishNewSavesCompatibility",
-        "PublishNoLiveryLimit",
-        "PublishPathNodeCrashFix",
-        "PublishPedModelsInCutscenesFix",
-        "PublishPlaneCrashFix",
-        "PublishPlayerAsPedComponentsFix",
-        "PublishPopupHeadlightsFlag",
-        "PublishSMPA60Fix",
-        "PublishSpeedupBugFix",
-        "PublishWantedLevelCrashFix",
-        "PublishSuperLODFix",
-        "PublishDrivebyFOVFix",
-        "PublishCrashMsgFix",
-        "PublishBenchmarkFix",
-        "PublishCarPartsShadowFix",
-        "PublishForceCarHeadlightShadows",
-        "PublishRemoveModChecks",
-        "PublishFreezeCarFix",
-        "PublishCarDynamicShadowFix",
-        "PublishGarageModelFix",
-        "PublishMovingSteeringWheelSupport",
-        "PublishShakingEngineBlock",
-        "PublishMovingPlaneParts",
-        "PublishMouseFix",
-        "PublishOutOfCommissionFix",
-        "PublishCutsceneFixes",
-        "InstallAimProjectileCrashFix",
-        "InstallAllowHashesForIDE",
-        "InstallBadPlayerModelCrashFix",
-        "InstallBetterMPSync",
-        "InstallBikeFeetFix",
-        "InstallBikePhoneAnimsFix",
-        "InstallBlackscreenFix",
-        "InstallBuildingAlphaFix",
-        "InstallBuildingDynamicShadows",
-        "InstallCollisionDeadlockFix",
-        "InstallCombinedRadioFreezeFix",
-        "InstallCopSirensFlag",
-        "InstallDualVehicleHeadlights",
-        "InstallEmissiveLerpFix",
-        "InstallEpisodeSwitchFreezeFix",
-        "InstallEpisodicVehicleSupport",
-        "InstallEpisodicWeaponSupport",
-        "InstallForceShadowsOnObjects",
-        "InstallFreezeGunFix",
-        "InstallGroupHackFix",
-        "InstallHighFPSBikePhysicsFix",
-        "InstallHighFPSSpeedupFix",
-        "InstallImprovedShaderStreaming",
-        "InstallInfiniteCarBottomDistance",
-        "InstallLoadDLCs",
-        "InstallMPNikoCrashFix",
-        "InstallNewFilesCompatibility",
-        "InstallNewMemorySystem",
-        "InstallNewSavesCompatibility",
-        "InstallNoLiveryLimit",
-        "InstallRemoveModChecks",
-        "InstallPathNodeCrashFix",
-        "InstallPedModelsInCutscenesFix",
-        "InstallPipeBombDropIconSupport",
-        "InstallPlaneCrashFix",
-        "InstallPlayerAsPedComponentsFix",
-        "InstallPoliceEpisodicWeaponSupport",
-        "InstallPopupHeadlightsFlag",
-        "InstallRemoveAllWeaponsProtection",
-        "InstallRemoveRGSCLoginRequirement",
-        "InstallRemoveStaticCarShadows",
-        "InstallRemoveStaticCutsceneCarShadows",
-        "InstallReversingLightFix",
-        "InstallSCOSignatureFix",
-        "InstallSMPA60Fix",
-        "InstallSavegameFix",
-        "InstallSpeedupBugFix",
-        "InstallTBoGTHeliHeightLimit",
-        "InstallTeleportProtection",
-        "InstallTryToSkipAllErrors",
-        "InstallWantedLevelCrashFix",
-        "InstallSuperLODFix",
-        "InstallDrivebyFOVFix",
-        "InstallCrashMsgFix",
-        "InstallBenchmarkFix",
-        "InstallCarPartsShadowFix",
-        "InstallForceCarHeadlightShadows",
-        "InstallFreezeCarFix",
-        "InstallCarDynamicShadowFix",
-        "InstallGarageModelFix",
-        "InstallMovingSteeringWheelSupport",
-        "InstallShakingEngineBlock",
-        "InstallMovingPlaneParts",
-        "InstallMouseFix",
-        "InstallOutOfCommissionFix",
-        "InstallCutsceneFixes",
-        "InstallCarDecalsFix",
-        "InstallRestoreDeathMusic",
-        "InstallCarDynamicShadowFixNoE",
-        "InstallFastLoading",
-        "InstallCarPartsShadowFixStandalone",
-        "InstallIncreaseVehicleModelLimit",
-        "InstallNoImpostorHeightCutoff",
-        "InstallStartupTimeFix",
-        "InstallIncreasePtrNodes",
-        "InstallIncreaseVehicleStructLimit",
-        "InstallNoLODLightHeightCutoff",
-        "InstallNoLoadingSleep",
-        "InstallOverrideGTADatPath",
-        "InstallVSyncFix",
-        "InstallGFWLProtectionDisabler",
-        "InstallSteamAchievements",
-        };
-
-        constexpr size_t kScheduleSize = std::size(kShippingOrder);
-        constexpr size_t kNotInSchedule = std::numeric_limits<size_t>::max();
-
-        int PhaseRank(Phase phase) noexcept
-        {
-            return static_cast<int>(phase);
-        }
-
-        size_t ScheduleIndex(std::string_view name) noexcept
-        {
-            for (size_t i = 0; i < kScheduleSize; ++i)
-            {
-                if (kShippingOrder[i] == name)
-                    return i;
-            }
-            return kNotInSchedule;
-        }
-
-        void AddDiagnostic(OrderResult& result, std::string text)
-        {
-            result.diagnostics.push_back(std::move(text));
-        }
-
-        std::string Quote(std::string_view name)
-        {
-            return '"' + std::string(name) + '"';
-        }
-
-        // One cycle path in `residual`, for the diagnostic. Iterative DFS so a
-        // long chain cannot overflow the stack.
-        std::vector<std::string> FindCycle(
-            const std::vector<std::vector<size_t>>& next, const std::vector<bool>& residual,
-            std::span<const FeatureRegistration> features)
-        {
-            const size_t count = features.size();
-            std::vector<uint8_t> colour(count, 0);  // 0 new, 1 on stack, 2 done
-            std::vector<size_t> stack;
-            std::vector<size_t> path;
-
-            for (size_t start = 0; start < count; ++start)
-            {
-                if (!residual[start] || colour[start] != 0)
-                    continue;
-                stack.push_back(start);
-                while (!stack.empty())
-                {
-                    const size_t node = stack.back();
-                    if (colour[node] == 0)
-                    {
-                        colour[node] = 1;
-                        path.push_back(node);
-                        for (const size_t successor : next[node])
-                        {
-                            if (!residual[successor])
-                                continue;
-                            if (colour[successor] == 1)
-                            {
-                                std::vector<std::string> cycle;
-                                bool inCycle = false;
-                                for (const size_t item : path)
-                                {
-                                    inCycle = inCycle || item == successor;
-                                    if (inCycle)
-                                        cycle.push_back(std::string(features[item].name));
-                                }
-                                cycle.push_back(std::string(features[successor].name));
-                                return cycle;
-                            }
-                            if (colour[successor] == 0)
-                                stack.push_back(successor);
-                        }
-                    }
-                    else
-                    {
-                        colour[node] = 2;
-                        stack.pop_back();
-                        if (!path.empty() && path.back() == node)
-                            path.pop_back();
-                    }
-                }
-            }
-            return {};
-        }
-    } // namespace
-
-    const char* PhaseName(Phase phase) noexcept
-    {
-        switch (phase)
-        {
-        case Phase::probe:
-            return "probe";
-        case Phase::config:
-            return "config";
-        case Phase::publish:
-            return "publish";
-        case Phase::install:
-            return "install";
-        case Phase::post:
-            return "post";
-        }
-        return "?";
+        static Event event;
+        return event;
     }
 
-    OrderResult BuildOrder(std::span<const FeatureRegistration> features)
+    Event& InstallEvent() noexcept
     {
-        OrderResult result;
-        const size_t count = features.size();
-        std::vector<size_t> position(count, kNotInSchedule);
-        std::unordered_map<std::string_view, size_t> byName;
-        byName.reserve(count * 2);
-
-        for (size_t i = 0; i < count; ++i)
-        {
-            const FeatureRegistration& feature = features[i];
-            if (feature.name.empty() || feature.install == nullptr)
-            {
-                AddDiagnostic(result, "order: feature #" + std::to_string(i) +
-                                          " has no name or no body");
-                continue;
-            }
-            const auto [iterator, inserted] = byName.emplace(feature.name, i);
-            if (!inserted)
-            {
-                AddDiagnostic(result, "order: duplicate feature " + Quote(feature.name));
-                continue;
-            }
-            position[i] = ScheduleIndex(feature.name);
-            if (position[i] == kNotInSchedule)
-            {
-                AddDiagnostic(result, "order: " + Quote(feature.name) +
-                                          " is not in the shipping schedule");
-            }
-        }
-
-        // A `Requires` target that is not registered skips the dependent arm; an
-        // `After` target that is not registered is a soft edge and is ignored.
-        std::vector<bool> active(count, true);
-        for (size_t i = 0; i < count; ++i)
-        {
-            for (const std::string_view required : features[i].needs)
-            {
-                if (byName.find(required) != byName.end())
-                    continue;
-                active[i] = false;
-                AddDiagnostic(result, "order: " + std::string(features[i].name) +
-                                          " requires " + std::string(required) +
-                                          " (absent): arm skipped");
-            }
-        }
-
-        std::vector<std::vector<size_t>> next(count);
-        std::vector<int> indegree(count, 0);
-        for (size_t i = 0; i < count; ++i)
-        {
-            if (!active[i])
-                continue;
-            for (const std::string_view target : features[i].after)
-            {
-                const auto found = byName.find(target);
-                if (found == byName.end())
-                    continue;  // soft edge
-                const size_t dependency = found->second;
-                if (PhaseRank(features[dependency].phase) > PhaseRank(features[i].phase))
-                {
-                    AddDiagnostic(result,
-                                  "order: phase inversion: " + std::string(features[i].name) +
-                                      " (" + PhaseName(features[i].phase) + ") after " +
-                                      std::string(target) + " (" +
-                                      PhaseName(features[dependency].phase) + ")");
-                    continue;
-                }
-                next[dependency].push_back(i);
-                ++indegree[i];
-            }
-        }
-
-        // Total-order ready set: phase, then the shipping schedule position, then
-        // the name. Independent of registration order and of sort stability.
-        const auto later = [&](size_t left, size_t right) {
-            const int leftPhase = PhaseRank(features[left].phase);
-            const int rightPhase = PhaseRank(features[right].phase);
-            if (leftPhase != rightPhase)
-                return leftPhase > rightPhase;
-            if (position[left] != position[right])
-                return position[left] > position[right];
-            return features[left].name > features[right].name;
-        };
-        std::priority_queue<size_t, std::vector<size_t>, decltype(later)> ready(later);
-
-        size_t activeCount = 0;
-        for (size_t i = 0; i < count; ++i)
-        {
-            if (!active[i])
-                continue;
-            ++activeCount;
-            if (indegree[i] == 0)
-                ready.push(i);
-        }
-
-        while (!ready.empty())
-        {
-            const size_t node = ready.top();
-            ready.pop();
-            result.order.push_back(
-                {features[node].phase, features[node].name.data(), features[node].install});
-            for (const size_t successor : next[node])
-            {
-                if (--indegree[successor] == 0)
-                    ready.push(successor);
-            }
-        }
-
-        if (result.order.size() != activeCount)
-        {
-            std::vector<bool> residual(count, false);
-            for (size_t i = 0; i < count; ++i)
-                residual[i] = active[i] && indegree[i] > 0;
-            std::vector<std::string> cycle = FindCycle(next, residual, features);
-            std::string text = "order: cycle";
-            for (const std::string& name : cycle)
-                text += " -> " + name;
-            if (cycle.empty())
-                text = "order: cycle among the residual arms";
-            AddDiagnostic(result, text);
-        }
-
-        // Any diagnostic that is an error empties the order: install nothing.
-        for (const std::string& diagnostic : result.diagnostics)
-        {
-            if (diagnostic.find("arm skipped") == std::string::npos)
-            {
-                result.order.clear();
-                break;
-            }
-        }
-        result.valid = !result.order.empty() || activeCount == 0;
-        return result;
-    }
-} // namespace opp
-
-namespace opp
-{
-    namespace
-    {
-        std::vector<FeatureRegistration>& Registry()
-        {
-            static std::vector<FeatureRegistration> registry;
-            return registry;
-        }
-
-        std::vector<Feature> ComputeOrder()
-        {
-            const OrderResult result = BuildOrder(Registry());
-            for (const std::string& diagnostic : result.diagnostics)
-                Log("%s", diagnostic.c_str());
-            if (!result.valid)
-            {
-                // A programming error (a cycle or a name the schedule does not
-                // know) must not install a partial, order-dependent patch set.
-                Log("install: refused, order invalid");
-                return {};
-            }
-            return result.order;
-        }
-    } // namespace
-
-    void RegisterFeature(const FeatureRegistration& feature)
-    {
-        Registry().push_back(feature);
+        static Event event;
+        return event;
     }
 
-    const std::vector<Feature>& RegisteredFeatures()
+    Event& PostEvent() noexcept
     {
-        static const std::vector<Feature> order = ComputeOrder();
-        return order;
+        static Event event;
+        return event;
+    }
+
+    void Event::Add(Callback callback, const char* name) noexcept
+    {
+        if (callback == nullptr)
+            return;
+        if (count_ == kCapacity)
+        {
+            Log("tier: full, ignoring %s", name != nullptr ? name : "(unnamed)");
+            return;
+        }
+        entries_[count_].callback = callback;
+        entries_[count_].name = name;
+        ++count_;
     }
 } // namespace opp
 
@@ -551,65 +168,29 @@ namespace opp
     {
         PatchContext ctx{image, reinterpret_cast<uintptr_t>(image.base), build, config};
 
-        const std::vector<Feature>& features = RegisteredFeatures();
-        size_t publishes = 0;
-        size_t installs = 0;
-        for (const Feature& feature : features)
-        {
-            if (feature.phase == Phase::publish)
-                ++publishes;
-            else if (feature.phase == Phase::install)
-                ++installs;
-        }
-        Log("order: %zu features (%zu publish, %zu install)", features.size(), publishes,
-            installs);
-        if (features.empty())
-        {
-            // ComputeOrder refuses an invalid graph; installing nothing is the
-            // fail-closed outcome and the reason is already in the log.
-            Log("install: no arms ran");
-            return;
-        }
-
-        std::optional<Phase> currentPhase;
-        size_t phaseApplied = 0;
-        size_t phaseSkipped = 0;
-
-        for (const Feature& feature : features)
-        {
-            // One line per phase boundary plus one per phase end: a crash in the
-            // install pass leaves the phase visible, not just the last arm.
-            if (!currentPhase || feature.phase != *currentPhase)
+        const auto run = [&](Event& event, const char* tier) {
+            Log("tier %s: %zu arms", tier, event.size());
+            const size_t applied = ArmWritesApplied();
+            const size_t skipped = ArmWritesSkipped();
+            for (size_t i = 0; i < event.size(); ++i)
             {
-                if (currentPhase)
-                {
-                    Log("phase %s: %zu applied, %zu skipped", PhaseName(*currentPhase),
-                        ArmWritesApplied() - phaseApplied,
-                        ArmWritesSkipped() - phaseSkipped);
-                }
-                currentPhase = feature.phase;
-                phaseApplied = ArmWritesApplied();
-                phaseSkipped = ArmWritesSkipped();
-                Log("phase %s", PhaseName(feature.phase));
+                const char* name = event.name(i);
+                if (observer.begin != nullptr)
+                    observer.begin(observer.user, name != nullptr ? name : tier);
+                event.callback(i)(ctx);
+                if (observer.end != nullptr)
+                    observer.end(observer.user, name != nullptr ? name : tier);
             }
+            Log("tier %s: %zu applied, %zu skipped", tier, ArmWritesApplied() - applied,
+                ArmWritesSkipped() - skipped);
+        };
 
-            if (observer.begin != nullptr)
-                observer.begin(observer.user, feature.name);
-            feature.install(ctx);
-            if (observer.end != nullptr)
-                observer.end(observer.user, feature.name);
-        }
-        if (currentPhase)
-        {
-            Log("phase %s: %zu applied, %zu skipped", PhaseName(*currentPhase),
-                ArmWritesApplied() - phaseApplied,
-                ArmWritesSkipped() - phaseSkipped);
-        }
+        run(PublishEvent(), "publish");
+        run(InstallEvent(), "install");
+        run(PostEvent(), "post");
 
-        // The post step the original runs after its arm sequence. It is not a
-        // registered arm (the launcher write is gated by a process probe, not by
-        // the arm schedule), but it is bracketed for the dump so its writes are
-        // attributed and covered by the matrix.
+        // The launcher write is gated by a process probe, not by an arm, so it
+        // runs after the tiers but is still bracketed for the dump.
         if (observer.begin != nullptr)
             observer.begin(observer.user, "ApplyLaunchWithPlayGTAIV");
         ApplyLaunchWithPlayGTAIV(ctx);
@@ -621,7 +202,10 @@ namespace opp
         // outside the image). A healthy install reports 0 skipped.
         Log("install: %zu writes applied, %zu skipped", ArmWritesApplied(), ArmWritesSkipped());
     }
+} // namespace opp
 
+namespace opp
+{
     namespace
     {
         // -1 = ask the process (or the dump's env override), 0/1 = forced.

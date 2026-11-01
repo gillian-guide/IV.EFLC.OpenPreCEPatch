@@ -49,7 +49,7 @@ EQUAL = re.compile(r"ctx\.build\s*==\s*GameBuild::(v\d+)")
 FUNCTION = re.compile(r"^\s*(?:static\s+)?[\w:<>]+\s+(\w+)\([^;{]*\)\s*(?:noexcept)?\s*\{", re.M)
 OPTION = re.compile(r'ctx\.Option\("([^"]+)"')
 PATTERN = re.compile(r'Pattern(?:All)?\(image,')
-ABI = re.compile(r'Abi\("([^"]+)"\)')
+ABI = re.compile(r'OPP_BODY\((\w+)\)')
 
 
 def shipped_options() -> list[tuple[str, str, str]]:

@@ -163,7 +163,7 @@ extern "C" void zpatch_local_settings_step() noexcept
 // @exact 0x100512F0 LocalSettingsPath detour: entered via E9 at the path-setup
 // function's epilogue (game 0x856EE6, swallowing pop edi/esi/ebx; ret plus one
 // int3 pad), runs the path-rewrite helper between pushad/popad and replays it.
-static __declspec(naked) void abi_local_settings_detour()
+[[maybe_unused]] static __declspec(naked) void abi_local_settings_detour()
 {
     __asm {
         pushad
@@ -179,7 +179,7 @@ static __declspec(naked) void abi_local_settings_detour()
 // @exact 0x10051300 LocalSettingsPath fallback detour (pattern absent on
 // 1.0.8.0): same helper, then re-issues the original 5-arg call through ESI and
 // the two-pop epilogue.
-static __declspec(naked) void abi_local_settings_fallback_detour()
+[[maybe_unused]] static __declspec(naked) void abi_local_settings_fallback_detour()
 {
     __asm {
         pushad
@@ -198,23 +198,5 @@ static __declspec(naked) void abi_local_settings_fallback_detour()
 }
 }  // extern "C"
 
-namespace
-{
-// The name -> body rows this module registers. The reference VA is the
-// original handler destination (0 when the body has none); it is provenance,
-// not an install address.
-const opp::HookBodyRow kSettingsHookBodies[] = {
-    {"abi_local_settings_detour", 0x100512F0u, reinterpret_cast<opp::HookBody>(&abi_local_settings_detour)},
-    {"abi_local_settings_fallback_detour", 0x10051300u, reinterpret_cast<opp::HookBody>(&abi_local_settings_fallback_detour)},
-};
-
-struct SettingsHookBodyRegistration
-{
-    SettingsHookBodyRegistration() noexcept
-    {
-        opp::RegisterHookBodies(kSettingsHookBodies);
-    }
-} g_settingsHookBodies;
-}  // namespace
 
 #endif  // !defined(_WIN64)

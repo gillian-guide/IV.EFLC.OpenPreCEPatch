@@ -22,252 +22,6 @@ import opp.common;
 import opp.settings;
 import opp.log;
 
-namespace opp::features
-{
-
-    // BorderlessWindowed / DoNotPauseOnMinimize live in the separate
-    // XLivelessAddon companion repository.
-
-
-    // publish DrivebyFOVFix
-
-    void PublishDrivebyFOVFix(PatchContext& ctx)
-    {
-
-        TraceArm("publish DrivebyFOVFix");
-
-        // DrivebyFOVFix: 2 slots
-        if (ctx.Option("DrivebyFOVFix", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "F3 0F 10 46 60 F3 0F 5C CA"); pattern.size() > 0)
-            {
-                zpatch_driveby_resume = MatchAddress(pattern, 5);
-            }
-
-            if (auto pattern = Pattern(image, "08 0B C2 8B F0 E8"); pattern.size() > 0)
-            {
-                zpatch_driveby_resolver = MatchTarget(pattern, 6, 10);
-            }
-        }
-
-    }
-
-
-    // DrivebyFOVFix
-
-    void InstallDrivebyFOVFix(PatchContext& ctx)
-    {
-
-        TraceArm("DrivebyFOVFix");
-
-        // DrivebyFOVFix: 1 sigjump
-        if (ctx.Option("DrivebyFOVFix", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "F3 0F 10 46 60 F3 0F 5C CA"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpToBody(ctx, match, "abi_driveby_fov_shim");
-            }
-        }
-
-    }
-
-
-    // publish MouseFix
-
-    void PublishMouseFix(PatchContext& ctx)
-    {
-
-        TraceArm("publish MouseFix");
-
-        // MouseFix: 6 slots
-        if (ctx.Option("MouseFix", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "51 8B 44 24 0C 85 C0 0F 57 D2 56 8B 35 ? ? ? ? 57 8B 3D ? ? ? ? F3 0F 11 54 24 08 75 0C"); pattern.size() > 0)
-            {
-                zpatch_mf_x = *pattern.get(0).get<uint32_t>(13);
-                zpatch_mf_y = *pattern.get(0).get<uint32_t>(20);
-            }
-
-            if (auto pattern = Pattern(image, "8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? 83 C4 08 83 3D"); pattern.size() > 0)
-            {
-                zpatch_mf_flag = *pattern.get(0).get<uint32_t>(20);
-            }
-
-            if (auto pattern = Pattern(image, "83 EC 08 DB 05 ? ? ? ? 68"); pattern.size() > 0)
-            {
-                zpatch_mf_time = MatchAddress(pattern);
-            }
-
-            if (auto pattern = Pattern(image, "53 56 8B F1 57 8B BE 40 01 00 00 85 FF F3 0F 11 46"); pattern.size() > 0)
-            {
-                zpatch_mf_resume_a = MatchAddress(pattern);
-                zpatch_mf_resume_b = MatchAddress(pattern, 1878);
-            }
-        }
-
-    }
-
-
-    // MouseFix
-
-    void InstallMouseFix(PatchContext& ctx)
-    {
-
-        TraceArm("MouseFix");
-
-        // MouseFix: 8 siginstalls
-        if (ctx.Option("MouseFix", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "51 8B 44 24 0C 85 C0 0F 57 D2 56 8B 35 ? ? ? ? 57 8B 3D ? ? ? ? F3 0F 11 54 24 08 75 0C"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpToBody(ctx, match, "abi_mouse_axis_float");
-            }
-
-            if (auto pattern = Pattern(image, "8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? D8"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpToBody(ctx, match, "abi_mouse_axis_neg");
-            }
-
-            if (auto pattern = Pattern(image, "83 C4 08 F7 D8 F3 0F 2A C0 6A 00 8B CE F3 0F 11 07"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                // 66 0F 6E C0 = `movd xmm0, eax`: the SSE form the fix puts
-                // where the x87 load was (the NOPs at +3/+31 remove the old one).
-                constexpr opp::ops::InstructionWindow<4> kMovdXmm0Eax{
-                    {0x66, 0x0F, 0x6E, 0xC0}};
-                static_assert(opp::ops::PackedLowDword(kMovdXmm0Eax) == 0xC06E0F66u);
-                WriteValue<uint32_t>(ctx, match + 5,
-                                     opp::ops::PackedLowDword(kMovdXmm0Eax));
-                WriteValue<uint32_t>(ctx, match + 33,
-                                     opp::ops::PackedLowDword(kMovdXmm0Eax));
-                NopAt(ctx, match + 3, 2);
-                NopAt(ctx, match + 31, 2);
-            }
-
-            if (auto pattern = Pattern(image, "83 C4 08 F7 D8 F3 0F 2A C0 6A 01 8B CB F3 0F 11 07"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                // 66 0F 6E C0 = `movd xmm0, eax`: the SSE form the fix puts
-                // where the x87 load was (the NOPs at +3/+31 remove the old one).
-                constexpr opp::ops::InstructionWindow<4> kMovdXmm0Eax{
-                    {0x66, 0x0F, 0x6E, 0xC0}};
-                static_assert(opp::ops::PackedLowDword(kMovdXmm0Eax) == 0xC06E0F66u);
-                WriteValue<uint32_t>(ctx, match + 5,
-                                     opp::ops::PackedLowDword(kMovdXmm0Eax));
-                WriteValue<uint32_t>(ctx, match + 33,
-                                     opp::ops::PackedLowDword(kMovdXmm0Eax));
-                NopAt(ctx, match + 3, 2);
-                NopAt(ctx, match + 31, 2);
-            }
-
-            if (auto pattern = Pattern(image, "83 C4 08 F7 D8 F3 0F 2A C8 F3 0F 10 46"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                // 66 0F 6E C8 = `movd xmm1, eax` (the second axis).
-                constexpr opp::ops::InstructionWindow<4> kMovdXmm1Eax{
-                    {0x66, 0x0F, 0x6E, 0xC8}};
-                static_assert(opp::ops::PackedLowDword(kMovdXmm1Eax) == 0xC86E0F66u);
-                WriteValue<uint32_t>(ctx, match + 5,
-                                     opp::ops::PackedLowDword(kMovdXmm1Eax));
-                NopAt(ctx, match + 3, 2);
-            }
-
-            if (auto pattern = Pattern(image, "8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? 83 C4 08 83 3D"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpToBody(ctx, match, "abi_mouse_axis_flag");
-            }
-
-            if (auto pattern = Pattern(image, "56 8B 74 24 08 57 8B 7C 24 10 C7 06 00 00 00 00"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                CallToBody(ctx, match + 51, "abi_mouse_axis_int");
-                CallToBody(ctx, match + 90, "abi_mouse_axis_int");
-            }
-
-            if (auto pattern = Pattern(image, "53 56 8B F1 57 8B BE 40 01 00 00 85 FF F3 0F 11 46"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpToBody(ctx, match - 15, "abi_mouse_angle");
-                JumpToBody(ctx, match + 1862, "abi_mouse_advance");
-            }
-        }
-
-    }
-
-
-    // VSyncFix
-
-    void InstallVSyncFix(PatchContext& ctx)
-    {
-
-        TraceArm("VSyncFix");
-
-        // VSyncFix: 2 literalstores
-        if (ctx.Option("VSyncFix", "0"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (BuildIs(ctx.build,
-                        {GameBuild::v1004, GameBuild::v1060, GameBuild::v1070, GameBuild::v1061,
-                         GameBuild::v1100, GameBuild::v1110, GameBuild::v1120, GameBuild::v12043}))
-            {
-
-                if (auto pattern = Pattern(image, "8B 08 8B 51 0C 6A 01 6A 00 6A 00 6A 00 6A 00 50 FF D2 8B F0 81 FE ? ? ? ? 74"); pattern.size() > 0)
-                {
-                    auto* match = pattern.get(0).get<uint8_t>();
-
-                    WriteValue<uint32_t>(ctx, match + 30, static_cast<uint32_t>(FindGlobalValue("VSyncFix")));
-                }
-
-                if (auto pattern = Pattern(image, "8B 10 50 8B 82 A8 00 00 00 FF D0 83"); pattern.size() > 0)
-                {
-                    auto* match = pattern.get(0).get<uint8_t>();
-
-                    WriteValue<uint32_t>(ctx, match + 13, static_cast<uint32_t>(FindGlobalValue("VSyncFix")));
-                }
-            }
-        }
-    }
-
-namespace
-{
-    class InputFeatures
-    {
-    public:
-        InputFeatures()
-        {
-            RegisterFeature({Phase::publish, "PublishDrivebyFOVFix", &PublishDrivebyFOVFix});
-            RegisterFeature({Phase::publish, "PublishMouseFix", &PublishMouseFix});
-            RegisterFeature({Phase::install, "InstallDrivebyFOVFix", &InstallDrivebyFOVFix, {"PublishDrivebyFOVFix"}});
-            RegisterFeature({Phase::install, "InstallMouseFix", &InstallMouseFix, {"PublishMouseFix"}});
-            RegisterFeature({Phase::install, "InstallVSyncFix", &InstallVSyncFix});
-        }
-    } inputFeatures;
-} // namespace
-
-} // namespace opp::features
-
 // ---------------------------------------------------------------------------
 // Hook bodies: the machine-level entry points input installs.
 //
@@ -323,7 +77,7 @@ extern "C" void abi_driveby_fov_note_impl()
         }
     }
 }
-static __declspec(naked) void abi_driveby_fov_note()
+[[maybe_unused]] static __declspec(naked) void abi_driveby_fov_note()
 {
     __asm {
         sub esp, 70h
@@ -858,32 +612,251 @@ static __declspec(naked) void abi_mouse_advance()
 }
 }  // extern "C"
 
-namespace
-{
-// The name -> body rows this module registers. The reference VA is the
-// original handler destination (0 when the body has none); it is provenance,
-// not an install address.
-const opp::HookBodyRow kInputHookBodies[] = {
-    {"abi_driveby_fov_helper", 0u, reinterpret_cast<opp::HookBody>(&abi_driveby_fov_helper)},
-    {"abi_driveby_fov_note", 0u, reinterpret_cast<opp::HookBody>(&abi_driveby_fov_note)},
-    {"abi_driveby_fov_note_impl", 0u, reinterpret_cast<opp::HookBody>(&abi_driveby_fov_note_impl)},
-    {"abi_driveby_fov_shim", 0x100064B0u, reinterpret_cast<opp::HookBody>(&abi_driveby_fov_shim)},
-    {"abi_mf_angle_step", 0x10024440u, reinterpret_cast<opp::HookBody>(&abi_mf_angle_step)},
-    {"abi_mouse_advance", 0x100243A0u, reinterpret_cast<opp::HookBody>(&abi_mouse_advance)},
-    {"abi_mouse_angle", 0x10024560u, reinterpret_cast<opp::HookBody>(&abi_mouse_angle)},
-    {"abi_mouse_axis_flag", 0x10024170u, reinterpret_cast<opp::HookBody>(&abi_mouse_axis_flag)},
-    {"abi_mouse_axis_float", 0x10024060u, reinterpret_cast<opp::HookBody>(&abi_mouse_axis_float)},
-    {"abi_mouse_axis_int", 0x10024120u, reinterpret_cast<opp::HookBody>(&abi_mouse_axis_int)},
-    {"abi_mouse_axis_neg", 0x100240C0u, reinterpret_cast<opp::HookBody>(&abi_mouse_axis_neg)},
-};
-
-struct InputHookBodyRegistration
-{
-    InputHookBodyRegistration() noexcept
-    {
-        opp::RegisterHookBodies(kInputHookBodies);
-    }
-} g_inputHookBodies;
-}  // namespace
 
 #endif  // !defined(_WIN64)
+
+namespace opp::features
+{
+
+    // BorderlessWindowed / DoNotPauseOnMinimize live in the separate
+    // XLivelessAddon companion repository.
+
+
+    // publish DrivebyFOVFix
+
+    void PublishDrivebyFOVFix(PatchContext& ctx)
+    {
+
+        TraceArm("publish DrivebyFOVFix");
+
+        // DrivebyFOVFix: 2 slots
+        if (ctx.Option("DrivebyFOVFix", "1"))
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, "F3 0F 10 46 60 F3 0F 5C CA"); pattern.size() > 0)
+            {
+                zpatch_driveby_resume = MatchAddress(pattern, 5);
+            }
+
+            if (auto pattern = Pattern(image, "08 0B C2 8B F0 E8"); pattern.size() > 0)
+            {
+                zpatch_driveby_resolver = MatchTarget(pattern, 6, 10);
+            }
+        }
+
+    }
+
+
+    // DrivebyFOVFix
+
+    void InstallDrivebyFOVFix(PatchContext& ctx)
+    {
+
+        TraceArm("DrivebyFOVFix");
+
+        // DrivebyFOVFix: 1 sigjump
+        if (ctx.Option("DrivebyFOVFix", "1"))
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, "F3 0F 10 46 60 F3 0F 5C CA"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                JumpTo(ctx, match, OPP_BODY(abi_driveby_fov_shim));
+            }
+        }
+
+    }
+
+
+    // publish MouseFix
+
+    void PublishMouseFix(PatchContext& ctx)
+    {
+
+        TraceArm("publish MouseFix");
+
+        // MouseFix: 6 slots
+        if (ctx.Option("MouseFix", "1"))
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, "51 8B 44 24 0C 85 C0 0F 57 D2 56 8B 35 ? ? ? ? 57 8B 3D ? ? ? ? F3 0F 11 54 24 08 75 0C"); pattern.size() > 0)
+            {
+                zpatch_mf_x = *pattern.get(0).get<uint32_t>(13);
+                zpatch_mf_y = *pattern.get(0).get<uint32_t>(20);
+            }
+
+            if (auto pattern = Pattern(image, "8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? 83 C4 08 83 3D"); pattern.size() > 0)
+            {
+                zpatch_mf_flag = *pattern.get(0).get<uint32_t>(20);
+            }
+
+            if (auto pattern = Pattern(image, "83 EC 08 DB 05 ? ? ? ? 68"); pattern.size() > 0)
+            {
+                zpatch_mf_time = MatchAddress(pattern);
+            }
+
+            if (auto pattern = Pattern(image, "53 56 8B F1 57 8B BE 40 01 00 00 85 FF F3 0F 11 46"); pattern.size() > 0)
+            {
+                zpatch_mf_resume_a = MatchAddress(pattern);
+                zpatch_mf_resume_b = MatchAddress(pattern, 1878);
+            }
+        }
+
+    }
+
+
+    // MouseFix
+
+    void InstallMouseFix(PatchContext& ctx)
+    {
+
+        TraceArm("MouseFix");
+
+        // MouseFix: 8 siginstalls
+        if (ctx.Option("MouseFix", "1"))
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, "51 8B 44 24 0C 85 C0 0F 57 D2 56 8B 35 ? ? ? ? 57 8B 3D ? ? ? ? F3 0F 11 54 24 08 75 0C"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                JumpTo(ctx, match, OPP_BODY(abi_mouse_axis_float));
+            }
+
+            if (auto pattern = Pattern(image, "8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? D8"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                JumpTo(ctx, match, OPP_BODY(abi_mouse_axis_neg));
+            }
+
+            if (auto pattern = Pattern(image, "83 C4 08 F7 D8 F3 0F 2A C0 6A 00 8B CE F3 0F 11 07"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                // 66 0F 6E C0 = `movd xmm0, eax`: the SSE form the fix puts
+                // where the x87 load was (the NOPs at +3/+31 remove the old one).
+                constexpr opp::ops::InstructionWindow<4> kMovdXmm0Eax{
+                    {0x66, 0x0F, 0x6E, 0xC0}};
+                static_assert(opp::ops::PackedLowDword(kMovdXmm0Eax) == 0xC06E0F66u);
+                WriteValue<uint32_t>(ctx, match + 5,
+                                     opp::ops::PackedLowDword(kMovdXmm0Eax));
+                WriteValue<uint32_t>(ctx, match + 33,
+                                     opp::ops::PackedLowDword(kMovdXmm0Eax));
+                NopAt(ctx, match + 3, 2);
+                NopAt(ctx, match + 31, 2);
+            }
+
+            if (auto pattern = Pattern(image, "83 C4 08 F7 D8 F3 0F 2A C0 6A 01 8B CB F3 0F 11 07"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                // 66 0F 6E C0 = `movd xmm0, eax`: the SSE form the fix puts
+                // where the x87 load was (the NOPs at +3/+31 remove the old one).
+                constexpr opp::ops::InstructionWindow<4> kMovdXmm0Eax{
+                    {0x66, 0x0F, 0x6E, 0xC0}};
+                static_assert(opp::ops::PackedLowDword(kMovdXmm0Eax) == 0xC06E0F66u);
+                WriteValue<uint32_t>(ctx, match + 5,
+                                     opp::ops::PackedLowDword(kMovdXmm0Eax));
+                WriteValue<uint32_t>(ctx, match + 33,
+                                     opp::ops::PackedLowDword(kMovdXmm0Eax));
+                NopAt(ctx, match + 3, 2);
+                NopAt(ctx, match + 31, 2);
+            }
+
+            if (auto pattern = Pattern(image, "83 C4 08 F7 D8 F3 0F 2A C8 F3 0F 10 46"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                // 66 0F 6E C8 = `movd xmm1, eax` (the second axis).
+                constexpr opp::ops::InstructionWindow<4> kMovdXmm1Eax{
+                    {0x66, 0x0F, 0x6E, 0xC8}};
+                static_assert(opp::ops::PackedLowDword(kMovdXmm1Eax) == 0xC86E0F66u);
+                WriteValue<uint32_t>(ctx, match + 5,
+                                     opp::ops::PackedLowDword(kMovdXmm1Eax));
+                NopAt(ctx, match + 3, 2);
+            }
+
+            if (auto pattern = Pattern(image, "8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? 83 C4 08 83 3D"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                JumpTo(ctx, match, OPP_BODY(abi_mouse_axis_flag));
+            }
+
+            if (auto pattern = Pattern(image, "56 8B 74 24 08 57 8B 7C 24 10 C7 06 00 00 00 00"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                CallTo(ctx, match + 51, OPP_BODY(abi_mouse_axis_int));
+                CallTo(ctx, match + 90, OPP_BODY(abi_mouse_axis_int));
+            }
+
+            if (auto pattern = Pattern(image, "53 56 8B F1 57 8B BE 40 01 00 00 85 FF F3 0F 11 46"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                JumpTo(ctx, match - 15, OPP_BODY(abi_mouse_angle));
+                JumpTo(ctx, match + 1862, OPP_BODY(abi_mouse_advance));
+            }
+        }
+
+    }
+
+
+    // VSyncFix
+
+    void InstallVSyncFix(PatchContext& ctx)
+    {
+
+        TraceArm("VSyncFix");
+
+        // VSyncFix: 2 literalstores
+        if (ctx.Option("VSyncFix", "0"))
+        {
+            const GameImage& image = ctx.image;
+
+            if (BuildIs(ctx.build,
+                        {GameBuild::v1004, GameBuild::v1060, GameBuild::v1070, GameBuild::v1061,
+                         GameBuild::v1100, GameBuild::v1110, GameBuild::v1120, GameBuild::v12043}))
+            {
+
+                if (auto pattern = Pattern(image, "8B 08 8B 51 0C 6A 01 6A 00 6A 00 6A 00 6A 00 50 FF D2 8B F0 81 FE ? ? ? ? 74"); pattern.size() > 0)
+                {
+                    auto* match = pattern.get(0).get<uint8_t>();
+
+                    WriteValue<uint32_t>(ctx, match + 30, static_cast<uint32_t>(FindGlobalValue("VSyncFix")));
+                }
+
+                if (auto pattern = Pattern(image, "8B 10 50 8B 82 A8 00 00 00 FF D0 83"); pattern.size() > 0)
+                {
+                    auto* match = pattern.get(0).get<uint8_t>();
+
+                    WriteValue<uint32_t>(ctx, match + 13, static_cast<uint32_t>(FindGlobalValue("VSyncFix")));
+                }
+            }
+        }
+    }
+
+namespace
+{
+    class InputFeatures
+    {
+    public:
+        InputFeatures()
+        {
+            PublishEvent().Add(&PublishDrivebyFOVFix, "PublishDrivebyFOVFix");
+            PublishEvent().Add(&PublishMouseFix, "PublishMouseFix");
+            InstallEvent().Add(&InstallDrivebyFOVFix, "InstallDrivebyFOVFix");
+            InstallEvent().Add(&InstallMouseFix, "InstallMouseFix");
+            InstallEvent().Add(&InstallVSyncFix, "InstallVSyncFix");
+        }
+    } inputFeatures;
+} // namespace
+
+} // namespace opp::features

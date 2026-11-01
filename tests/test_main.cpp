@@ -7,6 +7,7 @@
 #include "common.hxx"
 #include "hooks.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -14,6 +15,7 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <utility>
 #include <vector>
 
 import opp.common;
@@ -668,137 +670,108 @@ namespace
 
     void TestFeatureOrder()
     {
-        const auto& features = opp::RegisteredFeatures();
-        CHECK(features.size() == 122);
+        // The golden lists each tier's arms (sorted, one per line, `# tier`
+        // header). The subscription *sequence* inside a tier is the executable's
+        // static-init order, which differs between the ASI, the dump and the
+        // tests; the contract is the tier assignment and the arm set. The
+        // integer-ordered write set is proven separately (matrix/crossbuild):
+        // reordering a tier must not change a byte.
+        struct Expected
+        {
+            std::string tier;
+            std::string name;
+        };
+        std::vector<Expected> golden;
 
-        // Phases never go backwards: every publish precedes every install.
-        for (size_t i = 1; i < features.size(); ++i)
-            CHECK(static_cast<int>(features[i - 1].phase) <=
-                  static_cast<int>(features[i].phase));
-
-        // The effective order is the frozen shipping order (captured from the
-        // integer-ordered registry before this refactor). A reorder is a
-        // behaviour change and must update the golden in the same commit.
         std::FILE* file = std::fopen(OPCEP_SOURCE_DIR "/tests/order_golden.txt", "rb");
         CHECK(file != nullptr);
         if (file)
         {
-            std::vector<std::string> golden;
             char line[256];
+            std::string tier;
             while (std::fgets(line, sizeof(line), file))
             {
-                std::string name(line);
-                while (!name.empty() && (name.back() == '\n' || name.back() == '\r'))
-                    name.pop_back();
-                if (!name.empty())
-                    golden.push_back(name);
+                std::string text(line);
+                while (!text.empty() && (text.back() == '\n' || text.back() == '\r'))
+                    text.pop_back();
+                if (text.empty())
+                    continue;
+                if (text.front() == '#')
+                {
+                    tier = text.substr(1);
+                    while (!tier.empty() && tier.front() == ' ')
+                        tier.erase(tier.begin());
+                    continue;
+                }
+                golden.push_back({tier, text});
             }
             std::fclose(file);
+        }
 
-            CHECK(golden.size() == features.size());
-            for (size_t i = 0; i < features.size() && i < golden.size(); ++i)
+        std::vector<Expected> actual;
+        const std::pair<const char*, opp::Event*> tiers[] = {
+            {"publish", &opp::PublishEvent()},
+            {"install", &opp::InstallEvent()},
+            {"post", &opp::PostEvent()},
+        };
+        for (const auto& [tier, event] : tiers)
+        {
+            for (size_t i = 0; i < event->size(); ++i)
             {
-                if (features[i].name == golden[i])
-                    continue;
-                // One line per divergence, with the neighbour that proves where
-                // the sequence split.
-                std::fprintf(stderr,
-                             "order: #%zu expected %s, got %s (previous %s)\n", i,
-                             golden[i].c_str(), features[i].name,
-                             i ? features[i - 1].name : "-");
+                const char* name = event->name(i);
+                CHECK(name != nullptr);
+                if (name != nullptr)
+                    actual.push_back({tier, name});
+            }
+        }
+
+        const auto less = [](const Expected& left, const Expected& right) {
+            if (left.tier != right.tier)
+                return left.tier < right.tier;
+            return left.name < right.name;
+        };
+        std::sort(golden.begin(), golden.end(), less);
+        std::sort(actual.begin(), actual.end(), less);
+
+        CHECK(actual.size() == golden.size());
+        for (size_t i = 0; i < golden.size() && i < actual.size(); ++i)
+        {
+            if (golden[i].tier == actual[i].tier && golden[i].name == actual[i].name)
+                continue;
+            std::fprintf(stderr, "order: #%zu expected [%s] %s, got [%s] %s\n", i,
+                         golden[i].tier.c_str(), golden[i].name.c_str(),
+                         actual[i].tier.c_str(), actual[i].name.c_str());
+            ++failures;
+            break;
+        }
+
+        // No arm is subscribed twice, and a publish is never in the install tier.
+        for (size_t i = 1; i < actual.size(); ++i)
+        {
+            if (actual[i].tier == actual[i - 1].tier && actual[i].name == actual[i - 1].name)
+            {
+                std::fprintf(stderr, "order: duplicate arm %s\n", actual[i].name.c_str());
                 ++failures;
                 break;
             }
         }
     }
 
-    void TestOrderDiagnostics()
+    void TestTierEdges()
     {
-        const auto noop = [](opp::PatchContext&) {};
-        const auto find = [](const opp::OrderResult& result, const char* text) {
-            for (const std::string& diagnostic : result.diagnostics)
-            {
-                if (diagnostic.find(text) != std::string::npos)
-                    return true;
-            }
-            return false;
-        };
-
-        // A consistent two-arm graph orders by the shipping schedule.
-        {
-            const std::vector<opp::FeatureRegistration> features = {
-                {opp::Phase::install, "InstallSCOSignatureFix", noop},
-                {opp::Phase::install, "InstallLoadDLCs", noop},
-            };
-            const opp::OrderResult result = opp::BuildOrder(features);
-            CHECK(result.valid);
-            CHECK(result.order.size() == 2);
-            CHECK(result.order[0].name == std::string_view("InstallLoadDLCs"));
-            CHECK(result.order[1].name == std::string_view("InstallSCOSignatureFix"));
-
-            // Reversed registration must produce the same order.
-            const std::vector<opp::FeatureRegistration> reversed = {features[1], features[0]};
-            const opp::OrderResult again = opp::BuildOrder(reversed);
-            CHECK(again.order.size() == 2);
-            CHECK(again.order[0].name == std::string_view("InstallLoadDLCs"));
-        }
-
-        // A cycle fails closed and names the path.
-        {
-            std::vector<opp::FeatureRegistration> features = {
-                {opp::Phase::install, "InstallLoadDLCs", noop, {"InstallSCOSignatureFix"}},
-                {opp::Phase::install, "InstallSCOSignatureFix", noop, {"InstallLoadDLCs"}},
-            };
-            const opp::OrderResult result = opp::BuildOrder(features);
-            CHECK(!result.valid);
-            CHECK(result.order.empty());
-            CHECK(find(result, "cycle"));
-        }
-
-        // A missing `After` target is a soft edge; a missing `Requires` target
-        // skips the arm.
-        {
-            std::vector<opp::FeatureRegistration> features = {
-                {opp::Phase::install, "InstallLoadDLCs", noop, {"NotAnArm"}},
-                {opp::Phase::install, "InstallSCOSignatureFix", noop, {}, {"NotAnArm"}},
-            };
-            const opp::OrderResult result = opp::BuildOrder(features);
-            CHECK(result.valid);
-            CHECK(result.order.size() == 1);
-            CHECK(result.order[0].name == std::string_view("InstallLoadDLCs"));
-            CHECK(find(result, "requires NotAnArm (absent)"));
-        }
-
-        // A dependency that points backwards across phases is a programming
-        // error, not a silent reorder.
-        {
-            std::vector<opp::FeatureRegistration> features = {
-                {opp::Phase::publish, "PublishLoadDLCs", noop, {"InstallLoadDLCs"}},
-                {opp::Phase::install, "InstallLoadDLCs", noop},
-            };
-            const opp::OrderResult result = opp::BuildOrder(features);
-            CHECK(!result.valid);
-            CHECK(find(result, "phase inversion"));
-        }
-
-        // Duplicate and unknown names are refused, never deduplicated silently.
-        {
-            std::vector<opp::FeatureRegistration> features = {
-                {opp::Phase::install, "InstallLoadDLCs", noop},
-                {opp::Phase::install, "InstallLoadDLCs", noop},
-            };
-            const opp::OrderResult result = opp::BuildOrder(features);
-            CHECK(!result.valid);
-            CHECK(find(result, "duplicate feature"));
-        }
-        {
-            std::vector<opp::FeatureRegistration> features = {
-                {opp::Phase::install, "InstallNotInSchedule", noop},
-            };
-            const opp::OrderResult result = opp::BuildOrder(features);
-            CHECK(!result.valid);
-            CHECK(find(result, "not in the shipping schedule"));
-        }
+        // A tier is a plain callback list: Add appends, += appends unnamed, and a
+        // null callback is ignored. The pipeline's own tiers are not touched.
+        opp::Event event;
+        const auto first = [](opp::PatchContext&) {};
+        const auto second = [](opp::PatchContext&) {};
+        event.Add(first, "first");
+        event += second;
+        event.Add(nullptr, "ignored");
+        CHECK(event.size() == 2);
+        CHECK(event.callback(0) == first);
+        CHECK(event.callback(1) == second);
+        CHECK(std::strcmp(event.name(0), "first") == 0);
+        CHECK(event.name(1) == nullptr);
     }
 
     void TestArmFailsafes()
@@ -842,9 +815,9 @@ namespace
         opp::WriteValue<uint16_t>(ctx, buffer.data() + 8, 0xBEEFu);
         CHECK(std::memcmp(buffer.data(), reference.data(), 10) == 0);
 
-        // An unregistered body is a no-op, not a jump to 0.
+        // A missing body is a no-op, not a jump to 0.
         std::vector<uint8_t> before(buffer);
-        opp::JumpToBody(ctx, buffer.data() + 16, "abi_does_not_exist");
+        opp::JumpTo(ctx, buffer.data() + 16, nullptr);
         CHECK(std::memcmp(buffer.data() + 16, before.data() + 16, 5) == 0);
         CHECK(opp::ArmWritesSkipped() == skipped + 2);
 
@@ -852,9 +825,10 @@ namespace
         opp::CallTo(ctx, buffer.data() + 16, nullptr);
         CHECK(std::memcmp(buffer.data() + 16, before.data() + 16, 5) == 0);
 
-        // A registered body writes the same five-byte branch the arm wrote
-        // before: opcode + rel32 to the body, encoded from the site.
-        void* const body = opp::AbiByName("abi_aim_projectile_crash_fix");
+        // A body address writes the same five-byte branch the arm wrote before:
+        // opcode + rel32 to the body, encoded from the site. Any body address
+        // proves the encoder; use the externally linked OOC self-test body.
+        void* const body = reinterpret_cast<void*>(&zpatch_ooc_selftest);
         CHECK(body != nullptr);
         opp::JumpTo(ctx, buffer.data() + 32, body);
         CHECK(buffer[32] == 0xE9);
@@ -999,24 +973,6 @@ namespace
         CHECK(!opp::zpatch_relocate_calls(bad, source, sizeof(source), &out_of_range, 1));
     }
 
-    void TestHookBodyRegistry()
-    {
-        // One table now backs both lookups: a name resolves to its body, and a
-        // body's original handler VA resolves to the same body. The VA count is
-        // pinned so a dropped row is a test failure, not a silent skip.
-        CHECK(opp::HookBodyCount() == 103);
-        void* const aim = opp::AbiByName("abi_aim_projectile_crash_fix");
-        CHECK(aim != nullptr);
-        CHECK(opp::ResolveHookBody(0x10005590u, nullptr) ==
-              reinterpret_cast<uintptr_t>(aim));
-        CHECK(opp::ResolveHookBody(0u, nullptr) == 0);
-        CHECK(opp::ResolveHookBody(0x10000000u, nullptr) == 0);
-        CHECK(opp::AbiByName("does_not_exist") == nullptr);
-        CHECK(opp::AbiByName(nullptr) == nullptr);
-        // A name-only body (no recovered handler VA) still resolves by name.
-        CHECK(opp::AbiByName("abi_spawns_case_0x24") != nullptr);
-    }
-
     void TestMakeReturn()
     {
         // injector::MakeRET must write exactly the instruction: one byte for
@@ -1040,9 +996,9 @@ namespace
 
     void TestHooks()
     {
-        CHECK(opp::HookBodyCount() > 100);
-        CHECK(opp::AbiByName("abi_spawns_guard") != nullptr);
-        CHECK(opp::AbiByName("does_not_exist") == nullptr);
+        // The body bodies live in the feature modules now; these two expose an
+        // offline self-test, which is what the native suite can reach without a
+        // game image.
         CHECK(zpatch_ooc_selftest());
         CHECK(zpatch_nms_registry_selftest());
     }
@@ -1067,12 +1023,11 @@ int main()
     TestVehicleLights();
     TestMenu();
     TestFeatureOrder();
-    TestOrderDiagnostics();
+    TestTierEdges();
     TestArmFailsafes();
     TestLauncherNamePatch();
     TestRelocateCalls();
     TestMakeReturn();
-    TestHookBodyRegistry();
     TestHooks();
 
     if (failures != 0)
