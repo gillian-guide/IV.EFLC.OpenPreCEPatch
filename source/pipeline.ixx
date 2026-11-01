@@ -58,7 +58,8 @@ export namespace opp
         using Callback = void (*)(PatchContext&);
 
         // Appends `callback`; an overflow is logged and the arm skipped rather
-        // than corrupting the list.
+        // than corrupting the list. `operator+=` is the unnamed form the native
+        // tests use for a throwaway subscription.
         void Add(Callback callback, const char* name = nullptr) noexcept;
         void operator+=(Callback callback) noexcept { Add(callback, nullptr); }
 
@@ -247,9 +248,10 @@ namespace opp
 #if defined(OPCEP_DUMP_TOOL)
         // The offline harness has no PlayGTAIV.exe process; the parity driver
         // pins the probe so the launcher writes stay observable.
-        char value[8]{};
-        const DWORD length =
-            GetEnvironmentVariableA("OPCEP_LAUNCHER_PROBE", value, sizeof(value));
+        constexpr DWORD kLauncherProbeValueCapacity = 8;
+        char value[kLauncherProbeValueCapacity]{};
+        const DWORD length = GetEnvironmentVariableA(
+            "OPCEP_LAUNCHER_PROBE", value, kLauncherProbeValueCapacity);
         return length > 0 && value[0] == '1';
 #else
         return FindGameProcess() != 0;
@@ -302,17 +304,11 @@ namespace opp
     namespace
     {
         constexpr uint32_t kCallOperandOffset = 6u;
-        constexpr uint32_t kResolverSignatureLength = 10u;
+        // Byte distance from each recovered scan hit back to that function's
+        // entry; the original's preamble published the entry address.
         constexpr uint32_t kPreFn59C74Offset = 42u;
         constexpr uint32_t kPreFn5D63COffset = 48u;
         constexpr uint32_t kPreFn59CDCOffset = 48u;
-
-        uint32_t ReadU32(const uint8_t* address)
-        {
-            uint32_t value = 0;
-            std::memcpy(&value, address, sizeof(value));
-            return value;
-        }
 
         uint32_t PointerValue(const void* pointer)
         {
@@ -344,8 +340,9 @@ namespace opp
 
         if (const uint8_t* hit = scan("08 0B C2 8B F0 E8"))
         {
-            zpatch_driveby_resolver =
-                ReadU32(hit + kCallOperandOffset) + PointerValue(hit) + kResolverSignatureLength;
+            // The E8 at the hit's offset+5 calls the script resolver; its rel32
+            // operand sits at +6.
+            zpatch_driveby_resolver = BranchDestination(hit, kCallOperandOffset);
         }
 
         if (const uint8_t* hit = scan("85 F6 74 30 8B 16 8B 42 0C 8B CE FF D0 3C 02 75 23"))
@@ -356,7 +353,7 @@ namespace opp
             zpatch_model_lookup = PointerValue(hit);
 
         if (const uint8_t* hit = scan("85 C0 C6 44 24 0C 00 C6 44 24 0D 00 75 07"))
-            zpatch_pre_ped_array = ReadU32(hit - sizeof(uint32_t));
+            zpatch_pre_ped_array = ReadDword(hit - sizeof(uint32_t));
 
         if (const uint8_t* hit =
                 scan("56 8B F1 8B 06 8B 90 A0 00 00 00 57 FF D2 85 C0 74 1C"))

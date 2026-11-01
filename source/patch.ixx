@@ -2,13 +2,11 @@
 //
 // opp.patch - signature scanning, the guarded arm writes and the body ABI.
 //
-// This is the FusionFix-minimal patch module: pattern normalisation and
-// scanning (pattern.hxx/.cpp), the helpers every install arm uses to write
-// (helpers.hxx/.cpp): the guarded SiteWritable/JumpTo/CallTo/NopAt/WriteValue/
-// WriteRaw wrappers, the Pattern/PatternAll wrappers, the arm trace and the
-// applied/skipped counters, the body helpers several modules call (the spawn
-// formatter, the native-script call layer and the secure-copy slot) and the
-// resolver the x64 parity dump uses for OPP_BODY.
+// This is the FusionFix-minimal patch module: signature normalisation and
+// scanning, the guarded writes every install arm uses (SiteWritable, JumpTo,
+// CallTo, NopAt, WriteValue, WriteRaw and their no-read variants), the Pattern
+// wrappers, the arm trace and counters, the shared body helpers several modules
+// call, and the resolver the x64 parity dump uses for OPP_BODY.
 
 module;
 
@@ -719,7 +717,7 @@ extern "C" bool zpatch_relocate_calls(void* destination, const void* source,
     for (size_t i = 0; i < callCount; ++i)
     {
         const size_t offset = callOffsets[i];
-        if (offset + 5u > size || dst[offset] != 0xE8u)
+        if (offset + opp::kBranchLength > size || dst[offset] != opp::kCallOpcode)
             return false;
         int32_t old_rel = 0;
         std::memcpy(&old_rel, src + offset + 1u, sizeof(old_rel));

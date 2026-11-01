@@ -228,7 +228,7 @@ namespace
         }
 
         opp::Config config(configPath);
-        if (!config.loaded())
+        if (!config.present())
         {
             opp::Log("config: cannot read %s", configPath.string().c_str());
             return;

@@ -350,7 +350,7 @@ int main(int argc, char** argv)
     std::memcpy(image, file_image.data(), size);
 
     opp::Config config(argv[2]);
-    if (!config.loaded())
+    if (!config.present())
     {
         std::fprintf(stderr, "opcep_dump: cannot read %s\n", argv[2]);
         return 4;

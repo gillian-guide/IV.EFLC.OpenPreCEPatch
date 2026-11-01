@@ -7,8 +7,9 @@
 // construction, not a reimplementation: section/key are case-sensitive, the
 // last duplicate wins, a whole-line comment starts with `;`, `#` or `//`, an
 // inline comment (`;`, `//` or `#`) is stripped only when preceded by a space
-// and only after the first `=`, one matching quote pair is stripped from a
-// value, and a UTF-8 BOM/CRLF is tolerated.
+// and only after the first `=`, one leading and one trailing quote are stripped
+// independently (mINI's ReadString; a lone leading quote makes the key behave as
+// absent), and a UTF-8 BOM/CRLF is tolerated.
 //
 // Option semantics stay the original's: a present value is enabled when it
 // parses to exactly 1 (std::stoi's base-10 prefix grammar: "1abc" is 1), and an
@@ -17,10 +18,10 @@
 // the fault this tree replaces with a logged fallback to the same default
 // (improvements.md, "install-time failsafes").
 //
-// This header also declares the two INI-adjacent pieces the original loader had
+// This module also owns the two INI-adjacent pieces the original loader had
 // elsewhere: the FusionFix overlap gate (an option FusionFix already patches is
 // forced off) and the first-run creation/legacy import of the grouped INI.
-// Both are part of answering "what does this INI say?" and live in config.cpp.
+// Both are part of answering "what does this INI say?".
 
 module;
 
@@ -85,7 +86,9 @@ export namespace opp
         Config(const Config&) = delete;
         Config& operator=(const Config&) = delete;
 
-        [[nodiscard]] bool loaded() const noexcept { return loaded_; }
+        // True when the file existed when the Config was constructed. The
+        // content can still be empty when the file could not be read.
+        [[nodiscard]] bool present() const noexcept { return present_; }
         [[nodiscard]] const std::filesystem::path& path() const noexcept { return path_; }
 
         // True when the key exists in the section, even when its value is empty.
@@ -117,8 +120,8 @@ export namespace opp
         [[nodiscard]] const char* Value(std::string_view section,
                                         std::string_view key) const noexcept;
 
-        // Number of present values that did not parse as integers (each used
-        // the option default). Reported once at the end of the config load.
+        // A present value that did not parse as an integer (each used the option
+        // default). Reported once at the end of the config load.
         [[nodiscard]] size_t InvalidValues() const noexcept { return invalidValues_; }
 
     private:
@@ -144,7 +147,7 @@ export namespace opp
         std::vector<uint32_t> index_;  // open addressing: 0 empty, else entry + 1
         std::filesystem::path path_;
         mutable size_t invalidValues_{};
-        bool loaded_{};
+        bool present_{};
     };
 
     // -----------------------------------------------------------------------
@@ -233,10 +236,10 @@ namespace opp
             return text.substr(first, last - first + 1);
         }
 
-        // mINI removes one quote pair at ReadString time. A value that is a
-        // single quote makes mINI's own `at(size()-1)` throw and fall back to
-        // the caller's default, i.e. the key behaves as absent; that case is
-        // reported as absent so Has()/Option() keep the old answer.
+        // mINI strips one leading and one trailing quote independently. A value
+        // that is a single quote makes mINI's own `at(size()-1)` throw and fall
+        // back to the caller's default, i.e. the key behaves as absent; that case
+        // is reported as absent so Has()/Option() keep the old answer.
         std::string_view StripQuotes(std::string_view value, bool& absent) noexcept
         {
             absent = false;
@@ -258,15 +261,14 @@ namespace opp
 
         uint32_t HashKey(std::string_view section, std::string_view key) noexcept
         {
-            // FNV-1a, then a length mix so "ab"+"c" and "a"+"bc" differ.
+            // FNV-1a over the section then the key, with the key length mixed in
+            // at the end so ("ab", "c") and ("a", "bc") cannot collide.
             uint32_t hash = 2166136261u;
             for (const char c : section)
             {
                 hash ^= static_cast<uint8_t>(c);
                 hash *= 16777619u;
             }
-            hash ^= 0u;
-            hash *= 16777619u;
             for (const char c : key)
             {
                 hash ^= static_cast<uint8_t>(c);
@@ -329,9 +331,9 @@ namespace opp
 
     Config::Config(const std::filesystem::path& path)
         : path_(std::filesystem::absolute(path)),
-          loaded_(std::filesystem::exists(std::filesystem::absolute(path)))
+          present_(std::filesystem::exists(path_))
     {
-        if (!loaded_)
+        if (!present_)
             return;
         Load();
         BuildIndex();
@@ -485,7 +487,9 @@ namespace opp
 
         // A present but unparseable value (`Key=`, `Key=abc`) used to throw
         // std::invalid_argument out of DllMain. Fall back to the same default an
-        // absent key uses and record it for the one-line config summary.
+        // absent key uses, log this read, and count it for the one-line summary.
+        // The log is per read (several arms may read the same key); the counter
+        // is what the end-of-pass summary reports.
         ++invalidValues_;
         Log("config: invalid value for %s: \"%s\", using default %s", key, value,
             defaultValue);
@@ -541,7 +545,7 @@ namespace opp
             {"VSyncFix", "FusionFix framelimit.ixx / windowed.ixx"},
         };
 
-        bool bFusionFixPresent = false;
+        bool g_fusionFixPresent = false;
 
         bool EqualsIgnoreCase(std::string_view left, std::string_view right)
         {
@@ -611,17 +615,17 @@ namespace opp
 
     void SetFusionFixPresent(bool present) noexcept
     {
-        bFusionFixPresent = present;
+        g_fusionFixPresent = present;
     }
 
     bool FusionFixPresent() noexcept
     {
-        return bFusionFixPresent;
+        return g_fusionFixPresent;
     }
 
     bool IsFusionFixGated(const char* option) noexcept
     {
-        return bFusionFixPresent && FindConflict(option) != nullptr;
+        return g_fusionFixPresent && FindConflict(option) != nullptr;
     }
 
     const char* FusionFixGateReason(const char* option) noexcept
@@ -640,13 +644,7 @@ namespace opp
         constexpr const char* kOwnName = "IV.EFLC.OpenPreCEPatch.ini";
         constexpr const char* kLegacyName = "ZolikaPatch.ini";
 
-        constexpr const char* kSections[] = {
-            "Options",      "STABILITY", "FIXES",     "PERFORMANCE", "GRAPHICS",
-            "VEHICLES",     "INPUT",       "MULTIPLAYER", "EPISODIC", "LOADING",
-            "COMPATIBILITY", "MISC",       "XLIVELESS",   "INTERFACE", "DEBUG",
-        };
-
-        constexpr const char* kXlivelessKeys[] = {
+        constexpr std::string_view kXlivelessKeys[] = {
             "RemoveDataIntegrityChecks",
             "SkipTokenActivation",
             "SkipFirstTimePlayAsk",
@@ -781,7 +779,8 @@ namespace opp
 
         // The old file keeps every option in [Options]. The grouped file uses
         // subsystem sections, so a conversion must look in both places (and in
-        // every section, for a partially converted file).
+        // every section, for a partially converted file). The section list is
+        // OptionSections(), the same one the option lookup uses.
         std::string ReadLegacy(CIniReader& ini, const char* key, const char* section,
                                const char* defaultValue)
         {
@@ -790,9 +789,10 @@ namespace opp
                 return value;
             if (section && *section && Has(ini, section, key, value))
                 return value;
-            for (const char* candidate : kSections)
+            for (const std::string_view candidate : OptionSections())
             {
-                if (Has(ini, candidate, key, value))
+                const std::string sectionName(candidate);
+                if (Has(ini, sectionName.c_str(), key, value))
                     return value;
             }
             return defaultValue;
@@ -818,7 +818,7 @@ namespace opp
             std::istringstream input(kDefaultIni);
             std::string line;
             std::string section;
-            bool bSkipTable = false;
+            bool skipTable = false;
 
             while (std::getline(input, line))
             {
@@ -827,13 +827,13 @@ namespace opp
                     const size_t close = line.find(']');
                     if (close != std::string::npos)
                         section = line.substr(1, close - 1);
-                    bSkipTable = section == "PopupLightAngles" || section == "HeadlightConeOffsets";
-                    if (!bSkipTable)
+                    skipTable = section == "PopupLightAngles" || section == "HeadlightConeOffsets";
+                    if (!skipTable)
                         out << line << '\n';
                     continue;
                 }
 
-                if (bSkipTable)
+                if (skipTable)
                     continue;
 
                 const size_t equals = line.find('=');
@@ -852,9 +852,7 @@ namespace opp
                                                            : comment - equals - 1)));
 
                 std::string value;
-                bool xliveless = false;
-                for (const char* candidate : kXlivelessKeys)
-                    xliveless = xliveless || key == candidate;
+                const bool xliveless = Contains(kXlivelessKeys, key);
 
                 if (xliveless && hasMisc)
                     value = misc;

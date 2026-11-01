@@ -61,7 +61,7 @@ namespace
                   "[MAIN]\nComment = test\n\n[STABILITY]\nAimProjectileCrashFix = 1\n"
                   "BlackscreenFix = 2\n\n[GRAPHICS]\nCarDynamicShadowFix = 0\n");
         opp::Config config(path);
-        CHECK(config.loaded());
+        CHECK(config.present());
         CHECK(config.Option("AimProjectileCrashFix", "0"));
         CHECK(!config.Option("BlackscreenFix", "1")); // only exactly 1 enables
         CHECK(!config.Option("CarDynamicShadowFix", "1"));
@@ -129,7 +129,7 @@ namespace
                   "Merged = 1\n");
 
         opp::Config config(path);
-        CHECK(config.loaded());
+        CHECK(config.present());
         CHECK(!config.Option("Dup", "1"));                 // 0 wins over 1
         CHECK(!config.Option("Prec", "0"));                // [Options] order, not file order
         CHECK(config.Option("Inline", "0"));
@@ -153,7 +153,7 @@ namespace
         const std::filesystem::path crlf = "opcep_semantics_crlf.ini";
         WriteFile(crlf, "[Options]\r\nCrlf = 1\r\nText = a b\r\n");
         opp::Config windows(crlf);
-        CHECK(windows.loaded());
+        CHECK(windows.present());
         CHECK(windows.Option("Crlf", "0"));
         CHECK(windows.String("Options", "Text", "") == "a b");
         std::filesystem::remove(crlf);
@@ -171,7 +171,7 @@ namespace
                   "# whole-line hash\n"
                   "; whole-line semi\n");
         opp::Config commented(comments);
-        CHECK(commented.loaded());
+        CHECK(commented.present());
         CHECK(commented.Option("Hash", "0"));
         CHECK(commented.Option("Semi", "0"));
         CHECK(commented.Option("Slash", "0"));
@@ -180,7 +180,7 @@ namespace
 
         // A missing file loads nothing and every option keeps its default.
         opp::Config missing("opcep_semantics_missing.ini");
-        CHECK(!missing.loaded());
+        CHECK(!missing.present());
         CHECK(!missing.Has("Options", "Dup"));
         CHECK(missing.Option("Dup", "1"));
         CHECK(!missing.Option("Dup", "0"));
@@ -202,7 +202,7 @@ namespace
         const std::filesystem::path templatePath =
             std::filesystem::path(OPCEP_DATA_DIR) / "IV.EFLC.OpenPreCEPatch.ini";
         opp::Config config(templatePath);
-        CHECK(config.loaded());
+        CHECK(config.present());
 
         // Walk the file's own sections: every key may occur in one section only.
         std::FILE* file = std::fopen(templatePath.string().c_str(), "rb");
