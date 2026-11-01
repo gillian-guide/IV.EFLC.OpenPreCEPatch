@@ -47,32 +47,43 @@ extern "C"
 // name[4]=='p' && name[5]=='e'; sub_10045A10: name[4]=='v').
 using ShaderEntryNameFn = const void*(__fastcall*)(void* entry, int);
 using ShaderStreamFilterFn = int(__cdecl*)(const void* query, const void* name);
+// The shader-name suffix the two filters test: byte 4 is 'h' (HPE) / 'v' (V),
+// and 'p' at 4 with 'e' at 5 is the other HPE spelling.
+constexpr size_t kShaderNameKindOffset = 4;
+constexpr size_t kShaderNameSecondKindOffset = 5;
 int __cdecl abi_shader_stream_filter_hpe(const void*, const void* name)
 {
     const auto* p = static_cast<const unsigned char*>(name);
     if (!p) return 2;
-    if (p[4] == 'h') return 0;
-    if (p[4] == 'p' && p[5] == 'e') return 0;
+    if (p[kShaderNameKindOffset] == 'h') return 0;
+    if (p[kShaderNameKindOffset] == 'p' && p[kShaderNameSecondKindOffset] == 'e') return 0;
     return 2;
 }
 int __cdecl abi_shader_stream_filter_v(const void*, const void* name)
 {
     const auto* p = static_cast<const unsigned char*>(name);
-    return (p && p[4] == 'v') ? 0 : 2;
+    return (p && p[kShaderNameKindOffset] == 'v') ? 0 : 2;
 }
 namespace
 {
 void* shader_streaming_find(void* self, const void* query, ShaderStreamFilterFn filter)
 {
+    // The entry vector: pointer at this+8, count at this+0xC. Each non-null
+    // entry's vtable[+0x10] returns its name, which the filter classifies.
+    constexpr size_t kEntryVectorOffset = 8;
+    constexpr size_t kEntryCountOffset = 0xC;
+    constexpr size_t kNameLookupVtableOffset = 0x10;
     auto* base = static_cast<unsigned char*>(self);
-    const unsigned count = *reinterpret_cast<const unsigned short*>(base + 0xc);
-    auto** array = *reinterpret_cast<void***>(base + 8);
+    const unsigned count =
+        *reinterpret_cast<const unsigned short*>(base + kEntryCountOffset);
+    auto** array = *reinterpret_cast<void***>(base + kEntryVectorOffset);
     for (unsigned i = 0; i < count; ++i)
     {
         void* entry = array[i];
         if (!entry) continue;
         auto* vt = *reinterpret_cast<void* const* const*>(entry);
-        const auto* name = reinterpret_cast<ShaderEntryNameFn>(vt[0x10 / sizeof(void*)])(entry, 0);
+        const auto* name = reinterpret_cast<ShaderEntryNameFn>(
+            vt[kNameLookupVtableOffset / sizeof(void*)])(entry, 0);
         if (filter(query, name) == 0) return entry;
     }
     return nullptr;
@@ -703,9 +714,11 @@ namespace opp::features
             {
                 if (auto pattern = Pattern(image, "6A 0A E8 ? ? ? ? 83 C7 0A 83 C4 04 81 FF E8 03 00 00 75 02 33 FF"); pattern.size() > 0)
                 {
-                    // `6A 0A` is `push 10`: zeroing its low byte makes the
+                    // `6A 0A` is `push 10`: zeroing the immediate byte makes the
                     // sleep call wait 0 ms instead of 10 (the original's write).
-                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(1), 0x00u);
+                    constexpr ptrdiff_t kSleepMillisecondsOperand = 1;
+                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(kSleepMillisecondsOperand),
+                                        uint8_t{0});
                 }
             }
         }
@@ -729,17 +742,30 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                NopAt(ctx, match - 7, 2);
-                NopAt(ctx, match + 3, 2);
-                // The branch at +224 becomes a short jmp (the original's
-                // unconditional-skip rewrite in the 0x400-byte read function).
-                WriteValue<uint8_t>(ctx, match + 224, opp::ops::kJmpRel8);
-                NopAt(ctx, match + 231, 2);
-                NopAt(ctx, match + 367, 2);
-                NopAt(ctx, match + 377, 2);
-                NopAt(ctx, match + 607, 2);
-                NopAt(ctx, match + 614, 2);
-                NopAt(ctx, match + 764, 2);
+                // The original's nine writes, relative to the `comiss` match and
+                // in its write order. -7/+3 and +231/+367/+377/+607/+614/+764
+                // are two-byte jccs of the function's floating-point min/max
+                // clamps (NOP'd); +224 rewrites a `ja` to an unconditional
+                // `jmp` so the clamp is always skipped.
+                constexpr ptrdiff_t kClamp1SkipBefore = -7;
+                constexpr ptrdiff_t kClamp1SkipAt = 3;
+                constexpr ptrdiff_t kClamp2Skip = 224;
+                constexpr ptrdiff_t kClamp2Fallthrough = 231;
+                constexpr ptrdiff_t kClamp3Before = 367;
+                constexpr ptrdiff_t kClamp3At = 377;
+                constexpr ptrdiff_t kClamp4Skip = 607;
+                constexpr ptrdiff_t kClamp4Fallthrough = 614;
+                constexpr ptrdiff_t kClamp5Skip = 764;
+
+                NopAt(ctx, match + kClamp1SkipBefore, 2);
+                NopAt(ctx, match + kClamp1SkipAt, 2);
+                WriteValue<uint8_t>(ctx, match + kClamp2Skip, opp::ops::kJmpRel8);
+                NopAt(ctx, match + kClamp2Fallthrough, 2);
+                NopAt(ctx, match + kClamp3Before, 2);
+                NopAt(ctx, match + kClamp3At, 2);
+                NopAt(ctx, match + kClamp4Skip, 2);
+                NopAt(ctx, match + kClamp4Fallthrough, 2);
+                NopAt(ctx, match + kClamp5Skip, 2);
             }
         }
 
@@ -762,10 +788,20 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                CallTo(ctx, match + 85, OPP_BODY(abi_improved_shader_streaming_find_hpe));
-                JumpTo(ctx, match + 98, reinterpret_cast<void*>(match + 245));
-                CallTo(ctx, match + 253, OPP_BODY(abi_improved_shader_streaming_find_v));
-                JumpTo(ctx, match + 266, reinterpret_cast<void*>(match + 1158));
+                // The two shader-entry lookup calls are replaced by the HPE and
+                // V filters; the jumps skip the original calls that follow each
+                // replaced one (to the next filter block / the function's end).
+                constexpr ptrdiff_t kHpeFilterCall = 85;
+                constexpr ptrdiff_t kSkipToVFilter = 98;
+                constexpr ptrdiff_t kVFilterBlock = 245;
+                constexpr ptrdiff_t kVFilterCall = 253;
+                constexpr ptrdiff_t kSkipToFunctionEnd = 266;
+                constexpr ptrdiff_t kFunctionEnd = 1158;
+
+                CallTo(ctx, match + kHpeFilterCall, OPP_BODY(abi_improved_shader_streaming_find_hpe));
+                JumpTo(ctx, match + kSkipToVFilter, reinterpret_cast<void*>(match + kVFilterBlock));
+                CallTo(ctx, match + kVFilterCall, OPP_BODY(abi_improved_shader_streaming_find_v));
+                JumpTo(ctx, match + kSkipToFunctionEnd, reinterpret_cast<void*>(match + kFunctionEnd));
             }
         }
 
@@ -784,29 +820,32 @@ namespace opp::features
         {
             const GameImage& image = ctx.image;
 
+            // The `push imm32` operand at +8 is each pool's node count. The
+            // recovered originals are 0x13880 (80,000) and 0x3E80 (16,000); the
+            // writes raise them to 0x4E200 (320,000) and 0xFA00 (64,000).
+            constexpr ptrdiff_t kPoolCountOperand = 8;
+            constexpr uint32_t kPoolCountFrom80k = 0x4E200u;  // 320,000
+            constexpr uint32_t kPoolCountFrom16k = 0xFA00u;   // 64,000
+
             if (auto pattern = Pattern(image, "6A 08 ? ? ? ? ? 68 80 38 01 00"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                // The `push imm32` operand at +8 is the pointer-node pool count:
-                // 0x13880 (80,000) -> 0x4E200 (320,000).
-                WriteValue<uint32_t>(ctx, match + 8, static_cast<uint32_t>(0x4E200u));
+                WriteValue<uint32_t>(ctx, match + kPoolCountOperand, kPoolCountFrom80k);
             }
 
             if (auto pattern = Pattern(image, "6A 10 ? ? ? ? ? 68 80 3E 00 00"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                // The same operand on the 16,000-entry pool: -> 0xFA00 (64,000).
-                WriteValue<uint32_t>(ctx, match + 8, static_cast<uint32_t>(0xFA00u));
+                WriteValue<uint32_t>(ctx, match + kPoolCountOperand, kPoolCountFrom16k);
             }
 
             if (auto pattern = Pattern(image, "6A 14 ? ? ? ? ? 68 80 3E 00 00"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                // The same operand on the 16,000-entry pool: -> 0xFA00 (64,000).
-                WriteValue<uint32_t>(ctx, match + 8, static_cast<uint32_t>(0xFA00u));
+                WriteValue<uint32_t>(ctx, match + kPoolCountOperand, kPoolCountFrom16k);
             }
         }
 
@@ -827,11 +866,13 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "83 C7 01 81 FF 18 79 00 00 7C D2"); pattern.size() > 0)
             {
-                auto* target = MatchPointer(pattern, 77);
+                // The `mov ecx, imm32` operand at +77 names the model-limit
+                // dword (0xF3E8E8 on 1.0.8.0); the original raises it to 1024.
+                constexpr ptrdiff_t kModelLimitSlotOperand = 77;
+                constexpr uint32_t kVehicleModelLimit = 1024u;
+                auto* target = MatchPointer(pattern, kModelLimitSlotOperand);
                 if (target != nullptr)
-                    // The model-limit slot the pattern's stored pointer names:
-                    // 1024 models (0x400).
-                    WriteValue<uint32_t>(ctx, target, static_cast<uint32_t>(0x400u));
+                    WriteValue<uint32_t>(ctx, target, kVehicleModelLimit);
             }
         }
 
@@ -854,9 +895,12 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                // The `push 50` operand at +6 becomes 100: the vehicle-struct
-                // count the allocator is asked for.
-                WriteValue<uint8_t>(ctx, match + 6, static_cast<uint8_t>(0x64u));
+                // The `push 0x32` immediate at +6 becomes 0x64 (100): the
+                // vehicle-struct count the allocator is asked for.
+                constexpr ptrdiff_t kVehicleStructCountOperand = 6;
+                constexpr uint8_t kVehicleStructCount = 0x64u;
+                WriteValue<uint8_t>(ctx, match + kVehicleStructCountOperand,
+                                    kVehicleStructCount);
             }
         }
 
@@ -877,7 +921,10 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "6A 01 B9 00 00 40 06"); pattern.size() > 0)
             {
-                zpatch_nms_object = *pattern.get(0).get<uint32_t>(8);
+                // The `mov esi, imm32` at +7 names the allocator singleton
+                // (0x19CF9F0 on 1.0.8.0); the install writes our vtable there.
+                constexpr ptrdiff_t kAllocatorObjectOperand = 8;
+                zpatch_nms_object = *pattern.get(0).get<uint32_t>(kAllocatorObjectOperand);
             }
         }
 
@@ -900,8 +947,17 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                CallTo(ctx, match - 34, OPP_BODY(abi_nms_apply));
-                JumpTo(ctx, match - 29, reinterpret_cast<void*>(match - 16));
+                // The match is the allocator-init `cmp eax, 0x59999980`. The
+                // original's init call is at -34; the jump at -29 replaces the
+                // `push` after it and skips the remaining init instructions,
+                // resuming at the `mov edi, 0x28000` (-16).
+                constexpr ptrdiff_t kOriginalInitCall = -34;
+                constexpr ptrdiff_t kReplaceInitJump = -29;
+                constexpr ptrdiff_t kAfterInitResume = -16;
+
+                CallTo(ctx, match + kOriginalInitCall, OPP_BODY(abi_nms_apply));
+                JumpTo(ctx, match + kReplaceInitJump,
+                       reinterpret_cast<void*>(match + kAfterInitResume));
             }
         }
 
@@ -925,7 +981,9 @@ namespace opp::features
 
                 // `push 0x1388` (5000 ms) becomes `push 0`: the loading sleep
                 // the original removes.
-                WriteValue<uint32_t>(ctx, match + 1, static_cast<uint32_t>(0x0u));
+                constexpr ptrdiff_t kSleepMillisecondsOperand = 1;
+                WriteValue<uint32_t>(ctx, match + kSleepMillisecondsOperand,
+                                     uint32_t{0});
             }
         }
 
@@ -952,8 +1010,13 @@ namespace opp::features
                 // whose original read a fixed site set instead.
                 if (auto pattern = PatternAll(image, "68 00 C2 EC 80 68"); pattern.size() > 0)
                 {
+                    // The `push imm32` operand at +6 is the startup-time value
+                    // the original writes from its INI-backed global.
+                    constexpr ptrdiff_t kStartupTimeOperand = 6;
                     for (size_t i = 0; i < pattern.size(); ++i)
-                        WriteValue<uint32_t>(ctx, pattern.get(i).get<uint8_t>() + 6, static_cast<uint32_t>(FindGlobalValue("StartupTimeFix")));
+                        WriteValue<uint32_t>(
+                            ctx, pattern.get(i).get<uint8_t>() + kStartupTimeOperand,
+                            static_cast<uint32_t>(FindGlobalValue("StartupTimeFix")));
                 }
             }
         }
