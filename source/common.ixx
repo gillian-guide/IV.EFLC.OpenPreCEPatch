@@ -107,6 +107,26 @@ export namespace opp
         return reinterpret_cast<Fn>(address);
     }
 
+    // Fundamental float/double constants used at ABI stores. The bit patterns
+    // are pinned here once; modules store std::bit_cast<uint32_t>(constant) at
+    // the boundary instead of spelling the hex bits in logic.
+    inline constexpr float kDrivebyFovDegrees = 45.0f;
+    inline constexpr float kHalfPi = 1.5707964f;          // pi/2
+    inline constexpr float kDefaultConeOffset = 2.0f;
+    inline constexpr double kCutsceneZero = 0.0;
+    inline constexpr double kCutsceneLimit = 0.3333;      // recovered bits, not 1/3
+    inline constexpr float kCutsceneEpsilon = 0.05f;
+    inline constexpr float kCutsceneHalf = 0.5f;
+    inline constexpr float kBikePhysicsFloor = 0.0066666667f;
+    static_assert(std::bit_cast<uint32_t>(kDrivebyFovDegrees) == 0x42340000u);
+    static_assert(std::bit_cast<uint32_t>(kHalfPi) == 0x3FC90FDBu);
+    static_assert(std::bit_cast<uint32_t>(kDefaultConeOffset) == 0x40000000u);
+    static_assert(std::bit_cast<uint64_t>(kCutsceneZero) == 0x0ull);
+    static_assert(std::bit_cast<uint64_t>(kCutsceneLimit) == 0x3FD554C985F06F69ull);
+    static_assert(std::bit_cast<uint32_t>(kCutsceneEpsilon) == 0x3D4CCCCDu);
+    static_assert(std::bit_cast<uint32_t>(kCutsceneHalf) == 0x3F000000u);
+    static_assert(std::bit_cast<uint32_t>(kBikePhysicsFloor) == 0x3BDA740Eu);
+
     // Deleters for C-owned resources kept RAII: the allocation itself stays the
     // original's (malloc/free), only the ownership is expressed in the type.
     struct FreeDeleter final

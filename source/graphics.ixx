@@ -47,7 +47,7 @@ void abi_fchs_check() noexcept
 {
     const uint32_t* const hashes = zpatch_fchs_hashes;
     uint32_t hash = hashes[0];
-    zpatch_fchs_offset = 0x40000000u;  // 2.0f, as the original
+    zpatch_fchs_offset = std::bit_cast<uint32_t>(kDefaultConeOffset);
     if (hash == 0u) return;
     const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
         static_cast<uintptr_t>(zpatch_model_lookup));

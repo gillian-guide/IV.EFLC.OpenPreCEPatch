@@ -58,13 +58,11 @@ void abi_bike_physics_helper() noexcept
 {
     float value = 0.0f;
     std::memcpy(&value, &zpatch_bike_value, sizeof(value));
-    if (0.006666666665 > static_cast<double>(value))
-    {
-        // 0x3BDA740E is the float 0.0066666667: the floor the original clamps
-        // the bike physics scale to (its own literal bit pattern).
-        constexpr uint32_t kBikeFloorBits = 0x3BDA740Eu;
-        zpatch_bike_value = kBikeFloorBits;
-    }
+    // The floor is the float 0.0066666667 (its bits live in opp.common); the
+    // recovered threshold is a double, so it stays a named double literal.
+    constexpr double kBikeFloorThreshold = 0.006666666665;
+    if (kBikeFloorThreshold > static_cast<double>(value))
+        zpatch_bike_value = std::bit_cast<uint32_t>(kBikePhysicsFloor);
 }
 
 // PopupHeadlightsFlag checker (original sub_10044310), called between
@@ -89,7 +87,7 @@ uint32_t PopupAngleFor(uint32_t hash) noexcept
     const size_t slot = (hash * 2654435761u) >> 26;
     if (memo[slot].valid != 0u && memo[slot].hash == hash)
         return memo[slot].bits;
-    uint32_t bits = 0x3FC90FDBu;  // pi/2: the caller's default when nothing matches
+    uint32_t bits = std::bit_cast<uint32_t>(kHalfPi);  // the caller's default
     for (uint32_t k = 0; k < 512; ++k)
     {
         if (zpatch_popup_hashes[k] != 0u && zpatch_popup_hashes[k] == hash)
@@ -106,7 +104,7 @@ void abi_popup_check() noexcept
 {
     const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
         static_cast<uintptr_t>(zpatch_model_lookup));
-    zpatch_popup_angle = 0x3FC90FDBu;  // dword_101580CC: pi/2 float bits
+    zpatch_popup_angle = std::bit_cast<uint32_t>(kHalfPi);  // dword_101580CC
     zpatch_popup_flag = 0;             // dword_1015BE24
     if (lookup == nullptr)
         return;  // a preamble miss is a clean skip

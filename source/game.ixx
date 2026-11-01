@@ -450,10 +450,8 @@ extern "C"
     uint32_t zpatch_driveby_resolver = 0;               // dword_1015BDE0
     uint32_t zpatch_driveby_resume = 0;                 // dword_1015BDF4
     // The drive-by FOV the game loads (dword_101580C4), stored as the dword the
-    // game reads; its bits are the float 45.0f.
-    constexpr float kDrivebyFovDegrees = 45.0f;
-    static_assert(std::bit_cast<uint32_t>(kDrivebyFovDegrees) == 0x42340000u);
-    uint32_t zpatch_driveby_fov = std::bit_cast<uint32_t>(kDrivebyFovDegrees);
+    // game reads; the float constant and its bits live in opp.common.
+    uint32_t zpatch_driveby_fov = std::bit_cast<uint32_t>(opp::kDrivebyFovDegrees);
     uint32_t zpatch_driveby_cached = 0;           // dword_1015BDF8
     uint8_t zpatch_driveby_done = 0;              // byte_1015AD4A
     uint32_t zpatch_nolivery_name = 0;            // dword_10159BA8 (char*)
@@ -504,10 +502,8 @@ extern "C"
     uint32_t zpatch_popup_flag = 0;
     uint32_t zpatch_popup_index = 0;
     // The popup-light fallback angle (dword_101580CC), stored as the dword the
-    // game reads; its bits are pi/2.
-    constexpr float kHalfPi = 1.5707964f;
-    static_assert(std::bit_cast<uint32_t>(kHalfPi) == 0x3FC90FDBu);
-    uint32_t zpatch_popup_angle = std::bit_cast<uint32_t>(kHalfPi);
+    // game reads; the float constant and its bits live in opp.common.
+    uint32_t zpatch_popup_angle = std::bit_cast<uint32_t>(opp::kHalfPi);
     uint32_t zpatch_popup_resume_a = 0;
     uint32_t zpatch_popup_resume_b = 0;
     uint32_t zpatch_popup_hashes[512] = {};
@@ -516,10 +512,8 @@ extern "C"
     uint32_t zpatch_fchs_param = 0;
     uint32_t zpatch_fchs_resume = 0;
     // The headlight-cone fallback offset, stored as the dword the game reads;
-    // its bits are the float 2.0.
-    constexpr float kDefaultConeOffset = 2.0f;
-    static_assert(std::bit_cast<uint32_t>(kDefaultConeOffset) == 0x40000000u);
-    uint32_t zpatch_fchs_offset = std::bit_cast<uint32_t>(kDefaultConeOffset);
+    // the float constant and its bits live in opp.common.
+    uint32_t zpatch_fchs_offset = std::bit_cast<uint32_t>(opp::kDefaultConeOffset);
     uint32_t zpatch_fchs_hashes[512] = {};
     float zpatch_fchs_offsets[512] = {};
     // BadPlayerModelCrashFix scratch.
@@ -713,22 +707,12 @@ extern "C"
     uint32_t zpatch_cutscene_poke = 0;                      // dword_1015BDF0
     uint64_t zpatch_cutscene_accum = 0;                     // qword_1015BDE8 (BSS: starts 0)
     // The cutscene-shadow comparison constants, stored as the qwords the asm
-    // reads: 0.0 and 1/3 (the recovered double bits).
-    constexpr double kCutsceneZero = 0.0;
-    // The recovered bits are the double 0.3333 (not 1/3: the last bits differ),
-    // so the source states that decimal and the static_assert pins the value.
-    constexpr double kCutsceneLimit = 0.3333;
-    static_assert(std::bit_cast<uint64_t>(kCutsceneZero) == 0x0ull);
-    static_assert(std::bit_cast<uint64_t>(kCutsceneLimit) == 0x3FD554C985F06F69ull);
-    uint64_t zpatch_cutscene_zero = std::bit_cast<uint64_t>(kCutsceneZero);
-    uint64_t zpatch_cutscene_limit = std::bit_cast<uint64_t>(kCutsceneLimit);
+    // reads; the double constants and their bits live in opp.common.
+    uint64_t zpatch_cutscene_zero = std::bit_cast<uint64_t>(opp::kCutsceneZero);
+    uint64_t zpatch_cutscene_limit = std::bit_cast<uint64_t>(opp::kCutsceneLimit);
     uint32_t zpatch_cutscene_abs_mask = 0x7FFFFFFFu;  // 0x101523D0: clears the sign bit
-    constexpr float kCutsceneEpsilon = 0.05f;
-    constexpr float kCutsceneHalf = 0.5f;
-    static_assert(std::bit_cast<uint32_t>(kCutsceneEpsilon) == 0x3D4CCCCDu);
-    static_assert(std::bit_cast<uint32_t>(kCutsceneHalf) == 0x3F000000u);
-    uint32_t zpatch_cutscene_eps_a = std::bit_cast<uint32_t>(kCutsceneEpsilon);
-    uint32_t zpatch_cutscene_eps_b = std::bit_cast<uint32_t>(kCutsceneHalf);
+    uint32_t zpatch_cutscene_eps_a = std::bit_cast<uint32_t>(opp::kCutsceneEpsilon);
+    uint32_t zpatch_cutscene_eps_b = std::bit_cast<uint32_t>(opp::kCutsceneHalf);
     // NewMemorySystem: the allocator singleton the handler's second scan publishes
     // (the immediate of `mov esi, 0x19cf9f0`); the E8 body writes our vtable there.
     uint32_t zpatch_nms_object = 0; // dword_10159CD8

@@ -25,6 +25,7 @@
 #include <windows.h>
 
 #include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
