@@ -244,7 +244,7 @@ int RunOrderingCheck(std::uint8_t* image, std::uint32_t size, const ConfigDocume
 	constexpr std::uint32_t kMiscFixesScanByte = 0x90631;  // the `E8` RemoveUselessChecks NOPs
 	constexpr std::uint32_t kDeathMusicScanByte = 0x41E53A; // the `E8` RemoveUselessChecks patches
 	// RestoreDeathMusic's other two CALLs, which run after RemoveUselessChecks.
-	constexpr std::uint32_t kDeathMusicCalls[] = {0x41E3B8, 0x41E4FC};
+	constexpr std::array<std::uint32_t, 2> kDeathMusicCalls{0x41E3B8, 0x41E4FC};
 
 	if (size <= kMiscFixesScanByte + kBranchBytes)
 	{

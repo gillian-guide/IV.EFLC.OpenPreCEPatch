@@ -146,13 +146,13 @@ bool MapPeImage(const char* path, std::vector<std::uint8_t>& image, std::uint32_
 // A ptr_site_field row publishes a pointer embedded in the game image (a call
 // target read out of the code). At 0x400000 that pointer is already absolute;
 // on the heap fallback it must be rebased or the product's site-in-image check
-// skips the row. Same rule and same signature as tools/phase3/p3_dump.cpp.
+// skips the row. Same rule and same signature as the reference driver.
 void RelocateEmbeddedGamePointers(std::uint8_t* image, std::size_t size)
 {
-	static const unsigned char kCrashMsgSig[] = {0x68, 0x6A, 0x10, 0x4E, 0x31};
-	for (std::size_t i = 4; i + sizeof(kCrashMsgSig) <= size; ++i)
+	constexpr std::array<unsigned char, 5> kCrashMsgSig{0x68, 0x6A, 0x10, 0x4E, 0x31};
+	for (std::size_t i = 4; i + kCrashMsgSig.size() <= size; ++i)
 	{
-		if (std::memcmp(image + i, kCrashMsgSig, sizeof(kCrashMsgSig)) != 0)
+		if (std::memcmp(image + i, kCrashMsgSig.data(), kCrashMsgSig.size()) != 0)
 			continue;
 		auto* field = reinterpret_cast<std::uint32_t*>(image + i - 4);
 		const std::uint32_t value = *field;
@@ -233,7 +233,7 @@ LONG CALLBACK MapGamePageOnFault(EXCEPTION_POINTERS* info)
 
 	// A game VA the driver has not mapped anywhere: commit it. A VA inside some
 	// other allocation (a DLL, the heap) that is merely read-only: let the write
-	// through, the way the game's own image would. p3_dump's recording_protect
+	// through, the way the game's own image would. The reference driver's
 	// does the same for its product.
 	MEMORY_BASIC_INFORMATION mbi{};
 	if (VirtualQuery(page, &mbi, sizeof(mbi)) && mbi.State == MEM_COMMIT)
@@ -278,7 +278,7 @@ LONG CALLBACK MapGamePageOnFault(EXCEPTION_POINTERS* info)
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
-// Same fake destinations the reference driver uses (p3_dump's
+// Same fake destinations the reference driver uses (its
 // fake_skip_resolver): the skip-launcher jumps must not point into either
 // module, so their rel32 values are comparable between the two drivers.
 std::uintptr_t FakeSkipResolver(SkipHook hook, void* /*user*/)
@@ -464,7 +464,7 @@ int main(int argc, char** argv)
 		if (image[i] == pristine[i])
 			continue;
 		++changed;
-		// Decimal VA: tools/phase3/diff_oracle.py and compare_live_memory.py
+		// Decimal VA: the parity diff tools parse this field as base 10.
 		// parse this field with int(x) in base 10.
 		out << "D " << (kGtaImageBase + i) << " " << static_cast<unsigned>(pristine[i]) << " "
 		    << static_cast<unsigned>(image[i]) << "\n";

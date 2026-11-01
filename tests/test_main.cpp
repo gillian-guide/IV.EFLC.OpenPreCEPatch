@@ -247,11 +247,11 @@ int Run()
 			std::size_t positions;
 			std::uint64_t hash;
 		};
-		const Expected expected[] = {
+		constexpr std::array<Expected, 3> expected{{
 		    {GameBuild::v1040, 12406u, 0xCDD7889E5733E709ull},
 		    {GameBuild::v1070, 11516u, 0x34C4403380C387CAull},
 		    {GameBuild::v1080, 11839u, 0x4220A6D0FAD4C6C9ull},
-		};
+		}};
 		for (const Expected& want : expected)
 		{
 			std::vector<std::uint8_t> buffer(kScanProbeSize, 0); // above the largest RVA
@@ -274,7 +274,7 @@ int Run()
 			CHECK(hash == want.hash);
 		}
 
-		const GameBuild other[] = {
+		constexpr std::array<GameBuild, 10> other{
 		    GameBuild::unknown, GameBuild::v1000, GameBuild::v1004, GameBuild::v1060,
 		    GameBuild::v1061,  GameBuild::v1100, GameBuild::v1110, GameBuild::v1120,
 		    GameBuild::v1130,  GameBuild::v12043,
@@ -533,16 +533,15 @@ int Run()
 
 	// ---- pattern parser ----------------------------------------------------
 	{
-		const std::uint8_t bytes[] = {std::uint8_t{0x90}, std::uint8_t{0x85}, std::uint8_t{0xdb},
-		                              std::uint8_t{0x7e}, std::uint8_t{0x41}, std::uint8_t{0x55}};
+		constexpr std::array<std::uint8_t, 6> bytes{0x90, 0x85, 0xdb, 0x7e, 0x41, 0x55};
 		Match match;
 		// "485" is parsed with strtoul semantics and compared as one byte (0x85).
-		CHECK(FindPattern({bytes, sizeof(bytes)}, "485 DB ? 41", match));
-		CHECK(match.address == bytes + 1);
+		CHECK(FindPattern({bytes.data(), bytes.size()}, "485 DB ? 41", match));
+		CHECK(match.address == bytes.data() + 1);
 		std::vector<const std::uint8_t*> all;
-		CHECK(FindAllPatterns({bytes, sizeof(bytes)}, "? DB 7E", all) == 1);
-		CHECK(all[0] == bytes + 1);
-		CHECK(!FindPattern({bytes, sizeof(bytes)}, "DE AD BE EF", match));
+		CHECK(FindAllPatterns({bytes.data(), bytes.size()}, "? DB 7E", all) == 1);
+		CHECK(all[0] == bytes.data() + 1);
+		CHECK(!FindPattern({bytes.data(), bytes.size()}, "DE AD BE EF", match));
 	}
 
 	// ---- menu probes (IVMenuAPI, separate from the ZMenuIV guard) ----------
