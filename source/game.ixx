@@ -529,9 +529,9 @@ extern "C"
     uint32_t zpatch_new_saves_src = 0;
     uint32_t zpatch_new_saves_resume = 0;
     uint32_t zpatch_new_saves_chunk_len = 0;
-    uint8_t zpatch_new_saves_flag9 = 0;
-    uint8_t zpatch_new_saves_flag13 = 0;
-    uint8_t zpatch_new_saves_flag16 = 0;
+    uint8_t zpatch_new_saves_chunk9_new = 0;
+    uint8_t zpatch_new_saves_chunk13_new = 0;
+    uint8_t zpatch_new_saves_chunk16_new = 0;
     // Loader-preamble resolutions (unconditional in the original).
     uint32_t zpatch_pre_ped_array = 0;
     uint32_t zpatch_pre_fn_59c74 = 0;
@@ -573,7 +573,7 @@ extern "C"
     // NewSavesCompatibility's element counter.
     uint32_t zpatch_new_saves_element_count = 0;
     uint32_t zpatch_new_saves_loaddata = 0;
-    uint32_t zpatch_new_saves_p3_orig = 0;
+    uint32_t zpatch_new_saves_orig_handler = 0;
     uint32_t zpatch_gfwl_resume = 0;
     uint32_t zpatch_carparts_shadow_fn = 0; // dword_1015B5B8
     uint32_t zpatch_carparts_resume_2 = 0;  // dword_1015BDCC

@@ -118,10 +118,12 @@ extern "C" void zpatch_local_settings_capture_cwd() noexcept;
 extern "C" bool zpatch_ooc_selftest() noexcept;
 
 // NewSavesCompatibility chunk scan, split out for the native tests. `handle` is
-// a std::FILE*; guarded enables the folded guard checks, seek the seek path.
+// a std::FILE*; guarded enables the folded guard checks, seek the seek path. The
+// three outputs are the new-format chunk-size probes (1 = new format at that
+// chunk index); chunk13 gates the p3 hook.
 extern "C" bool zpatch_new_saves_scan(void* handle, int guarded, int seek,
-                                      uint32_t* flag9, uint32_t* flag16,
-                                      uint32_t* flag13) noexcept;
+                                      uint32_t* chunk9_new, uint32_t* chunk16_new,
+                                      uint32_t* chunk13_new) noexcept;
 
 // NewMemorySystem: the reimplemented CRageAllocator methods (vtable[2]/[3]/[18]
 // of the original 0x100B5038) and the vtable the E8 body writes into the game's

@@ -182,6 +182,18 @@ export namespace opp
                static_cast<uintptr_t>(displacement);
     }
 
+    // The destination of a `call rel32` at `instruction`: the displacement at
+    // `instruction + operandOffset` is measured from the end of the five-byte
+    // instruction (operandOffset + 4). Use this when the call is not at the
+    // match start; BranchTarget keeps its original-site meaning.
+    inline uint32_t BranchDestination(const uint8_t* instruction, ptrdiff_t operandOffset)
+    {
+        const auto displacement = static_cast<int32_t>(Field(instruction, operandOffset));
+        return static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(instruction) + operandOffset + 4u +
+            static_cast<uint32_t>(displacement));
+    }
+
     // A five-byte branch written the way the original's collector writes it
     // (opcode + rel32). injector::MakeCALL/MakeJMP first call GetBranchDestination,
     // which for a `FF 15 <disp32>` site dereferences the operand; that read is

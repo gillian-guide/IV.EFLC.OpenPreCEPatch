@@ -94,6 +94,18 @@ export namespace opp
         const uint8_t* base{};
         size_t size{};
     };
+
+    // Rebased globals hold 32-bit VAs of game functions, not typed pointers.
+    // This is the one conversion back to a callable: the caller may only use it
+    // after its scan proved the address and the signature (the arm's pattern is
+    // that proof), and the call's ABI is the one the recovered body transcribes.
+    template <typename Fn>
+    constexpr Fn GameFunction(uintptr_t address) noexcept
+    {
+        static_assert(std::is_pointer_v<Fn>,
+                      "GameFunction returns a function pointer type");
+        return reinterpret_cast<Fn>(address);
+    }
 } // namespace opp
 
 #if defined(OPCEP_DUMP_TOOL)

@@ -154,9 +154,13 @@ extern "C" uint32_t zpatch_bpm_resume;       // dword_10159CB8
 extern "C" uint32_t zpatch_new_saves_src;       // Src
 extern "C" uint32_t zpatch_new_saves_resume;    // dword_1015AD88
 extern "C" uint32_t zpatch_new_saves_chunk_len; // dword_1015AD90
-extern "C" uint8_t zpatch_new_saves_flag9;      // byte_1015AD98
-extern "C" uint8_t zpatch_new_saves_flag13;     // byte_1015AD99
-extern "C" uint8_t zpatch_new_saves_flag16;     // byte_1015AD9A
+// The chunk-size probes: 1 when the save's chunk at that index has the new
+// format's size (byte_1015AD98/99/9A in the original). Chunk 13 gates the p3
+// hook's 12-byte reads and chunk 16 selects the 3694-byte read; chunk 9 gates
+// the P1 branch.
+extern "C" uint8_t zpatch_new_saves_chunk9_new;  // byte_1015AD98
+extern "C" uint8_t zpatch_new_saves_chunk13_new; // byte_1015AD99
+extern "C" uint8_t zpatch_new_saves_chunk16_new; // byte_1015AD9A
 // The preamble's unconditionally resolved pointers (the original resolves them
 // on every run): the shared model lookup (dword_10159C0C), the script resolver
 // (dword_1015BDE0), the ped array (dword_1015AD78) and four crash-fix functions.
@@ -205,7 +209,7 @@ extern "C" uint32_t zpatch_death_music_site;  // dword_101A84B8
 // NewSavesCompatibility state (see the port in the hook bodies).
 extern "C" uint32_t zpatch_new_saves_element_count;  // dword_1015ADA0
 extern "C" uint32_t zpatch_new_saves_loaddata;       // dword_1015AD94 (game LoadData)
-extern "C" uint32_t zpatch_new_saves_p3_orig;        // dword_1015AD8C (P3 call target)
+extern "C" uint32_t zpatch_new_saves_orig_handler;   // dword_1015AD8C (P3 original handler)
 // Patch4RemoveModChecks / RemoveGFWLUpdatePopup: the shared resume (match+12)
 // for the stub's tail jump.
 extern "C" uint32_t zpatch_gfwl_resume;              // dword_10159C18

@@ -37,34 +37,75 @@ using namespace opp;
 
 #include "body_helpers.inc"
 
+// ---------------------------------------------------------------------------
+// NewSavesCompatibility's two LoadData hooks
+//
+// Both are compiled C reconstructions of functions the original ASI keeps at
+// 0x10051A90 (read hook) and 0x10051AD0 (p3 hook); neither carries an @exact
+// contract. Their contract is the LoadData ABI they wrap: cdecl, a buffer and a
+// byte count, returning LoadData's own result.
+// ---------------------------------------------------------------------------
+using LoadFn = int32_t(__cdecl*)(void*, uint32_t);
+using OrigFn = int32_t(__cdecl*)();
+
+namespace
+{
+// The game's LoadData entry the P2/P3 sites call (original dword_1015AD94) and
+// the handler the p3 hook wraps (original dword_1015AD8C). Both are captured by
+// the install arm, so they are 32-bit VAs behind rebased globals, not typed
+// pointers; GameFunction is the one conversion back to a callable.
+LoadFn LoadData() noexcept
+{
+    return GameFunction<LoadFn>(static_cast<uintptr_t>(zpatch_new_saves_loaddata));
+}
+OrigFn OriginalP3Handler() noexcept
+{
+    return GameFunction<OrigFn>(static_cast<uintptr_t>(zpatch_new_saves_orig_handler));
+}
+}  // namespace
+
+// The fixed stack scratch of the original read hook (sub_10051A90): its frame is
+// `sub esp, 0xE7C` with a 3704-byte (0xE78) buffer and the /GS cookie. 3704 is
+// the original's literal, and the largest request the P2 site passes is the
+// new-format read (kNewSaveReadBytes = 3694), which fits. `size` is passed
+// through to LoadData; the buffer is never sized from it.
+constexpr size_t kSaveScratchSize = 3704u;
+// The original p3 hook (sub_10051AD0) keeps a fixed 12-byte local and reads the
+// new-format block into it before and after the wrapped handler; the block is a
+// sink (its contents are never observed).
+constexpr size_t kSaveBufferSize = 12u;
+// The two sizes the P2 install writes into its `push imm32`: an old-format save
+// reads 3262 bytes, a new-format one 3694.
+constexpr uint32_t kOldSaveReadBytes = 3262u;
+constexpr uint32_t kNewSaveReadBytes = 3694u;
+
 extern "C"
 {
-
-// The NewSavesCompatibility converter (original sub_10051B30): parse the save's
-// 0x110-byte header (magic "SAVE" at +0xC), walk 18 chunks of 9-byte header +
-// payload, record the new-format chunk sizes, then patch three game sites.
-
+// The P2 LoadData replacement (original sub_10051A90): load into the fixed
+// scratch instead of the game's destination and return LoadData's result. The
+// original returns the full EAX; this rebuild declares uint8_t, so callers see
+// AL exactly as they did before.
 extern "C" uint8_t abi_new_saves_read_hook(void*, uint32_t size) noexcept
 {
-    uint8_t scratch[3704];
+    std::array<uint8_t, kSaveScratchSize> scratch;
     if (zpatch_new_saves_loaddata == 0) return 0;
-    using LoadFn = uint8_t(__cdecl*)(void*, uint32_t);
-    return reinterpret_cast<LoadFn>(
-        static_cast<uintptr_t>(zpatch_new_saves_loaddata))(scratch, size);
+    return static_cast<uint8_t>(LoadData()(scratch.data(), size));
 }
 
+// The P3 LoadData replacement (original sub_10051AD0): for a new-format save
+// (chunk 13 has the new size, original byte_1015AD99) it consumes the 12-byte
+// block, runs the original handler, then consumes a second 12-byte block and
+// returns that read's result. The pre/post reads are the original's own
+// behaviour, not a duplicate introduced by this rebuild.
 extern "C" int32_t abi_new_saves_p3_hook() noexcept
 {
-    uint8_t buffer[12];
-    using LoadFn = int32_t(__cdecl*)(void*, uint32_t);
-    const auto load = reinterpret_cast<LoadFn>(
-        static_cast<uintptr_t>(zpatch_new_saves_loaddata));
-    if (zpatch_new_saves_flag13 != 0 && load)
-        static_cast<void>(load(buffer, 12));
-    using OrigFn = int32_t(__cdecl*)();
-    const int32_t result = reinterpret_cast<OrigFn>(
-        static_cast<uintptr_t>(zpatch_new_saves_p3_orig))();
-    if (zpatch_new_saves_flag13 != 0 && load) return load(buffer, 12);
+    std::array<uint8_t, kSaveBufferSize> buffer;
+    const LoadFn load = LoadData();
+    if (zpatch_new_saves_chunk13_new != 0 && load)
+        static_cast<void>(load(buffer.data(), kSaveBufferSize));
+    const int32_t result = OriginalP3Handler()();
+    if (zpatch_new_saves_chunk13_new != 0 && load)
+        return load(buffer.data(), kSaveBufferSize);
     return result;
 }
 
@@ -73,9 +114,13 @@ extern "C" int32_t abi_new_saves_p3_hook() noexcept
 // checks; `seek` enables the fseek-over-payload path. With both 0 this is the
 // original loop: every fread result is ignored and the underflow/malloc are
 // unchecked.
+//
+// The three outputs are the original's new-format probes: 1 when the chunk at
+// that index has the new format's total size. `chunk13_new` is the p3 hook's
+// gate; `chunk16_new` selects the 3694-byte P2 read; `chunk9_new` gates P1.
 extern "C" bool zpatch_new_saves_scan(void* handle, int guarded, int seek,
-                                      uint32_t* flag9, uint32_t* flag16,
-                                      uint32_t* flag13) noexcept
+                                      uint32_t* chunk9_new, uint32_t* chunk16_new,
+                                      uint32_t* chunk13_new) noexcept
 {
     auto* file = static_cast<std::FILE*>(handle);
     if (file == nullptr) return false;
@@ -86,6 +131,15 @@ extern "C" bool zpatch_new_saves_scan(void* handle, int guarded, int seek,
     constexpr size_t kSaveChunkHeaderSize = 9;
     constexpr size_t kSaveMagicOffset = 0x0C;
     constexpr uint32_t kSaveMagic = 0x45564153u;  // "SAVE"
+    constexpr int kSaveChunkCount = 18;
+    // The three chunks whose size tells the formats apart (the original's
+    // recovered indices); each size constant is the new format's chunk total.
+    constexpr int kChunk9Index = 9;
+    constexpr int kChunk13Index = 13;
+    constexpr int kChunk16Index = 16;
+    constexpr uint32_t kNewFormatChunk9Size = 19525u;
+    constexpr uint32_t kNewFormatChunk13Size = 5953u;
+    constexpr uint32_t kNewFormatChunk16Size = 3703u;
     uint8_t header[kSaveHeaderSize];
     if (guarded != 0)
     {
@@ -102,24 +156,24 @@ extern "C" bool zpatch_new_saves_scan(void* handle, int guarded, int seek,
     if (magic != kSaveMagic)
         return false;
 
-    uint32_t local9 = 0;
-    uint32_t local16 = 0;
-    uint32_t local13 = 0;
-    for (int i = 0; i < 18; ++i)
+    uint32_t chunk9_state = 0;
+    uint32_t chunk16_state = 0;
+    uint32_t chunk13_state = 0;
+    for (int i = 0; i < kSaveChunkCount; ++i)
     {
-        uint8_t chunk[9];
-        const size_t chunk_read = std::fread(chunk, 9, 1, file);
+        uint8_t chunk[kSaveChunkHeaderSize];
+        const size_t chunk_read = std::fread(chunk, kSaveChunkHeaderSize, 1, file);
         if (guarded != 0 && chunk_read != 1)
             return false;
         uint32_t size = 0;
         std::memcpy(&size, chunk + 5, 4);
-        if (guarded != 0 && size < 9u)
+        if (guarded != 0 && size < kSaveChunkHeaderSize)
         {
             // The original underflows the allocation count here.
             return false;
         }
         zpatch_new_saves_chunk_len = size;                  // dword_1015AD90
-        zpatch_new_saves_element_count = size - 9u;         // dword_1015ADA0
+        zpatch_new_saves_element_count = size - kSaveChunkHeaderSize;  // dword_1015ADA0
         bool skipped = false;
         // fseek takes a long: only seek when the element count fits one.
         constexpr uint32_t kSeekCountLimit = 0x7FFFFFFFu;
@@ -152,38 +206,41 @@ extern "C" bool zpatch_new_saves_scan(void* handle, int guarded, int seek,
                     return false;
             }
         }
-        if (i == 9) local9 = size == 19525u ? 1u : 0u;
-        if (i == 16) local16 = size == 3703u ? 1u : 0u;
-        if (i == 13) local13 = size == 5953u ? 1u : 0u;
+        if (i == kChunk9Index) chunk9_state = size == kNewFormatChunk9Size ? 1u : 0u;
+        if (i == kChunk16Index) chunk16_state = size == kNewFormatChunk16Size ? 1u : 0u;
+        if (i == kChunk13Index) chunk13_state = size == kNewFormatChunk13Size ? 1u : 0u;
     }
-    if (flag9 != nullptr) *flag9 = local9;
-    if (flag16 != nullptr) *flag16 = local16;
-    if (flag13 != nullptr) *flag13 = local13;
+    if (chunk9_new != nullptr) *chunk9_new = chunk9_state;
+    if (chunk16_new != nullptr) *chunk16_new = chunk16_state;
+    if (chunk13_new != nullptr) *chunk13_new = chunk13_state;
     return true;
 }
 
+// The NewSavesCompatibility converter (original sub_10051B30): parse the save's
+// 0x110-byte header (magic "SAVE" at +0xC), walk 18 chunks of 9-byte header +
+// payload, record the new-format chunk sizes, then patch three game sites.
 extern "C" void abi_new_saves_convert(const char* path) noexcept
 {
     std::FILE* file = std::fopen(path, "rb");
     if (!file) return;
-    uint32_t flag9 = 0;
-    uint32_t flag16 = 0;
-    uint32_t flag13 = 0;
+    uint32_t chunk9_new = 0;
+    uint32_t chunk16_new = 0;
+    uint32_t chunk13_new = 0;
     const bool parsed = zpatch_new_saves_scan(
         file, 1, 1,
-        &flag9, &flag16, &flag13);
+        &chunk9_new, &chunk16_new, &chunk13_new);
     std::fclose(file);
     if (!parsed) return;  // including the original wrong-magic early return
-    zpatch_new_saves_flag9 = flag9;
-    zpatch_new_saves_flag16 = flag16;
-    zpatch_new_saves_flag13 = flag13;
+    zpatch_new_saves_chunk9_new = static_cast<uint8_t>(chunk9_new);
+    zpatch_new_saves_chunk16_new = static_cast<uint8_t>(chunk16_new);
+    zpatch_new_saves_chunk13_new = static_cast<uint8_t>(chunk13_new);
 
     // P1 (game 0x872185): force the 0x3C-byte read path for new saves.
     static const uint8_t* p1 = nullptr;
     if (p1 == nullptr) p1 = scan_game("74 37 80 3D ? ? ? ? 00 75 2E 8D 84 ? ? ? ? 00 6A 1E");
     if (p1 != nullptr)
         wp_byte(const_cast<uint8_t*>(p1),
-                zpatch_new_saves_flag9 != 0 ? opp::ops::kJmpRel8 : opp::ops::kJzRel8);
+                zpatch_new_saves_chunk9_new != 0 ? opp::ops::kJmpRel8 : opp::ops::kJzRel8);
 
     // P2 (game 0x7D8C50): route the oversized read through the plugin's scratch
     // buffer, resize the read, and force/NOP the branch per the save format.
@@ -191,35 +248,35 @@ extern "C" void abi_new_saves_convert(const char* path) noexcept
     if (p2 == nullptr) p2 = scan_game("68 BE 0C 00 00 50 E8");
     if (p2 != nullptr)
     {
+        // The E8 call sits at site+6 with its rel32 operand at site+7.
+        constexpr ptrdiff_t kLoadDataCallOffset = 6;
+        constexpr ptrdiff_t kBranchOperandOffset = 7;
+        constexpr ptrdiff_t kLoadSizeOperandOffset = 1;
+        constexpr ptrdiff_t kSkipLoadBranchOffset = -5;
         auto* site = const_cast<uint8_t*>(p2);
-        int32_t original_rel = 0;
-        std::memcpy(&original_rel, site + 7, 4);
-        const auto original_target = static_cast<uint32_t>(
-            reinterpret_cast<uintptr_t>(site) + 11u +
-            static_cast<uint32_t>(original_rel));
-        // The call at P2+6 already is E8+rel32; MakeCALL writes the same five
-        // bytes and keeps the original's read of the old destination first.
-        injector::MakeCALL(injector::raw_ptr(site + 6),
+        const uint32_t original_target = BranchDestination(site, kBranchOperandOffset);
+        // The call already is E8+rel32; MakeCALL writes the same five bytes and
+        // keeps the original's read of the old destination first.
+        injector::MakeCALL(injector::raw_ptr(site + kLoadDataCallOffset),
                            injector::raw_ptr(&abi_new_saves_read_hook), true);
         if (zpatch_new_saves_loaddata == 0)
             zpatch_new_saves_loaddata = original_target;
 
         // The `push imm32` at P2+1 carries the load size: the old format reads
         // 3262 bytes, the new one 3694.
-        constexpr uint32_t kOldSaveReadBytes = 3262;
-        constexpr uint32_t kNewSaveReadBytes = 3694;
-        wp_dword(site + 1, zpatch_new_saves_flag16 != 0 ? kNewSaveReadBytes
-                                                        : kOldSaveReadBytes);
+        wp_dword(site + kLoadSizeOperandOffset,
+                 zpatch_new_saves_chunk16_new != 0 ? kNewSaveReadBytes
+                                                   : kOldSaveReadBytes);
 
         // The `jnz rel8` five bytes before the call skips the load; for a new
         // save it is a two-byte NOP instead (75 26 = jnz +0x26).
-        // `jnz +0x26`: the branch that skips the load for an old-format save.
-constexpr opp::ops::InstructionWindow<2> kSkipLoadBranch{{0x75, 0x26}};
+        constexpr opp::ops::InstructionWindow<2> kSkipLoadBranch{{0x75, 0x26}};
         static_assert(opp::ops::PackedLowWord(kSkipLoadBranch) == 0x2675u);
-        if (zpatch_new_saves_flag16 != 0)
-            injector::MakeNOP(injector::raw_ptr(site - 5), kSkipLoadBranch.Size(), true);
+        if (zpatch_new_saves_chunk16_new != 0)
+            injector::MakeNOP(injector::raw_ptr(site + kSkipLoadBranchOffset),
+                              kSkipLoadBranch.Size(), true);
         else
-            wp_word(site - 5, opp::ops::PackedLowWord(kSkipLoadBranch));
+            wp_word(site + kSkipLoadBranchOffset, opp::ops::PackedLowWord(kSkipLoadBranch));
     }
 
     // P3 (game 0x8DA090): route the second LoadData call through the plugin body
@@ -229,29 +286,33 @@ constexpr opp::ops::InstructionWindow<2> kSkipLoadBranch{{0x75, 0x26}};
     if (p3 == nullptr) p3 = scan_game("56 E8 ? ? ? ? E8 ? ? ? ? A1 ? ? ? ? 8D 0C 85 00 00 00 00");
     if (p3 != nullptr)
     {
+        // The replaced call is the second E8 (site+6, rel32 operand at site+7);
+        // the third call's operand at site+30 names the shared LoadData slot
+        // that P2's captured value is repointed to.
+        constexpr ptrdiff_t kLoadDataCallOffset = 6;
+        constexpr ptrdiff_t kBranchOperandOffset = 7;
+        constexpr ptrdiff_t kLaterCallOperandOffset = 30;
         auto* site = const_cast<uint8_t*>(p3);
-        int32_t original_rel = 0;
-        std::memcpy(&original_rel, site + 7, 4);
-        const auto original_target = static_cast<uint32_t>(
-            reinterpret_cast<uintptr_t>(site) + 11u +
-            static_cast<uint32_t>(original_rel));
-        injector::MakeCALL(injector::raw_ptr(site + 6),
+        const uint32_t original_target = BranchDestination(site, kBranchOperandOffset);
+        injector::MakeCALL(injector::raw_ptr(site + kLoadDataCallOffset),
                            injector::raw_ptr(&abi_new_saves_p3_hook), true);
-        if (zpatch_new_saves_p3_orig == 0)
-            zpatch_new_saves_p3_orig = original_target;
-        int32_t third_rel = 0;
-        std::memcpy(&third_rel, site + 30, 4);
-        zpatch_new_saves_loaddata = static_cast<uint32_t>(
-            reinterpret_cast<uintptr_t>(site) + 30u +
-            static_cast<uint32_t>(third_rel) + 4u);
+        if (zpatch_new_saves_orig_handler == 0)
+            zpatch_new_saves_orig_handler = original_target;
+        zpatch_new_saves_loaddata = BranchDestination(site, kLaterCallOperandOffset);
     }
 }
 
 // The prepare step of the tramp (original sub_10051FD0): if the handler
-// captured the game's save-name buffer, make sure the savegame directory
-// exists (game function found by signature) and convert "<dir>\\<save name>".
+// captured the game's save-name buffer, resolve the game's save-directory getter
+// (scan) and convert "<dir>\\<save name>".
 extern "C" void abi_new_saves_prepare() noexcept
 {
+    // The getter fills `directory` and a trailing byte; 312 and 560 are the
+    // original's recovered stack capacities for the directory and the joined
+    // directory + save-name path.
+    constexpr size_t kSaveDirectoryCapacity = 312u;
+    constexpr size_t kSavePathCapacity = 560u;
+    using GetSaveDirectoryFn = uint8_t(__cdecl*)(int, char*, char*);
     const auto* name = reinterpret_cast<const char*>(
         static_cast<uintptr_t>(zpatch_new_saves_src));
     if (name == nullptr) return;
@@ -259,12 +320,13 @@ extern "C" void abi_new_saves_prepare() noexcept
     if (get_dir == nullptr)
         get_dir = scan_game("55 8B EC 83 E4 F8 83 EC 4C 56 33 C0 8D 4C 24 28");
     if (get_dir == nullptr) return;
-    char directory[312]{};
+    const auto get_directory = GameFunction<GetSaveDirectoryFn>(
+        reinterpret_cast<uintptr_t>(get_dir));
+    char directory[kSaveDirectoryCapacity]{};
     char suffix = 0;
-    if (reinterpret_cast<uint8_t(__cdecl*)(int, char*, char*)>(
-            const_cast<uint8_t*>(get_dir))(0, directory, &suffix) == 0)
+    if (get_directory(0, directory, &suffix) == 0)
         return;
-    char path[560];
+    char path[kSavePathCapacity];
     std::snprintf(path, sizeof(path), "%s\\%s", directory, name);
     abi_new_saves_convert(path);
 }
