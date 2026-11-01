@@ -9,9 +9,13 @@
 
 module;
 
+#include <array>
 #include <cstdarg>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <mutex>
+#include <string_view>
 
 export module opp.log;
 
@@ -25,44 +29,64 @@ namespace opp
 {
     namespace
     {
-        std::FILE* g_log = nullptr;
-    }
+        // The longest line an arm emits (a signature miss plus its arm name); a
+        // longer one is truncated, never split.
+        constexpr size_t kLogLineCapacity = 2048;
+
+        // The trace log is one owned file. std::ofstream keeps it open for the
+        // process lifetime and one mutex-guarded write per line keeps lines from
+        // interleaving (the CRT used to provide that lock through stdio).
+        class LogFile final
+        {
+        public:
+            void Open(const std::filesystem::path& path)
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (stream_.is_open())
+                    return;
+                stream_.open(path, std::ios::binary | std::ios::trunc);
+                if (stream_)
+                {
+                    stream_ << "OpenPreCEPatch log\n";
+                    stream_.flush();
+                }
+            }
+
+            void Line(std::string_view line)
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (!stream_)
+                    return;
+                stream_.write(line.data(), static_cast<std::streamsize>(line.size()));
+                stream_.flush();
+            }
+
+        private:
+            std::mutex mutex_;
+            std::ofstream stream_;
+        };
+
+        LogFile g_log;
+    } // namespace
 
     void OpenLog(const std::filesystem::path& path)
     {
-        if (g_log)
-            return;
-        g_log = _wfopen(path.c_str(), L"w");
-        if (g_log)
-        {
-            std::fprintf(g_log, "OpenPreCEPatch log\n");
-            std::fflush(g_log);
-        }
+        g_log.Open(path);
     }
 
     void Log(const char* format, ...)
     {
-        if (!g_log)
-            return;
-
-        // The achievement hook and the install pass log from different threads.
-        // Format one whole line and emit it with a single call so lines cannot
-        // interleave (the CRT locks the stream for the duration of each write).
-        // The capacity fits the longest line an arm emits (a signature miss plus
-        // its arm name); a longer one is truncated, never split.
-        constexpr size_t kLogLineCapacity = 2048;
-        char line[kLogLineCapacity];
+        std::array<char, kLogLineCapacity> line{};
         va_list args;
         va_start(args, format);
-        const int used = std::vsnprintf(line, sizeof(line), format, args);
+        const int used = std::vsnprintf(line.data(), line.size(), format, args);
         va_end(args);
         if (used < 0)
             return;
-        std::size_t length = static_cast<std::size_t>(used);
-        if (length >= sizeof(line))
-            length = sizeof(line) - 1;
+        size_t length = static_cast<size_t>(used);
+        if (length >= line.size())
+            length = line.size() - 1;
         line[length++] = '\n';
-        std::fwrite(line, 1, length, g_log);
-        std::fflush(g_log);
+        g_log.Line(std::string_view(line.data(), length));
     }
 } // namespace opp

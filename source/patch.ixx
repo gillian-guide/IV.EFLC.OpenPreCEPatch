@@ -23,6 +23,7 @@ module;
 #include <cstdint>
 #include <cstring>
 #include <cstdarg>
+#include <fstream>
 #include <initializer_list>
 #include <cstdio>
 
@@ -688,11 +689,13 @@ namespace opp
         // pass leaves the last arm visible.
         Log("arm %s", name);
 #if defined(OPCEP_TRACE_INSTALLS)
-        static std::FILE* log = std::fopen("IV.EFLC.OpenPreCEPatch.trace.log", "a");
-        if (log)
+        // The trace file is owned and append-only; a function-local static keeps
+        // it open for the whole install pass.
+        static std::ofstream trace("IV.EFLC.OpenPreCEPatch.trace.log", std::ios::app);
+        if (trace)
         {
-            std::fprintf(log, "arm %s\n", name);
-            std::fflush(log);
+            trace << "arm " << (name != nullptr ? name : "?") << '\n';
+            trace.flush();
         }
 #else
         (void)name;
