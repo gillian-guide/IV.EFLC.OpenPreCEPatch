@@ -4953,6 +4953,10 @@ struct OocPakEntry final
 };
 static_assert(sizeof(OocPakEntry) == 44);
 
+// The fake-pak vector is the original's own global storage: begin/end/
+// capacity are the handler's dwords, so its growth keeps ::operator new and
+// ::operator delete and the raw pointers. That is recovered ABI state, not a
+// local allocation.
 void zpatch_ooc_register_entry(unsigned char* table)
 {
 	auto* begin = reinterpret_cast<OocPakEntry*>(
@@ -5125,13 +5129,14 @@ struct OocStream final
 
 // The original's Adler-32 variant (a = 1, b = 0, 1872-byte partition, 32-bit
 // wrapping); reproduced because the blob's trailer was built with it.
-std::uint32_t zpatch_ooc_adler32(const unsigned char* data, std::size_t size) noexcept
+std::uint32_t zpatch_ooc_adler32(std::span<const unsigned char> data) noexcept
 {
 	std::uint32_t a = 1u;
 	std::uint32_t b = 0u;
-	for (std::size_t block = 0; block < size; block += kOocAdlerBlock)
+	for (std::size_t block = 0; block < data.size(); block += kOocAdlerBlock)
 	{
-		const std::size_t end = (block + kOocAdlerBlock < size) ? block + kOocAdlerBlock : size;
+		const std::size_t end =
+		    (block + kOocAdlerBlock < data.size()) ? block + kOocAdlerBlock : data.size();
 		for (std::size_t i = block; i < end; ++i)
 		{
 			a += data[i];
@@ -5184,18 +5189,20 @@ bool zpatch_ooc_decode(unsigned char* table) noexcept
 	                              (static_cast<std::uint32_t>(kOocPakBlob[pc + 3]) << 16) |
 	                              (static_cast<std::uint32_t>(kOocPakBlob[pc + 4]) << 8) |
 	                              static_cast<std::uint32_t>(kOocPakBlob[pc + 5]);
-	return zpatch_ooc_adler32(table, kOocTableSize) == trailer;
+	return zpatch_ooc_adler32({table, kOocTableSize}) == trailer;
 }
 
 // sub_1004ACE0 for the single registered entry ("finale2.sco", table, 179536).
 // 20-byte header, one 16-byte record, the name, then the payload at offset 2048
-// followed by the zero padding to the next 2048 boundary. The table is freed like
-// the original; `final_offset` is the original's dword_10159C78.
+// followed by the zero padding to the next 2048 boundary. Ownership is explicit:
+// the builder consumes the malloc'd table (the original frees it inside the
+// payload loop) and returns the malloc'd archive, which the caller owns.
+// `final_offset` is the original's dword_10159C78.
 // Archive page size (the 0x800 granularity of the payload/records).
 constexpr std::uint32_t kOocPageSize = 2048u;
 
-unsigned char* zpatch_ooc_build_archive(unsigned char* table,
-                                        std::uint32_t& final_offset) noexcept
+[[nodiscard]] std::unique_ptr<unsigned char, FreeDeleter> zpatch_ooc_build_archive(
+    std::unique_ptr<unsigned char, FreeDeleter> table, std::uint32_t& final_offset) noexcept
 {
 	const std::uint32_t size = static_cast<std::uint32_t>(kOocTableSize);
 	const std::uint32_t remainder = size & (kOocPageSize - 1u);
@@ -5203,12 +5210,13 @@ unsigned char* zpatch_ooc_build_archive(unsigned char* table,
 	const std::uint32_t total = pages * kOocPageSize + kOocPageSize;
 	// No null check, like the original's archive build: the memset below faults
 	// on a failed allocation.
-	auto* archive = static_cast<unsigned char*>(std::malloc(total));
-	std::memset(archive, 0, total);
+	std::unique_ptr<unsigned char, FreeDeleter> archive(
+	    static_cast<unsigned char*>(std::malloc(total)));
+	std::memset(archive.get(), 0, total);
 	std::uint32_t offset = 0;
 	const auto append = [&](const void* source, std::uint32_t bytes) noexcept
 	{
-		std::memcpy(archive + offset, source, bytes);
+		std::memcpy(archive.get() + offset, source, bytes);
 		offset += bytes;
 		zpatch_ooc_store(&zpatch_ooc_archive_offset, offset);
 	};
@@ -5242,8 +5250,8 @@ unsigned char* zpatch_ooc_build_archive(unsigned char* table,
 	append(name, name_bytes);
 	offset = kOocPageSize;                         // the original resets dword_10159C78
 	zpatch_ooc_store(&zpatch_ooc_archive_offset, offset);
-	append(table, size);
-	std::free(table);                              // j_j_free inside the payload loop
+	append(table.get(), size);
+	table.reset();                                 // j_j_free inside the payload loop
 	if (remainder != 0u)
 		offset += kOocPageSize - remainder;        // zero padding (already memset)
 	if (remainder != 0u) zpatch_ooc_store(&zpatch_ooc_archive_offset, offset);
@@ -5254,26 +5262,31 @@ unsigned char* zpatch_ooc_build_archive(unsigned char* table,
 // sub_1004B750: the one-shot init the wrapper runs before mounting. Its guard
 // dword_10159C00 has no writer in the original, so it re-runs (and leaks the
 // archive) on every call - kept 1:1. Both mallocs are unchecked like the
-// original.
+// original: the table block is written through even when malloc failed, and the
+// archive is handed to the game and intentionally not freed.
 std::uint32_t zpatch_ooc_lookup() noexcept
 {
-	auto* table = static_cast<unsigned char*>(std::malloc(kOocTableSize));
-	static_cast<void>(zpatch_ooc_decode(table));  // the original discards the result
+	std::unique_ptr<unsigned char, FreeDeleter> table(
+	    static_cast<unsigned char*>(std::malloc(kOocTableSize)));
+	static_cast<void>(zpatch_ooc_decode(table.get()));  // the original discards the result
 	zpatch_ooc_store(&zpatch_ooc_table_size,
 	                 static_cast<std::uint32_t>(kOocTableSize));
-	zpatch_ooc_register_entry(table);
+	zpatch_ooc_register_entry(table.get());
 	std::uint32_t final_offset = 0;
-	unsigned char* archive = zpatch_ooc_build_archive(table, final_offset);
+	std::unique_ptr<unsigned char, FreeDeleter> archive =
+	    zpatch_ooc_build_archive(std::move(table), final_offset);
 	zpatch_ooc_store(&zpatch_ooc_vector_end,
 	                 zpatch_ooc_vector_begin);
 	zpatch_ooc_store(&zpatch_ooc_state, final_offset);
-	return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(archive));
+	// The mounted archive stays alive for the game; the original leaks it on
+	// every re-run of sub_1004B750 (its guard dword has no writer).
+	return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(archive.release()));
 }
 
-std::uint32_t zpatch_ooc_fnv1a(const unsigned char* data, std::size_t size) noexcept
+std::uint32_t zpatch_ooc_fnv1a(std::span<const unsigned char> data) noexcept
 {
 	std::uint32_t hash = 2166136261u;
-	for (std::size_t i = 0; i < size; ++i)
+	for (std::size_t i = 0; i < data.size(); ++i)
 	{
 		hash ^= data[i];
 		hash *= 16777619u;
@@ -5286,37 +5299,34 @@ std::uint32_t zpatch_ooc_fnv1a(const unsigned char* data, std::size_t size) noex
 // own Adler trailer and the archive must match the golden layout/hash.
 extern "C" bool zpatch_ooc_selftest() noexcept
 {
-	auto* table = static_cast<unsigned char*>(std::malloc(kOocTableSize));
-	if (table == nullptr) return false;
-	const bool decoded = zpatch_ooc_decode(table);
-	const std::uint32_t table_adler = zpatch_ooc_adler32(table, kOocTableSize);
+	std::unique_ptr<unsigned char, FreeDeleter> table(
+	    static_cast<unsigned char*>(std::malloc(kOocTableSize)));
+	if (!table) return false;
+	const bool decoded = zpatch_ooc_decode(table.get());
+	const std::uint32_t table_adler =
+	    zpatch_ooc_adler32({table.get(), kOocTableSize});
 	std::uint32_t final_offset = 0;
-	unsigned char* archive = zpatch_ooc_build_archive(table, final_offset);
-	if (archive == nullptr)
-	{
-		std::free(table);
-		return false;
-	}
+	std::unique_ptr<unsigned char, FreeDeleter> archive =
+	    zpatch_ooc_build_archive(std::move(table), final_offset);
+	if (!archive) return false;
 	const std::uint32_t header[4] = {kOocArchiveMagic, 3u, 1u, 28u};
 	bool header_ok = true;
 	for (int i = 0; i < 4; ++i)
-		header_ok = header_ok && std::memcmp(archive + 4 * i, &header[i], 4) == 0;
-	header_ok = header_ok && archive[16] == kOocHeaderPage && archive[17] == 0u &&
-	            archive[18] == kOocHeaderOp && archive[19] == 0u;
+		header_ok = header_ok && std::memcmp(archive.get() + 4 * i, &header[i], 4) == 0;
+	header_ok = header_ok && archive.get()[16] == kOocHeaderPage && archive.get()[17] == 0u &&
+	            archive.get()[18] == kOocHeaderOp && archive.get()[19] == 0u;
 	const std::uint32_t record_size = static_cast<std::uint32_t>(kOocTableSize);
 	const std::uint32_t record_index = 1u;
-	bool record_ok = std::memcmp(archive + 20, &record_size, 4) == 0;
+	bool record_ok = std::memcmp(archive.get() + 20, &record_size, 4) == 0;
 	const std::uint32_t zero = 0u;
-	record_ok = record_ok && std::memcmp(archive + 24, &zero, 4) == 0 &&
-	            std::memcmp(archive + 28, &record_index, 4) == 0;
-	record_ok = record_ok && archive[32] == 88u && archive[33] == 0u &&
-	            archive[34] == kOocRecordTag && archive[35] == kOocRecordTag2;
-	const bool name_ok = std::memcmp(archive + 36, "finale2.sco", 12) == 0;
-	const bool ok = decoded && final_offset == kOocDecodedLength && table_adler == kOocTableAdler &&
-	                header_ok && record_ok && name_ok &&
-	                zpatch_ooc_fnv1a(archive, final_offset) == kOocArchiveFnv;
-	std::free(archive);
-	return ok;
+	record_ok = record_ok && std::memcmp(archive.get() + 24, &zero, 4) == 0 &&
+	            std::memcmp(archive.get() + 28, &record_index, 4) == 0;
+	record_ok = record_ok && archive.get()[32] == 88u && archive.get()[33] == 0u &&
+	            archive.get()[34] == kOocRecordTag && archive.get()[35] == kOocRecordTag2;
+	const bool name_ok = std::memcmp(archive.get() + 36, "finale2.sco", 12) == 0;
+	return decoded && final_offset == kOocDecodedLength && table_adler == kOocTableAdler &&
+	       header_ok && record_ok && name_ok &&
+	       zpatch_ooc_fnv1a({archive.get(), final_offset}) == kOocArchiveFnv;
 }
 
 // @exact 0x1004C3C0 OutOfCommissionFix branch body (E9 target of game
