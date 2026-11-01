@@ -35,8 +35,6 @@ export namespace opp
     bool InstallSteamAchievementsBridge(GameImage image) noexcept;
 } // namespace opp
 
-// SPDX-License-Identifier: GPL-3.0-or-later
-//
 // Steam achievement mirror.
 //
 // The game writes GFWL achievements through xlive.dll's
@@ -158,6 +156,8 @@ namespace opp
         // XUserWriteAchievements is a 3-argument __stdcall. See the file note.
         using WriteAchievementsFn =
             uint32_t(__stdcall*)(uint32_t, const XUserAchievement*, void*);
+        // x64 has no __thiscall; the Steam interface methods are thiscall on x86
+        // and the platform's default calling convention on x64.
 #if defined(_M_IX86)
 #define OPCEP_THISCALL __thiscall
 #else
@@ -167,6 +167,16 @@ namespace opp
         using StoreStatsFn = bool(OPCEP_THISCALL*)(void*);
         using RequestStatsFn = bool(OPCEP_THISCALL*)(void*);
         using RunCallbacksFn = void(__cdecl*)();
+
+        // GTA IV's AppID and the Episodes' one (the Steam client's values for
+        // the two executables), the xlive import ordinal and the ISteamUserStats
+        // v012 interface name the bridge resolves.
+        constexpr const char* kBaseGameAppId = "12210";
+        constexpr const char* kEpisodesAppId = "12220";
+        constexpr WORD kXUserWriteAchievementsOrdinal = 5278;
+        constexpr const char* kUserStatsInterface =
+            "STEAMUSERSTATS_INTERFACE_VERSION012";
+        constexpr size_t kAppIdCapacity = 32;
 
         constexpr uint32_t kMaxAchievementId = 65;
         constexpr uint32_t kAchievementSlots = kMaxAchievementId + 1;
@@ -181,7 +191,7 @@ namespace opp
         RequestStatsFn g_request_stats = nullptr;
         RunCallbacksFn g_run_callbacks = nullptr;
         void* g_user_stats = nullptr;
-        char g_app_id[32] = "12210";
+        char g_app_id[kAppIdCapacity] = "12210";
 
         // Guards the state shared by the game's achievement thread and the
         // Steam init worker. SRWLOCK needs no initialisation.
@@ -232,7 +242,7 @@ namespace opp
                 return;
             prepared = true;
 
-            char inherited[32] = {};
+            char inherited[kAppIdCapacity] = {};
             const DWORD length =
                 GetEnvironmentVariableA("SteamAppId", inherited, sizeof(inherited));
             if (length != 0)
@@ -243,7 +253,7 @@ namespace opp
             }
 
             std::snprintf(g_app_id, sizeof(g_app_id), "%s",
-                          IsEpisodesExecutable() ? "12220" : "12210");
+                          IsEpisodesExecutable() ? kEpisodesAppId : kBaseGameAppId);
             SetEnvironmentVariableA("SteamAppId", g_app_id);
             SetEnvironmentVariableA("SteamGameId", g_app_id);
             Log("steam: no inherited SteamAppId, using %s", g_app_id);
@@ -428,7 +438,8 @@ namespace opp
         // (the worker below); installing the hook first means an achievement
         // written during that window is still observed and queued instead of
         // silently missed.
-        if (!ReplaceImportOrdinal(GetModuleHandleW(nullptr), "xlive.dll", 5278,
+        if (!ReplaceImportOrdinal(GetModuleHandleW(nullptr), "xlive.dll",
+                                  kXUserWriteAchievementsOrdinal,
                                   reinterpret_cast<void*>(&XUserWriteAchievementsHook),
                                   reinterpret_cast<void**>(&g_write_original)))
         {
@@ -437,23 +448,29 @@ namespace opp
             return false;
         }
         g_hook_installed = true;
-        Log("steam: hooked xlive.dll ordinal 5278 (XUserWriteAchievements)");
+        Log("steam: hooked xlive.dll ordinal %u (XUserWriteAchievements)",
+            kXUserWriteAchievementsOrdinal);
 
+        // The worker's retry policy: a first one-second settle, then two-second
+        // retries until the attempt budget is spent.
+        constexpr int kSteamInitAttempts = 20;
+        constexpr DWORD kSteamFirstDelayMs = 1000;
+        constexpr DWORD kSteamRetryDelayMs = 2000;
         HANDLE thread = CreateThread(nullptr, 0, [](LPVOID) -> DWORD {
             // Give the client and the game a moment to settle, then retry while
             // the failure is transient (Steam still starting, the launch not yet
             // registered). Achievement ids seen meanwhile stay queued and are
             // replayed when the mirror finally comes up.
-            for (int attempt = 0; attempt < 20; ++attempt)
+            for (int attempt = 0; attempt < kSteamInitAttempts; ++attempt)
             {
-                Sleep(attempt == 0 ? 1000 : 2000);
+                Sleep(attempt == 0 ? kSteamFirstDelayMs : kSteamRetryDelayMs);
                 if (InstallSteamNow(attempt))
                     return 0;
                 if (g_disabled)
                     return 0;
             }
-            Log("steam: not ready after 20 attempts; Steam mirror off this session "
-                "(GFWL unaffected)");
+            Log("steam: not ready after %d attempts; Steam mirror off this session "
+                "(GFWL unaffected)", kSteamInitAttempts);
             return 0;
         }, nullptr, 0, nullptr);
         if (thread == nullptr)
@@ -511,8 +528,7 @@ namespace opp
             return false;  // transient: launch may not be registered yet
         }
 
-        g_user_stats =
-            find_interface(get_user(), "STEAMUSERSTATS_INTERFACE_VERSION012");
+        g_user_stats = find_interface(get_user(), kUserStatsInterface);
         if (g_user_stats == nullptr)
         {
             g_disabled = true;
@@ -526,11 +542,16 @@ namespace opp
             Log("steam: ISteamUserStats vtable unavailable, skipped");
             return false;
         }
-        // ISteamUserStats v012: RequestCurrentStats at 0, SetAchievement at 7
-        // (28 bytes) and StoreStats at 10 (40 bytes).
-        g_request_stats = reinterpret_cast<RequestStatsFn>(vtable[0 / 4]);
-        g_set_achievement = reinterpret_cast<SetAchievementFn>(vtable[28 / 4]);
-        g_store_stats = reinterpret_cast<StoreStatsFn>(vtable[40 / 4]);
+        // ISteamUserStats v012: RequestCurrentStats at slot 0, SetAchievement at
+        // slot 7 and StoreStats at slot 10 (the SDK's vtable indices; the old
+        // expression divided the byte offsets 28/40 by four, which is the same
+        // index on x86 and must not become sizeof(void*)-dependent).
+        constexpr size_t kRequestStatsSlot = 0;
+        constexpr size_t kSetAchievementSlot = 7;
+        constexpr size_t kStoreStatsSlot = 10;
+        g_request_stats = reinterpret_cast<RequestStatsFn>(vtable[kRequestStatsSlot]);
+        g_set_achievement = reinterpret_cast<SetAchievementFn>(vtable[kSetAchievementSlot]);
+        g_store_stats = reinterpret_cast<StoreStatsFn>(vtable[kStoreStatsSlot]);
         g_run_callbacks = run_callbacks;
         if (g_set_achievement == nullptr || g_store_stats == nullptr)
         {
@@ -541,14 +562,16 @@ namespace opp
 
         // Load the user's stats, then let the first callbacks arrive before the
         // mirror accepts writes. Achievements written meanwhile stay queued.
+        constexpr int kSteamWarmupCallbacks = 10;
+        constexpr DWORD kSteamWarmupDelayMs = 50;
         if (g_request_stats != nullptr)
             (void)g_request_stats(g_user_stats);
         if (g_run_callbacks != nullptr)
         {
-            for (int i = 0; i < 10; ++i)
+            for (int i = 0; i < kSteamWarmupCallbacks; ++i)
             {
                 g_run_callbacks();
-                Sleep(50);
+                Sleep(kSteamWarmupDelayMs);
             }
         }
 
