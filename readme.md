@@ -2,21 +2,14 @@
 
 [![Build](https://github.com/gillian-guide/IV.EFLC.OpenPreCEPatch/actions/workflows/msvc_x86.yml/badge.svg)](https://github.com/gillian-guide/IV.EFLC.OpenPreCEPatch/actions/workflows/msvc_x86.yml)
 
-OpenPreCEPatch is an open-source successor to ZolikaPatch, the GTA IV / Episodes from Liberty City
-quality-of-life and crash-fix plugin. It keeps the original mod's options, rewrites them as
-readable, maintainable C++23, and modernises the loader, hooking and configuration layers around
-the same signature data, while adding improvements to some unreliable code.
+OpenPreCEPatch is an open-source successor to ZolikaPatch, the GTA IV / Episodes from Liberty City quality-of-life and crash-fix plugin. It keeps the original mod's options, rewrites them using modern conventions and modernises the loader, hooking and configuration layers around the same signature data, while adding improvements to some unreliable code.
 
 It targets improvements to the pre-CE experience to bring it closer to the Complete Edition, and to
 general stability and the multiplayer experience. Options FusionFix already owns are gated off
-automatically when a FusionFix ASI is next to the game. Every entry below is an option in
-`data/plugins/IV.EFLC.OpenPreCEPatch.ini`, which records the default and the game versions each
-option applies to.
+automatically when a FusionFix ASI is next to the game.
 
-It is meant to be used with [this fork of XLivelessAddon](https://github.com/gillian-guide/XLivelessAddon)
-as a companion, because some features belong there. It also carries the standalone
-`GFWLProtectionDisabler2019` patch and a reimplementation of the Steam Achievements mod that works
-differently from the original: GFWL achievements now work alongside Steam's.
+It is meant to be used with [this fork of XLivelessAddon](https://github.com/gillian-guide/XLivelessAddon) as a companion, because some features belong there. It also carries the standalone
+`GFWLProtectionDisabler2019` patch and a reimplementation of the Steam Achievements mod that works differently from the original: GFWL achievements now work alongside Steam's.
 
 ## Features
 
