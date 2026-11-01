@@ -776,8 +776,12 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "8B 47 28 C1 E8 06 83 E0 0F 83 C0"); pattern.size() > 0)
             {
-                zpatch_bds_resume_a = MatchAddress(pattern, 15);
-                zpatch_bds_resume_b = MatchAddress(pattern, 112);
+                // Two resumes inside the shadow-size function (offsets 15 and
+                // 112); the hash rows' dword operand is named below.
+                constexpr ptrdiff_t kResumeAOffset = 15;
+                constexpr ptrdiff_t kResumeBOffset = 112;
+                zpatch_bds_resume_a = MatchAddress(pattern, kResumeAOffset);
+                zpatch_bds_resume_b = MatchAddress(pattern, kResumeBOffset);
             }
 
             // The two hash slots take the same field of the FIRST and the SECOND
@@ -791,8 +795,10 @@ namespace opp::features
             if (hashes.size() > 0 &&
                 ExpectMatchCount(hashes, 2, "BuildingDynamicShadows hash pair"))
             {
-                zpatch_bds_hash_a = *hashes.get(0).get<uint32_t>(20);
-                zpatch_bds_hash_b = *hashes.get(1).get<uint32_t>(20);
+                // The `mov dword ptr [esi+28h], imm32` operand at +20.
+                constexpr ptrdiff_t kHashOperand = 20;
+                zpatch_bds_hash_a = *hashes.get(0).get<uint32_t>(kHashOperand);
+                zpatch_bds_hash_b = *hashes.get(1).get<uint32_t>(kHashOperand);
             }
         }
 
@@ -866,20 +872,34 @@ namespace opp::features
         {
             const GameImage& image = ctx.image;
 
-            if (auto pattern = Pattern(image, "56 6A 02 53 53 57 E8 ?? ?? ?? ?? 56 6A 02 6A 04 6A 05 57 E8"); pattern.size() > 0)
+            // The two recovered spawner rows, in the original's order. The
+            // resume is the instruction after the first E8; shadow_fn is that
+            // call's target.
+            struct CarShadowRow final
             {
-                zpatch_carparts_resume_2 = MatchAddress(pattern, 11);
-                zpatch_carparts_shadow_fn = MatchTarget(pattern, 7, 11);
-            }
-
-            if (auto pattern = Pattern(image, "56 6A 02 6A 00 6A 00 57 E8 ? ? ? ? 56 6A 02 6A 04 6A 05 57 E8"); pattern.size() > 0)
+                const char* signature;
+                ptrdiff_t resume_offset;
+                ptrdiff_t call_operand;
+            };
+            constexpr CarShadowRow kRows[] = {
+                {"56 6A 02 53 53 57 E8 ?? ?? ?? ?? 56 6A 02 6A 04 6A 05 57 E8",
+                 11, 7},
+                {"56 6A 02 6A 00 6A 00 57 E8 ? ? ? ? 56 6A 02 6A 04 6A 05 57 E8",
+                 13, 9},
+            };
+            for (const CarShadowRow& row : kRows)
             {
-                zpatch_carparts_resume_2 = MatchAddress(pattern, 13);
-                zpatch_carparts_shadow_fn = MatchTarget(pattern, 9, 13);
+                if (auto pattern = Pattern(image, row.signature); pattern.size() > 0)
+                {
+                    zpatch_carparts_resume_2 = MatchAddress(pattern, row.resume_offset);
+                    zpatch_carparts_shadow_fn = BranchDestination(
+                        pattern.get(0).get<uint8_t>(), row.call_operand);
+                }
             }
 
             if (auto pattern = Pattern(image, "8B 45 10 8B 16 8B 92 8C 00 00 00"); pattern.size() > 0)
             {
+                // The match is the published "dynamic shadow entry" function.
                 zpatch_car_dynamic_d = MatchAddress(pattern);
             }
         }
@@ -917,7 +937,12 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                JumpTo(ctx, match + 3, reinterpret_cast<void*>(match + 30));
+                // `jz +0x18` at +3 becomes an unconditional jump to match+30
+                // (the original's shadow-class skip).
+                constexpr ptrdiff_t kShadowClassJumpOffset = 3;
+                constexpr ptrdiff_t kShadowClassSkipTarget = 30;
+                JumpTo(ctx, match + kShadowClassJumpOffset,
+                       reinterpret_cast<void*>(match + kShadowClassSkipTarget));
             }
 
             {
@@ -995,7 +1020,10 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                NopAt(ctx, match + 62, 6);
+                // The six-byte `jz` at +62 the @noE variant NOPs.
+                constexpr ptrdiff_t kNoEBranchOffset = 62;
+                constexpr size_t kNoEBranchLength = 6;
+                NopAt(ctx, match + kNoEBranchOffset, kNoEBranchLength);
             }
         }
 
@@ -1016,8 +1044,12 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "85 DB 7E 41 55 EB 0A"); pattern.size() > 0)
             {
-                zpatch_carparts_resume_if = MatchAddress(pattern, 2);
-                zpatch_carparts_resume_else = MatchAddress(pattern, 69);
+                // The two branch-pair resumes inside the car-parts walker: the
+                // `jle` target and the `jmp` target (+2/+69 in the match).
+                constexpr ptrdiff_t kResumeIfOffset = 2;
+                constexpr ptrdiff_t kResumeElseOffset = 69;
+                zpatch_carparts_resume_if = MatchAddress(pattern, kResumeIfOffset);
+                zpatch_carparts_resume_else = MatchAddress(pattern, kResumeElseOffset);
             }
         }
 
@@ -1040,7 +1072,10 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                JumpTo(ctx, match - 6, OPP_BODY(abi_carparts_shadow));
+                // The six bytes before the match are the walker's prologue the
+                // shim replaces.
+                constexpr ptrdiff_t kCarPartsShimOffset = -6;
+                JumpTo(ctx, match + kCarPartsShimOffset, OPP_BODY(abi_carparts_shadow));
             }
         }
 
@@ -1096,8 +1131,14 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "8B 4C 24 2C 5F 5E 5B 33 CC B0 01 E8"); pattern.size() > 0)
             {
-                zpatch_cutscene_target = MatchAddress(pattern) + *pattern.get(0).get<uint32_t>(-4);
-                zpatch_cutscene_poke = MatchTarget(pattern, -4, 79);
+                // The `call [imm32]` operand at -4 names the camera callee; the
+                // poke target is that call's continuation (+79).
+                constexpr ptrdiff_t kCalleeOperand = -4;
+                constexpr ptrdiff_t kPokeNextOffset = 79;
+                zpatch_cutscene_target = MatchAddress(pattern) +
+                                         *pattern.get(0).get<uint32_t>(kCalleeOperand);
+                zpatch_cutscene_poke = MatchTarget(pattern, kCalleeOperand,
+                                                   kPokeNextOffset);
             }
         }
 
@@ -1115,7 +1156,9 @@ namespace opp::features
         {
             auto* match = pattern.get(0).get<uint8_t>();
 
-            CallTo(ctx, match - 5, OPP_BODY(abi_cutscene_chain_b));
+            // The two E8 call sites are 5 bytes before their matches.
+            constexpr ptrdiff_t kCallBeforeMatch = -5;
+            CallTo(ctx, match + kCallBeforeMatch, OPP_BODY(abi_cutscene_chain_b));
         }
 
         if (auto pattern = Pattern(image, "8B CF 88 44 24 0F E8 ? ? ? ? A1"); pattern.size() > 0)
@@ -1165,12 +1208,12 @@ namespace opp::features
         constexpr uint32_t kCutscenePokeOffset = kCutsceneShapePoke + kBranchLength;
         static_assert(kCutscenePokeOffset == 0x4Fu);
         constexpr uint32_t kCutsceneBranchOffset = 0x200u;
-        // The 14 `call rel32` offsets inside the copied cutscene shadow body:
+        // The 13 `call rel32` offsets inside the copied cutscene shadow body:
         // zpatch_relocate_calls re-points each at the same absolute target it
         // had in the game image after the copy moves.
         constexpr uint32_t kCutsceneCalls[] = {
             0x00Eu, 0x01Du, 0x092u, 0x0E9u, 0x0F1u, 0x101u, 0x118u,
-            0x127u, 0x13Cu, 0x233u, 0x24Cu, 0x286u, 0x29Au,  // 13 offsets total
+            0x127u, 0x13Cu, 0x233u, 0x24Cu, 0x286u, 0x29Au,  // 13 offsets
         };
 
         // The copy's own `call rel32`s only reach their targets if it lives
@@ -1208,13 +1251,17 @@ namespace opp::features
 
         void* CutsceneCalleeCopy(const GameImage& image, uintptr_t callee)
         {
-            // 55 8B EC 83 E4 = `push ebp; mov ebp,esp; and esp,-16`: the prologue the
-    // copied function starts with.
-    static constexpr uint8_t kPrologue[5] = {0x55u, 0x8Bu, 0xECu, 0x83u, 0xE4u};
+            // 55 8B EC 83 E4 = `push ebp; mov ebp,esp; and esp,-16`. The fifth
+            // byte is the `and` opcode: the F0 immediate is not compared here
+            // because the whole prologue is copied unchanged (the immediate
+            // relocates with it); this window only proves the function shape.
+            static constexpr uint8_t kPrologue[5] = {0x55u, 0x8Bu, 0xECu, 0x83u, 0xE4u};
             // C6 44 24 1C 01 = `mov byte ptr [esp+0x1C], 1`: the shape poke itself.
-    static constexpr uint8_t kPokeSite[5] = {0xC6u, 0x44u, 0x24u, 0x1Cu, 0x01u};
-            // 74 24 8B 44 24 2C 83 F8 = `jz +0x24; mov eax,[esp+0x2C]; cmp eax,-8`.
-    static constexpr uint8_t kBranchSite[8] = {0x74u, 0x24u, 0x8Bu,
+            static constexpr uint8_t kPokeSite[5] = {0xC6u, 0x44u, 0x24u, 0x1Cu, 0x01u};
+            // 74 24 8B 44 24 2C 83 F8 = `jz +0x24; mov eax,[esp+0x2C]; cmp eax,imm8`.
+            // The imm8 (-8 on 1.0.8.0) is copied with the body, so the 8-byte
+            // window stops at the `cmp` opcode.
+            static constexpr uint8_t kBranchSite[8] = {0x74u, 0x24u, 0x8Bu,
                                                        0x44u, 0x24u, 0x2Cu,
                                                        0x83u, 0xF8u};
             if (callee == 0u || !InImage(image, callee) ||
@@ -1297,11 +1344,20 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "8B 17 8B 42 64 8B CF FF D0 8B 54"); pattern.size() > 0)
             {
-                zpatch_dual_bcc = *pattern.get(0).get<uint32_t>(207);
-                zpatch_dual_bd4 = MatchTarget(pattern, 331, 335);
-                zpatch_dual_bd0 = MatchTarget(pattern, 140, 144);
-                zpatch_dual_be4 = MatchTarget(pattern, 151, 155);
-                zpatch_dual_be0 = MatchAddress(pattern, 338);
+                // The recovered slots inside the dual-headlights body: the
+                // stored pointer at +207, the two call targets at +140/+331 and
+                // +151 (operands), and the absolute slot at +338.
+                constexpr ptrdiff_t kBccPointerOperand = 207;
+                constexpr ptrdiff_t kBd0CallOperand = 140;
+                constexpr ptrdiff_t kBd4CallOperand = 331;
+                constexpr ptrdiff_t kBe4CallOperand = 151;
+                constexpr ptrdiff_t kBe0AddressOffset = 338;
+                auto* match = pattern.get(0).get<uint8_t>();
+                zpatch_dual_bcc = *pattern.get(0).get<uint32_t>(kBccPointerOperand);
+                zpatch_dual_bd4 = BranchDestination(match, kBd4CallOperand);
+                zpatch_dual_bd0 = BranchDestination(match, kBd0CallOperand);
+                zpatch_dual_be4 = BranchDestination(match, kBe4CallOperand);
+                zpatch_dual_be0 = MatchAddress(pattern, kBe0AddressOffset);
             }
         }
 
@@ -1355,8 +1411,12 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "F3 0F 58 C1 F3 0F 2A C8 F3 0F 58 C1"); pattern.size() > 0)
             {
-                zpatch_emissive_const = MatchAddress(pattern, -16);
-                zpatch_emissive_resume = MatchAddress(pattern, -12);
+                // The const float and the resume the shim published: 16 and 12
+                // bytes before the match.
+                constexpr ptrdiff_t kEmissiveConstOffset = -16;
+                constexpr ptrdiff_t kEmissiveResumeOffset = -12;
+                zpatch_emissive_const = MatchAddress(pattern, kEmissiveConstOffset);
+                zpatch_emissive_resume = MatchAddress(pattern, kEmissiveResumeOffset);
             }
         }
 
@@ -1379,7 +1439,9 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                JumpTo(ctx, match - 24, OPP_BODY(abi_emissive_lerp_shim));
+                // The shim replaces the 24 bytes before the match (its prologue).
+                constexpr ptrdiff_t kEmissiveShimOffset = -24;
+                JumpTo(ctx, match + kEmissiveShimOffset, OPP_BODY(abi_emissive_lerp_shim));
             }
         }
 
@@ -1400,7 +1462,10 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "55 8B EC 83 E4 F0 81 EC D4 00 00 00 8B 45 20 8B"); pattern.size() > 0)
             {
-                zpatch_fchs_resume = MatchAddress(pattern, 12);
+                // `and esp,-16` (4 bytes) + `sub esp,0xD4` (8 bytes) = the 12
+                // bytes the shim's prologue replay covers.
+                constexpr ptrdiff_t kFchsResumeOffset = 12;
+                zpatch_fchs_resume = MatchAddress(pattern, kFchsResumeOffset);
             }
         }
 
@@ -1423,13 +1488,20 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                // The original's ForceCarHeadlightShadows arm writes two
-                // `jmp` opcodes (+6, +379) and re-points the branch at +95 to
-                // match+476.
-                WriteValue<uint8_t>(ctx, match + 6, opp::ops::kJmpRel8);
-                JumpTo(ctx, match + 95, reinterpret_cast<void*>(match + 476));
-                WriteValue<uint8_t>(ctx, match + 379, opp::ops::kJmpRel8);
-                WriteValue<uint32_t>(ctx, match + 211, AddressOf(&zpatch_fchs_offset));
+                // The original's ForceCarHeadlightShadows arm writes two `jmp`
+                // opcodes (+6, +379), re-points the branch at +95 to match+476 and
+                // stores our cone-offset address at +211.
+                constexpr ptrdiff_t kFirstJmp = 6;
+                constexpr ptrdiff_t kRepointedBranch = 95;
+                constexpr ptrdiff_t kRepointedTarget = 476;
+                constexpr ptrdiff_t kSecondJmp = 379;
+                constexpr ptrdiff_t kConeOffsetOperand = 211;
+                WriteValue<uint8_t>(ctx, match + kFirstJmp, opp::ops::kJmpRel8);
+                JumpTo(ctx, match + kRepointedBranch,
+                       reinterpret_cast<void*>(match + kRepointedTarget));
+                WriteValue<uint8_t>(ctx, match + kSecondJmp, opp::ops::kJmpRel8);
+                WriteValue<uint32_t>(ctx, match + kConeOffsetOperand,
+                                     AddressOf(&zpatch_fchs_offset));
             }
 
             if (auto pattern = Pattern(image, "55 8B EC 83 E4 F0 81 EC D4 00 00 00 8B 45 20 8B"); pattern.size() > 0)
@@ -1494,7 +1566,10 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                WriteValue<uint8_t>(ctx, match + 7, opp::ops::kJmpRel8);
+                // The `jz` at +7 becomes an unconditional skip.
+                constexpr ptrdiff_t kShadowBranchOffset = 7;
+                WriteValue<uint8_t>(ctx, match + kShadowBranchOffset,
+                                    opp::ops::kJmpRel8);
             }
         }
 
