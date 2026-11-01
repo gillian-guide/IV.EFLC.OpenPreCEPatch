@@ -2,6 +2,7 @@
 // Declarations shared by the loader, the installers and the hook bodies.
 
 #include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -156,6 +157,7 @@ using ModelIndexResolver = int (*)(std::uint32_t, void*);
 // The original's on-disk default for the popup angle: pi/2 rounded to float
 // (0x3FC90FDB).
 constexpr float kDefaultPopupAngleRadians = 1.5707963705062866f;
+static_assert(std::bit_cast<std::uint32_t>(kDefaultPopupAngleRadians) == 0x3FC90FDBu);
 
 struct PopupLightSelection
 {

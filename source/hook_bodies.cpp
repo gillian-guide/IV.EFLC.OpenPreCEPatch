@@ -79,7 +79,7 @@ constexpr std::size_t kModelRegistryStride = 0xE0;
 static_assert(kModelRegistryStride == 224u);
 constexpr std::uint16_t kOocPadMask = 0x1Fu << 11;
 constexpr std::uint16_t kClearedLowBit = 0xFFFEu;          // clears flag bit 0
-constexpr std::size_t kSpawnsNameCapacity = 0x40u;  // ooc name buffer
+constexpr std::size_t kSpawnsNameCapacity = 0x40u;  // name scratch (spawn/nolivery/ped)
 constexpr std::uint32_t kFlagBit4 = 1u << 4;               // object flag bit 4
 constexpr std::uint32_t kModelRegistryCountOffset = 0x14u; // +0: count
 constexpr std::uint32_t kModelEntryBoneOffset = 0x14u;     // name +0, bone +0x14
@@ -143,6 +143,12 @@ constexpr std::size_t kSaveFilePathCapacity = 560;
 struct FreeDeleter final
 {
 	void operator()(void* pointer) const noexcept { std::free(pointer); }
+};
+
+// The DLC discovery scratch is the original's `::operator new` block.
+struct OperatorDeleteDeleter final
+{
+	void operator()(void* pointer) const noexcept { ::operator delete(pointer); }
 };
 // NewSaves' flag16 restore branch: 75 26 = jne +0x26 (the two bytes the original
 // writes back over the forced short jump).
@@ -311,7 +317,9 @@ extern "C"
 	std::uint32_t zpatch_pre_fn_59b88 = 0;
 	std::uint32_t zpatch_pre_fn_5d63c = 0;
 	std::uint32_t zpatch_pre_fn_59cdc = 0;
-	// Hash salts: the on-disk (probe-hit) values of the original's ten dwords.
+	// Hash salts: opaque 32-bit fingerprints read by the scripting layer, not
+	// float bit patterns. The loader rewrites them only when its build probe
+	// misses (the fallback table in dllmain.cpp).
 	std::uint32_t zpatch_salt_28 = 0x6A6B4F18u;
 	std::uint32_t zpatch_salt_3c = 0x022B2DA9u;
 	std::uint32_t zpatch_salt_40 = 0x4BF36A32u;
@@ -721,6 +729,8 @@ std::uintptr_t FindGlobalSlot(std::string_view slot_name) noexcept
 // Game structure offsets used by the helpers below; the inline asm keeps the
 // numeric operands because MASM needs compile-time constants.
 constexpr std::size_t kModelIndexOffset = 0x2E;
+// CPed's class id: the original compares the vtable result against 6.
+constexpr char kPedModelClassId = 6;
 constexpr std::size_t kVehicleSteeringOffset = 0x10D8;
 constexpr std::size_t kVehicleBoneOffset = 0xE18;
 constexpr std::size_t kVehicleLockOwnerOffset = 0x84;
@@ -874,7 +884,7 @@ void abi_popup_check() noexcept
 		zpatch_popup_flag = 1;
 		return;
 	}
-	for (std::uint32_t i = 0; i < 512; ++i)
+	for (std::uint32_t i = 0; i < kVehicleLightSlotCount; ++i)
 	{
 		const std::uint32_t hash = zpatch_popuplights_models[i];
 		if (hash == 0) return;
@@ -882,7 +892,7 @@ void abi_popup_check() noexcept
 		lookup(hash, &out);
 		if (out != static_cast<std::int32_t>(zpatch_popup_model)) continue;
 		zpatch_popup_flag = 1;
-		for (std::uint32_t k = 0; k < 512; ++k)
+		for (std::uint32_t k = 0; k < kVehicleLightSlotCount; ++k)
 		{
 			if (zpatch_popup_hashes[k] != 0 &&
 			    zpatch_popup_hashes[k] == hash)
@@ -927,7 +937,7 @@ void abi_fchs_check() noexcept
 		++i;
 		// The original walks into adjacent .data instead; layout-specific and
 		// unreproducible.
-		if (i == 512u) return;
+		if (i == kVehicleLightSlotCount) return;
 		hash = hashes[i];
 		if (hash == 0u) return;
 	}
@@ -1169,7 +1179,7 @@ extern "C" void abi_bpm_check() noexcept
 	// `call eax`; preserve that contract (odd as it looks).
 	const char class_id = reinterpret_cast<char(__thiscall*)(void*)>(vtable[3])(
 	    const_cast<void*>(reinterpret_cast<const void*>(models)));
-	if (class_id == 6) return;
+	if (class_id == kPedModelClassId) return;
 	if (GetModuleHandleW(L"GTAC.dll") != nullptr)
 	{
 		const std::uint32_t modelHash =
@@ -1179,11 +1189,11 @@ extern "C" void abi_bpm_check() noexcept
 		std::uint32_t entity = zpatch_bpm_obj;
 		const char* who = reinterpret_cast<const char*>(static_cast<std::uintptr_t>(
 		    zpatch_script_call(zpatch_salt_c8, 1, &entity)));
-		char buffer[64];
-		std::snprintf(buffer, sizeof(buffer), "%s used a non-ped model (%s)", who,
+		std::array<char, kSpawnsNameCapacity> buffer;
+		std::snprintf(buffer.data(), buffer.size(), "%s used a non-ped model (%s)", who,
 		              model_name);
 		const std::uint32_t text = static_cast<std::uint32_t>(
-		    reinterpret_cast<std::uintptr_t>(buffer));
+		    reinterpret_cast<std::uintptr_t>(buffer.data()));
 		zpatch_script_call(kScriptCallHash, 1, &text);
 	}
 	const std::uint32_t hash = GameHash("m_y_multiplayer");
@@ -1370,40 +1380,45 @@ extern "C" void zpatch_local_settings_capture_cwd() noexcept
 // first ANSI destination is hardcoded "GTA IV"). Called between pushad/popad.
 namespace
 {
-void zpatch_build_ansi_path(char* out, const char* name) noexcept
+constexpr std::string_view kSavesPrefix = "\\saves\\";
+constexpr std::wstring_view kSavesPrefixWide = L"\\saves\\";
+// The two local name buffers: "\saves\GTA IV\" fits the 16-byte one, the
+// episode names ("TBoGT") the 32-byte ones.
+constexpr std::size_t kIvPathNameCapacity = 16;
+constexpr std::size_t kEpisodeNameCapacity = 32;
+
+void zpatch_build_ansi_path(std::span<char> out, std::string_view name) noexcept
 {
-	const char prefix[] = "\\saves\\";
 	std::size_t o = 0;
-	for (const char* s = prefix; *s; ++s) out[o++] = *s;
-	for (const char* s = name; *s; ++s) out[o++] = *s;
+	for (const char c : kSavesPrefix) out[o++] = c;
+	for (const char c : name) out[o++] = c;
 	out[o++] = '\\';
 	out[o] = '\0';
 }
-void zpatch_build_wide_path(wchar_t* out, const wchar_t* name) noexcept
+void zpatch_build_wide_path(std::span<wchar_t> out, std::wstring_view name) noexcept
 {
-	const wchar_t prefix[] = L"\\saves\\";
 	std::size_t o = 0;
-	for (const wchar_t* s = prefix; *s; ++s) out[o++] = *s;
-	for (const wchar_t* s = name; *s; ++s) out[o++] = *s;
+	for (const wchar_t c : kSavesPrefixWide) out[o++] = c;
+	for (const wchar_t c : name) out[o++] = c;
 	out[o++] = L'\\';
 	out[o] = 0;
 }
 // The original copies with strcpy_s/wcscpy_s (cap 0x200); these write the same
 // bytes without the static CRT's secure-copy path.
-void zpatch_copy_path(char* dst, std::size_t cap, const char* src) noexcept
+void zpatch_copy_path(std::span<char> dst, std::string_view src) noexcept
 {
 	std::size_t n = 0;
-	while (n + 1 < cap && src[n] != '\0')
+	while (n + 1 < dst.size() && src[n] != '\0')
 	{
 		dst[n] = src[n];
 		++n;
 	}
 	dst[n] = '\0';
 }
-void zpatch_copy_wpath(wchar_t* dst, std::size_t cap, const wchar_t* src) noexcept
+void zpatch_copy_wpath(std::span<wchar_t> dst, std::wstring_view src) noexcept
 {
 	std::size_t n = 0;
-	while (n + 1 < cap && src[n] != 0)
+	while (n + 1 < dst.size() && src[n] != 0)
 	{
 		dst[n] = src[n];
 		++n;
@@ -1434,30 +1449,34 @@ extern "C" void zpatch_local_settings_step() noexcept
 		ansi_name = "TBoGT";
 		wide_name = L"TBoGT";
 	}
-	char ansi_iv[16];
-	char ansi_episode[32];
-	wchar_t wide_episode[32];
+	std::array<char, kIvPathNameCapacity> ansi_iv;
+	std::array<char, kEpisodeNameCapacity> ansi_episode;
+	std::array<wchar_t, kEpisodeNameCapacity> wide_episode;
 	// sub_10050D10 copies the literal "\saves\GTA IV\" into ansi_iv, independent
 	// of the episode.
 	zpatch_build_ansi_path(ansi_iv, "GTA IV");
 	zpatch_build_ansi_path(ansi_episode, ansi_name);
 	zpatch_build_wide_path(wide_episode, wide_name);
 	if (zpatch_local_path_18)
-		zpatch_copy_path(reinterpret_cast<char*>(static_cast<std::uintptr_t>(
-		                     zpatch_local_path_18)),
-		                 kSettingsPathCapacity, ansi_iv);
+		zpatch_copy_path({reinterpret_cast<char*>(static_cast<std::uintptr_t>(
+		                      zpatch_local_path_18)),
+		                  kSettingsPathCapacity},
+		                 ansi_iv.data());
 	if (zpatch_local_path_08)
-		zpatch_copy_path(reinterpret_cast<char*>(static_cast<std::uintptr_t>(
-		                     zpatch_local_path_08)),
-		                 kSettingsPathCapacity, ansi_episode);
+		zpatch_copy_path({reinterpret_cast<char*>(static_cast<std::uintptr_t>(
+		                      zpatch_local_path_08)),
+		                  kSettingsPathCapacity},
+		                 ansi_episode.data());
 	if (zpatch_local_path_1c)
-		zpatch_copy_wpath(reinterpret_cast<wchar_t*>(static_cast<std::uintptr_t>(
-		                      zpatch_local_path_1c)),
-		                  kSettingsPathCapacity, wide_episode);
+		zpatch_copy_wpath({reinterpret_cast<wchar_t*>(static_cast<std::uintptr_t>(
+		                       zpatch_local_path_1c)),
+		                   kSettingsPathCapacity},
+		                  wide_episode.data());
 	if (zpatch_local_path_10)
-		zpatch_copy_wpath(reinterpret_cast<wchar_t*>(static_cast<std::uintptr_t>(
-		                      zpatch_local_path_10)),
-		                  kSettingsPathCapacity, wide_episode);
+		zpatch_copy_wpath({reinterpret_cast<wchar_t*>(static_cast<std::uintptr_t>(
+		                       zpatch_local_path_10)),
+		                   kSettingsPathCapacity},
+		                  wide_episode.data());
 	zpatch_cookie_tail();
 }
 
@@ -1467,45 +1486,60 @@ extern "C" void zpatch_local_settings_step() noexcept
 // The originals take ECX=object, EDX=vehicle; naked wrappers forward to these.
 namespace
 {
+// The recovered garage layout: the hash bytes are the original's four scattered
+// stores, the vehicle's model is at +0x2E, its ped entry's hash at +0x3C, and
+// the rebuilt object carries the index at +0x10 and the flag word at +0x30.
+constexpr std::size_t kGarageHashByte0 = 64;   // object+0x40
+constexpr std::size_t kGarageHashByte1 = 19;   // object+0x13
+constexpr std::size_t kGarageHashByte2 = 65;   // object+0x41
+constexpr std::size_t kGarageHashByte3 = 70;   // object+0x46
+constexpr std::size_t kGarageVehicleModelOffset = 46;  // vehicle+0x2E
+constexpr std::size_t kGaragePedHashOffset = 60;       // ped entry+0x3C
+constexpr std::size_t kGarageIndexOffset = 16;         // object+0x10
+constexpr std::size_t kGarageFlagsOffset = 48;         // object+0x30
+constexpr std::int32_t kGarageModelLimit = 32000;
+constexpr std::int32_t kGarageInvalidModel = 65534;    // 0xFFFE write-back
 void zpatch_garage_store_c(std::uint8_t* object, const std::uint8_t* vehicle) noexcept
 {
 	if (zpatch_citizen_present) return;
 	const std::int16_t model =
-	    *reinterpret_cast<const std::int16_t*>(vehicle + 46);
+	    *reinterpret_cast<const std::int16_t*>(vehicle + kGarageVehicleModelOffset);
 	const auto base = static_cast<std::uintptr_t>(zpatch_pre_ped_array);
 	const std::uint32_t entry = *reinterpret_cast<const std::uint32_t*>(
-	    base + 4u * static_cast<std::uint32_t>(model));
+	    base + sizeof(std::uint32_t) * static_cast<std::uint32_t>(model));
 	const std::uint32_t hash = *reinterpret_cast<const std::uint32_t*>(
-	    reinterpret_cast<const std::uint8_t*>(static_cast<std::uintptr_t>(entry)) + 60);
-	object[64] = static_cast<std::uint8_t>(hash >> 8);
-	object[19] = static_cast<std::uint8_t>(hash);
-	object[65] = static_cast<std::uint8_t>(hash >> 16);
-	object[70] = static_cast<std::uint8_t>(hash >> 24);
+	    reinterpret_cast<const std::uint8_t*>(static_cast<std::uintptr_t>(entry)) +
+	    kGaragePedHashOffset);
+	object[kGarageHashByte0] = static_cast<std::uint8_t>(hash >> 8);
+	object[kGarageHashByte1] = static_cast<std::uint8_t>(hash);
+	object[kGarageHashByte2] = static_cast<std::uint8_t>(hash >> 16);
+	object[kGarageHashByte3] = static_cast<std::uint8_t>(hash >> 24);
 }
 std::int32_t zpatch_garage_lookup_c(std::uint8_t* object) noexcept
 {
-	std::uint32_t hash = object[19];
-	hash |= (static_cast<std::uint32_t>(object[64]) |
-	         ((static_cast<std::uint32_t>(object[65]) |
-	           (static_cast<std::uint32_t>(object[70]) << 8))
+	std::uint32_t hash = object[kGarageHashByte1];
+	hash |= (static_cast<std::uint32_t>(object[kGarageHashByte0]) |
+	         ((static_cast<std::uint32_t>(object[kGarageHashByte2]) |
+	           (static_cast<std::uint32_t>(object[kGarageHashByte3]) << 8))
 	          << 8))
 	        << 8;
-	const std::int32_t original = static_cast<std::int32_t>(object[19]);
+	const std::int32_t original = static_cast<std::int32_t>(object[kGarageHashByte1]);
 	if (hash == 0u) return original;
 	// 0x10046C10 / 0x10046C4A call dword_10159C0C unguarded.
 	const auto lookup = reinterpret_cast<int(__cdecl*)(std::uint32_t, std::int32_t*)>(
 	    static_cast<std::uintptr_t>(zpatch_model_lookup));
 	std::int32_t out = -1;
 	lookup(hash, &out);
-	if (out <= 0 || out >= 32000)
+	if (out <= 0 || out >= kGarageModelLimit)
 	{
 		out = -1;
 		lookup(kSuperLodFallbackHash, &out);
-		*reinterpret_cast<std::int16_t*>(object + 16) = static_cast<std::int16_t>(out);
-		*reinterpret_cast<std::uint16_t*>(object + 48) &= kClearedLowBit;
-		return 65534;
+		*reinterpret_cast<std::int16_t*>(object + kGarageIndexOffset) =
+		    static_cast<std::int16_t>(out);
+		*reinterpret_cast<std::uint16_t*>(object + kGarageFlagsOffset) &= kClearedLowBit;
+		return kGarageInvalidModel;
 	}
-	*reinterpret_cast<std::int16_t*>(object + 16) = static_cast<std::int16_t>(out);
+	*reinterpret_cast<std::int16_t*>(object + kGarageIndexOffset) = static_cast<std::int16_t>(out);
 	return out;
 }
 }  // namespace
@@ -3517,13 +3551,13 @@ __declspec(naked) void abi_driveby_fov_shim()
 // published function as `__thiscall(this, hash)`.
 extern "C" void abi_nolivery_hash_sign()  // sub_1003D220
 {
-	char buffer[64];
+	std::array<char, kSpawnsNameCapacity> buffer;
 	// Original: sprintf(buffer, 0x40, "%s_sign_%d", name, index + 1).
 	zpatch_spawns_sprintf(
-	    buffer, sizeof(buffer), "%s_sign_%d",
+	    buffer.data(), buffer.size(), "%s_sign_%d",
 	    reinterpret_cast<const char*>(static_cast<std::uintptr_t>(zpatch_nolivery_name)),
 	    static_cast<int>(zpatch_nolivery_index) + 1);
-	zpatch_nolivery_hash = GameHash(buffer);
+	zpatch_nolivery_hash = GameHash(buffer.data());
 	zpatch_cookie_tail();
 }
 extern "C" void abi_nolivery_copy_name()  // sub_1003D2F0
@@ -3545,10 +3579,10 @@ extern "C" void abi_nolivery_count_loop()  // sub_1003D270
 	zpatch_nolivery_count = 0;
 	for (std::uint32_t i = 1;; ++i)
 	{
-		char buffer[64];
-		zpatch_spawns_sprintf(buffer, sizeof(buffer), "%s_sign_%d", name,
+		std::array<char, kSpawnsNameCapacity> buffer;
+		zpatch_spawns_sprintf(buffer.data(), buffer.size(), "%s_sign_%d", name,
 		                      static_cast<int>(i));
-		const int result = fn ? fn(self, 0, GameHash(buffer)) : 0;
+		const int result = fn ? fn(self, 0, GameHash(buffer.data())) : 0;
 		if (result == 0) break;
 		zpatch_nolivery_count = i;
 	}
@@ -3883,7 +3917,7 @@ extern "C" int abi_copsirens_check_a()  // sub_10005F70
 		volatile std::uint32_t* flag = &zpatch_copsirens_flag;
 		*flag = *flag;
 	}
-	for (int i = 0; i < 512 && zpatch_copsirens_models[i]; ++i)
+	for (int i = 0; i < static_cast<int>(kVehicleLightSlotCount) && zpatch_copsirens_models[i]; ++i)
 	{
 		std::int32_t out = -1;
 		lookup(zpatch_copsirens_models[i], &out);
@@ -3907,7 +3941,7 @@ extern "C" int abi_copsirens_check_b()  // sub_10006260
 	if (out != index)
 	{
 		if (!zpatch_copsirens_models[0]) return 0;
-		for (int i = 0; i < 512 && zpatch_copsirens_models[i]; ++i)
+		for (int i = 0; i < static_cast<int>(kVehicleLightSlotCount) && zpatch_copsirens_models[i]; ++i)
 		{
 			out = -1;
 			lookup(zpatch_copsirens_models[i], &out);
@@ -3977,7 +4011,7 @@ extern "C" void abi_ide_parse()  // sub_10003FA0
 		const float angle = std::strtof(str + 11, nullptr);
 		std::uint32_t bits = 0;
 		std::memcpy(&bits, &angle, sizeof(bits));
-		for (int i = 0; i < 512; ++i)
+		for (int i = 0; i < static_cast<int>(kVehicleLightSlotCount); ++i)
 		{
 			if (zpatch_wheelangle_models[i] == model) return;
 			if (zpatch_wheelangle_models[i] == 0)
@@ -4402,16 +4436,29 @@ extern "C" __declspec(naked) void __cdecl zpatch_dlc_apply_capture_edx(
 	}
 }
 
-// The 0x104-byte path buffers sub_10023150 builds for each DLC folder.
+// The 0x104-byte path buffers sub_10023150 builds for each DLC folder, and the
+// request struct it fills: the path copy, the flag at +358 and the mode dword
+// at +344.
 constexpr std::size_t kDlcPathCapacity = 0x104u;
+constexpr std::size_t kDlcRequestCapacity = 360;
+constexpr std::size_t kDlcRequestFlagOffset = 358;
+constexpr std::size_t kDlcRequestModeOffset = 344;
+constexpr std::size_t kDlcObjectFlagOffset = 358;  // object+358 = 2 after the walk
+constexpr int kTladDlcId = 2;
+constexpr int kTbogtDlcId = 4;
+constexpr int kEpisodeChannelStart = 3;
+constexpr int kEpisodeChannelEnd = 255;   // one past the last channel
+constexpr int kEpisodeChannelScale = 2;
+constexpr int kEpisode254Channel = 508;   // 2 * 254
 
 void* dlc_discovery_post(void* object)
 {
-	auto* const module_path = static_cast<char*>(::operator new(kDlcPathCapacity));
-	// Original ignores the return value and continues with the allocator buffer
-	// (sub_10023150); a failed GetModuleFileNameA is not a clean early return.
-	GetModuleFileNameA(nullptr, module_path, kDlcPathCapacity);
-	PathRemoveFileSpecA(module_path);
+	// The original allocates this block unchecked and never frees it; owning it
+	// only changes its lifetime (no value or fault differs).
+	std::unique_ptr<char, OperatorDeleteDeleter> module_path(
+	    static_cast<char*>(::operator new(kDlcPathCapacity)));
+	GetModuleFileNameA(nullptr, module_path.get(), kDlcPathCapacity);
+	PathRemoveFileSpecA(module_path.get());
 	std::uint32_t last_apply_edx = 0;
 	bool episode254_registered = false;
 
@@ -4419,39 +4466,39 @@ void* dlc_discovery_post(void* object)
 	// otherwise the legacy fallback; it never registers both.
 	const auto try_paths = [&](const char* primary, const char* fallback, int id)
 	{
-		char path[kDlcPathCapacity];
-		strcpy_s(path, kDlcPathCapacity, module_path);
-		strcat_s(path, kDlcPathCapacity, primary);
-		if (!PathFileExistsA(path))
+		std::array<char, kDlcPathCapacity> path;
+		strcpy_s(path.data(), path.size(), module_path.get());
+		strcat_s(path.data(), path.size(), primary);
+		if (!PathFileExistsA(path.data()))
 		{
 			if (std::strcmp(primary, fallback) == 0) return;
-			strcpy_s(path, kDlcPathCapacity, module_path);
-			strcat_s(path, kDlcPathCapacity, fallback);
-			if (!PathFileExistsA(path)) return;
+			strcpy_s(path.data(), path.size(), module_path.get());
+			strcat_s(path.data(), path.size(), fallback);
+			if (!PathFileExistsA(path.data())) return;
 		}
-		char request[360]{};
-		strcpy_s(request, kDlcPathCapacity, path);
-		request[358] = 1;
-		*reinterpret_cast<std::uint32_t*>(request + 344) = 1;
+		std::array<char, kDlcRequestCapacity> request{};
+		strcpy_s(request.data(), kDlcPathCapacity, path.data());
+		request[kDlcRequestFlagOffset] = 1;
+		*reinterpret_cast<std::uint32_t*>(request.data() + kDlcRequestModeOffset) = 1;
 		const auto game_base = reinterpret_cast<std::uintptr_t>(GetModuleHandleA(nullptr));
 		const auto register_fn = reinterpret_cast<DlcRegisterFn>(
 		    game_base + DlcRegisterRva());
 		const auto apply_fn = reinterpret_cast<DlcApplyFn>(
 		    game_base + DlcApplyRva());
-		register_fn(id, request, 1);
-		zpatch_dlc_apply_capture_edx(object, request, apply_fn, &last_apply_edx);
-		if (id == 508) episode254_registered = true;
+		register_fn(id, request.data(), 1);
+		zpatch_dlc_apply_capture_edx(object, request.data(), apply_fn, &last_apply_edx);
+		if (id == kEpisode254Channel) episode254_registered = true;
 	};
 
-	try_paths("\\dlc\\tlad\\content\\", "\\TLAD\\", 2);
-	try_paths("\\dlc\\TBoGT\\content\\", "\\TBoGT\\", 4);
-	for (int i = 3; i < 255; ++i)
+	try_paths("\\dlc\\tlad\\content\\", "\\TLAD\\", kTladDlcId);
+	try_paths("\\dlc\\TBoGT\\content\\", "\\TBoGT\\", kTbogtDlcId);
+	for (int i = kEpisodeChannelStart; i < kEpisodeChannelEnd; ++i)
 	{
-		char suffix[kEpisodeSuffixCapacity];
-		zpatch_spawns_sprintf(suffix, sizeof(suffix), "\\Episode%d\\", i);
-		try_paths(suffix, suffix, 2 * i);
+		std::array<char, kEpisodeSuffixCapacity> suffix;
+		zpatch_spawns_sprintf(suffix.data(), suffix.size(), "\\Episode%d\\", i);
+		try_paths(suffix.data(), suffix.data(), kEpisodeChannelScale * i);
 	}
-	*reinterpret_cast<std::uint8_t*>(static_cast<std::uint8_t*>(object) + 358) = 2;
+	*reinterpret_cast<std::uint8_t*>(static_cast<std::uint8_t*>(object) + kDlcObjectFlagOffset) = 2;
 	// sub_10023150's final sub_10001280 call leaves its 0x40 buffer size in EDX;
 	// PathFileExistsA preserves EDX and the caller's resume observes it. If
 	// Episode254 exists, its final apply call is the last EDX producer instead
@@ -4953,6 +5000,20 @@ struct OocPakEntry final
 };
 static_assert(sizeof(OocPakEntry) == 44);
 
+// The single registered entry's name (used by the entry, the archive header and
+// the self-test) and the archive's fixed offsets.
+constexpr char kOocName[] = "finale2.sco";
+constexpr std::size_t kOocNameLength = sizeof(kOocName) - 1;
+constexpr std::size_t kOocHeaderSize = 20;
+constexpr std::size_t kOocRecordSize = 16;
+constexpr std::size_t kOocRecordSizeOffset = 0;    // physical size dword
+constexpr std::size_t kOocRecordIndexOffset = 8;   // entry index dword
+constexpr std::size_t kOocRecordPagesOffset = 12;  // page count word
+constexpr std::size_t kOocRecordPadOffset = 14;    // padding word
+constexpr std::size_t kOocArchiveRecordOffset = kOocHeaderSize;
+constexpr std::size_t kOocArchiveRecordTagOffset = kOocArchiveRecordOffset + 12;
+constexpr std::size_t kOocArchiveNameOffset = kOocArchiveRecordOffset + kOocRecordSize;
+
 // The fake-pak vector is the original's own global storage: begin/end/
 // capacity are the handler's dwords, so its growth keeps ::operator new and
 // ::operator delete and the raw pointers. That is recovered ABI state, not a
@@ -4985,9 +5046,9 @@ void zpatch_ooc_register_entry(unsigned char* table)
 	}
 
 	OocPakEntry entry{};
-	std::memcpy(entry.name_buffer, "finale2.sco", sizeof("finale2.sco"));
-	entry.name_size = 11u;
-	entry.name_capacity = 15u;
+	std::memcpy(entry.name_buffer, kOocName, sizeof(kOocName));
+	entry.name_size = static_cast<std::uint32_t>(kOocNameLength);
+	entry.name_capacity = static_cast<std::uint32_t>(sizeof(entry.name_buffer) - 1);
 	entry.file_size = static_cast<std::uint32_t>(kOocTableSize);
 	entry.data = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(table));
 	std::memcpy(end, &entry, sizeof(entry));
@@ -5221,33 +5282,35 @@ constexpr std::uint32_t kOocPageSize = 2048u;
 		zpatch_ooc_store(&zpatch_ooc_archive_offset, offset);
 	};
 	zpatch_ooc_store(&zpatch_ooc_archive_offset, 0);
-	const char name[] = "finale2.sco";
-	const std::uint32_t name_bytes = sizeof(name);  // includes the NUL
+	const std::uint32_t name_bytes = sizeof(kOocName);  // includes the NUL
 	struct OocHeader final
 	{
 		std::uint32_t fields[4];
 		std::uint16_t words[2];
 	};
-	static_assert(sizeof(OocHeader) == 20);
+	static_assert(sizeof(OocHeader) == kOocHeaderSize);
 	const OocHeader header{{kOocArchiveMagic, 3u, 1u, name_bytes + 16u},
 	                       {kOocHeaderPage, kOocHeaderOp}};
 	append(&header, sizeof(header));
-	unsigned char record[16] = {};
-	std::memcpy(record, &size, 4);                 // physical size (entry[0x20])
-	const std::uint32_t index = 1u;                // v9 + 1
-	std::memcpy(record + 8, &index, 4);
+	std::array<unsigned char, kOocRecordSize> record{};
+	std::memcpy(record.data() + kOocRecordSizeOffset, &size,
+	            sizeof(size));  // physical size (entry[0x20])
+	const std::uint32_t index = 1u;  // v9 + 1
+	std::memcpy(record.data() + kOocRecordIndexOffset, &index, sizeof(index));
 	const std::uint16_t record_pages = static_cast<std::uint16_t>(pages);
-	std::memcpy(record + 12, &record_pages, 2);    // sub_1004ABB0
+	std::memcpy(record.data() + kOocRecordPagesOffset, &record_pages,
+	            sizeof(record_pages));  // sub_1004ABB0
 	if (remainder != 0u)
 	{
 		const std::uint16_t padding =
 		    static_cast<std::uint16_t>(kOocPageSize - remainder);
 		const std::uint16_t packed =
 		    static_cast<std::uint16_t>((static_cast<std::uint16_t>(0u) & kOocPadMask) | padding);
-		std::memcpy(record + 14, &packed, 2);        // sub_1004AB90
+		std::memcpy(record.data() + kOocRecordPadOffset, &packed,
+		            sizeof(packed));  // sub_1004AB90
 	}
-	append(record, 16);
-	append(name, name_bytes);
+	append(record.data(), kOocRecordSize);
+	append(kOocName, name_bytes);
 	offset = kOocPageSize;                         // the original resets dword_10159C78
 	zpatch_ooc_store(&zpatch_ooc_archive_offset, offset);
 	append(table.get(), size);
@@ -5309,7 +5372,7 @@ extern "C" bool zpatch_ooc_selftest() noexcept
 	std::unique_ptr<unsigned char, FreeDeleter> archive =
 	    zpatch_ooc_build_archive(std::move(table), final_offset);
 	if (!archive) return false;
-	const std::uint32_t header[4] = {kOocArchiveMagic, 3u, 1u, 28u};
+	constexpr std::array<std::uint32_t, 4> header{kOocArchiveMagic, 3u, 1u, 28u};
 	bool header_ok = true;
 	for (int i = 0; i < 4; ++i)
 		header_ok = header_ok && std::memcmp(archive.get() + 4 * i, &header[i], 4) == 0;
@@ -5317,13 +5380,20 @@ extern "C" bool zpatch_ooc_selftest() noexcept
 	            archive.get()[18] == kOocHeaderOp && archive.get()[19] == 0u;
 	const std::uint32_t record_size = static_cast<std::uint32_t>(kOocTableSize);
 	const std::uint32_t record_index = 1u;
-	bool record_ok = std::memcmp(archive.get() + 20, &record_size, 4) == 0;
+	bool record_ok =
+	    std::memcmp(archive.get() + kOocArchiveRecordOffset, &record_size, 4) == 0;
 	const std::uint32_t zero = 0u;
-	record_ok = record_ok && std::memcmp(archive.get() + 24, &zero, 4) == 0 &&
-	            std::memcmp(archive.get() + 28, &record_index, 4) == 0;
-	record_ok = record_ok && archive.get()[32] == 88u && archive.get()[33] == 0u &&
-	            archive.get()[34] == kOocRecordTag && archive.get()[35] == kOocRecordTag2;
-	const bool name_ok = std::memcmp(archive.get() + 36, "finale2.sco", 12) == 0;
+	record_ok =
+	    record_ok &&
+	    std::memcmp(archive.get() + kOocArchiveRecordOffset + 4, &zero, 4) == 0 &&
+	    std::memcmp(archive.get() + kOocArchiveRecordOffset + kOocRecordIndexOffset,
+	                &record_index, 4) == 0;
+	record_ok = record_ok && archive.get()[kOocArchiveRecordTagOffset] == 88u &&
+	            archive.get()[kOocArchiveRecordTagOffset + 1] == 0u &&
+	            archive.get()[kOocArchiveRecordTagOffset + 2] == kOocRecordTag &&
+	            archive.get()[kOocArchiveRecordTagOffset + 3] == kOocRecordTag2;
+	const bool name_ok =
+	    std::memcmp(archive.get() + kOocArchiveNameOffset, kOocName, sizeof(kOocName)) == 0;
 	return decoded && final_offset == kOocDecodedLength && table_adler == kOocTableAdler &&
 	       header_ok && record_ok && name_ok &&
 	       zpatch_ooc_fnv1a({archive.get(), final_offset}) == kOocArchiveFnv;

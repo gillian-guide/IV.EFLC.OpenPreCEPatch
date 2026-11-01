@@ -51,6 +51,7 @@ namespace
 constexpr double kPi = 3.141592653589793;
 // FUN_1001AD20's value when no [HeadlightConeOffsets] row matches.
 constexpr float kDefaultHeadlightOffset = 2.0f;
+static_assert(std::bit_cast<std::uint32_t>(kDefaultHeadlightOffset) == 0x40000000u);
 
 // One row of the two 512-slot tables: "Car<N>Name" or "Car<N>Angle"/"Car<N>Offset",
 // N in 1..512, no leading zero. Anything else in the section is ignored, exactly
