@@ -33,9 +33,8 @@ struct PatchResult final
 	constexpr explicit operator bool() const noexcept { return code == PatchResultCode::ok; }
 };
 
-// A bounded memory view to scan. FindPattern reads tokens the original way -
-// strtoul(token, nullptr, 16), low byte compared, "?" a wildcard - while the
-// scanner itself is the vendored CitizenFX one.
+// A bounded memory view to scan. FindPattern reads tokens the original way (strtoul
+// with low-byte compare, "?" a wildcard); the scanner is the vendored CitizenFX one.
 struct ModuleView
 {
 	const std::uint8_t* base{};
@@ -53,8 +52,7 @@ bool FindPattern(ModuleView module, std::string_view signature, Match& output) n
 std::size_t FindAllPatterns(ModuleView module, std::string_view signature,
                             std::vector<const std::uint8_t*>& output) noexcept;
 
-// The same signature in the strict "AA ?? BB" form hook::pattern takes; empty
-// when the signature has no tokens.
+// The signature in the strict "AA ?? BB" form hook::pattern takes; empty with no tokens.
 std::string NormalizeSignature(std::string_view signature);
 
 // 0x10003E50. "hash:NNNN" returns the parsed value (a 0 result falls back to
@@ -159,9 +157,9 @@ PopupLightSelection SelectPopupLight(
 float SelectHeadlightOffset(const VehicleLightTables&, int modelIndex, ModelIndexResolver,
                             void* context = nullptr) noexcept;
 
-// IVMenuAPI integration: when AddOptionsInMenu is on, the shipped mod probes
-// for the module (loading it once and caching the attempt) and registers the
-// two toggles through AddIVMenuOption (see the MenuRegistration rows).
+// IVMenuAPI integration: with AddOptionsInMenu on, the shipped mod probes for the
+// module (loading it once, caching the attempt) and registers the two toggles through
+// AddIVMenuOption (see the MenuRegistration rows).
 enum class MenuProbeResult
 {
 	disabled,
@@ -202,9 +200,9 @@ std::span<const MenuRegistration> MenuRegistrations() noexcept;
 // absent).
 std::size_t RegisterMenuOptions() noexcept;
 
-// The ZMenuIV compatibility guard (sub_10052300, called unconditionally at
-// 0x1005527B after the INI object is built). It asks GetZMenuVersion for the
-// menu's version and, below the minimum, shows a box and exits the process.
+// The ZMenuIV compatibility guard (sub_10052300, called unconditionally at 0x1005527B
+// after the INI object is built): ask GetZMenuVersion for the version and, below the
+// minimum, show a box and exit the process.
 constexpr std::uint32_t kZMenuMinVersion = 0x35DD1u;
 constexpr const char* kZMenuModuleName = "ZMenuIV.asi";
 constexpr const char* kZMenuProcName = "GetZMenuVersion";

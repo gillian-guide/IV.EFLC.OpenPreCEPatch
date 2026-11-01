@@ -1,9 +1,7 @@
-// The hook bodies' declarations (C linkage). Included inside an `extern "C"`
-// block by `src/hook_bodies.h` (the plain translation units and the write-set
-// dump's stubs) and by `source/hook_bodies.cpp` (so every body definition binds
-// to this declaration). Hand-maintained: there is no generator, so a body is
-// added here and in the implementation unit together; a missing row is a
-// compile error in the ASI and in tests/stub_bodies.cpp.
+// The hook bodies' declarations (C linkage). Included inside an `extern "C"` block by
+// `src/hook_bodies.h` and by `source/hook_bodies.cpp`, so every body definition binds to
+// this declaration. Hand-maintained: add a body here and in the implementation unit
+// together - a missing row is a compile error in the ASI and in tests/stub_bodies.cpp.
 void abi_aim_projectile_crash_fix();
 void abi_bad_player_model();
 void abi_benchmark_a();

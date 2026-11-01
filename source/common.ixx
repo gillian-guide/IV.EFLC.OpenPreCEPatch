@@ -1,8 +1,7 @@
 // zp.common - the pieces every module and the entry translation unit share.
 //
-// The header (`common.hxx`) carries the includes; this unit carries the actual
-// declarations. Layout follows GTAIV.EFLC.FusionFix: `module;` global fragment
-// with the includes, then `export module`, then the exported declarations.
+// The header (`common.hxx`) carries the includes; this unit carries the
+// declarations.
 
 module;
 
@@ -27,8 +26,8 @@ inline constexpr std::uintptr_t kUserModeCeiling = 0x80000000u;
 
 export
 {
-// The whitespace the INI reader and the signature parser skip: space, tab, CR,
-// LF, FF, VT.
+// The whitespace the INI reader and the signature parser skip: space, tab, CR, LF,
+// FF, VT.
 bool IsWhite(char c);
 
 // Trim both ends of the same whitespace set (the INI reader's rule).
@@ -41,13 +40,12 @@ inline constexpr std::uint8_t kNibbleMask = 0x0Fu;  // low hex digit
 // The four bytes of the little-endian dwords the original compares.
 inline constexpr std::size_t kDwordLength = sizeof(std::uint32_t);
 
-// The short-jump opcode the NewSaves flag toggle chooses between (its twin,
-// kJeRel8Opcode, lives with the body that writes it).
+// The short-jump opcode the NewSaves flag toggle chooses; its twin kJeRel8Opcode
+// lives with the body that writes it.
 inline constexpr std::uint8_t kShortJmpOpcode = 0xEBu;  // jmp rel8
 
-// A value an installer publishes for the game. The dump (ZP_DUMP_TOOL)
-// substitutes a fixed stand-in for its own addresses; in the ASI every value is
-// published unchanged.
+// A value an installer publishes for the game. The dump (ZP_DUMP_TOOL) substitutes
+// a fixed stand-in for its own addresses; the ASI publishes the value unchanged.
 std::uintptr_t PublishedAddress(std::uintptr_t value) noexcept;
 }  // export
 
@@ -73,11 +71,9 @@ std::string_view Trim(std::string_view value)
 #if defined(ZP_DUMP_TOOL)
 namespace
 {
-// The dump never runs the game, so a pointer into the tool itself can never be
-// used there. Publishing one would only record where the tool happened to load,
-// which is not part of the installer logic, so the dump substitutes a fixed
-// stand-in: the write still shows up, at the same site, with a value that does
-// not depend on the tool's layout.
+// The dump never runs the game, so a pointer into the tool itself is never usable
+// there: publishing one would only record where the tool happened to load. A fixed
+// stand-in keeps the write visible at the same site with a layout-independent value.
 constexpr std::uint32_t kDumpToolPointer = 0xD0000000u;
 
 bool IsToolPointer(std::uintptr_t address) noexcept

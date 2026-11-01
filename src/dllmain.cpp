@@ -4,11 +4,10 @@
 // game's import-time code by the time a deferred worker would get to scan, so the
 // signatures have to be matched now.
 //
-// The support code is split into FusionFix-style modules under `source/` (one
-// logical piece per .ixx). This is the only plain translation unit left: it keeps
-// the entry point, the loader pipeline (`SetStuff`), its helpers and the probe
-// (`FindGamePointers`). The install arms live in the feature modules and
-// `PatchGame` only walks them, in the order this tree has always run them.
+// This is the only plain translation unit left: the entry point, the loader pipeline
+// (`SetStuff`), its helpers and the probe (`FindGamePointers`). The install arms live
+// in the FusionFix-style modules under `source/` and `PatchGame` only walks them, in
+// the order this tree has always run them.
 
 #include "pch.h"
 
@@ -336,17 +335,12 @@ void ApplyLaunchWithPlayGTAIV(GameBuild build, GameImage image, INI<>& ini)
 	}
 }
 
-// ---- the loader pipeline -------------------------------------------------
+// `SetStuff` is the whole load-time pipeline, in the order the recovered loader runs
+// its stages. Each phase is one named step; the arms live in the feature modules and
+// `PatchGame` only walks them. The order is the behaviour: no phase may move.
 //
-// `SetStuff` is the whole load-time pipeline, in the order the recovered loader
-// runs its stages.
-// Each phase is one named step; the install arms themselves live in the feature
-// modules (`source/<feature>.ixx`) and `PatchGame` only walks them. The order is
-// the behaviour: no phase may move.
-//
-// The two load-bearing edges: the ZMenuIV guard runs even when the config load
-// fails (it follows config-object construction, unconditionally), and
-// RemoveUselessChecks runs before MiscFixes/RestoreDeathMusic, whose signatures
+// The two load-bearing edges: the ZMenuIV guard runs even when the config load fails,
+// and RemoveUselessChecks runs before MiscFixes/RestoreDeathMusic, whose signatures
 // its tables destroy (`zp_dump --ordering` pins that one).
 
 // FixPCIDKickbug: drop the GFWL CD-key value so keygen users stop kicking each
@@ -424,9 +418,8 @@ void SetStuff()
 	const bool initialized = ini.loaded() && LoadConfigAndFlags(ini, config);
 	TraceBoot("config");
 
-	// Phase 2: the unconditional guards.
-	// The ZMenuIV guard follows config-object construction and is unconditional, so
-	// a failed initialize must not suppress it.
+	// Phase 2: the unconditional guards. The ZMenuIV guard follows config-object
+	// construction, so a failed initialize must not suppress it.
 	TraceBoot("zmenu");
 	EnforceZMenuVersion();
 	if (!initialized)
@@ -485,12 +478,9 @@ void SetStuff()
 }
 } // namespace
 
-// ---- startup guards ------------------------------------------------------
-//
-// Generic startup logic, not a feature: the ZMenuIV guard asks the loaded menu
-// for its version and `EnforceZMenuVersion` above turns a rejection into the
-// original's message box and exit. The probe stays at global scope because the
-// native tests drive it directly.
+// Generic startup logic, not a feature: the ZMenuIV guard asks the loaded menu for its
+// version and `EnforceZMenuVersion` turns a rejection into the original's message box
+// and exit. The probe stays at global scope because the native tests drive it.
 
 ZMenuGuardResult ZMenuVersionGuard(std::uint32_t& version) noexcept
 {
@@ -512,11 +502,10 @@ ZMenuGuardResult ZMenuVersionGuard(std::uint32_t& version) noexcept
 }
 
 #if defined(ZP_PARITY_DRIVER)
-// Offline state driver only (readable/tests/state_dump.cpp); never compiled into
-// the shipped ASI. The driver must run the loader's own INI/flags arm and its
-// own SkipLauncher staging against a caller-owned mapped image instead of the
-// running process, so these forward to the same functions DllMain uses rather
-// than re-implementing them in the harness.
+// Offline state driver only (readable/tests/state_dump.cpp); never compiled into the
+// shipped ASI. It must run the loader's own INI/flags arm and SkipLauncher staging
+// against a caller-owned mapped image, so these forward to the same functions DllMain
+// uses rather than re-implementing them in the harness.
 bool ZpDriverLoadConfigAndFlags(INI<>& ini, ConfigDocument& config)
 {
 	return LoadConfigAndFlags(ini, config);
@@ -531,9 +520,9 @@ void ZpDriverApplySkipLauncher(GameBuild build, GameImage image, INI<>& ini,
                                SkipHookResolver resolver) noexcept
 {
 	// SetStuff's order: MiscFixes' arm owns the one-shot DFA pass, then
-	// ApplySkipLauncherIfEnabled adds whatever stages are still pending. The
-	// driver has no XLivelessAddon/GTAC module, so the `main` stage is always on
-	// and IsDFAAllowed depends only on the build.
+	// ApplySkipLauncherIfEnabled adds whatever stages are still pending. The driver has no
+	// XLivelessAddon/GTAC module, so the `main` stage is always on and IsDFAAllowed depends
+	// only on the build.
 	if (ZpDriverOption(ini, "MiscFixes", "1") && IsDFAAllowed(build) && !bDFAInstalled)
 	{
 		bDFAInstalled = true;
@@ -586,17 +575,16 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID /*reserved*/)
 
 
 
-// The option pass: the arms live in the feature modules (`source/<feature>.ixx`),
-// in the order this tree has always run them. `PatchGame` only walks that order.
+// The option pass: the arms live in the feature modules, in the order this tree has
+// always run them; `PatchGame` only walks that order.
 void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 {
 	PatchContext ctx{image, reinterpret_cast<std::uintptr_t>(image.base), build,
 	                  config};
 
-	// Publish every slot before any arm writes a site: a site write can
-	// overwrite the signature a later arm's slot publish scans for. The feature
-	// modules own the blocks; the order here is the one this tree has always run, and
-	// it is the only ordering there is (no phase graph).
+	// Publish every slot before any arm writes a site: a site write can overwrite the
+	// signature a later arm's slot publish scans for. The feature modules own the blocks;
+	// this order is the only ordering there is (no phase graph).
 	PublishBadPlayerModelCrashFix(ctx);
 	PublishBlackscreenFix(ctx);
 	PublishBuildingDynamicShadows(ctx);

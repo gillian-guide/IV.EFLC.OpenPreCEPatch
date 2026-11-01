@@ -1,11 +1,4 @@
 // zp.misc - The remaining fixes and the compatibility stubs.
-//
-// One arm per INI option, in the order this tree has always run its arms (the
-// recovered loader's order was never reproduced exactly; see
-// docs/architecture.md, "Option blocks"). `Publish*` publishes
-// the game addresses a body reads (the whole publish stage runs before any arm
-// writes a site); `Apply*` installs the option. Each block is the shipped mod's
-// arm verbatim: the recovered pattern, its offsets and the bytes it stores.
 
 module;
 
@@ -41,11 +34,10 @@ void ApplyDrivebyFOVFix(const PatchContext& ctx);
 void ApplyPatch4RemoveModChecks(const PatchContext& ctx);
 }  // export
 
-// Patch6and7RemoveModChecks / Patch7RemoveModChecks (original handler
-// sub_10044710): the packed entry-stub jump targets, per gated build. The
-// handler writes `lea edi,[eax+<site>]; lea ebx,[eax+<target>];
-// mov byte [edi],0E9h`; the entry target (0x3A09) is a 1.0.6.0 row, the mid and
-// case targets (0x38AE / 0x39E9) are 1.0.7.0 rows.
+// Patch6and7RemoveModChecks / Patch7RemoveModChecks (original handler sub_10044710):
+// the packed entry-stub jump targets, per gated build. The handler writes
+// `lea edi,[eax+<site>]; lea ebx,[eax+<target>]; mov byte [edi],0E9h`; the entry
+// target (0x3A09) is a 1.0.6.0 row, the mid and case targets are 1.0.7.0 rows.
 constexpr GameRva kModChecksEntryJmp_1060{0x003A09u};
 constexpr GameRva kModChecksMidJmp_1070{0x0038AEu};
 constexpr GameRva kModChecksCaseJmp_1070{0x0039E9u};
@@ -285,9 +277,7 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 
 		if (ctx.build == GameBuild::v1060)
 		{
-			// The original wrote these packed-entry-stub bytes by RVA. Each
-			// signature below is the recovered candidate with exactly one
-			// hit at its site on this build.
+			// Recovered candidate: exactly one hit at its site on this build.
 			if (auto pattern = Pattern(image, "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74"); pattern.size() > 0)
 			{
 				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x0038AC
@@ -313,9 +303,9 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x003A14
 				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true); //jmp
 			}
-			// The original NOPs the seven bytes at 0x42E7..0x42ED. One scan at the
-			// instruction plus match+0..+6 is equivalent and order-independent; the
-			// old per-byte windows relied on the ascending write order.
+			// The original NOPs the seven bytes at 0x42E7..0x42ED; one scan at the instruction
+			// plus match+0..+6 is equivalent and order-independent (per-byte windows relied on
+			// the ascending write order).
 			if (auto pattern = Pattern(image, "C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8"); pattern.size() > 0)
 			{
 				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x0042E7..0x0042ED
@@ -325,9 +315,7 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 
 		if (ctx.build == GameBuild::v1070)
 		{
-			// The original wrote these packed-entry-stub bytes by RVA. Each
-			// signature below is the recovered candidate with exactly one
-			// hit at its site on this build.
+			// Recovered candidate: exactly one hit at its site on this build.
 			if (auto pattern = Pattern(image, "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74"); pattern.size() > 0)
 			{
 				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00388C
@@ -358,9 +346,8 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x0039F4
 				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true); //jmp
 			}
-			// The original NOPs the seven bytes at 0x42C7..0x42CD; one scan at the
-			// instruction plus match+0..+6 replaces the seven per-byte windows
-			// 
+			// The original NOPs the seven bytes at 0x42C7..0x42CD; one scan replaces the seven
+			// per-byte windows.
 			if (auto pattern = Pattern(image, "C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8"); pattern.size() > 0)
 			{
 				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x0042C7..0x0042CD
@@ -435,10 +422,8 @@ void ApplyPatch7RemoveModChecks(const PatchContext& ctx)
 
 		if (ctx.build == GameBuild::v1060)
 		{
-			// The original wrote these packed-entry-stub bytes by RVA. Each
-			// signature below is the candidate the recovered rows verified as exactly one
-			// hit at its site on this build; the scans run in ascending address
-			// order so no candidate is read after an earlier site was overwritten.
+			// Written by RVA in the original; each candidate has exactly one hit at its site.
+			// Scans run in ascending address order, so no site is read after being overwritten.
 			if (auto pattern = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); pattern.size() > 0)
 			{
 				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x003982
@@ -448,10 +433,8 @@ void ApplyPatch7RemoveModChecks(const PatchContext& ctx)
 
 		if (ctx.build == GameBuild::v1070)
 		{
-			// The original wrote these packed-entry-stub bytes by RVA. Each
-			// signature below is the candidate the recovered rows verified as exactly one
-			// hit at its site on this build; the scans run in ascending address
-			// order so no candidate is read after an earlier site was overwritten.
+			// Written by RVA in the original; each candidate has exactly one hit at its site.
+			// Scans run in ascending address order, so no site is read after being overwritten.
 			if (auto pattern = Pattern(image, "75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D"); pattern.size() > 0)
 			{
 				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00389C

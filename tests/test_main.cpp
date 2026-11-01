@@ -54,10 +54,9 @@ constexpr std::uint32_t kZMenuRejectFlag = 1u << 4;
 constexpr std::uint32_t kMaxImageSize = 0x10000000u;
 } // namespace
 
-// ---- write-set dump (development aid) -----------------------------------
-// Maps a PE32 file into a contiguous image, so a patch pass can be applied to
-// the same bytes the loader would see and compared with the reference
-// implementation's output. Run: zp_tests --dump-writes <out> [ini]
+// Write-set dump (development aid): maps a PE32 file into a contiguous image so a
+// patch pass can be applied to the bytes the loader would see and compared with the
+// reference implementation's output. Run: zp_tests --dump-writes <out> [ini]
 static bool MapPeImage(const char* path, std::vector<std::uint8_t>& image,
                        std::uint32_t& imageBase, std::uint32_t& sizeOfImage)
 {
@@ -234,12 +233,10 @@ int Run()
 	// The generated OOC payload decodes to the expected table and archive.
 	CHECK(zpatch_ooc_selftest());
 
-	// ---- tables ------------------------------------------------------------
-	// RemoveUselessChecks is five RVA arrays + 23 singles now. Drive both write
-	// phases over a blank image and compare with the expanded 7,489-row table it
-	// replaced: same positions, same bytes, nothing on the other builds. The
-	// hash is FNV-1a 64 over (rva LE32, byte) for every changed position in
-	// ascending RVA order.
+	// Tables: RemoveUselessChecks is five RVA arrays + 23 singles. Drive both write phases
+	// over a blank image and compare with the 7,489-row table it replaced - same positions,
+	// same bytes, nothing on the other builds. The hash is FNV-1a 64 over (rva LE32, byte)
+	// for every changed position in ascending RVA order.
 	{
 		struct Expected
 		{

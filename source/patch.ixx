@@ -2,10 +2,10 @@
 // signature scan (one candidate per site, all hits for the collectors) and the
 // mapped-image write.
 //
-// The scan is the original's: whitespace-separated hex tokens, `?`/`??` the
-// only wildcards, a token's low byte the compared value. The scanner itself is
-// the vendored Hooking.Patterns (`hook::make_range_pattern` over the caller's
-// image view), and a write goes through the injector.
+// The scan format is the original's: whitespace-separated hex tokens, `?`/`??` the
+// only wildcards, a token's low byte the compared value. The scanner is the vendored
+// Hooking.Patterns (`hook::make_range_pattern` over the caller's image view); a write
+// goes through the injector.
 
 module;
 
@@ -25,8 +25,7 @@ bool FindPattern(ModuleView module, std::string_view signature, Match& output) n
 std::size_t FindAllPatterns(ModuleView module, std::string_view signature,
                             std::vector<const std::uint8_t*>& output) noexcept;
 
-// The option pass's scan/write helpers (the steps every arm shares). Declared in
-// `src/patches.h`; the arms in the feature modules call them through that header.
+// The scan/write helpers every arm shares; declared in `src/patches.h`.
 bool BuildIs(GameBuild build, std::initializer_list<GameBuild> builds);
 
 hook::pattern Pattern(const GameImage& image, std::string_view signature);
@@ -58,8 +57,8 @@ bool FusionFixGateClosed();
 
 bool NewFilesConflictModulesPresent();
 
-// The instruction bytes the arms store. An opcode is not data: naming them keeps
-// `0xEB` at a site readable as "jmp rel8".
+// The instruction bytes the arms store; naming them keeps `0xEB` readable as "jmp
+// rel8".
 inline constexpr std::size_t kWordLength = 2;
 inline constexpr std::size_t kBranchLength = 5;  // E8/E9 <rel32>
 inline constexpr std::uint8_t kCallOpcode = 0xE8;
@@ -88,10 +87,9 @@ std::size_t PatternLength(std::string_view normalized) noexcept
 	return normalized.size() / kSignatureTokenWidth + 1;
 }
 
-// The original feeds every whitespace-separated token to strtoul(token, nullptr,
-// 16) and compares the low byte; "?" and "??" are the only wildcards. A few
-// signatures carry three-digit tokens such as "485", which the original reads as
-// 0x85 - reproducing that here matters.
+// The original feeds every whitespace-separated token to strtoul(token, nullptr, 16)
+// and compares the low byte; "?" and "??" are the only wildcards. A three-digit token
+// such as "485" reads as 0x85 - reproducing that here matters.
 // One signature token: a wildcard, or the low byte of its parsed value.
 struct SignatureToken final
 {
@@ -309,14 +307,13 @@ std::uintptr_t BranchTarget(const std::uint8_t* match, std::ptrdiff_t siteOffset
 	       static_cast<std::uintptr_t>(displacement);
 }
 
-// A five-byte branch written the way the original's collector writes it
-// (opcode + rel32). injector::MakeCALL/MakeJMP first call
-// GetBranchDestination, which for a `FF 15 <disp32>` site dereferences the
-// operand; that read is discarded, and it is the only difference from the
-// original. Use this where the dereference would read memory the site does
-// not point into (e.g. a byte of the operand is overwritten by the same arm).
-// Only WriteMemoryRaw is guaranteed by every injector shim (the real one, the
-// dump shim and the trace shim), so the rel32 is built here.
+// A five-byte branch written as opcode + rel32, the way the original's collector
+// writes it. injector::MakeCALL/MakeJMP first call GetBranchDestination, which for a
+// `FF 15 <disp32>` site dereferences the operand; the read is discarded here, and that
+// is the only difference from the original. Use this where the dereference would read
+// memory the site does not point into (e.g. a byte of the operand is overwritten by
+// the same arm). Only WriteMemoryRaw exists in every injector shim, so the rel32 is
+// built here.
 void WriteBranchNoRead(std::uint8_t* site, std::uint8_t opcode, void* destination)
 {
 	std::uint8_t bytes[kBranchLength];

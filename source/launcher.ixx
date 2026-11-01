@@ -1,15 +1,13 @@
 // zp.launcher — the launch-slot rewrite data.
 //
-// LaunchWithPlayGTAIV overwrites the game's `LaunchGTAIV.exe\0` text at the two
-// launch slots with `PlayGTAIV.exe` and leaves the slot's last two bytes as the
-// original does. The capital P is the original's own byte (the CMake port once
-// had it lowercase; the dump cannot reach this arm because it only runs with
-// PlayGTAIV.exe present, so the exact bytes are pinned by a native test here).
+// Original: LaunchWithPlayGTAIV overwrites `LaunchGTAIV.exe\0` at the two launch
+// slots and leaves the last two bytes as "e\0". The capital P is the original's
+// own byte; a native test pins it because the dump cannot reach this arm.
 //
-// The scan is one wildcard-free 16-byte signature; on the five builds the
-// original's table covered it hits exactly the two table RVAs, and on
-// 1.0.0.4/1.0.1.0/EFLC it hits slots the original never wrote,
-// which is why the five-build gate is load-bearing.
+// The scan is one wildcard-free 16-byte signature. On the five builds the
+// original's table covered it hits exactly the two slot RVAs; on
+// 1.0.0.4/1.0.1.0/EFLC it matches slots the original never wrote, so the build
+// gate is load-bearing.
 
 module;
 

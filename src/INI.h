@@ -7,10 +7,6 @@
 //   INI<> ini("ZolikaPatch.ini", true);
 //   ini.select("Options");
 //   if (std::stoi(ini.get("SkipLauncher", "1")) == 1) ...
-//
-// What is read here are the shipped reader's rules, not a general-purpose INI
-// library's: the last entry for a key wins, an absent key yields the caller's
-// default, and an option runs only when its value parses to exactly 1.
 
 #include <cstddef>
 #include <cstdint>
@@ -30,11 +26,11 @@ struct ConfigDocument
 {
 	std::vector<ConfigEntry> entries;
 
-	// Open-addressed (section, key) index over `entries`: a slot holds the
-	// entry's index + 1, 0 is empty. Built once after the parse, so a lookup is
-	// O(1) instead of a reverse scan of all ~2,100 entries (the table loader
-	// alone asks ~2,000 times at start-up). Entries appended after the parse are
-	// not indexed; find() scans those first so an append still shadows the file.
+	// Open-addressed (section, key) index over `entries`: a slot holds the entry's index
+	// + 1, 0 is empty. Built once after the parse, so a lookup is O(1) instead of a reverse
+	// scan of ~2,100 entries (the table loader alone asks ~2,000 times at start-up). Entries
+	// appended after the parse are not indexed; find() scans those first, so an append still
+	// shadows the file.
 	std::vector<std::uint32_t> index;
 	std::size_t indexed = 0;
 

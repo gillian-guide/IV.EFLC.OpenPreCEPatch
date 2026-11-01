@@ -1,14 +1,14 @@
 // zp.hook_bodies - the implementation: the rebased globals the bodies publish,
 // the bodies themselves and the resolver's table.
 //
-// An implementation unit, not part of the interface: the bodies are
-// `__declspec(naked)` 32-bit assembly with inline `__asm`, which MSVC refuses to
-// write into a module interface (C2488). `@exact` marks a byte-exact
-// transcription of the original function; tools/verify_bodies.py proves those
-// instruction-for-instruction against the shipped ASI. The x64 write-set dump
-// never runs the bodies - it only needs their addresses, which
+// An implementation unit, not part of the interface: the bodies are `__declspec(naked)`
+// 32-bit assembly with inline `__asm`, which MSVC refuses to write into a module
+// interface (C2488). `@exact` marks a byte-exact transcription; tools/verify_bodies.py
+// proves those instruction-for-instruction against the shipped ASI.
+//
+// The x64 write-set dump never runs the bodies - it needs only their addresses, which
 // tests/stub_bodies.cpp provides - so the assembly region is compiled out under
-// ZP_DUMP_TOOL and the table names the stubs instead.
+// ZP_DUMP_TOOL and the table names the stubs.
 
 module;
 

@@ -1,5 +1,3 @@
-// pch.cpp: source file corresponding to the pre-compiled header
+// pch.cpp: builds the precompiled header (pch.h).
 
 #include "pch.h"
-
-// When you are using pre-compiled headers, this source file is necessary for compilation to succeed.

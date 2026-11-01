@@ -1,11 +1,4 @@
 // zp.input - Mouse/focus behaviour.
-//
-// One arm per INI option, in the order this tree has always run its arms (the
-// recovered loader's order was never reproduced exactly; see
-// docs/architecture.md, "Option blocks"). `Publish*` publishes
-// the game addresses a body reads (the whole publish stage runs before any arm
-// writes a site); `Apply*` installs the option. Each block is the shipped mod's
-// arm verbatim: the recovered pattern, its offsets and the bytes it stores.
 
 module;
 
@@ -85,9 +78,9 @@ void ApplyMouseFix(const PatchContext& ctx)
 			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_mouse_axis_neg), true); //jmp
 		}
 
-		// The two sites differ only in the model's axis operands (6A 00 / 8B CE and
-		// 6A 01 / 8B CB); each gets the same movd replacement at +5/+33 and the two
-		// two-byte nops that disable the original cvtsi2ss prologue at +3/+31.
+		// The two sites differ only in the axis operands (6A 00 / 8B CE and 6A 01 / 8B CB);
+		// each gets the movd replacement at +5/+33 and the two-byte nops that disable the
+		// original cvtsi2ss prologue at +3/+31.
 		constexpr std::string_view kMovdSitePatterns[] = {
 		    "83 C4 08 F7 D8 F3 0F 2A C0 6A 00 8B CE F3 0F 11 07",
 		    "83 C4 08 F7 D8 F3 0F 2A C0 6A 01 8B CB F3 0F 11 07",

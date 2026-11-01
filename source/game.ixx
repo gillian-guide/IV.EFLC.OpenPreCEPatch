@@ -1,10 +1,9 @@
 // zp.game - the game's identity: build classification, the version probe, the
 // process lookup and the name hash every installer and hook body uses.
 //
-// `GameBuild` and `GameImage` stay declared in `src/common.h`,
-// the header the plain translation units share; this unit owns their
-// implementations and the recovered RVA type (`GameRva`) the install arms gate
-// their writes with.
+// `GameBuild` and `GameImage` stay declared in `src/common.h`, the header the plain
+// translation units share; this unit owns their implementations and the recovered
+// RVA type (`GameRva`) the install arms gate their writes with.
 
 module;
 
@@ -18,10 +17,9 @@ import zp.common;
 export
 {
 // A recovered game-image RVA: a byte offset from GTAIV.exe's image base, used
-// where no safe signature exists (the value is the original handler's own
-// operand). `site()` is the only conversion, so a raw RVA cannot leak into a
-// write. The provenance of each constant below is the build, the original
-// function and the instruction that put the value in a register.
+// where no safe signature exists (the value is the original handler's own operand).
+// `site()` is the only conversion, so a raw RVA cannot leak into a write; each
+// constant below names its build, original function and instruction.
 struct GameRva final
 {
 	std::uint32_t value;
@@ -128,9 +126,8 @@ std::uint32_t ParseDecOrHex(std::string_view text)
 	return negative ? 0u - value : value;
 }
 
-// 0x10003E50's name hash: case-folded, backslashes folded to '/', a quoted
-// string stops at its closing quote, and the folded value runs through the
-// multiply/xor chain below.
+// 0x10003E50's name hash: case-folded, backslashes folded to '/', a quoted string
+// stops at its closing quote, then the multiply/xor chain below.
 std::uint32_t HashText(std::string_view text)
 {
 	const bool quoted = !text.empty() && text.front() == '"';

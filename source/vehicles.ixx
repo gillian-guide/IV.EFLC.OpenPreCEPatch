@@ -1,12 +1,5 @@
 // zp.vehicles - Vehicle behaviour: steering, engine, plane parts, driveby, car shadows,
 // teleport, no-livery, the model/struct limits and the spawn probe.
-//
-// One arm per INI option, in the order this tree has always run its arms (the
-// recovered loader's order was never reproduced exactly; see
-// docs/architecture.md, "Option blocks"). `Publish*` publishes
-// the game addresses a body reads (the whole publish stage runs before any arm
-// writes a site); `Apply*` installs the option. Each block is the shipped mod's
-// arm verbatim: the recovered pattern, its offsets and the bytes it stores.
 
 module;
 
@@ -359,8 +352,8 @@ void ApplyEpisodicVehicleSupport(const PatchContext& ctx)
 		const GameImage& image = ctx.image;
 
 		// The original wrote these four slots by RVA (0x021500/0x7D91AE on 1.0.7.0,
-		// 0x095040/0x684ABE on 1.0.8.0). The recovered signatures are unique on
-		// every gated build, so scan instead: same site, same bytes.
+		// 0x095040/0x684ABE on 1.0.8.0); the recovered signatures are unique on every gated
+		// build, so scanning reaches the same site with the same bytes.
 		if (ctx.build == GameBuild::v1070)
 		{
 			if (auto pattern = Pattern(image, "44 80 0F ?? 02 75 ?? E8 ?? ?? ?? ?? 3B C3 74 ?? 8D"); pattern.size() > 0)
@@ -576,11 +569,10 @@ void ApplyTeleportProtection(const PatchContext& ctx)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			// The original writes exactly three bytes here: C2 08 over the two
-			// opcode bytes and 00 over the byte after the immediate. injector::
-			// MakeRET is NOT equivalent: its header stores the opcode through a
-			// 4-byte int store, so it also zeroes match+3 (0x83 on 1.0.8.0, the
-			// first byte of the next instruction). Keep the three-byte form.
+			// The original writes exactly three bytes: C2 08 over the opcode bytes and 00 over
+			// the byte after the immediate. injector::MakeRET is NOT equivalent - its header
+			// stores the opcode through a 4-byte int store, so it also zeroes match+3 (0x83 on
+			// 1.0.8.0, the first byte of the next instruction). Keep the three-byte form.
 			injector::WriteMemory<std::uint16_t>(injector::raw_ptr(match), kRet8Imm, true); //ret 8
 			injector::WriteMemory<std::uint8_t>(injector::raw_ptr(match + 2), kRet8High, true); //ret 8
 		}
@@ -780,28 +772,21 @@ void ApplyCarDynamicShadowFix(const PatchContext& ctx)
 			}
 		}
 
-		// Two further writes the original makes under this arm; they are in its
-		// write log for a CarDynamicShadowFix-only cell but not in the recovered
-		// row tables, so the reconstruction does not make them either. They are
-		// the arm's @noFCHS variant: with ForceCarHeadlightShadows on, the
-		// original takes the other path and makes neither write (probed:
-		// CarDynamic+FCHS writes only 0x8F7422; CarDynamic alone also writes
-		// 0x8F73EC and 0x8F719F).
-		//
-		//  * `0F 84 <rel32>` (jz) becomes `E9 <rel32+1>`: a jmp to the same
-		//    target. The displacement grows by one because the jz encoding is one
-		//    byte longer than the jmp (match+6+rel == match+5+newRel).
-		//  * `push 0x504` becomes `push 0x100` (the shadow size the arm forces),
-		//    written as a dword over the immediate like the original does.
+		// The @noFCHS variant: with ForceCarHeadlightShadows on, the original takes the
+		// other path and makes neither of these two writes (probed: CarDynamic+FCHS writes
+		// only 0x8F7422; CarDynamic alone also writes 0x8F73EC and 0x8F719F).
+		//   * `0F 84 <rel32>` (jz) becomes `E9 <rel32+1>`: a jmp to the same target, the
+		//     displacement growing by one because the jz encoding is one byte longer
+		//     (match+6+rel == match+5+newRel).
+		//   * `push 0x504` becomes `push 0x100`, written as a dword over the immediate.
 		if (!ctx.Option("ForceCarHeadlightShadows", "1"))
 		{
 			if (auto pattern = Pattern(image, "0F 84 9E 00 00 00 80 7D 28"); pattern.size() > 0)
 			{
 				auto* match = pattern.get(0).get<std::uint8_t>();
 
-				// The jz's own destination, re-encoded as a 5-byte jmp (rel32+1
-				// falls out of dest-(match+5)); the old instruction's sixth byte
-				// is left untouched, as before.
+				// The jz's own destination, re-encoded as a 5-byte jmp (rel32+1 falls out of
+				// dest-(match+5)); the old instruction's sixth byte is left untouched, as before.
 				const auto* target = reinterpret_cast<std::uint8_t*>(
 				    injector::ReadRelativeOffset(injector::raw_ptr(match + 2), 4, true).as_int());
 				injector::MakeJMP(injector::raw_ptr(match), injector::raw_ptr(target), true); //jmp

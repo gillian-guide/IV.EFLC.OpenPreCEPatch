@@ -2,10 +2,9 @@
 // loader's per-arm read.
 //
 // The reader is the shipped reader's: last value for a key wins, an absent key
-// yields the caller's default, an option runs only when the value parses to
-// exactly 1, and a malformed line rejects the file. `ConfigEntry`,
-// `ConfigDocument` and `INI<>` stay declared in `src/INI.h` (the plain
-// translation units share it); this unit owns their implementations.
+// yields the caller's default, an option runs only when the value parses to exactly
+// 1, and a malformed line rejects the file. `ConfigEntry`, `ConfigDocument` and
+// `INI<>` stay declared in `src/INI.h`; this unit owns their implementations.
 
 module;
 
@@ -21,8 +20,7 @@ export
 // The section every option key lives in; the loader selects it once.
 inline constexpr const char* kOptionsSection = "Options";
 
-// One INI arm: the key is read with the default its loader arm substitutes, and
-// the option runs only when the value parses to exactly 1.
+// Reads the key with the default its loader arm substitutes.
 bool Option(INI<>& ini, const char* key, const char* defaultValue);
 
 bool ParseConfig(std::string_view text, ConfigDocument& output) noexcept;
@@ -39,14 +37,12 @@ namespace
 {
 // The parser index cannot address more than this many entries (slot = entry+1).
 constexpr std::size_t kMaxIndexEntries = 0xFFFFFFF0u;
-// Mixed into the hash between the section and the key, so ("a","bc") and
-// ("ab","c") cannot collide.
+// FNV-1a over section+key needs it, so ("a","bc") and ("ab","c") differ.
 constexpr std::uint64_t kSectionKeySeparator = 0xFFu;
 }  // namespace
 
 namespace
 {
-// FNV-1a over the section and key, separated so ("a","bc") and ("ab","c") differ.
 std::uint64_t ConfigKeyHash(std::string_view section, std::string_view key) noexcept
 {
 	// FNV-1a 64: the standard offset basis and prime.

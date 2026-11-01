@@ -1,9 +1,8 @@
 ﻿#pragma once
-// A minimal stand-in for the vendored injector, used only by the 64-bit
-// write-set dump. The real header is 32-bit oriented (its pointer arithmetic
-// assumes a module and game in one flat 32-bit space), which is exactly right
-// for the ASI but breaks a 64-bit harness. This shim performs the same stores:
-// MakeJMP/MakeCALL write the opcode and the rel32 the caller's target implies.
+// A minimal stand-in for the vendored injector, used only by the 64-bit write-set
+// dump: the real header assumes a flat 32-bit space, which is right for the ASI but
+// breaks a 64-bit harness. It performs the same stores (MakeJMP/MakeCALL write the
+// opcode and the rel32 the caller's target implies).
 
 #include <cstddef>
 #include <cstdint>

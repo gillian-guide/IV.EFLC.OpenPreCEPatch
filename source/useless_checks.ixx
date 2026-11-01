@@ -1,15 +1,11 @@
 // zp.useless_checks — RemoveUselessChecks as the original handler does it.
 //
-// The original handler sub_10044BD0 writes a per-build list of game RVAs as NOP
-// or one-byte patches: 19/2/2 singles first, then its five RVA tables
-// (2230/45/56 on build 9, 2288 on build 8, 2466 on build 5). The data is the
-// generated, SHA-pinned `src/useless_checks_data.inc`
-// (tools/extract_useless_checks.py); this module owns the three write shapes,
-// the per-build row table and the application point. Every entry is
-// `game base + RVA`, written unconditionally (the original verifies nothing
-// before writing), and only on the builds the original gated it to.
-//
-// The caller owns the RemoveUselessChecks INI gate, exactly like the other arms.
+// Original: sub_10044BD0 writes a per-build list of game RVAs as NOP or one-byte
+// patches - 19/2/2 singles first, then its five RVA tables (2230/45/56 on build 9,
+// 2288 on build 8, 2466 on build 5). The rows are the generated, SHA-pinned
+// `src/useless_checks_data.inc`; each is `game base + RVA`, written unconditionally
+// (the original verifies nothing) and only on the builds it gated. The caller owns
+// the RemoveUselessChecks INI gate, like every other arm.
 
 module;
 
@@ -91,10 +87,9 @@ void SweepSingles(GameImage image, std::span<const UselessCheckSingle> rows)
 	}
 }
 
-// The original's per-build rows, one row per gated build; a build with no row
-// writes nothing (that is the handler's default). A row's spans are the
-// generated tables it selects, in the handler's write order: singles, the
-// NOP-5 table, then the two five-byte tables.
+// The original's per-build rows; a build with no row writes nothing (the handler's
+// default). A row's spans are its generated tables in the handler's write order:
+// singles, the NOP-5 table, then the two five-byte tables.
 struct BuildSweep final
 {
 	GameBuild build;

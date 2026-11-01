@@ -2,11 +2,10 @@
 // into: the resolver that maps an original VA to a body, the rebased-global
 // accessors, and the dump's canonicalisation entry points.
 //
-// The definitions live in the implementation unit `source/hook_bodies.cpp`: the
-// bodies are `__declspec(naked)` 32-bit assembly, and MSVC cannot write a naked
-// definition into a module interface (C2488), so the interface only declares
-// them. `src/hook_bodies.h` declares the C-linkage bodies for the plain
-// translation units (the install arms name some of them directly).
+// Declarations only: the bodies are `__declspec(naked)` 32-bit assembly and MSVC
+// cannot write a naked definition into a module interface (C2488), so they are
+// defined in `source/hook_bodies.cpp`. `src/hook_bodies.h` declares the C-linkage
+// bodies for the plain translation units (some install arms name them directly).
 
 module;
 

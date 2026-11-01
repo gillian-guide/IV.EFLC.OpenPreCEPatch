@@ -1,11 +1,4 @@
 // zp.multiplayer - MP sync and the model-name hash.
-//
-// One arm per INI option, in the order this tree has always run its arms (the
-// recovered loader's order was never reproduced exactly; see
-// docs/architecture.md, "Option blocks"). `Publish*` publishes
-// the game addresses a body reads (the whole publish stage runs before any arm
-// writes a site); `Apply*` installs the option. Each block is the shipped mod's
-// arm verbatim: the recovered pattern, its offsets and the bytes it stores.
 
 module;
 

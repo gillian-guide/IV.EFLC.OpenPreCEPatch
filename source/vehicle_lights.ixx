@@ -1,24 +1,13 @@
-// zp.vehicle_lights - the two 512-slot vehicle light tables the loader reads
-// once and the popup/headlight bodies consult.
+// zp.vehicle_lights - the two 512-slot vehicle light tables the loader reads once.
 //
-// `[PopupLightAngles]` and `[HeadlightConeOffsets]` are parsed from the parsed
-// document (not re-read per slot), the popup angle is converted to radians and
-// the model name is hashed with the game's own name hash.
+// `[PopupLightAngles]` / `[HeadlightConeOffsets]` are parsed once from the document,
+// the popup angle is converted to radians and the model name hashed with the game's
+// own name hash. A slot with no `Car<N>Name` (or an empty one) stores nothing.
 //
-// A slot with no `Car<N>Name` (or an empty one) is skipped; a slot whose name is
-// present but whose `Car<N>Angle`/`Car<N>Offset` is missing or unparseable
-// throws, exactly like the original. Evidence (original ASI, sub_100523C0):
-// the 512-slot loop runs 0x100524B0..0x100528FB; the empty-name test is the
-// std::string compare `call 0x1005AF10` with the skip branch `jne 0x1005289D`
-// at 0x10052638 (advance the slot, store nothing); the value is fetched
-// unconditionally and converted with `_errno` (0x10052745) + `strtof`
-// (0x10052763), whose result is checked at 0x10052772 (`endptr == start`) and
-// 0x1005277E (`errno == ERANGE`), and those two branches call the CRT's
-// `_Xinvalid_argument` (0x10063120, string "invalid stof argument" at
-// 0x10063A24) and `_Xout_of_range` (0x10063124, "stof argument out of range" at
-// 0x10063A80) - i.e. the original calls std::stof and lets it throw. The throw
-// escapes the loader uncaught, so a bad table faults at boot; preserving that
-// throw is the 1:1 behaviour (commit 217ec39's skip was a divergence).
+// Original: sub_100523C0, slot loop 0x100524B0..0x100528FB. The value goes through
+// std::stof (strtof at 0x10052763, checked at 0x10052772/0x1005277E) and the throw
+// is uncaught, so a missing or out-of-range value faults at boot. Preserve the throw;
+// a skip is a divergence.
 
 module;
 
@@ -45,9 +34,8 @@ float SelectHeadlightOffset(const VehicleLightTables& tables, int modelIndex,
 
 namespace
 {
-// The popup table is written in degrees and read in radians; the original
-// multiplies by pi and then divides by 180 in double (that order matters for
-// the last bit), then stores a float.
+// Degrees in, radians out: the original multiplies by pi then divides by 180 in
+// double (that order matters for the last bit) and stores a float.
 constexpr double kPi = 3.141592653589793;
 // FUN_1001AD20's value when no [HeadlightConeOffsets] row matches.
 constexpr float kDefaultHeadlightOffset = 2.0f;
@@ -102,9 +90,8 @@ PatchResult LoadVehicleLightTables(const ConfigDocument& config,
 	constexpr std::string_view kSections[] = {"PopupLightAngles", "HeadlightConeOffsets"};
 	constexpr std::string_view kValueSuffixes[] = {"Angle", "Offset"};
 
-	// One pass over the document: the original asks 2 x 512 key pairs, but
-	// the section only ever holds those rows, so walk them once and keep the
-	// last entry per key (the reader's last-value-wins rule).
+	// One pass over the document: the original asks 2 x 512 key pairs, but the section
+	// only ever holds those rows, so walk it once keeping the last entry per key.
 	const ConfigEntry* names[std::size(kSections)][kVehicleLightSlotCount]{};
 	const ConfigEntry* values[std::size(kSections)][kVehicleLightSlotCount]{};
 	for (const ConfigEntry& entry : config.entries)
@@ -139,15 +126,11 @@ PatchResult LoadVehicleLightTables(const ConfigDocument& config,
 			if (name == nullptr || name->value.empty())
 				continue; // no row: the original's empty-name branch stores nothing
 
-			// The original converts the value with std::stof and does not guard
-			// it: a missing key (empty string) throws invalid_argument and an
-			// out-of-range one throws out_of_range, both uncaught (see the
-			// evidence in the file header). Keep the throw, do not skip.
+			// std::stof is unguarded, as in the original: a missing or bad value throws (header).
 			const ConfigEntry* value = values[table][i];
 			const std::string_view text = value ? std::string_view{value->value} : std::string_view{};
 			const float numeric = std::stof(std::string(text));
 
-			// The popup table is written in degrees and read in radians.
 			VehicleLightValue& slot = slots[i];
 			slot.modelHash = GameHash(name->value);
 			slot.populated = true;

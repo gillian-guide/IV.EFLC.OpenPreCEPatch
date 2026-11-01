@@ -532,9 +532,7 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 	return {};
 }
 
-// ---------------------------------------------------------------------------
-// Windows hook bodies
-// ---------------------------------------------------------------------------
+// Windows hook bodies (the shipped mod's CreateFile/ROM-window path).
 
 #if defined(_WIN32)
 

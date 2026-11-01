@@ -1,10 +1,8 @@
 // The one header every translation unit includes (FusionFix-style layout).
 //
-// Following GTAIV.EFLC.FusionFix, the module interface units include this file
-// in their `module;` global fragment, so Win32, the standard library and the two
-// vendored libraries are declared identically everywhere. Keep this file to
-// includes and API-neutral configuration: a type or constant that several
-// modules share belongs in `common.ixx`, not here.
+// Include it in the `module;` global fragment, so Win32, the standard library and
+// the two vendored libraries are declared identically everywhere. A type or
+// constant that several modules share belongs in `common.ixx`, not here.
 
 #pragma once
 

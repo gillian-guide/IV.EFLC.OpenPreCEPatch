@@ -1,9 +1,8 @@
 ﻿#pragma once
-// Write-tracing stand-in for the vendored injector, compiled only into the
-// debug ASI (ZP_TRACE_WRITES). It performs exactly the same stores and appends
-// "site length bytes" to ZolikaPatch.writes.log, so a live run can be compared
-// with the reference implementation's log and a boot fault can be located at
-// its last write.
+// Write-tracing stand-in for the vendored injector, compiled only into the debug ASI
+// (ZP_TRACE_WRITES). It performs the same stores and appends "site length bytes" to
+// ZolikaPatch.writes.log, so a live run can be compared with the reference log and a
+// boot fault located at its last write.
 
 #include <cstddef>
 #include <cstdint>

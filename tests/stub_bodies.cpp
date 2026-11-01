@@ -1,7 +1,6 @@
-// Stub hook bodies for the write-set dump tool: the dump only needs their
-// addresses (they appear as jump targets), never their code - the real
-// bodies are 32-bit assembly. stub_bodies.h is the declaration list; including
-// it here makes the compiler check every definition against it.
+// Stub hook bodies for the write-set dump: only their addresses matter (they appear as
+// jump targets), never their code. stub_bodies.h is the declaration list; including it
+// here makes the compiler check every definition against it.
 #include "pch.h"
 
 #include <cstdint>

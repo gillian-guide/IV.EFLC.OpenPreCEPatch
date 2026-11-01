@@ -1,12 +1,5 @@
 // zp.graphics - Rendering: shadows, alpha, emissive lerp, reflections, LOD, shader
 // streaming, VRAM, the cutscene chain and the window style.
-//
-// One arm per INI option, in the order this tree has always run its arms (the
-// recovered loader's order was never reproduced exactly; see
-// docs/architecture.md, "Option blocks"). `Publish*` publishes
-// the game addresses a body reads (the whole publish stage runs before any arm
-// writes a site); `Apply*` installs the option. Each block is the shipped mod's
-// arm verbatim: the recovered pattern, its offsets and the bytes it stores.
 
 module;
 
@@ -50,8 +43,8 @@ void ApplyNoLODLightHeightCutoff(const PatchContext& ctx);
 
 // SuperLODFix (original handler sub_10046A10): the three base+RVA values it
 // publishes in dword_101580AC (fail), dword_101580B0 (ok) and dword_101580B4
-// (lookup), per gated build. The suffix is the game version the handler's row
-// belongs to (build 8 = 1.0.7.0, build 9 = 1.0.8.0).
+// (lookup), per gated build. The suffix is the game version (build 8 = 1.0.7.0,
+// build 9 = 1.0.8.0).
 constexpr GameRva kSuperLodFail_1070{0x4A3D37u};
 constexpr GameRva kSuperLodOk_1070{0x4A3CEFu};
 constexpr GameRva kSuperLodLookup_1070{0x58AAE0u};
@@ -86,10 +79,10 @@ void PublishBuildingDynamicShadows(const PatchContext& ctx)
 			zpatch_bds_resume_b = MatchAddress(pattern, 112);
 		}
 
-		// The two hash slots take the same field of the FIRST and the SECOND
-		// match (recovered rows: dword_10159C1C index 0, dword_10159C24 index 1).
-		// The two matches hold different pointers (0xD8FA2C / 0xDCF48C on 1080),
-		// so publishing both from the first is not the original's state.
+		// The two hash slots take the same field of the FIRST and the SECOND match
+		// (recovered rows: dword_10159C1C index 0, dword_10159C24 index 1); the matches hold
+		// different pointers (0xD8FA2C / 0xDCF48C on 1080), so publishing both from the first
+		// is not the original's state.
 		auto hashes = Pattern(
 		    image, "8B 46 28 83 4E 24 05 25 7F FC FF FF 83 C8 40 89 46 28 C7 06");
 		if (hashes.size() > 0)
@@ -366,9 +359,8 @@ void ApplySuperLODFix(const PatchContext& ctx)
 	{
 		const GameImage& image = ctx.image;
 
-		// The original jumped at 0x4A3CE9 (1.0.7.0) / 0x540E19 (1.0.8.0). The
-		// recovered signature is the same on both and unique per gated build,
-		// so scan inside the gate instead of naming the RVA.
+		// The original jumped at 0x4A3CE9 (1.0.7.0) / 0x540E19 (1.0.8.0); the recovered
+		// signature is the same on both and unique per gated build, so scan inside the gate.
 		if (BuildIs(ctx.build, {GameBuild::v1070, GameBuild::v1080}))
 		{
 			if (auto pattern = Pattern(image, "F6 40 ?? ?? 74 ?? 85 ED 0F 85 ?? ?? ?? ?? 55 6A ?? E8 ?? ?? ?? ?? 8B F8"); pattern.size() > 0)
@@ -420,9 +412,9 @@ void ApplyCutsceneFixes(const PatchContext& ctx)
 		}
 
 		{
-			// 1080 has exactly one match of the primary pattern (0xC9A840); the
-			// alternate is only for builds where it is absent. Falling back on
-			// "<= 1 match" threw that single match away and applied nothing.
+			// 1080 has exactly one match of the primary pattern (0xC9A840); the alternate is
+			// only for builds where it is absent. Falling back on "<= 1 match" would throw that
+			// single match away and apply nothing.
 			auto pattern = Pattern(image, "74 24 8B 44 24 2C 83 F8 03");
 			if (pattern.size() == 0)
 				pattern = Pattern(image, "74 0B 83 7C 24 2C 03");
@@ -443,11 +435,10 @@ void ApplyBorderlessWindowed(const PatchContext& ctx)
 		{
 			if (auto pattern = Pattern(image, "FF 15 ? ? ? ? 5F 5E 5D 5B 83 C4 10 C2 10 00"); pattern.size() > 0)
 			{
-				// The call is installed before the 0x90: offset 5 is the fourth
-				// byte of the `FF 15 <disp32>` operand, so writing it first would
-				// make a read of the old destination dereference the corrupted
-				// operand (0x00D6B460 becomes 0x90D6B460). The original's
-				// collector writes opcode+rel32 without reading it, so do that.
+				// The call is installed before the 0x90: offset 5 is the fourth byte of the
+				// `FF 15 <disp32>` operand, so writing it first would make a read of the old
+				// destination dereference the corrupted operand (0x00D6B460 becomes 0x90D6B460).
+				// The original's collector writes opcode+rel32 without reading it, so do that.
 				WriteCallNoRead(pattern.get(0).get<std::uint8_t>(), reinterpret_cast<void*>(&abi_borderless_w));
 				if (pattern.size() > 1)
 					WriteCallNoRead(pattern.get(1).get<std::uint8_t>(), reinterpret_cast<void*>(&abi_borderless_a));

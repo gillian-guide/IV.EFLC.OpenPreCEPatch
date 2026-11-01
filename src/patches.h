@@ -1,7 +1,6 @@
 #pragma once
-// The option pass (`PatchGame`) and the loader preamble. The arms run in this
-// tree's own order (derived from the recovered loader, not identical to it;
-// docs/architecture.md, "Option blocks").
+// The option pass (`PatchGame`) and the loader preamble. The arms run in this tree's
+// own order, derived from the recovered loader but not identical (docs/architecture.md).
 
 #include <cstddef>
 #include <cstdint>
@@ -46,9 +45,9 @@ struct PreambleReport
 
 PreambleReport FindGamePointers(GameImage image) noexcept;
 
-// The helpers every install arm calls (implemented in zp.patch, except Trace,
-// which is `zp.log`). A feature module includes this header; the exported
-// definitions keep the plain symbols the header declares.
+// The helpers every install arm calls (implemented in zp.patch, except Trace in
+// zp.log). A feature module includes this header; the exported definitions keep the
+// plain symbols it declares.
 bool BuildIs(GameBuild build, std::initializer_list<GameBuild> builds);
 
 hook::pattern Pattern(const GameImage& image, std::string_view signature);
@@ -92,8 +91,8 @@ inline constexpr std::uint8_t kMovdXmm0Eax[] = {0x66, 0x0F, 0x6E, 0xC0};
 inline constexpr std::uint8_t kMovdXmm1Eax[] = {0x66, 0x0F, 0x6E, 0xC8};
 
 // AddOptionsInMenu's decision, read by the RestoreDeathMusic arm: with the menu
-// integration on, the mod installs that feature's hooks even with its INI key
-// off. Defined in dllmain.cpp next to SetMenuIntegration.
+// integration on, the mod installs that feature's hooks even with its INI key off.
+// Defined in dllmain.cpp next to SetMenuIntegration.
 extern bool bMenuIntegration;
 
 void Trace(const char* name);

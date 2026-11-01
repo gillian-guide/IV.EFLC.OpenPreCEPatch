@@ -2,22 +2,21 @@
 // Offline Runtime State driver for the readable port (Gate 3).
 //
 // Maps game_refs/GTAIV.exe at its preferred base 0x400000 (so every game VA the
-// installers store is canonical, exactly as in the game process), runs the same
-// load-time pipeline DllMain runs, then writes the two line formats
-// tools/parity/state_diff.py compares.
+// installers store is canonical, as in the game process), runs the same load-time
+// pipeline DllMain runs, then writes the two line formats tools/parity/state_diff.py
+// diffs.
 //
 //   G <symbol> <address> <size> <hex bytes>   one per port global (237 rows)
 //   D <game VA> <old> <new>                   every changed game-image byte
 //
 // plus the meta keys state_diff's pointer normalisation reads (image_host,
-// image_size, module_base). The executable links with /BASE:0x60000000 so the
-// 0x400000 window is free; if the map still fails it falls back to the heap and
-// relocates the one embedded game pointer the installers read back, like the reference driver does.
+// image_size, module_base). The executable links with /BASE:0x60000000 so the 0x400000
+// window is free; if the map still fails it falls back to the heap and relocates the one
+// embedded game pointer the installers read back, like the reference driver does.
 //
 // Usage: zp_state_dump <game.exe> <build-ordinal> <ini> <out.txt>
 //
-// This is a verification tool: it is never shipped and it does not change what
-// the installers do.
+// Verification tool only: never shipped, and it changes nothing the installers do.
 
 #include <cstdint>
 #include <cstdio>
@@ -162,12 +161,11 @@ void RelocateEmbeddedGamePointers(std::uint8_t* image, std::size_t size)
 	}
 }
 
-// Apply the image's own base-relocation table, i.e. load the PE at the heap
-// address the way a loader would. Without it, every absolute game VA baked into
-// the file (a static pointer the installers read back and write through) points
-// outside the heap image; the game process never sees that because its image is
-// at 0x400000. The relocation entries are exactly the dwords the loader itself
-// would fix up, so this adds no guesses.
+// Apply the image's own base-relocation table: load the PE at the heap address the way
+// a loader would. Without it every absolute game VA baked into the file (a static
+// pointer the installers read back and write through) points outside the heap image -
+// the game process never sees that because its image is at 0x400000. The entries are
+// exactly the dwords the loader would fix up, so this adds no guesses.
 std::size_t ApplyBaseRelocations(std::uint8_t* image, std::size_t size, std::uint32_t preferred)
 {
 	const auto delta = static_cast<std::int32_t>(reinterpret_cast<std::uintptr_t>(image) -

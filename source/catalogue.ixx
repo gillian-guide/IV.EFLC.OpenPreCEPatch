@@ -1,9 +1,7 @@
 // zp.catalogue — the recovered model catalogue.
 //
-// `src/catalogue_data.cpp` is the generated 38,455-entry table (original table
-// order, `static_assert` on the count). This unit owns the lookups: the count,
-// the index -> name accessor and the name-hash search the crash fixes use. It is
-// a support module; the generated data stays a plain translation unit.
+// The generated table is `src/catalogue_data.cpp` (original order); this unit owns
+// the lookups the crash fixes use.
 
 module;
 

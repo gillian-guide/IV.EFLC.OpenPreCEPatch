@@ -1,14 +1,7 @@
 // zp.menu - the IVMenuAPI integration.
 //
-// With `AddOptionsInMenu` on the shipped mod loads IVMenuAPI.asi once, registers
-// the Death Music and Pause On Focus Loss toggles through AddIVMenuOption and
-// installs RestoreDeathMusic's hooks even with its INI key off; the callbacks it
-// passes are the ABI bodies in the hook bodies.
-//
-// The ZMenuIV compatibility guard is *not* here: it is a generic startup guard
-// (ask the loaded menu for its version and refuse below the minimum), so
-// `ZMenuVersionGuard` lives in `src/dllmain.cpp` with the rest of the startup
-// sequence, and this module keeps only the menu API's probing and registration.
+// The ZMenuIV version guard is not here: it runs in the startup sequence
+// (`src/dllmain.cpp`), so this module only probes the API and registers the toggles.
 
 module;
 
@@ -32,8 +25,7 @@ std::size_t RegisterMenuOptions() noexcept;
 
 namespace
 {
-// The two toggles the shipped mod registers; the callbacks are the ABI bodies in
-// the hook bodies.
+// The callbacks are ABI bodies (the menu calls them with the original convention).
 const MenuRegistration kMenuRegistrations[] = {
 	{"PREF_DEATHMUSIC", L"Death Music", "MENU_DISPLAY_ON_OFF", "PREF_MUSIC_VOLUME", 1, 0,
 	 reinterpret_cast<std::uintptr_t>(&abi_menu_death_get),

@@ -1,11 +1,4 @@
 // zp.mission - Episodic weapons, heli height, OutOfCommission, the cutscene ped fix.
-//
-// One arm per INI option, in the order this tree has always run its arms (the
-// recovered loader's order was never reproduced exactly; see
-// docs/architecture.md, "Option blocks"). `Publish*` publishes
-// the game addresses a body reads (the whole publish stage runs before any arm
-// writes a site); `Apply*` installs the option. Each block is the shipped mod's
-// arm verbatim: the recovered pattern, its offsets and the bytes it stores.
 
 module;
 
@@ -64,8 +57,8 @@ void PublishOutOfCommissionFix(const PatchContext& ctx)
 
 		if (auto pattern = Pattern(image, "E8 ? ? ? ? 8B 74 24 14 83 C4 08 6A 00 56"); pattern.size() > 0)
 		{
-			// The logger call is the E8 at match-0x33 (operand -0x32, next -0x2E);
-			// the match itself is the E8 whose original target the wrapper replays.
+			// The logger call is the E8 at match-0x33 (operand -0x32, next -0x2E); the match
+			// itself is the E8 whose original target the wrapper replays.
 			zpatch_ooc_logger = MatchTarget(pattern, -50, -46);
 			zpatch_ooc_orig = MatchTarget(pattern, 1, 5);
 		}
@@ -85,9 +78,8 @@ void ApplyEpisodicWeaponSupport(const PatchContext& ctx)
 		             GameBuild::v1061, GameBuild::v1100, GameBuild::v1110, GameBuild::v1120,
 		             GameBuild::v1130, GameBuild::v12043}))
 		{
-			// The original's eight rows: each site reads `[episode] == 2`; a row
-			// NOPs either the comparison at the match or the branch that follows
-			// the six-byte `cmp [abs],2`.
+			// The original's eight rows: each site reads `[episode] == 2`, and a row NOPs either
+			// the comparison at the match or the branch after the six-byte `cmp [abs],2`.
 			struct EpisodicWeaponSite final
 			{
 				std::string_view signature;

@@ -1,11 +1,4 @@
 // zp.loading - DLC, new files, saves, the launcher stages and the load-time fixes.
-//
-// One arm per INI option, in the order this tree has always run its arms (the
-// recovered loader's order was never reproduced exactly; see
-// docs/architecture.md, "Option blocks"). `Publish*` publishes
-// the game addresses a body reads (the whole publish stage runs before any arm
-// writes a site); `Apply*` installs the option. Each block is the shipped mod's
-// arm verbatim: the recovered pattern, its offsets and the bytes it stores.
 
 module;
 
@@ -55,8 +48,7 @@ void ApplyVSyncFix(const PatchContext& ctx);
 // LoadDLCs (original handler sub_100234E0): per build, the loader callback the
 // handler stores in dword_1015BDDC and the two DLC entry points it puts in
 // dword_1015804C (register) and dword_101580D0 (apply). The suffix is the game
-// version the row belongs to (1.0.6.0 = build 7, 1.0.7.0 = build 8); the
-// handler's own `lea edi,[eax+<rva>]` rows hold the same values.
+// version the row belongs to; the handler's own `lea edi,[eax+<rva>]` rows agree.
 constexpr GameRva kDlcLoadCallback_1060{0x414560u};
 constexpr GameRva kDlcRegister_1060{0x4136E0u};
 constexpr GameRva kDlcApply_1060{0x414080u};
@@ -264,12 +256,11 @@ void PublishRemoveGFWLUpdatePopup(const PatchContext& ctx)
 
 }
 
-// ApplyLoadDLCs' per-build site rows (original handler sub_100234E0). The kind
-// says which write a row performs (call_body is abi_load_dlcs_dummy, jump_body
-// is abi_load_dlcs_struct_fixup), `rva` is the game target for the rva kinds,
-// and `twice` keeps the original's duplicated write where its handler issued
-// two. The rows are in the handler's scan order (ascending addresses on each
-// build).
+// ApplyLoadDLCs' per-build site rows (original handler sub_100234E0). `kind` says
+// which write a row performs (call_body is abi_load_dlcs_dummy, jump_body is
+// abi_load_dlcs_struct_fixup), `rva` is the game target for the rva kinds, and
+// `twice` keeps the original's duplicated write. Rows are in the handler's scan
+// order (ascending addresses on each build).
 enum class DlcSiteKind : std::uint8_t
 {
 	call_body,
@@ -510,9 +501,9 @@ void ApplyRemoveRGSCLoginRequirement(const PatchContext& ctx)
 
 		if (ctx.build == GameBuild::v1080)
 		{
-			// The original derives the site from 0x498460 and writes the same jump
-			// twice (the duplicate write is kept). The recovered signature is unique
-			// at that RVA on 1.0.8.0, so the scan replaces the address with the same site.
+			// The original derives the site from 0x498460 and writes the jump twice (the
+			// duplicate is kept). The recovered signature is unique at that RVA on 1.0.8.0, so
+			// the scan finds the same site.
 			if (auto pattern = Pattern(image, "8B 44 24 ?? 85 C0 74 ?? F3 0F 7E 05 ?? ?? ?? ?? 66 0F D6 00"); pattern.size() > 0)
 			{
 				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x498460

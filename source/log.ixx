@@ -1,10 +1,9 @@
 // zp.log - the opt-in diagnostics.
 //
-// `ZP_TRACE_INSTALLS` (a CMake option, default OFF) turns on the boot-stage
-// trace, the heap check after each stage and the first-fault handler; the
-// release ASI is silent and writes no log. The stage names are the loader
-// pipeline's, so a fault before the install pass can be located from
-// ZolikaPatch.trace.log.
+// `ZP_TRACE_INSTALLS` (a CMake option, default OFF) turns on the boot-stage trace,
+// the heap check after each stage and the first-fault handler; a release ASI writes
+// no log. The stage names are the loader pipeline's, so a fault before the install
+// pass can be located from ZolikaPatch.trace.log.
 
 module;
 
@@ -35,8 +34,7 @@ namespace
 {
 // The owned trace log. Opening is lazy and retried on the next event when the
 // first open failed, so a log file created later still receives writes (the
-// original per-site std::fopen did the same). The release ASI never compiles
-// this block.
+// original's per-site std::fopen did the same).
 class TraceLog final
 {
 public:
@@ -60,8 +58,8 @@ TraceLog& TraceFile() noexcept
 	return log;
 }
 
-// The 8-digit upper-case hex the old fprintf format printed. One value per
-// stream expression; the buffer is trace-only scratch.
+// The 8-digit upper-case hex the old fprintf printed; one value per stream
+// expression (the buffer is trace-only scratch).
 const char* Hex(std::uint32_t value) noexcept
 {
 	static char text[9];
@@ -75,8 +73,8 @@ const char* HeapState() noexcept
 }
 }  // namespace
 
-// Debug builds only: log the first fault with its registers and the raw stack, so
-// the module and call site that caused it can be identified from the log.
+// Debug builds only: log the first fault's registers and raw stack, so the module
+// and call site can be identified from the log.
 LONG WINAPI TraceFault(EXCEPTION_POINTERS* info)
 {
 	const auto* record = info->ExceptionRecord;
@@ -127,8 +125,8 @@ LONG WINAPI TraceFault(EXCEPTION_POINTERS* info)
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
-// Debug builds only: name the loader stage, so a fault before the install pass
-// can be located from ZolikaPatch.trace.log.
+// Debug builds only: name the loader stage, so a fault before the install pass can
+// be located from the trace log.
 void TraceBoot(const char* stage)
 {
 	std::ofstream* const log = TraceFile().Stream();
@@ -162,8 +160,8 @@ void InstallFaultTracer()
 }
 
 #if defined(ZP_TRACE_INSTALLS)
-// Debug builds only: name the arm that is about to run, so a boot fault can
-// be narrowed down from the log.
+// Debug builds only: name the arm about to run, so a boot fault can be narrowed
+// down from the log.
 void Trace(const char* name)
 {
 	std::ofstream* const log = TraceFile().Stream();
