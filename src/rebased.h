@@ -171,9 +171,10 @@ extern "C" std::uint32_t zpatch_bpm_resume;       // dword_10159CB8
 extern "C" std::uint32_t zpatch_new_saves_src;       // Src
 extern "C" std::uint32_t zpatch_new_saves_resume;    // dword_1015AD88
 extern "C" std::uint32_t zpatch_new_saves_chunk_len; // dword_1015AD90
-extern "C" std::uint8_t zpatch_new_saves_flag9;      // byte_1015AD98
-extern "C" std::uint8_t zpatch_new_saves_flag13;     // byte_1015AD99
-extern "C" std::uint8_t zpatch_new_saves_flag16;     // byte_1015AD9A
+// byte_1015AD98/99/9A: the save format probes (chunk 9 / 13 / 16 sizes).
+extern "C" std::uint8_t zpatch_new_saves_force_new_read;  // byte_1015AD98 (chunk 9)
+extern "C" std::uint8_t zpatch_new_saves_extra_block;     // byte_1015AD99 (chunk 13)
+extern "C" std::uint8_t zpatch_new_saves_new_chunk16;     // byte_1015AD9A (chunk 16)
 // The preamble's unconditionally resolved pointers (the original resolves them
 // on every run): the shared model lookup (dword_10159C0C), the script resolver
 // (dword_1015BDE0), the ped array (dword_1015AD78) and four crash-fix functions.
@@ -221,7 +222,7 @@ extern "C" std::uint32_t zpatch_death_music_site;  // dword_101A84B8
 // NewSavesCompatibility state (see the port in the hook bodies).
 extern "C" std::uint32_t zpatch_new_saves_element_count;  // dword_1015ADA0
 extern "C" std::uint32_t zpatch_new_saves_loaddata;       // dword_1015AD94 (game LoadData)
-extern "C" std::uint32_t zpatch_new_saves_p3_orig;        // dword_1015AD8C (P3 call target)
+extern "C" std::uint32_t zpatch_new_saves_p3_original;    // dword_1015AD8C (P3 original handler)
 // Patch4RemoveModChecks / RemoveGFWLUpdatePopup: the shared resume (match+12)
 // for the stub's tail jump.
 extern "C" std::uint32_t zpatch_gfwl_resume;              // dword_10159C18

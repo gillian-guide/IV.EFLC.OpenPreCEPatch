@@ -141,6 +141,33 @@ constexpr std::uint32_t kSaveMagic = static_cast<std::uint32_t>('S') |
                                      (static_cast<std::uint32_t>('E') << 24);
 static_assert(kSaveMagic == 0x45564153u);
 
+// NewSavesCompatibility's save-image layout (original converter sub_10051B30
+// and the tramp bodies): an 0x110-byte header, then kSaveChunkCount chunks of a
+// 9-byte header whose dword at +5 is the chunk's total size, followed by that
+// payload. The three chunk sizes identify the newer save format; P2 writes one
+// of the two read sizes into the game's read call for it.
+constexpr std::size_t kSaveChunkCount = 18;
+constexpr std::uint32_t kSaveChunkHeaderSize = 9;
+constexpr std::size_t kSaveChunkSizeOffset = 5;
+constexpr std::uint32_t kSaveChunk9SizeNew = 19525u;
+constexpr std::uint32_t kSaveChunk13SizeNew = 5953u;
+constexpr std::uint32_t kSaveChunk16SizeNew = 3703u;
+constexpr std::uint32_t kSaveReadSizeNew = 3694u;  // overwrites the 0x0CBE push
+constexpr std::uint32_t kSaveReadSizeOld = 3262u;
+// The read hook reads into its own scratch, not the caller's buffer (the
+// original body does the same); 12 is the extra block P3 probes.
+constexpr std::uint32_t kNewSaveScratchSize = 3704u;
+constexpr std::uint32_t kNewSaveProbeSize = 12u;
+// Where the converter's hook sites sit inside their signature match: the E8 at
+// +6 (operand +7), the later LoadData call P3 repoints (+30), and the jne that
+// selects the read path (-5).
+constexpr std::ptrdiff_t kNewSaveCallSite = 6;
+constexpr std::ptrdiff_t kNewSaveCallOperand = 7;
+constexpr std::ptrdiff_t kNewSaveLoadOperand = 30;
+constexpr std::ptrdiff_t kNewSaveBranchSite = -5;
+// The read size is the immediate of the `68 BE 0C 00 00` push at P2 (+1).
+constexpr std::ptrdiff_t kNewSaveReadSizeOperand = 1;
+
 // ---------------------------------------------------------------------------
 // Rebased globals: the live globals the hook bodies address by name.
 // ---------------------------------------------------------------------------
@@ -263,9 +290,9 @@ extern "C"
 	std::uint32_t zpatch_new_saves_src = 0;
 	std::uint32_t zpatch_new_saves_resume = 0;
 	std::uint32_t zpatch_new_saves_chunk_len = 0;
-	std::uint8_t zpatch_new_saves_flag9 = 0;
-	std::uint8_t zpatch_new_saves_flag13 = 0;
-	std::uint8_t zpatch_new_saves_flag16 = 0;
+	std::uint8_t zpatch_new_saves_force_new_read = 0;
+	std::uint8_t zpatch_new_saves_extra_block = 0;
+	std::uint8_t zpatch_new_saves_new_chunk16 = 0;
 	// Loader-preamble resolutions (unconditional in the original).
 	std::uint32_t zpatch_pre_ped_array = 0;
 	std::uint32_t zpatch_pre_fn_59c74 = 0;
@@ -305,7 +332,7 @@ extern "C"
 	// NewSavesCompatibility's element counter.
 	std::uint32_t zpatch_new_saves_element_count = 0;
 	std::uint32_t zpatch_new_saves_loaddata = 0;
-	std::uint32_t zpatch_new_saves_p3_orig = 0;
+	std::uint32_t zpatch_new_saves_p3_original = 0;
 	std::uint32_t zpatch_gfwl_resume = 0;
 	std::uint32_t zpatch_carparts_shadow_fn = 0; // dword_1015B5B8
 	std::uint32_t zpatch_carparts_resume_2 = 0;  // dword_1015BDCC
@@ -696,6 +723,15 @@ constexpr std::size_t kVehicleHeaveOffset = 0x1F00;
 // them - it only needs their addresses, which tests/stub_bodies.cpp provides -
 // so the whole assembly region is compiled out for it.
 #if !defined(ZP_DUMP_TOOL)
+
+// The one VA-to-function conversion the bodies use: a handler stores its
+// destination as a plain module VA (dword), so this is the only place that
+// turns it back into a callable.
+template <typename Fn>
+Fn GameFunction(std::uintptr_t va) noexcept
+{
+	return reinterpret_cast<Fn>(va);
+}
 
 extern "C"
 {
@@ -1729,27 +1765,34 @@ extern "C" void abi_gfwl_patch() noexcept
 	}
 }
 
-extern "C" std::uint8_t abi_new_saves_read_hook(void*, std::uint32_t size) noexcept
+using NewSaveLoadByteFn = std::uint8_t(__cdecl*)(void*, std::uint32_t);
+using NewSaveLoadIntFn = std::int32_t(__cdecl*)(void*, std::uint32_t);
+using NewSaveOriginalFn = std::int32_t(__cdecl*)();
+
+// The existing read call, routed through the plugin: the caller's buffer is
+// intentionally ignored - the original body reads into its own
+// kNewSaveScratchSize scratch and only the return value is observed.
+extern "C" std::uint8_t abi_new_saves_read_hook(void* /*caller_buffer*/,
+                                                std::uint32_t size) noexcept
 {
-	std::uint8_t scratch[3704];
+	std::array<std::uint8_t, kNewSaveScratchSize> scratch;
 	if (zpatch_new_saves_loaddata == 0) return 0;
-	using LoadFn = std::uint8_t(__cdecl*)(void*, std::uint32_t);
-	return reinterpret_cast<LoadFn>(
-	    static_cast<std::uintptr_t>(zpatch_new_saves_loaddata))(scratch, size);
+	return GameFunction<NewSaveLoadByteFn>(zpatch_new_saves_loaddata)(scratch.data(), size);
 }
 
+// P3's replacement: with the newer format on, probe the 12-byte block before
+// and after the original call. The original issues both loads - the first
+// result is discarded and the second returned - so the duplicate is kept.
 extern "C" std::int32_t abi_new_saves_p3_hook() noexcept
 {
-	std::uint8_t buffer[12];
-	using LoadFn = std::int32_t(__cdecl*)(void*, std::uint32_t);
-	const auto load = reinterpret_cast<LoadFn>(
-	    static_cast<std::uintptr_t>(zpatch_new_saves_loaddata));
-	if (zpatch_new_saves_flag13 != 0 && load)
-		static_cast<void>(load(buffer, 12));
-	using OrigFn = std::int32_t(__cdecl*)();
-	const std::int32_t result = reinterpret_cast<OrigFn>(
-	    static_cast<std::uintptr_t>(zpatch_new_saves_p3_orig))();
-	if (zpatch_new_saves_flag13 != 0 && load) return load(buffer, 12);
+	std::array<std::uint8_t, kNewSaveProbeSize> probe;
+	const auto load = GameFunction<NewSaveLoadIntFn>(zpatch_new_saves_loaddata);
+	const bool extra_block = zpatch_new_saves_extra_block != 0;
+	if (extra_block && load)
+		static_cast<void>(load(probe.data(), kNewSaveProbeSize));
+	const std::int32_t result = GameFunction<NewSaveOriginalFn>(
+	    zpatch_new_saves_p3_original)();
+	if (extra_block && load) return load(probe.data(), kNewSaveProbeSize);
 	return result;
 }
 
@@ -1757,29 +1800,34 @@ extern "C" void abi_new_saves_convert(const char* path) noexcept
 {
 	std::FILE* file = std::fopen(path, "rb");
 	if (!file) return;
-	std::uint8_t header[kSaveHeaderSize];
-	std::fread(header, kSaveHeaderSize, 1, file);  // return ignored, like the original
+	std::array<std::uint8_t, kSaveHeaderSize> header;
+	std::fread(header.data(), header.size(), 1, file);  // return ignored, like the original
 	std::uint32_t magic = 0;
-	std::memcpy(&magic, header + kSaveMagicOffset, 4);
+	std::memcpy(&magic, header.data() + kSaveMagicOffset, sizeof(magic));
 	if (magic != kSaveMagic)  // "SAVE"
 	{
 		std::fclose(file);
 		return;
 	}
-	for (int i = 0; i < 18; ++i)
+	for (std::size_t i = 0; i < kSaveChunkCount; ++i)
 	{
-		std::uint8_t chunk[9];
-		std::fread(chunk, 9, 1, file);
+		std::array<std::uint8_t, kSaveChunkHeaderSize> chunk;
+		std::fread(chunk.data(), chunk.size(), 1, file);
 		std::uint32_t size = 0;
-		std::memcpy(&size, chunk + 5, 4);
+		std::memcpy(&size, chunk.data() + kSaveChunkSizeOffset, sizeof(size));
 		zpatch_new_saves_chunk_len = size;                  // dword_1015AD90
-		zpatch_new_saves_element_count = size - 9u;         // dword_1015ADA0
+		zpatch_new_saves_element_count = size - kSaveChunkHeaderSize;  // dword_1015ADA0
+		// The original's allocation is unchecked: a failed malloc passes null to
+		// fread and faults, so no null guard is added here.
 		void* payload = std::malloc(zpatch_new_saves_element_count);
 		std::fread(payload, 1, zpatch_new_saves_element_count, file);
 		std::free(payload);
-		if (i == 9) zpatch_new_saves_flag9 = size == 19525u ? 1u : 0u;
-		if (i == 16) zpatch_new_saves_flag16 = size == 3703u ? 1u : 0u;
-		if (i == 13) zpatch_new_saves_flag13 = size == 5953u ? 1u : 0u;
+		if (i == 9)
+			zpatch_new_saves_force_new_read = size == kSaveChunk9SizeNew ? 1u : 0u;
+		if (i == 16)
+			zpatch_new_saves_new_chunk16 = size == kSaveChunk16SizeNew ? 1u : 0u;
+		if (i == 13)
+			zpatch_new_saves_extra_block = size == kSaveChunk13SizeNew ? 1u : 0u;
 	}
 	std::fclose(file);
 
@@ -1788,7 +1836,7 @@ extern "C" void abi_new_saves_convert(const char* path) noexcept
 	if (p1 == nullptr) p1 = scan_game("74 37 80 3D ? ? ? ? 00 75 2E 8D 84 ? ? ? ? 00 6A 1E");
 	if (p1 != nullptr)
 		wp_byte(const_cast<std::uint8_t*>(p1),
-		        zpatch_new_saves_flag9 != 0 ? kShortJmpOpcode : kJeRel8Opcode);
+		        zpatch_new_saves_force_new_read != 0 ? kShortJmpOpcode : kJeRel8Opcode);
 
 	// P2 (game 0x7D8C50): route the oversized read through the plugin's scratch
 	// buffer, resize the read, and force/NOP the branch per the save format.
@@ -1798,17 +1846,19 @@ extern "C" void abi_new_saves_convert(const char* path) noexcept
 	{
 		auto* site = const_cast<std::uint8_t*>(p2);
 		const auto original_target = static_cast<std::uint32_t>(
-		    injector::ReadRelativeOffset(injector::raw_ptr(site + 7), 4, true).as_int());
-		injector::MakeCALL(injector::raw_ptr(site + 6),
+		    injector::ReadRelativeOffset(injector::raw_ptr(site + kNewSaveCallOperand), 4, true)
+		        .as_int());
+		injector::MakeCALL(injector::raw_ptr(site + kNewSaveCallSite),
 		                   injector::raw_ptr(reinterpret_cast<void*>(&abi_new_saves_read_hook)),
 		                   true); //call
 		if (zpatch_new_saves_loaddata == 0)
 			zpatch_new_saves_loaddata = original_target;
-		wp_dword(site + 1, zpatch_new_saves_flag16 != 0 ? 3694u : 3262u);
-		if (zpatch_new_saves_flag16 != 0)
-			injector::MakeNOP(injector::raw_ptr(site - 5), 2, true); //nop
+		wp_dword(site + kNewSaveReadSizeOperand,
+		         zpatch_new_saves_new_chunk16 != 0 ? kSaveReadSizeNew : kSaveReadSizeOld);
+		if (zpatch_new_saves_new_chunk16 != 0)
+			injector::MakeNOP(injector::raw_ptr(site + kNewSaveBranchSite), 2, true); //nop
 		else
-			wp_word(site - 5, kJneRel8Plus38);  // 75 26 = jne +0x26
+			wp_word(site + kNewSaveBranchSite, kJneRel8Plus38);  // 75 26 = jne +0x26
 	}
 
 	// P3 (game 0x8DA090): route the second LoadData call through the plugin body
@@ -1820,14 +1870,16 @@ extern "C" void abi_new_saves_convert(const char* path) noexcept
 	{
 		auto* site = const_cast<std::uint8_t*>(p3);
 		const auto original_target = static_cast<std::uint32_t>(
-		    injector::ReadRelativeOffset(injector::raw_ptr(site + 7), 4, true).as_int());
-		injector::MakeCALL(injector::raw_ptr(site + 6),
+		    injector::ReadRelativeOffset(injector::raw_ptr(site + kNewSaveCallOperand), 4, true)
+		        .as_int());
+		injector::MakeCALL(injector::raw_ptr(site + kNewSaveCallSite),
 		                   injector::raw_ptr(reinterpret_cast<void*>(&abi_new_saves_p3_hook)),
 		                   true); //call
-		if (zpatch_new_saves_p3_orig == 0)
-			zpatch_new_saves_p3_orig = original_target;
+		if (zpatch_new_saves_p3_original == 0)
+			zpatch_new_saves_p3_original = original_target;
 		zpatch_new_saves_loaddata = static_cast<std::uint32_t>(
-		    injector::ReadRelativeOffset(injector::raw_ptr(site + 30), 4, true).as_int());
+		    injector::ReadRelativeOffset(injector::raw_ptr(site + kNewSaveLoadOperand), 4, true)
+		        .as_int());
 	}
 }
 
