@@ -20,81 +20,23 @@ differently from the original: GFWL achievements now work alongside Steam's.
 
 ## Features
 
-- Launch patch 7 or 8 through Steam with a non-SecuROM launcher renamed to `PlayGTAIV.exe`.
-- Fix the 15+ second wait before the game window even pops up.
-- Cut loading times in half or more.
-- Get to the main menu faster.
-- Improve a badly coded shader-streaming function, reducing stutter somewhat.
-- Reimplement memory allocation, reducing memory usage and loading times and eliminating SMPA* errors.
-- Fix the crash after the benchmark ends.
-- Fix the freeze after Concrete Jungle with the three EFLC-exclusive radio stations installed.
-- Fix the crash when switching episodes mid-game.
-- Fix the crash when firing the ROCKET weapon.
-- Fix the rare crash when getting a wanted level.
-- Fix SMPA60 when the game is abused with car mods.
-- Ignore all error messages, which is possibly useful for debugging.
-- Fix the climbing quick-time event in Out of Commission at high FPS.
-- Fix the crash when SuperLOD is spawned.
-- Fix the crash when starting cutscenes as a ped.
-- Fix random crashes while using actual planes.
-- Fix the crash when another player changes their model to Niko and then back.
-- Fix the crash when another player switches to an invalid player model.
-- Fix the crash when another player spawns a car with the wrong vehicle type.
-- Fix the blackscreen, crash-message and group-hack crash methods used by malicious trainers.
-- Fix the aim-projectile, path-node and collision-deadlock crashes and freezes that usually happen in GTAC.
-- Increase the PtrNode limit, fixing random crashes in big Cunning Stunts maps.
-- Fix zoomed-in cutscenes and jittery cutscene camera motion at high framerates.
-- Fix bikes sliding out easily above 60 FPS.
-- Fix the foot position on chopper bikes and the standing-still animation during a phone call.
-- Fix the game speeding up above 300 FPS.
-- Fix the game being permanently sped up slightly in some cases.
-- Fix VSync locking below 60 FPS.
-- Fix the mouse deadzone and remove mouse acceleration from snipers.
-- Fix driveby shots not landing in the center of the crosshair when high above ground level.
-- Increase the sync interval when players are far away.
-- Stop other players teleporting you or removing all your weapons with malicious trainers.
-- Remove the modded-file checks from 1.0.4.0, 1.0.6.0 and 1.0.7.0.
-- Remove the Social Club login requirement for multiplayer.
-- Remove the "update or sign out of LIVE" popup on patch 5 and below.
-- Log entities as they sync into the GTAC console.
-- Allow `script.img` and `radiohud` from newer versions to work (`script.img` is still 1060+ only).
-- Make newer savefiles load properly without downgrading them first.
-- Remove the GFWL savegame CRC check, allowing other people's savegames to load.
-- Disable the GFWL `xlive.dll` protection check.
-- Mirror GFWL achievements to Steam.
-- Fix emissive lights such as lampposts slowly fading in and out with the time of day.
-- Fix reverse lights being cast in the middle of the car's hood.
-- Fix the missing fade-in for LODs.
-- Enable night shadows cast from buildings.
-- Cast dynamic shadows for cars and detached car parts from the Booth Tunnel, lampposts and helicopter spotlights.
-- Make all objects cast shadows (e.g. bollards, Hove Beach train tracks).
-- Cast two separate lights for car headlights, each with its own shadows.
-- Re-enable headlight shadows while CarDynamicShadowFix is active (buggy; never use with dual headlights).
-- Remove the arbitrary height cutoff from vehicle imposters, making them behave more like V.
-- Remove the arbitrary height cutoff from distant lights.
-- Remove the static shadow textures under cars, in the world and in cutscenes.
-- Remove the draw distance from static vehicle shadows.
-- Load TBoGT and TLAD from EFLC or CE folders, and further add-on episodes in the same format.
-- Allow loading any `.sco` file regardless of which episode or platform it came from.
-- Add APC and Buzzard support to all episodes.
-- Add explosive shotgun, sticky bomb and DSR1 sniper support to all episodes.
-- Make cops use P90s and assault shotguns.
-- Unlock the aircraft height limit to TBoGT's level for all episodes.
-- Use `droppipebomb_icon` for the pipe bomb in base IV.
-- Fix cars being randomly changed in parking spots when add-on models are added.
-- Increase the number of vehicles with different models that can be loaded at one time.
-- Increase the number of possible `vehicles.ide` entries to 1024.
-- Fix bullet holes not appearing on some modded cars outside TBoGT.
-- Remove the 4-livery limit, allowing up to 255 unique livery textures for any car.
-- Add the `+popuplights` `vehicles.ide` flag for the Hakumai's popup headlights.
-- Add the `+siren` `vehicles.ide` flag for police sirens.
-- Make propellers, ailerons, elevators and rudders move on planes that support them.
-- Make the engine block part of cars shake like V.
-- Make the `steeringwheel` car bone rotate properly, with a configurable `+wheelangle` flag.
-- Restore the unused music on death.
-- Load `gta.dat` from another path.
-- Allow raw hashes in `.ide` entries by prefixing the unsigned decimal hash with `hash:`.
-- Fix Niko peds' clothes never changing properly in the trainer.
+- Skip the launcher/DRM checks (XLivelessAddon).
+- Set custom savegame and settings folders, or move both into a saves folder inside the game folder (XLivelessAddon).
+- Remove the Rockstar Games registry path dependency and skip the GFWL web-connect and health checks (XLivelessAddon).
+- Shorten the intro screens and skip the main menu (XLivelessAddon).
+- Add borderless windowed mode, keep rendering while unfocused, and fix the VRAM detection (XLivelessAddon).
+- Use a (non-SecuROM) launcher renamed to `PlayGTAIV.exe`.
+- Fix the 15+ second startup times before the game window even pops up, cut loading times in half or more, and get to the main menu faster.
+- Fix the benchmark, Concrete Jungle, episode-switch, ROCKET, wanted-level, SuperLOD and SMPA60 crashes.
+- Fix the multiplayer crashes and freezes, including the modmenu crash methods.
+- Fix the high-FPS problems: cutscenes, bike physics, the 300 FPS speedup, VSync, driveby aim and the mouse deadzone.
+- Raise the PtrNode and vehicle limits, remove the livery limit and reimplement memory allocation.
+- Fix the emissive-light, reversing-light and LOD fade-in bugs, and add car, object and building shadows.
+- Add compatibility for newer `script.img`/`radiohud` files, newer savefiles, any `.sco` file and the Complete Edition folder structure and files.
+- Remove the GFWL savegame CRC check, Social Club login, GFWL update popup and modded-file checks.
+- Add the APC/Buzzard, explosive weapons, police weapons and TBoGT aircraft height limit.
+- Add the popup headlights, sirens, plane parts, engine block, steering wheel and garage fixes.
+- Mirror GFWL achievements to Steam, disable the GFWL `xlive.dll` protection check, and add the pipe-bomb icon, raw `.ide` hashes, `gta.dat` override, death music and Niko ped clothes.
 
 ## Installation
 
