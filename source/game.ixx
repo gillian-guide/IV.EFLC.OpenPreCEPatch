@@ -253,24 +253,40 @@ namespace opp
         return true;
     }
 
+    namespace
+    {
+        // The original classifier's switch as one table: the compact version is
+        // the enum's numeric value, and the name is what the log/dump prints.
+        struct BuildRow final
+        {
+            uint32_t compact_version;
+            GameBuild build;
+            const char* name;
+        };
+        constexpr BuildRow kBuildRows[] = {
+            {1000, GameBuild::v1000, "1000"},
+            {1004, GameBuild::v1004, "1004"},
+            {1040, GameBuild::v1040, "1040"},
+            {1060, GameBuild::v1060, "1060"},
+            {1061, GameBuild::v1061, "1061"},
+            {1070, GameBuild::v1070, "1070"},
+            {1080, GameBuild::v1080, "1080"},
+            {1100, GameBuild::v1100, "1100"},
+            {1110, GameBuild::v1110, "1110"},
+            {1120, GameBuild::v1120, "1120"},
+            {1130, GameBuild::v1130, "1130"},
+            {12043, GameBuild::v12043, "12043"},
+        };
+    } // namespace
+
     GameBuild ClassifyGameBuild(uint32_t version) noexcept
     {
-        switch (version)
+        for (const BuildRow& row : kBuildRows)
         {
-        case 1000: return GameBuild::v1000;
-        case 1004: return GameBuild::v1004;
-        case 1040: return GameBuild::v1040;
-        case 1060: return GameBuild::v1060;
-        case 1061: return GameBuild::v1061;
-        case 1070: return GameBuild::v1070;
-        case 1080: return GameBuild::v1080;
-        case 1100: return GameBuild::v1100;
-        case 1110: return GameBuild::v1110;
-        case 1120: return GameBuild::v1120;
-        case 1130: return GameBuild::v1130;
-        case 12043: return GameBuild::v12043;
-        default: return GameBuild::unknown;
+            if (row.compact_version == version)
+                return row.build;
         }
+        return GameBuild::unknown;
     }
 
     bool BuildIs(GameBuild build, std::initializer_list<GameBuild> builds) noexcept
@@ -285,22 +301,12 @@ namespace opp
 
     const char* GameBuildName(GameBuild build) noexcept
     {
-        switch (build)
+        for (const BuildRow& row : kBuildRows)
         {
-        case GameBuild::v1000: return "1000";
-        case GameBuild::v1004: return "1004";
-        case GameBuild::v1040: return "1040";
-        case GameBuild::v1060: return "1060";
-        case GameBuild::v1061: return "1061";
-        case GameBuild::v1070: return "1070";
-        case GameBuild::v1080: return "1080";
-        case GameBuild::v1100: return "1100";
-        case GameBuild::v1110: return "1110";
-        case GameBuild::v1120: return "1120";
-        case GameBuild::v1130: return "1130";
-        case GameBuild::v12043: return "12043";
-        default: return "unknown";
+            if (row.build == build)
+                return row.name;
         }
+        return "unknown";
     }
 
     uint32_t SelectGameProcess(const ProcessEntry* entries, size_t count,
@@ -771,35 +777,55 @@ namespace
     }
 } // namespace
 
+namespace
+{
+    struct ValueBinding final
+    {
+        std::string_view name;
+        void* address;
+    };
+
+    // The original-global publish targets keyed by INI option (the sig-install
+    // `literal` rows). The addresses are stable for the process lifetime.
+    constexpr ValueBinding kValueBindings[] = {
+        {"StartupTimeFix", &g_startup_time},
+        {"VSyncFix", &g_vsync_flag},
+        {"OverrideGTADatPath", zpatch_override_gta_dat_path},
+        // PopupHeadlightsFlag: the `fld` operand at +82 loads our pi/2 float.
+        {"PopupHeadlightsFlag", &zpatch_popup_angle},
+        // ForceCarHeadlightShadows: the operand at +211 loads our 2.0f dword.
+        {"ForceCarHeadlightShadows", &zpatch_fchs_offset},
+        // LocalSettingsPath: the path-helper call goes through our 4-byte slot.
+        {"LocalSettingsPath", &zpatch_local_saves_slot},
+    };
+
+    // Named plugin-data symbols the sig-install `plugin_data_ptr` kind addresses
+    // (a 4-byte value written at the site: the ADDRESS of the named global).
+    constexpr ValueBinding kSymbolBindings[] = {
+        {"zpatch_local_iv_suffix", zpatch_local_iv_suffix},
+        {"zpatch_episode_flag", &zpatch_episode_flag},
+    };
+
+    template <size_t N>
+    uintptr_t FindBinding(const ValueBinding (&bindings)[N], std::string_view name) noexcept
+    {
+        for (const ValueBinding& binding : bindings)
+        {
+            if (binding.name == name)
+                return DumpTrack(reinterpret_cast<uintptr_t>(binding.address));
+        }
+        return 0;
+    }
+} // namespace
+
 uintptr_t FindGlobalValue(std::string_view option) noexcept
 {
-    if (option == "StartupTimeFix")
-        return DumpTrack(reinterpret_cast<uintptr_t>(&g_startup_time));
-    if (option == "VSyncFix")
-        return DumpTrack(reinterpret_cast<uintptr_t>(&g_vsync_flag));
-    if (option == "OverrideGTADatPath")
-        return DumpTrack(reinterpret_cast<uintptr_t>(zpatch_override_gta_dat_path));
-    // PopupHeadlightsFlag: the `fld` operand at +82 now loads our pi/2 float.
-    if (option == "PopupHeadlightsFlag")
-        return DumpTrack(reinterpret_cast<uintptr_t>(&zpatch_popup_angle));
-    // ForceCarHeadlightShadows: the operand at +211 now loads our 2.0f dword.
-    if (option == "ForceCarHeadlightShadows")
-        return DumpTrack(reinterpret_cast<uintptr_t>(&zpatch_fchs_offset));
-    // LocalSettingsPath: the path-helper call goes through our 4-byte slot.
-    if (option == "LocalSettingsPath")
-        return DumpTrack(reinterpret_cast<uintptr_t>(&zpatch_local_saves_slot));
-    return 0;
+    return FindBinding(kValueBindings, option);
 }
 
-// Named plugin-data symbols the sig-install `plugin_data_ptr` kind addresses
-// (a 4-byte value written at the site: the ADDRESS of the named global).
 uintptr_t FindGlobalSymbol(std::string_view symbol) noexcept
 {
-    if (symbol == "zpatch_local_iv_suffix")
-        return DumpTrack(reinterpret_cast<uintptr_t>(zpatch_local_iv_suffix));
-    if (symbol == "zpatch_episode_flag")
-        return DumpTrack(reinterpret_cast<uintptr_t>(&zpatch_episode_flag));
-    return 0;
+    return FindBinding(kSymbolBindings, symbol);
 }
 
 // Slot publishes are keyed by the original global's name; a name that is not
