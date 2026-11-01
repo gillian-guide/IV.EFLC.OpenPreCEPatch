@@ -41,7 +41,12 @@ void ApplyDrivebyFOVFix(const PatchContext& ctx);
 void ApplyPatch4RemoveModChecks(const PatchContext& ctx);
 }  // export
 
-constexpr GameRva kModChecksEntryJmp_1070{0x003A09u};
+// Patch6and7RemoveModChecks / Patch7RemoveModChecks (original handler
+// sub_10044710): the packed entry-stub jump targets, per gated build. The
+// handler writes `lea edi,[eax+<site>]; lea ebx,[eax+<target>];
+// mov byte [edi],0E9h`; the entry target (0x3A09) is a 1.0.6.0 row, the mid and
+// case targets (0x38AE / 0x39E9) are 1.0.7.0 rows.
+constexpr GameRva kModChecksEntryJmp_1060{0x003A09u};
 constexpr GameRva kModChecksMidJmp_1070{0x0038AEu};
 constexpr GameRva kModChecksCaseJmp_1070{0x0039E9u};
 constexpr std::uint32_t kTrueValue = 1u;                    // mov eax,1
@@ -318,7 +323,7 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 			if (auto p = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x003982
-				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksEntryJmp_1070.site(ctx.gameBase)), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksEntryJmp_1060.site(ctx.gameBase)), true); //jmp
 			}
 			if (auto p = Pattern(image, "74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F"); p.size() > 0)
 			{
@@ -452,7 +457,7 @@ void ApplyPatch7RemoveModChecks(const PatchContext& ctx)
 			if (auto p = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x003982
-				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksEntryJmp_1070.site(ctx.gameBase)), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksEntryJmp_1060.site(ctx.gameBase)), true); //jmp
 			}
 		}
 

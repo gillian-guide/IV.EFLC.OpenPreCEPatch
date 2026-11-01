@@ -48,12 +48,16 @@ void ApplyNoImpostorHeightCutoff(const PatchContext& ctx);
 void ApplyNoLODLightHeightCutoff(const PatchContext& ctx);
 }  // export
 
-constexpr GameRva kSuperLodFail_1080{0x4A3D37u};
-constexpr GameRva kSuperLodOk_1080{0x4A3CEFu};
-constexpr GameRva kSuperLodLookup_1080{0x58AAE0u};
-constexpr GameRva kSuperLodFail_1070{0x540E67u};
-constexpr GameRva kSuperLodOk_1070{0x540E1Fu};
-constexpr GameRva kSuperLodLookup_1070{0x4DD2D0u};
+// SuperLODFix (original handler sub_10046A10): the three base+RVA values it
+// publishes in dword_101580AC (fail), dword_101580B0 (ok) and dword_101580B4
+// (lookup), per gated build. The suffix is the game version the handler's row
+// belongs to (build 8 = 1.0.7.0, build 9 = 1.0.8.0).
+constexpr GameRva kSuperLodFail_1070{0x4A3D37u};
+constexpr GameRva kSuperLodOk_1070{0x4A3CEFu};
+constexpr GameRva kSuperLodLookup_1070{0x58AAE0u};
+constexpr GameRva kSuperLodFail_1080{0x540E67u};
+constexpr GameRva kSuperLodOk_1080{0x540E1Fu};
+constexpr GameRva kSuperLodLookup_1080{0x4DD2D0u};
 
 void PublishBuildingDynamicShadows(const PatchContext& ctx)
 {
@@ -108,16 +112,16 @@ void PublishSuperLODFix(const PatchContext& ctx)
 
 		if (ctx.build == GameBuild::v1070)
 		{
-			zpatch_super_lod_fail = AddressOf(kSuperLodFail_1080.site_ptr(image.base));
-			zpatch_super_lod_ok = AddressOf(kSuperLodOk_1080.site_ptr(image.base));
-			zpatch_super_lod_lookup = AddressOf(kSuperLodLookup_1080.site_ptr(image.base));
+			zpatch_super_lod_fail = AddressOf(kSuperLodFail_1070.site_ptr(image.base));
+			zpatch_super_lod_ok = AddressOf(kSuperLodOk_1070.site_ptr(image.base));
+			zpatch_super_lod_lookup = AddressOf(kSuperLodLookup_1070.site_ptr(image.base));
 		}
 
 		if (ctx.build == GameBuild::v1080)
 		{
-			zpatch_super_lod_fail = AddressOf(kSuperLodFail_1070.site_ptr(image.base));
-			zpatch_super_lod_ok = AddressOf(kSuperLodOk_1070.site_ptr(image.base));
-			zpatch_super_lod_lookup = AddressOf(kSuperLodLookup_1070.site_ptr(image.base));
+			zpatch_super_lod_fail = AddressOf(kSuperLodFail_1080.site_ptr(image.base));
+			zpatch_super_lod_ok = AddressOf(kSuperLodOk_1080.site_ptr(image.base));
+			zpatch_super_lod_lookup = AddressOf(kSuperLodLookup_1080.site_ptr(image.base));
 		}
 	}
 }

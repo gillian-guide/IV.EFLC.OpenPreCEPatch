@@ -60,41 +60,6 @@ constexpr DWORD kUnsupportedSleepMs = 500;
 constexpr UINT kUnsupportedExitCode = E_UNEXPECTED;  // 0x8000FFFF
 static_assert(kUnsupportedExitCode == 0x8000FFFFu);
 
-
-// LoadDLCs (original handler sub_100234E0): the loader's return value is stored
-// as the callback and the two DLC entry points it patches in are RVAs.
-// provenance: GTAIV_1070.exe / GTAIV_1060.exe / GTAIV.exe, IDA 2026-10-31;
-// instructions: `add edi, 414560h`, `lea edi, [eax+4136E0h]`, `lea edi,
-// [eax+414080h]` (and the 1060/1080 equivalents).
-
-// LoadDLCs rail: the game functions the original's handler calls/jumps to
-// after patching the loader. provenance: same three images; instructions
-// `mov byte ptr [edi], 0E9h` / `0E8h` at the site named by each constant.
-
-// SuperLODFix (original handler sub_10046A10): the three game addresses the
-// shim tail-jumps to / calls, per build. provenance: IDA 2026-10-31; the
-// original's `lea edi, [ecx+4A3CE9h]` site is the JumpToBody the arm patches.
-
-// The packed entry-stub jumps the RemoveModChecks arms write (original handler
-// sub_10044710). provenance: GTAIV_1060.exe / GTAIV_1070.exe, IDA 2026-10-31;
-// the original's `add esi/edi, <rva>` instruction precedes each write.
-constexpr GameRva kModChecksEntryJmp_1060{0x003A09u};
-constexpr GameRva kModChecksMidJmp_1060{0x0038AEu};
-constexpr GameRva kModChecksCaseJmp_1060{0x0039E9u};
-
-
-// Structural values the arms and the compiled bodies would otherwise spell as
-// bare hex. Each is a field offset, a size or a mask; the recovered literal is
-// in the comment (research 07 §2).
-// The two push immediates ForceCarHeadlightShadows' patterns embed (0x0504
-// and 0x0104); the arm rewrites their two bytes.
-constexpr std::uint32_t kForcedShadowSize = 0x100u;     // 0x100
-
-
-
-
-
-
 bool bDFAInstalled = false;
 
 void ResolvePaths(HMODULE module)

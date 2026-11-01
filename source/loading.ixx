@@ -52,21 +52,28 @@ void ApplyOverrideGTADatPath(const PatchContext& ctx);
 void ApplyVSyncFix(const PatchContext& ctx);
 }  // export
 
-constexpr GameRva kDlcLoadCallback_1070{0x414560u};
-constexpr GameRva kDlcRegister_1070{0x4136E0u};
-constexpr GameRva kDlcApply_1070{0x414080u};
-constexpr GameRva kDlcLoadCallback_1060{0x414300u};
-constexpr GameRva kDlcRegister_1060{0x413480u};
-constexpr GameRva kDlcApply_1060{0x413E20u};
+// LoadDLCs (original handler sub_100234E0): per build, the loader callback the
+// handler stores in dword_1015BDDC and the two DLC entry points it puts in
+// dword_1015804C (register) and dword_101580D0 (apply). The suffix is the game
+// version the row belongs to (1.0.6.0 = build 7, 1.0.7.0 = build 8); the
+// handler's own `lea edi,[eax+<rva>]` rows hold the same values.
+constexpr GameRva kDlcLoadCallback_1060{0x414560u};
+constexpr GameRva kDlcRegister_1060{0x4136E0u};
+constexpr GameRva kDlcApply_1060{0x414080u};
+constexpr GameRva kDlcLoadCallback_1070{0x414300u};
+constexpr GameRva kDlcRegister_1070{0x413480u};
+constexpr GameRva kDlcApply_1070{0x413E20u};
 constexpr GameRva kDlcLoadCallback_1080{0x490460u};
 constexpr GameRva kDlcRegister_1080{0x48F440u};
 constexpr GameRva kDlcApply_1080{0x48FE00u};
-constexpr GameRva kLoadDlcsJmpA_1070{0x4144B8u};   // 0x4144B8: jmp target
-constexpr GameRva kLoadDlcsJmpB_1070{0x41452Cu};   // 0x41452C: jmp target
-constexpr GameRva kLoadDlcsCall_1070{0x413E30u};   // 0x413E30: call target
-constexpr GameRva kLoadDlcsJmpA_1060{0x414258u};   // 0x414258: jmp target
-constexpr GameRva kLoadDlcsJmpB_1060{0x4142CCu};   // 0x4142CC: jmp target
-constexpr GameRva kLoadDlcsCall_1060{0x413BD0u};   // 0x413BD0: call target
+// The LoadDLCs rail: the call/jump targets the handler writes after patching the
+// loader (target = site + 5 + rel32; the sites are the scans in ApplyLoadDLCs).
+constexpr GameRva kLoadDlcsJmpA_1060{0x4144B8u};   // 0x4144B8: jmp target
+constexpr GameRva kLoadDlcsJmpB_1060{0x41452Cu};   // 0x41452C: jmp target
+constexpr GameRva kLoadDlcsCall_1060{0x413E30u};   // 0x413E30: call target
+constexpr GameRva kLoadDlcsJmpA_1070{0x414258u};   // 0x414258: jmp target
+constexpr GameRva kLoadDlcsJmpB_1070{0x4142CCu};   // 0x4142CC: jmp target
+constexpr GameRva kLoadDlcsCall_1070{0x413BD0u};   // 0x413BD0: call target
 constexpr GameRva kLoadDlcsJmpA_1080{0x4903B8u};   // 0x4903B8: jmp target
 constexpr GameRva kLoadDlcsJmpB_1080{0x49042Cu};   // 0x49042C: jmp target
 constexpr GameRva kLoadDlcsCall_1080{0x48FBB0u};   // 0x48FBB0: call target
@@ -79,16 +86,16 @@ void PublishLoadDLCs(const PatchContext& ctx)
 	{
 		if (ctx.build == GameBuild::v1060)
 		{
-			zpatch_dlc_load_callback = static_cast<std::uint32_t>(kDlcLoadCallback_1070.site(ctx.gameBase));
-			DlcRegisterRva() = kDlcRegister_1070.value;
-			DlcApplyRva() = kDlcApply_1070.value;
+			zpatch_dlc_load_callback = static_cast<std::uint32_t>(kDlcLoadCallback_1060.site(ctx.gameBase));
+			DlcRegisterRva() = kDlcRegister_1060.value;
+			DlcApplyRva() = kDlcApply_1060.value;
 		}
 
 		if (ctx.build == GameBuild::v1070)
 		{
-			zpatch_dlc_load_callback = static_cast<std::uint32_t>(kDlcLoadCallback_1060.site(ctx.gameBase));
-			DlcRegisterRva() = kDlcRegister_1060.value;
-			DlcApplyRva() = kDlcApply_1060.value;
+			zpatch_dlc_load_callback = static_cast<std::uint32_t>(kDlcLoadCallback_1070.site(ctx.gameBase));
+			DlcRegisterRva() = kDlcRegister_1070.value;
+			DlcApplyRva() = kDlcApply_1070.value;
 		}
 
 		if (ctx.build == GameBuild::v1080)
@@ -273,7 +280,7 @@ void ApplyLoadDLCs(const PatchContext& ctx)
 			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x41445C
-				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpA_1070.site(ctx.gameBase)), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpA_1060.site(ctx.gameBase)), true); //jmp
 			}
 			if (auto p = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8"); p.size() > 0)
 			{
@@ -285,12 +292,12 @@ void ApplyLoadDLCs(const PatchContext& ctx)
 			if (auto p = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x41450E
-				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpB_1070.site(ctx.gameBase)), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpB_1060.site(ctx.gameBase)), true); //jmp
 			}
 			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x41453A
-				injector::MakeCALL(site, reinterpret_cast<void*>(kLoadDlcsCall_1070.site(ctx.gameBase)), true); //call
+				injector::MakeCALL(site, reinterpret_cast<void*>(kLoadDlcsCall_1060.site(ctx.gameBase)), true); //call
 			}
 			if (auto p = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); p.size() > 0)
 			{
@@ -315,7 +322,7 @@ void ApplyLoadDLCs(const PatchContext& ctx)
 			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x4141FC
-				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpA_1060.site(ctx.gameBase)), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpA_1070.site(ctx.gameBase)), true); //jmp
 			}
 			if (auto p = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E"); p.size() > 0)
 			{
@@ -327,12 +334,12 @@ void ApplyLoadDLCs(const PatchContext& ctx)
 			if (auto p = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x4142AE
-				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpB_1060.site(ctx.gameBase)), true); //jmp
+				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpB_1070.site(ctx.gameBase)), true); //jmp
 			}
 			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x4142DA
-				injector::MakeCALL(site, reinterpret_cast<void*>(kLoadDlcsCall_1060.site(ctx.gameBase)), true); //call
+				injector::MakeCALL(site, reinterpret_cast<void*>(kLoadDlcsCall_1070.site(ctx.gameBase)), true); //call
 			}
 			if (auto p = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); p.size() > 0)
 			{
