@@ -76,7 +76,6 @@ extern "C" uint32_t zpatch_driveby_resume;    // dword_1015BDF4
 extern "C" uint32_t zpatch_driveby_fov;       // dword_101580C4
 extern "C" uint32_t zpatch_driveby_cached;    // dword_1015BDF8
 extern "C" uint8_t zpatch_driveby_done;       // byte_1015AD4A
-extern "C" uint32_t zpatch_driveby_last_result;  // resolver result (diagnostic)
 // NoLiveryLimit: the published jumps/function pointer plus the helper's state.
 extern "C" uint32_t zpatch_nolivery_name;      // dword_10159BA8 (char*)
 extern "C" uint32_t zpatch_nolivery_index;     // dword_10159BB0

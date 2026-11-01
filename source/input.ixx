@@ -37,125 +37,6 @@ using namespace opp;
 
 extern "C"
 {
-constexpr uint32_t kModelTablePointerRva = 0x150FDD0u;
-constexpr uint32_t kModelTableCountRva = 0x150FDD4u;
-// One-shot diagnostic for DrivebyFOVFix: scans the resolver's registry table
-// (base+0x150FDD0/count 0x150FDD4, build-9 RVAs) for the key 0x9399528. Naked so
-// the shim can call it without disturbing the live xmm1..xmm7 (xmm0 is scratch).
-// The scan result is not consumed.
-extern "C" void abi_driveby_fov_note_impl()
-{
-    static bool logged = false;
-    if (logged) return;
-    logged = true;
-    const uintptr_t game_base =
-        static_cast<uintptr_t>(zpatch_driveby_resume) - 5u - 0x85031Fu;  // build-9 sig RVA
-    uint32_t count = 0;
-    uint32_t table = 0;
-    // Sanity bounds for a mapped 32-bit image base: above the DOS header area
-    // and below the user-mode limit.
-    constexpr uintptr_t kImageBaseMin = 0x10000u;
-    constexpr uintptr_t kImageBaseMax = 0x80000000u;
-    if (game_base > kImageBaseMin && game_base < kImageBaseMax)
-    {
-        count = *reinterpret_cast<const uint32_t*>(game_base + kModelTableCountRva);
-        table = *reinterpret_cast<const uint32_t*>(game_base + kModelTablePointerRva);
-        // The resolver registry is a pointer plus a count; the caps reject a
-        // half-initialised table (the original scans it unguarded).
-        constexpr uint32_t kModelTableMin = 0x10000u;
-        constexpr uint32_t kModelTableCountMax = 0x100000u;
-        if (table > kModelTableMin && count > 0u && count < kModelTableCountMax)
-        {
-            for (uint32_t i = 0; i < count; ++i)
-            {
-                const uint32_t key = *reinterpret_cast<const uint32_t*>(
-                    static_cast<uintptr_t>(table) + i * 8u);
-                // The model the diagnostic looks for (the drive-by pose model).
-                constexpr uint32_t kDrivebyModelHash = 0x9399528u;
-                if (key == kDrivebyModelHash) break;
-            }
-        }
-    }
-}
-[[maybe_unused]] static __declspec(naked) void abi_driveby_fov_note()
-{
-    __asm {
-        sub esp, 70h
-        __emit 0Fh
-        __emit 11h
-        __emit 4Ch
-        __emit 24h
-        __emit 00h                    // movups [esp], xmm1
-        __emit 0Fh
-        __emit 11h
-        __emit 54h
-        __emit 24h
-        __emit 10h                    // movups [esp+0x10], xmm2
-        __emit 0Fh
-        __emit 11h
-        __emit 5Ch
-        __emit 24h
-        __emit 20h                    // movups [esp+0x20], xmm3
-        __emit 0Fh
-        __emit 11h
-        __emit 64h
-        __emit 24h
-        __emit 30h                    // movups [esp+0x30], xmm4
-        __emit 0Fh
-        __emit 11h
-        __emit 6Ch
-        __emit 24h
-        __emit 40h                    // movups [esp+0x40], xmm5
-        __emit 0Fh
-        __emit 11h
-        __emit 74h
-        __emit 24h
-        __emit 50h                    // movups [esp+0x50], xmm6
-        __emit 0Fh
-        __emit 11h
-        __emit 7Ch
-        __emit 24h
-        __emit 60h                    // movups [esp+0x60], xmm7
-        call abi_driveby_fov_note_impl
-        __emit 0Fh
-        __emit 10h
-        __emit 4Ch
-        __emit 24h
-        __emit 00h                    // movups xmm1, [esp]
-        __emit 0Fh
-        __emit 10h
-        __emit 54h
-        __emit 24h
-        __emit 10h                    // movups xmm2, [esp+0x10]
-        __emit 0Fh
-        __emit 10h
-        __emit 5Ch
-        __emit 24h
-        __emit 20h                    // movups xmm3, [esp+0x20]
-        __emit 0Fh
-        __emit 10h
-        __emit 64h
-        __emit 24h
-        __emit 30h                    // movups xmm4, [esp+0x30]
-        __emit 0Fh
-        __emit 10h
-        __emit 6Ch
-        __emit 24h
-        __emit 40h                    // movups xmm5, [esp+0x40]
-        __emit 0Fh
-        __emit 10h
-        __emit 74h
-        __emit 24h
-        __emit 50h                    // movups xmm6, [esp+0x50]
-        __emit 0Fh
-        __emit 10h
-        __emit 7Ch
-        __emit 24h
-        __emit 60h                    // movups xmm7, [esp+0x60]
-        add esp, 70h
-        ret
-    }
-}
 
 // 0x100064b0 DrivebyFOVFix: computes the drive-by FOV once and feeds it to the
 // resume as xmm0. The original is `pushal; call sub_10006450; popal;
@@ -287,14 +168,12 @@ void zpatch_mf_advance_c() noexcept
 
     // fstp dword ptr [esi+yaw] followed by the first two bytes of the next
     // instruction (8B 5C = mov ebx, [esp+...]).
-    // `fstp dword ptr [esi+0x148]` followed by the next instruction's bytes.
     constexpr opp::ops::InstructionWindow<8> kStoreYaw{
         {0xD9, 0x9E, 0x48, 0x01, 0x00, 0x00, 0x8B, 0x5C}};
     static_assert(opp::ops::PackedLowDword(kStoreYaw) == 0x01489ED9u);
     static_assert(opp::ops::PackedHighDword(kStoreYaw) == 0x5C8B0000u);
 
     // fstp st(0) + four NOPs + the same next-instruction bytes.
-    // `fstp st(0)` + four NOPs + the same next-instruction bytes.
     constexpr opp::ops::InstructionWindow<8> kDiscardYaw{
         {0xDD, 0xD8, 0x90, 0x90, 0x90, 0x90, 0x8B, 0x5C}};
     static_assert(opp::ops::PackedLowDword(kDiscardYaw) == 0x9090D8DDu);
@@ -307,11 +186,11 @@ void zpatch_mf_advance_c() noexcept
         opp::ops::InstructionWindow<8> whenZero;
         opp::ops::InstructionWindow<8> otherwise;
     };
-    const Window windows[3] = {
+    const std::array<Window, 3> windows = {{
         {kMouseAdvancePitchWindow, kWritePitch, kNop},
         {kMouseAdvanceYawWindow, kWriteYaw, kNop},
         {kMouseAdvanceStoreWindow, kStoreYaw, kDiscardYaw},
-    };
+    }};
     for (const Window& window : windows)
     {
         const opp::ops::InstructionWindow<8>& value = zero ? window.whenZero : window.otherwise;
@@ -358,7 +237,7 @@ static __declspec(naked) void abi_mouse_axis_float()
         mov  esp, ebp
         pop  ebp
         ret
-        __emit 0CCh
+        __emit 0CCh   // body delimiter for tools/opcep_bodycheck.py
     }
 }
 // @exact 0x100240C0 negated axis helper: -127.5 * value.
@@ -392,7 +271,7 @@ static __declspec(naked) void abi_mouse_axis_neg()
         mov  eax, dword ptr [ebp + 0Ch]
         pop  ebp
         ret
-        __emit 0CCh
+        __emit 0CCh   // body delimiter for tools/opcep_bodycheck.py
     }
 }
 // @exact 0x10024120 int axis helper: (int)(value * 0.0078125 * 255).
@@ -424,7 +303,7 @@ static __declspec(naked) void abi_mouse_axis_int()
         cvttsd2si eax, xmm0
         pop  ebp
         ret
-        __emit 0CCh
+        __emit 0CCh   // body delimiter for tools/opcep_bodycheck.py
     }
 }
 // @exact 0x10024170 flagged float helper: negated variant that flips sign again
@@ -465,7 +344,7 @@ static __declspec(naked) void abi_mouse_axis_flag()
         mov  eax, dword ptr [ebp + 0Ch]
         pop  ebp
         ret
-        __emit 0CCh
+        __emit 0CCh   // body delimiter for tools/opcep_bodycheck.py
     }
 }
 // @exact 0x10024440 internal FPU helper called by abi_mouse_angle: advances the
@@ -539,7 +418,7 @@ static __declspec(naked) void abi_mf_angle_step()
         mov  esp, ebp
         pop  ebp
         ret
-        __emit 0CCh
+        __emit 0CCh   // body delimiter for tools/opcep_bodycheck.py
     }
 }
 // @exact 0x10024560 MouseFix body A (installed at game 0xA81B10): saves xmm0-7
@@ -574,7 +453,7 @@ static __declspec(naked) void abi_mouse_angle()
         xorps xmm0, xmm0
         sub  esp, 94h
         jmp  dword ptr [zpatch_mf_resume_a]
-        __emit 0CCh
+        __emit 0CCh   // body delimiter for tools/opcep_bodycheck.py
     }
 }
 // @exact 0x100243A0 MouseFix body B (installed at game 0xA82265): same xmm
@@ -607,7 +486,7 @@ static __declspec(naked) void abi_mouse_advance()
         addss xmm0, xmm3
         movss xmm3, dword ptr [esi + 150h]
         jmp  dword ptr [zpatch_mf_resume_b]
-        __emit 0CCh
+        __emit 0CCh   // body delimiter for tools/opcep_bodycheck.py
     }
 }
 }  // extern "C"
@@ -636,12 +515,18 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "F3 0F 10 46 60 F3 0F 5C CA"); pattern.size() > 0)
             {
-                zpatch_driveby_resume = MatchAddress(pattern, 5);
+                // `movss xmm0, [esi+0x60]` is the five bytes the shim replaces;
+                // the resume is the instruction after them.
+                constexpr ptrdiff_t kDrivebyResumeOffset = 5;
+                zpatch_driveby_resume = MatchAddress(pattern, kDrivebyResumeOffset);
             }
 
             if (auto pattern = Pattern(image, "08 0B C2 8B F0 E8"); pattern.size() > 0)
             {
-                zpatch_driveby_resolver = MatchTarget(pattern, 6, 10);
+                // The E8 at +5 calls the resolver; its rel32 operand is at +6.
+                constexpr ptrdiff_t kResolverCallOperand = 6;
+                zpatch_driveby_resolver = BranchDestination(
+                    pattern.get(0).get<uint8_t>(), kResolverCallOperand);
             }
         }
 
@@ -683,26 +568,38 @@ namespace opp::features
         {
             const GameImage& image = ctx.image;
 
+            // The two axis pointers are the `mov esi, imm32` / `mov edi, imm32`
+            // operands; the flag pointer is the `cmp [imm32], ...` operand.
+            constexpr ptrdiff_t kMouseXOperand = 13;
+            constexpr ptrdiff_t kMouseYOperand = 20;
+            constexpr ptrdiff_t kMouseFlagOperand = 20;
+
             if (auto pattern = Pattern(image, "51 8B 44 24 0C 85 C0 0F 57 D2 56 8B 35 ? ? ? ? 57 8B 3D ? ? ? ? F3 0F 11 54 24 08 75 0C"); pattern.size() > 0)
             {
-                zpatch_mf_x = *pattern.get(0).get<uint32_t>(13);
-                zpatch_mf_y = *pattern.get(0).get<uint32_t>(20);
+                zpatch_mf_x = *pattern.get(0).get<uint32_t>(kMouseXOperand);
+                zpatch_mf_y = *pattern.get(0).get<uint32_t>(kMouseYOperand);
             }
 
             if (auto pattern = Pattern(image, "8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? 83 C4 08 83 3D"); pattern.size() > 0)
             {
-                zpatch_mf_flag = *pattern.get(0).get<uint32_t>(20);
+                zpatch_mf_flag = *pattern.get(0).get<uint32_t>(kMouseFlagOperand);
             }
 
             if (auto pattern = Pattern(image, "83 EC 08 DB 05 ? ? ? ? 68"); pattern.size() > 0)
             {
+                // The match is the frame-time getter's entry (sub esp,8; fld
+                // dword [imm32]); abi_mf_angle_step calls it through the slot.
                 zpatch_mf_time = MatchAddress(pattern);
             }
 
             if (auto pattern = Pattern(image, "53 56 8B F1 57 8B BE 40 01 00 00 85 FF F3 0F 11 46"); pattern.size() > 0)
             {
-                zpatch_mf_resume_a = MatchAddress(pattern);
-                zpatch_mf_resume_b = MatchAddress(pattern, 1878);
+                // Body A is installed 15 bytes before the match and resumes at
+                // it; body B is installed at +1862 and resumes at +1878.
+                constexpr ptrdiff_t kMouseResumeAOffset = 0;
+                constexpr ptrdiff_t kMouseResumeBOffset = 1878;
+                zpatch_mf_resume_a = MatchAddress(pattern, kMouseResumeAOffset);
+                zpatch_mf_resume_b = MatchAddress(pattern, kMouseResumeBOffset);
             }
         }
 
@@ -710,6 +607,43 @@ namespace opp::features
 
 
     // MouseFix
+
+    namespace
+    {
+        // 66 0F 6E C0 = `movd xmm0, eax` and 66 0F 6E C8 = `movd xmm1, eax`:
+        // the SSE forms the fix stores where the x87 loads were.
+        constexpr opp::ops::InstructionWindow<4> kMovdXmm0Eax{
+            {0x66, 0x0F, 0x6E, 0xC0}};
+        constexpr opp::ops::InstructionWindow<4> kMovdXmm1Eax{
+            {0x66, 0x0F, 0x6E, 0xC8}};
+        static_assert(opp::ops::PackedLowDword(kMovdXmm0Eax) == 0xC06E0F66u);
+        static_assert(opp::ops::PackedLowDword(kMovdXmm1Eax) == 0xC86E0F66u);
+
+        // The mouse axis sites: the SSE store slots and the two old x87 bytes
+        // (two-byte fstp prefixes) the fix NOPs out.
+        constexpr ptrdiff_t kMouseSseStoreA = 5;
+        constexpr ptrdiff_t kMouseSseStoreB = 33;
+        constexpr ptrdiff_t kMouseSseNopA = 3;
+        constexpr ptrdiff_t kMouseSseNopB = 31;
+
+        // One x87-to-SSE transition: the store(s) are written before either NOP,
+        // as in the original handler. `store_b`/`nop_b` are 0 for the single-axis
+        // sites.
+        void ApplyXmmTransition(PatchContext& ctx, uint8_t* match,
+                                const opp::ops::InstructionWindow<4>& window,
+                                ptrdiff_t store_a, ptrdiff_t store_b,
+                                ptrdiff_t nop_a, ptrdiff_t nop_b)
+        {
+            WriteValue<uint32_t>(ctx, match + store_a,
+                                 opp::ops::PackedLowDword(window));
+            if (store_b != 0)
+                WriteValue<uint32_t>(ctx, match + store_b,
+                                     opp::ops::PackedLowDword(window));
+            NopAt(ctx, match + nop_a, 2);
+            if (nop_b != 0)
+                NopAt(ctx, match + nop_b, 2);
+        }
+    } // namespace
 
     void InstallMouseFix(PatchContext& ctx)
     {
@@ -737,49 +671,22 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "83 C4 08 F7 D8 F3 0F 2A C0 6A 00 8B CE F3 0F 11 07"); pattern.size() > 0)
             {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                // 66 0F 6E C0 = `movd xmm0, eax`: the SSE form the fix puts
-                // where the x87 load was (the NOPs at +3/+31 remove the old one).
-                constexpr opp::ops::InstructionWindow<4> kMovdXmm0Eax{
-                    {0x66, 0x0F, 0x6E, 0xC0}};
-                static_assert(opp::ops::PackedLowDword(kMovdXmm0Eax) == 0xC06E0F66u);
-                WriteValue<uint32_t>(ctx, match + 5,
-                                     opp::ops::PackedLowDword(kMovdXmm0Eax));
-                WriteValue<uint32_t>(ctx, match + 33,
-                                     opp::ops::PackedLowDword(kMovdXmm0Eax));
-                NopAt(ctx, match + 3, 2);
-                NopAt(ctx, match + 31, 2);
+                ApplyXmmTransition(ctx, pattern.get(0).get<uint8_t>(), kMovdXmm0Eax,
+                                   kMouseSseStoreA, kMouseSseStoreB,
+                                   kMouseSseNopA, kMouseSseNopB);
             }
 
             if (auto pattern = Pattern(image, "83 C4 08 F7 D8 F3 0F 2A C0 6A 01 8B CB F3 0F 11 07"); pattern.size() > 0)
             {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                // 66 0F 6E C0 = `movd xmm0, eax`: the SSE form the fix puts
-                // where the x87 load was (the NOPs at +3/+31 remove the old one).
-                constexpr opp::ops::InstructionWindow<4> kMovdXmm0Eax{
-                    {0x66, 0x0F, 0x6E, 0xC0}};
-                static_assert(opp::ops::PackedLowDword(kMovdXmm0Eax) == 0xC06E0F66u);
-                WriteValue<uint32_t>(ctx, match + 5,
-                                     opp::ops::PackedLowDword(kMovdXmm0Eax));
-                WriteValue<uint32_t>(ctx, match + 33,
-                                     opp::ops::PackedLowDword(kMovdXmm0Eax));
-                NopAt(ctx, match + 3, 2);
-                NopAt(ctx, match + 31, 2);
+                ApplyXmmTransition(ctx, pattern.get(0).get<uint8_t>(), kMovdXmm0Eax,
+                                   kMouseSseStoreA, kMouseSseStoreB,
+                                   kMouseSseNopA, kMouseSseNopB);
             }
 
             if (auto pattern = Pattern(image, "83 C4 08 F7 D8 F3 0F 2A C8 F3 0F 10 46"); pattern.size() > 0)
             {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                // 66 0F 6E C8 = `movd xmm1, eax` (the second axis).
-                constexpr opp::ops::InstructionWindow<4> kMovdXmm1Eax{
-                    {0x66, 0x0F, 0x6E, 0xC8}};
-                static_assert(opp::ops::PackedLowDword(kMovdXmm1Eax) == 0xC86E0F66u);
-                WriteValue<uint32_t>(ctx, match + 5,
-                                     opp::ops::PackedLowDword(kMovdXmm1Eax));
-                NopAt(ctx, match + 3, 2);
+                ApplyXmmTransition(ctx, pattern.get(0).get<uint8_t>(), kMovdXmm1Eax,
+                                   kMouseSseStoreA, 0, kMouseSseNopA, 0);
             }
 
             if (auto pattern = Pattern(image, "8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? 83 C4 08 83 3D"); pattern.size() > 0)
@@ -793,16 +700,23 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                CallTo(ctx, match + 51, OPP_BODY(abi_mouse_axis_int));
-                CallTo(ctx, match + 90, OPP_BODY(abi_mouse_axis_int));
+                // The two int-axis conversion calls in the function.
+                constexpr ptrdiff_t kIntAxisCallA = 51;
+                constexpr ptrdiff_t kIntAxisCallB = 90;
+                CallTo(ctx, match + kIntAxisCallA, OPP_BODY(abi_mouse_axis_int));
+                CallTo(ctx, match + kIntAxisCallB, OPP_BODY(abi_mouse_axis_int));
             }
 
             if (auto pattern = Pattern(image, "53 56 8B F1 57 8B BE 40 01 00 00 85 FF F3 0F 11 46"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                JumpTo(ctx, match - 15, OPP_BODY(abi_mouse_angle));
-                JumpTo(ctx, match + 1862, OPP_BODY(abi_mouse_advance));
+                // Body A is installed 15 bytes before the match (replaying its
+                // 15-byte prologue); body B at +1862 (replaying three bytes).
+                constexpr ptrdiff_t kBodyAInstallOffset = -15;
+                constexpr ptrdiff_t kBodyBInstallOffset = 1862;
+                JumpTo(ctx, match + kBodyAInstallOffset, OPP_BODY(abi_mouse_angle));
+                JumpTo(ctx, match + kBodyBInstallOffset, OPP_BODY(abi_mouse_advance));
             }
         }
 
@@ -826,18 +740,27 @@ namespace opp::features
                          GameBuild::v1100, GameBuild::v1110, GameBuild::v1120, GameBuild::v12043}))
             {
 
+                // The two recovered operand slots the handler points at its
+                // VSync flag dword (the windows are pre-write).
+                constexpr ptrdiff_t kVsyncFirstSlot = 30;
+                constexpr ptrdiff_t kVsyncSecondSlot = 13;
+
                 if (auto pattern = Pattern(image, "8B 08 8B 51 0C 6A 01 6A 00 6A 00 6A 00 6A 00 50 FF D2 8B F0 81 FE ? ? ? ? 74"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    WriteValue<uint32_t>(ctx, match + 30, static_cast<uint32_t>(FindGlobalValue("VSyncFix")));
+                    WriteValue<uint32_t>(ctx, match + kVsyncFirstSlot,
+                                         static_cast<uint32_t>(
+                                             FindGlobalValue("VSyncFix")));
                 }
 
                 if (auto pattern = Pattern(image, "8B 10 50 8B 82 A8 00 00 00 FF D0 83"); pattern.size() > 0)
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    WriteValue<uint32_t>(ctx, match + 13, static_cast<uint32_t>(FindGlobalValue("VSyncFix")));
+                    WriteValue<uint32_t>(ctx, match + kVsyncSecondSlot,
+                                         static_cast<uint32_t>(
+                                             FindGlobalValue("VSyncFix")));
                 }
             }
         }

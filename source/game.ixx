@@ -456,7 +456,6 @@ extern "C"
     uint32_t zpatch_driveby_fov = std::bit_cast<uint32_t>(kDrivebyFovDegrees);
     uint32_t zpatch_driveby_cached = 0;           // dword_1015BDF8
     uint8_t zpatch_driveby_done = 0;              // byte_1015AD4A
-    uint32_t zpatch_driveby_last_result = 0;      // resolver result (diagnostic)
     uint32_t zpatch_nolivery_name = 0;            // dword_10159BA8 (char*)
     uint32_t zpatch_nolivery_index = 0;           // dword_10159BB0
     uint32_t zpatch_nolivery_hash = 0;            // dword_10159B98
