@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.31)
 project(OpenPreCEPatch
     VERSION 1.0.0
     DESCRIPTION "OpenPreCEPatch - GTA IV / EFLC quality-of-life and crash-fix plugin"
-    LANGUAGES CXX)
+    LANGUAGES CXX RC)
 
 # The shipped ASI is 32-bit. The 64-bit configure exists only for the write-set
 # parity dump, which maps the game image without executing any hook body.
@@ -38,6 +38,7 @@ set(OPCEP_MODULES
     source/patch.ixx
     source/pipeline.ixx
     source/config.ixx
+    source/warnings.ixx
     source/data/model_catalogue.ixx
     source/steam.ixx
     source/game.ixx
@@ -89,8 +90,11 @@ if(CMAKE_SIZEOF_VOID_P EQUAL 4)
     add_library(opcep_core STATIC ${OPCEP_CORE_SOURCES})
     target_sources(opcep_core PUBLIC FILE_SET CXX_MODULES FILES ${OPCEP_MODULES})
     opcep_configure_target(opcep_core)
+    # psapi: the ASI loader probe enumerates the process's modules.
+    # shell32: the warning dialogs open links (download page, notice file).
+    target_link_libraries(opcep_core PUBLIC psapi shell32)
 
-    add_library(OpenPreCEPatch SHARED source/dllmain.cpp)
+    add_library(OpenPreCEPatch SHARED source/dllmain.cpp source/warnings.rc)
     opcep_configure_target(OpenPreCEPatch)
     target_link_libraries(OpenPreCEPatch PRIVATE
         "$<LINK_LIBRARY:WHOLE_ARCHIVE,opcep_core>"

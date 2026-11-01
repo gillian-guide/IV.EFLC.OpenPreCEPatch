@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <vector>
 
+import opp.config;
 import opp.game;
 import opp.pipeline;
 

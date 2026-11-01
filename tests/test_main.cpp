@@ -27,6 +27,7 @@ import opp.patch;
 import opp.pipeline;
 import opp.settings;
 import opp.vehicles;
+import opp.warnings;
 
 
 namespace
@@ -1001,6 +1002,53 @@ namespace
         CHECK(zpatch_ooc_selftest());
         CHECK(zpatch_nms_registry_selftest());
     }
+
+    void TestWarnings()
+    {
+        // The 1.2.x range is refused, except the Complete Edition build this tree
+        // has recovered gates for (1.2.0.43).
+        CHECK(!opp::IsUnsupportedGameVersion(1080));
+        CHECK(!opp::IsUnsupportedGameVersion(1120));
+        CHECK(!opp::IsUnsupportedGameVersion(12043));
+        CHECK(opp::IsUnsupportedGameVersion(1201));
+        CHECK(opp::IsUnsupportedGameVersion(12059));
+        CHECK(opp::IsUnsupportedGameVersion(12999));
+        CHECK(!opp::IsUnsupportedGameVersion(1200));
+        CHECK(!opp::IsUnsupportedGameVersion(13000));
+
+        // Ultimate ASI Loader 6.9.0 is the first release exporting the
+        // IsUltimateASILoader marker; the loader warning enforces that minimum.
+        CHECK(opp::AsiLoaderVersionAccepted(0x00060009, 0));
+        CHECK(opp::AsiLoaderVersionAccepted(0x00090007, 0x00040000));
+        CHECK(!opp::AsiLoaderVersionAccepted(0x00060008, 0x0000FFFF));
+        CHECK(!opp::AsiLoaderVersionAccepted(0x00050000, 0));
+
+        // The FusionFix notice is rewritten on every launch: the current list
+        // replaces the previous one, and nothing is appended.
+        const std::filesystem::path notice =
+            std::filesystem::current_path() / L"opcep-fusionfix-notice-test.txt";
+        const std::vector<std::wstring> gated{L"NoLoadingSleep - FusionFix loadingdelays.ixx"};
+        CHECK(opp::WriteFusionFixNotice(notice, L"IV.EFLC.OpenPreCEPatch.ini", gated));
+
+        std::ifstream file(notice, std::ios::binary);
+        std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        CHECK(text.find("NoLoadingSleep - FusionFix loadingdelays.ixx") != std::string::npos);
+        CHECK(text.find("IV.EFLC.OpenPreCEPatch.ini") != std::string::npos);
+
+        const std::vector<std::wstring> replaced{L"SkipIntro - FusionFix skipintro.ixx"};
+        CHECK(opp::WriteFusionFixNotice(notice, L"IV.EFLC.OpenPreCEPatch.ini", replaced));
+        std::ifstream second(notice, std::ios::binary);
+        text.assign(std::istreambuf_iterator<char>(second), std::istreambuf_iterator<char>());
+        CHECK(text.find("SkipIntro - FusionFix skipintro.ixx") != std::string::npos);
+        CHECK(text.find("NoLoadingSleep") == std::string::npos);
+
+        // Windows refuses to delete a file with an open handle; close first.
+        second.close();
+        file.close();
+        std::error_code removeError;
+        std::filesystem::remove(notice, removeError);
+        CHECK(!removeError);
+    }
 } // namespace
 
 int main()
@@ -1028,6 +1076,7 @@ int main()
     TestRelocateCalls();
     TestMakeReturn();
     TestHooks();
+    TestWarnings();
 
     if (failures != 0)
     {

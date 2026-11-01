@@ -21,16 +21,13 @@ import opp.patch;
 import opp.pipeline;
 import opp.settings;
 import opp.vehicles;
+import opp.warnings;
 
 namespace
 {
-    constexpr uint64_t kOldDsoundLoaderSize = 91648ull;
-    constexpr uint32_t kUnsupportedVersionMin = 1201;
-    constexpr uint32_t kUnsupportedVersionMax = 12999;
-    constexpr DWORD kUnsupportedSleepMs = 500;
     // 0x8000FFFF is E_UNEXPECTED; spelled as a UINT to avoid a signed/unsigned
     // conversion warning. It is the exit code the original passes to
-    // TerminateProcess.
+    // TerminateProcess, kept for the unsupported-version exit.
     constexpr UINT kUnsupportedExitCode = 0x8000FFFFu;
 
     std::filesystem::path modulePath;
@@ -38,6 +35,11 @@ namespace
     std::filesystem::path configPath;
     HMODULE hSelf = nullptr;
     std::once_flag g_once;
+
+    std::wstring Widen(const std::string& text)
+    {
+        return std::wstring(text.begin(), text.end());
+    }
 
     bool IsSameModule(HMODULE module, HMODULE self) noexcept
     {
@@ -58,34 +60,41 @@ namespace
         return std::filesystem::path(buffer).parent_path();
     }
 
-    void CheckGameVersion(uint32_t compactVersion)
+    // The old dsound.dll and any other non-UAL loader get the same warning: the
+    // loader cannot be identified as a modern Ultimate ASI Loader. A fatal
+    // version warning stops the start-up here; its dialog is posted to a worker
+    // thread and exits the process when it is closed.
+    bool CheckGameVersion(uint32_t compactVersion)
     {
-        if (const HMODULE dsound = GetModuleHandleW(L"dsound.dll"))
+        const opp::AsiLoaderInfo loader = opp::QueryAsiLoader();
+        if (loader.detected)
         {
-            wchar_t path[MAX_PATH]{};
-            WIN32_FILE_ATTRIBUTE_DATA info{};
-            if (GetModuleFileNameW(dsound, path, MAX_PATH) &&
-                GetFileAttributesExW(path, GetFileExInfoStandard, &info))
-            {
-                const uint64_t size =
-                    (static_cast<uint64_t>(info.nFileSizeHigh) << 32) | info.nFileSizeLow;
-                if (size == kOldDsoundLoaderSize)
-                {
-                    MessageBoxA(0,
-                                "Old dsound.dll detected! It's strongly recommended to use Ultimate ASI "
-                                "Loader as either dinput8.dll or xlive.dll to load this mod.",
-                                "OpenPreCEPatch Warning", 0);
-                }
-            }
+            opp::Log("loader: %s %s", loader.name.c_str(),
+                     loader.version.empty() ? "(version unknown)" : loader.version.c_str());
+        }
+        else
+        {
+            opp::Log("loader: no Ultimate ASI Loader found in this process");
         }
 
-        if (compactVersion >= kUnsupportedVersionMin &&
-            compactVersion <= kUnsupportedVersionMax)
+        const bool modernLoader =
+            loader.detected &&
+            (!loader.versionKnown ||
+             opp::AsiLoaderVersionAccepted(loader.versionMs, loader.versionLs));
+        if (!modernLoader)
         {
-            std::system("start https://zolika1351.pages.dev/mods/ivpatch/downgrading");
-            Sleep(kUnsupportedSleepMs);
-            TerminateProcess(GetCurrentProcess(), kUnsupportedExitCode);
+            opp::ShowWarningAsync(
+                opp::OldAsiLoaderDialog(loader.name, loader.version, loader.versionKnown),
+                std::nullopt);
         }
+
+        if (opp::IsUnsupportedGameVersion(compactVersion))
+        {
+            opp::Log("version: %u is outside the supported range", compactVersion);
+            opp::ShowWarningAsync(opp::UnsupportedGameVersionDialog(), kUnsupportedExitCode);
+            return false;
+        }
+        return true;
     }
 
     // The three modules the option arms consult. A module named XLivelessAddon.asi
@@ -164,15 +173,17 @@ namespace
     }
 
     // FusionFix gates overlapping options silently, which can look like the mod
-    // ignored the INI. Show the enabled-but-gated set once per install (a marker
-    // file next to the ASI) and log it on every run.
+    // ignored the INI. The set is written to a .txt next to the ASI on every
+    // launch; the dialog is shown only while that file does not exist yet, so it
+    // stays a one-time notice. Deleting the file brings the dialog back.
     void NotifyFusionFixGatedOptions(const opp::Config& config)
     {
         if (!opp::FusionFixPresent())
             return;
 
-        size_t count = 0;
+        std::vector<std::wstring> gated;
         std::string names;
+        size_t count = 0;
         const opp::FusionFixConflict* conflicts = opp::FusionFixConflicts(count);
         for (size_t i = 0; i < count; ++i)
         {
@@ -184,30 +195,27 @@ namespace
             if (!names.empty())
                 names += ", ";
             names += conflicts[i].option;
+            gated.push_back(Widen(conflicts[i].option) + L" - " + Widen(conflicts[i].reason));
         }
 
-        if (names.empty())
+        if (gated.empty())
             return;
 
         opp::Log("compat: enabled but disabled by FusionFix: %s", names.c_str());
 
-        const std::filesystem::path marker =
-            configPath.parent_path() / L"IV.EFLC.OpenPreCEPatch.fusionfix-notice";
-        if (std::filesystem::exists(marker))
+        const std::filesystem::path notice =
+            configPath.parent_path() / L"IV.EFLC.OpenPreCEPatch.fusionfix-notice.txt";
+        const bool existed = std::filesystem::exists(notice);
+        if (!opp::WriteFusionFixNotice(notice, L"IV.EFLC.OpenPreCEPatch.ini", gated))
+            opp::Log("compat: cannot write %s", notice.string().c_str());
+
+        if (existed)
             return;
 
-        const std::string text =
-            "FusionFix is installed. These OpenPreCEPatch options are enabled in "
-            "IV.EFLC.OpenPreCEPatch.ini but will not be active:\n\n" +
-            names +
-            "\n\nThis notice is shown once. Delete "
-            "IV.EFLC.OpenPreCEPatch.fusionfix-notice to show it again.";
-        MessageBoxA(nullptr, text.c_str(), "OpenPreCEPatch - FusionFix compatibility",
-                    MB_OK | MB_ICONINFORMATION);
-
-        std::ofstream notice(marker, std::ios::binary | std::ios::trunc);
-        if (notice)
-            notice << "FusionFix compatibility notice shown.\r\n";
+        opp::ShowWarningAsync(opp::FusionFixNoticeDialog(L"IV.EFLC.OpenPreCEPatch.ini",
+                                                         notice.filename().wstring(),
+                                                         notice.wstring(), gated),
+                              std::nullopt);
     }
 
     void SetStuff(HMODULE module)
@@ -272,8 +280,9 @@ namespace
         else
             opp::Log("preamble: %zu pointers resolved", preamble.resolved);
 
-        // CarDecalsFix's double-load guard: when its scan finds nothing, another
-        // ASI loader already patched the site.
+        // CarDecalsFix's site: a miss is no longer read as "another copy of this
+        // ASI already patched it" (that is the single-instance marker's job); say
+        // what was observed instead, so a genuinely different build is visible.
         if (config.Option("CarDecalsFix", "1"))
         {
             opp::Match decals;
@@ -283,11 +292,8 @@ namespace
                     view,
                     "8B 44 24 08 8B 48 28 81 E1 C0 03 00 00 81 F9 80 00 00 00", decals))
             {
-                MessageBoxA(0,
-                            "OpenPreCEPatch was loaded twice! Make sure that you don't have multiple "
-                            "ASI loaders installed! (e.g. xliveless + dsound, xliveless + dinput8, "
-                            "dsound + dinput8, etc)",
-                            "OpenPreCEPatch Error", 0);
+                opp::Log("CarDecalsFix: site not found (already patched, or a different "
+                         "game image)");
             }
         }
 
@@ -310,7 +316,21 @@ namespace
         (void)opp::QueryGameVersion(compactVersion, build);
 
         opp::Log("module: %s", modulePath.string().c_str());
-        CheckGameVersion(compactVersion);
+
+        // Two copies of this ASI (a renamed duplicate, or two ASI loaders each
+        // loading their own copy) both run the entry point. The process-wide
+        // marker is the direct test; a scan-based one false-positives whenever a
+        // pattern is simply missing.
+        if (!opp::ClaimSingleInstance(L"IV.EFLC.OpenPreCEPatch"))
+        {
+            opp::Log("init: another copy of OpenPreCEPatch already initialized in this process");
+            opp::ShowWarningAsync(opp::LoadedTwiceDialog(), std::optional<UINT>{0u});
+            return;
+        }
+
+        if (!CheckGameVersion(compactVersion))
+            return;
+
         CaptureModules(module);
         if (opp::DetectFusionFix(modulePath))
         {

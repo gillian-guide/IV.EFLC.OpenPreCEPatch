@@ -172,6 +172,51 @@ differs by stack frame, register allocation or helper inlining, and behavioural
 equivalence is **not asserted or verified** (there is no runtime oracle for
 them). The write-set oracles only prove the install path is unchanged.
 
+## Startup warnings: task dialogs, loader probe, single instance
+
+The original popped plain message boxes (and, for an unsupported version, opened
+the ZolikaPatch downgrading page and killed the process without a dialog). The
+warnings are now FusionFix-style task dialogs, and each is gated by an actual
+probe instead of a proxy:
+
+* **Presentation.** `source/warnings.ixx` shows `TaskDialogIndirect` with the
+  command-link buttons, hyperlink support and information/error icon that
+  `GTAIV.EFLC.FusionFix/source/compat.ixx` uses. The game executable has no
+  `Microsoft.Windows.Common-Controls` dependency, so comctl32 v6 does not exist
+  in the process: the ASI embeds an `RT_MANIFEST` (`source/warnings.rc`) and
+  `CreateActCtx`/`ActivateActCtx` are held while the dialog is created. When
+  that fails the code falls back to a plain message box. Every dialog is posted
+  to a worker thread because the entry point can run under the loader lock, and
+  `TaskDialogIndirect` maps comctl32.
+* **Old ASI Loader.** The loader is identified from the caller's stack (and, as
+  a fallback, by scanning the loaded modules) for the `IsUltimateASILoader`
+  export. That export was added to Ultimate ASI Loader on 2023-10-24 and first
+  shipped in **v6.9.0** (2024-01-21), the same release that carries the extended
+  version resource, so 6.9.0 is the minimum: it is the marker FusionFix's own
+  compatibility check trusts, and no module installed next to the game needs a
+  newer export (FusionFix 5.1.1's `GetOverloadPathW`, v10.0.0, is optional and
+  degrades to no file overload). A loader without the marker, or one whose
+  version resource is older, gets "Old ASI Loader detected!" with a
+  *Download Ultimate ASI Loader* button and *Continue*. The `dsound.dll`
+  file-size check is gone (it warned about a setup that the probe now judges).
+* **Unsupported game version.** 1.2.0.1–1.2.9.99 are refused except **1.2.0.43**
+  (`kSupportedCompleteEdition`), which this tree has recovered gates for. The
+  dialog states the downgrade/accidental-install case and the process exits with
+  the original's `0x8000FFFF`; the browser launch is gone.
+* **Loaded twice.** A process-wide named mutex
+  (`Local\IV.EFLC.OpenPreCEPatch-<pid>`) is claimed before anything is
+  installed; a second copy of the ASI (a renamed duplicate, or two loaders with
+  their own copies) gets the "loaded twice" dialog and exits. The old check
+  inferred a double load from a `CarDecalsFix` signature miss, which also fires
+  on a different game image; that case is now only logged.
+* **FusionFix notice.** `IV.EFLC.OpenPreCEPatch.fusionfix-notice.txt` is
+  rewritten on every launch with the enabled-but-gated options and their
+  reasons; the dialog is shown only while the file does not exist, so it stays
+  one-time and deleting the file restores it.
+
+The ZMenuIV version guard is unchanged: it keeps the original's message box and
+exit code.
+
 ## Backlog (documented, not gates)
 
 `tools/gen_version_matrix.py` renders `docs/version-matrix.md` from

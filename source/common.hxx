@@ -21,6 +21,9 @@
 #endif
 
 #include <windows.h>
+#include <Commctrl.h>
+#include <psapi.h>
+#include <shellapi.h>
 
 #include <array>
 #include <bit>
@@ -29,7 +32,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <initializer_list>
+#include <memory>
+#include <new>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <type_traits>

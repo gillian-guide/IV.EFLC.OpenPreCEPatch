@@ -43,6 +43,49 @@ export namespace opp
     // Reads the running executable's VS_FIXEDFILEINFO.
     bool QueryGameVersion(uint32_t& compactVersion, GameBuild& build) noexcept;
 
+    // ---------------------------------------------------------------------
+    // The version gate: the 1.2.x range the original refuses, minus the one
+    // Complete Edition build this reimplementation has recovered gates for.
+    // ---------------------------------------------------------------------
+    constexpr uint32_t kRejectedVersionMin = 1201;   // 1.2.0.1
+    constexpr uint32_t kRejectedVersionMax = 12999;  // 1.2.9.99
+    constexpr uint32_t kSupportedCompleteEdition = 12043; // 1.2.0.43
+    constexpr bool IsUnsupportedGameVersion(uint32_t compactVersion) noexcept
+    {
+        return compactVersion >= kRejectedVersionMin &&
+               compactVersion <= kRejectedVersionMax &&
+               compactVersion != kSupportedCompleteEdition;
+    }
+
+    // ---------------------------------------------------------------------
+    // ASI loader probe. "Modern" is Ultimate ASI Loader >= 6.9.0: that release
+    // added the IsUltimateASILoader export (2023-10-24, first tag v6.9.0) and the
+    // extended version resource, and it is the marker FusionFix's own
+    // compatibility check trusts. Any other loader (or an older one) cannot be
+    // identified, so it is reported as old.
+    // ---------------------------------------------------------------------
+    constexpr uint32_t kMinimumAsiLoaderVersionMs = 0x00060009; // 6.9.0
+    constexpr uint32_t kMinimumAsiLoaderVersionLs = 0;
+    constexpr const char* kAsiLoaderMarker = "IsUltimateASILoader";
+
+    struct AsiLoaderInfo
+    {
+        bool detected{};      // a loader exporting the marker is on the stack / loaded
+        bool versionKnown{};  // the loader has a parseable VS_FIXEDFILEINFO
+        uint32_t versionMs{};
+        uint32_t versionLs{};
+        std::string name;     // e.g. "dinput8.dll"
+        std::string version;  // e.g. "9.7.4"
+    };
+
+    bool AsiLoaderVersionAccepted(uint32_t versionMs, uint32_t versionLs) noexcept;
+    AsiLoaderInfo QueryAsiLoader() noexcept;
+
+    // Claims this process's single-instance marker. False when another copy of
+    // this module already initialized in this process (the second copy of an ASI
+    // loaded by two loaders, or a renamed duplicate).
+    bool ClaimSingleInstance(const wchar_t* name) noexcept;
+
     struct ProcessEntry
     {
         std::string_view executable;
@@ -998,5 +1041,152 @@ namespace opp
         (void)getVersion(&version, &out); // the original ignores the result
         return ZMenuVersionAccepted(version) ? ZMenuGuardResult::version_ok
                                              : ZMenuGuardResult::version_rejected;
+    }
+
+    namespace
+    {
+        bool HasAsiLoaderMarker(HMODULE module) noexcept
+        {
+            return module != nullptr && GetProcAddress(module, kAsiLoaderMarker) != nullptr;
+        }
+
+        HMODULE CurrentModule() noexcept
+        {
+            HMODULE self = nullptr;
+            if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                    reinterpret_cast<LPCWSTR>(&CurrentModule), &self))
+                return nullptr;
+            return self;
+        }
+
+        // The loader that called us, when it is still on the stack (UAL calls
+        // InitializeASI from its own frames, and LoadLibrary keeps the caller's
+        // frames above DllMain).
+        HMODULE AsiLoaderOnStack(HMODULE self) noexcept
+        {
+            void* frames[64]{};
+            const USHORT count = CaptureStackBackTrace(1, 64, frames, nullptr);
+            for (USHORT i = 0; i < count; ++i)
+            {
+                HMODULE module = nullptr;
+                if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                       reinterpret_cast<LPCWSTR>(frames[i]), &module) &&
+                    module != self && HasAsiLoaderMarker(module))
+                    return module;
+            }
+            return nullptr;
+        }
+
+        // Fallback for an entry point that no loader frame is visible from: any
+        // module in the process carrying the marker. The loader is not told apart
+        // there, but "a modern UAL is installed" is still answered.
+        HMODULE AnyAsiLoaderModule(HMODULE self) noexcept
+        {
+            HMODULE modules[512]{};
+            DWORD needed = 0;
+            if (!EnumProcessModules(GetCurrentProcess(), modules, sizeof modules, &needed))
+                return nullptr;
+            const DWORD count = needed / sizeof(HMODULE);
+            for (DWORD i = 0; i < count && i < _countof(modules); ++i)
+            {
+                if (modules[i] != self && HasAsiLoaderMarker(modules[i]))
+                    return modules[i];
+            }
+            return nullptr;
+        }
+
+        std::string ModuleBaseName(HMODULE module) noexcept
+        {
+            wchar_t path[MAX_PATH]{};
+            if (GetModuleFileNameW(module, path, MAX_PATH) == 0)
+                return {};
+            const wchar_t* base = path;
+            for (const wchar_t* p = path; *p != L'\0'; ++p)
+            {
+                if (*p == L'\\' || *p == L'/')
+                    base = p + 1;
+            }
+            std::string out;
+            for (const wchar_t* p = base; *p != L'\0'; ++p)
+                out.push_back(*p < 0x80 ? static_cast<char>(*p) : '?');
+            return out;
+        }
+
+        std::string ModuleVersionText(HMODULE module, uint32_t& versionMs,
+                                      uint32_t& versionLs) noexcept
+        {
+            versionMs = 0;
+            versionLs = 0;
+
+            wchar_t path[MAX_PATH]{};
+            if (GetModuleFileNameW(module, path, MAX_PATH) == 0)
+                return {};
+
+            DWORD ignored = 0;
+            const DWORD size = GetFileVersionInfoSizeW(path, &ignored);
+            if (size == 0)
+                return {};
+            std::vector<uint8_t> data(size);
+            if (!GetFileVersionInfoW(path, ignored, size, data.data()))
+                return {};
+
+            VS_FIXEDFILEINFO* info = nullptr;
+            UINT length = 0;
+            if (!VerQueryValueW(data.data(), L"\\", reinterpret_cast<void**>(&info), &length) ||
+                info == nullptr)
+                return {};
+
+            versionMs = info->dwFileVersionMS;
+            versionLs = info->dwFileVersionLS;
+            char text[40]{};
+            std::snprintf(text, sizeof text, "%u.%u.%u.%u", HIWORD(versionMs),
+                          LOWORD(versionMs), HIWORD(versionLs), LOWORD(versionLs));
+            return text;
+        }
+    } // namespace
+
+    bool AsiLoaderVersionAccepted(uint32_t versionMs, uint32_t versionLs) noexcept
+    {
+        return versionMs > kMinimumAsiLoaderVersionMs ||
+               (versionMs == kMinimumAsiLoaderVersionMs &&
+                versionLs >= kMinimumAsiLoaderVersionLs);
+    }
+
+    AsiLoaderInfo QueryAsiLoader() noexcept
+    {
+        AsiLoaderInfo info;
+        const HMODULE self = CurrentModule();
+
+        HMODULE loader = AsiLoaderOnStack(self);
+        if (loader == nullptr)
+            loader = AnyAsiLoaderModule(self);
+        if (loader == nullptr)
+            return info;
+
+        info.detected = true;
+        info.name = ModuleBaseName(loader);
+        info.version = ModuleVersionText(loader, info.versionMs, info.versionLs);
+        info.versionKnown = info.versionMs != 0 || info.versionLs != 0;
+        return info;
+    }
+
+    bool ClaimSingleInstance(const wchar_t* name) noexcept
+    {
+        wchar_t mutexName[128]{};
+        std::swprintf(mutexName, _countof(mutexName), L"Local\\%ls-%lu", name,
+                      GetCurrentProcessId());
+
+        const HANDLE mutex = CreateMutexW(nullptr, FALSE, mutexName);
+        if (mutex == nullptr)
+            return true; // the marker cannot be created; never block the game on it
+        if (GetLastError() == ERROR_ALREADY_EXISTS)
+        {
+            CloseHandle(mutex);
+            return false;
+        }
+        // Intentionally never closed: the object must live for the whole process.
+        return true;
     }
 } // namespace opp
