@@ -13,6 +13,8 @@ module;
 #include "rebased.h"
 #include "opcodes.hxx"
 
+#include <new>
+#include <shlwapi.h>
 export module opp.loading;
 
 import opp.pipeline;
@@ -20,6 +22,7 @@ import opp.patch;
 import opp.game;
 import opp.common;
 import opp.settings;
+import opp.log;
 
 namespace opp::features
 {
@@ -386,3 +389,556 @@ namespace
 } // namespace
 
 } // namespace opp::features
+
+// ---------------------------------------------------------------------------
+// Hook bodies: the machine-level entry points loading installs.
+//
+// Each body keeps the original site's calling convention and register
+// contract; the comment above it names the original destination VA. They are
+// 32-bit only (the x64 parity dump resolves names to the original VAs).
+// ---------------------------------------------------------------------------
+#if !defined(_WIN64)
+
+using namespace opp;
+
+#include "body_helpers.inc"
+
+extern "C"
+{
+
+// The NewSavesCompatibility converter (original sub_10051B30): parse the save's
+// 0x110-byte header (magic "SAVE" at +0xC), walk 18 chunks of 9-byte header +
+// payload, record the new-format chunk sizes, then patch three game sites.
+
+extern "C" uint8_t abi_new_saves_read_hook(void*, uint32_t size) noexcept
+{
+    uint8_t scratch[3704];
+    if (zpatch_new_saves_loaddata == 0) return 0;
+    using LoadFn = uint8_t(__cdecl*)(void*, uint32_t);
+    return reinterpret_cast<LoadFn>(
+        static_cast<uintptr_t>(zpatch_new_saves_loaddata))(scratch, size);
+}
+
+extern "C" int32_t abi_new_saves_p3_hook() noexcept
+{
+    uint8_t buffer[12];
+    using LoadFn = int32_t(__cdecl*)(void*, uint32_t);
+    const auto load = reinterpret_cast<LoadFn>(
+        static_cast<uintptr_t>(zpatch_new_saves_loaddata));
+    if (zpatch_new_saves_flag13 != 0 && load)
+        static_cast<void>(load(buffer, 12));
+    using OrigFn = int32_t(__cdecl*)();
+    const int32_t result = reinterpret_cast<OrigFn>(
+        static_cast<uintptr_t>(zpatch_new_saves_p3_orig))();
+    if (zpatch_new_saves_flag13 != 0 && load) return load(buffer, 12);
+    return result;
+}
+
+// The converter's chunk scan, split out so the native tests can drive it
+// without a game image. `guarded` enables the folded NewSavesCompatibility
+// checks; `seek` enables the fseek-over-payload path. With both 0 this is the
+// original loop: every fread result is ignored and the underflow/malloc are
+// unchecked.
+extern "C" bool zpatch_new_saves_scan(void* handle, int guarded, int seek,
+                                      uint32_t* flag9, uint32_t* flag16,
+                                      uint32_t* flag13) noexcept
+{
+    auto* file = static_cast<std::FILE*>(handle);
+    if (file == nullptr) return false;
+    // The save header is 0x110 bytes; the format magic "SAVE" sits at +0xC and
+    // each of the 18 chunks starts with a 9-byte header whose dword at +5 is the
+    // chunk's total size.
+    constexpr size_t kSaveHeaderSize = 0x110;
+    constexpr size_t kSaveChunkHeaderSize = 9;
+    constexpr size_t kSaveMagicOffset = 0x0C;
+    constexpr uint32_t kSaveMagic = 0x45564153u;  // "SAVE"
+    uint8_t header[kSaveHeaderSize];
+    if (guarded != 0)
+    {
+        // Opt-in guard: a short header cannot carry a magic/chunk table.
+        if (std::fread(header, kSaveHeaderSize, 1, file) != 1)
+            return false;
+    }
+    else
+    {
+        std::fread(header, kSaveHeaderSize, 1, file);  // return ignored, like the original
+    }
+    uint32_t magic = 0;
+    std::memcpy(&magic, header + kSaveMagicOffset, 4);
+    if (magic != kSaveMagic)
+        return false;
+
+    uint32_t local9 = 0;
+    uint32_t local16 = 0;
+    uint32_t local13 = 0;
+    for (int i = 0; i < 18; ++i)
+    {
+        uint8_t chunk[9];
+        const size_t chunk_read = std::fread(chunk, 9, 1, file);
+        if (guarded != 0 && chunk_read != 1)
+            return false;
+        uint32_t size = 0;
+        std::memcpy(&size, chunk + 5, 4);
+        if (guarded != 0 && size < 9u)
+        {
+            // The original underflows the allocation count here.
+            return false;
+        }
+        zpatch_new_saves_chunk_len = size;                  // dword_1015AD90
+        zpatch_new_saves_element_count = size - 9u;         // dword_1015ADA0
+        bool skipped = false;
+        // fseek takes a long: only seek when the element count fits one.
+        constexpr uint32_t kSeekCountLimit = 0x7FFFFFFFu;
+        if (seek != 0 && size >= kSaveChunkHeaderSize &&
+            zpatch_new_saves_element_count <= kSeekCountLimit)
+        {
+            // Only the 9-byte chunk headers are needed; seek over the payload.
+            skipped = std::fseek(file,
+                                 static_cast<long>(zpatch_new_saves_element_count),
+                                 SEEK_CUR) == 0;
+        }
+        if (!skipped)
+        {
+            if (zpatch_new_saves_element_count == 0u &&
+                (guarded != 0 || seek != 0))
+            {
+                // A header-only chunk is valid; do not treat malloc(0) == null
+                // as an allocation failure. With both keys off this branch is
+                // skipped so the original malloc/fread/free still runs.
+            }
+            else
+            {
+                void* payload = std::malloc(zpatch_new_saves_element_count);
+                if (guarded != 0 && payload == nullptr)
+                    return false;
+                const size_t payload_read =
+                    std::fread(payload, 1, zpatch_new_saves_element_count, file);
+                std::free(payload);
+                if (guarded != 0 && payload_read != zpatch_new_saves_element_count)
+                    return false;
+            }
+        }
+        if (i == 9) local9 = size == 19525u ? 1u : 0u;
+        if (i == 16) local16 = size == 3703u ? 1u : 0u;
+        if (i == 13) local13 = size == 5953u ? 1u : 0u;
+    }
+    if (flag9 != nullptr) *flag9 = local9;
+    if (flag16 != nullptr) *flag16 = local16;
+    if (flag13 != nullptr) *flag13 = local13;
+    return true;
+}
+
+extern "C" void abi_new_saves_convert(const char* path) noexcept
+{
+    std::FILE* file = std::fopen(path, "rb");
+    if (!file) return;
+    uint32_t flag9 = 0;
+    uint32_t flag16 = 0;
+    uint32_t flag13 = 0;
+    const bool parsed = zpatch_new_saves_scan(
+        file, 1, 1,
+        &flag9, &flag16, &flag13);
+    std::fclose(file);
+    if (!parsed) return;  // including the original wrong-magic early return
+    zpatch_new_saves_flag9 = flag9;
+    zpatch_new_saves_flag16 = flag16;
+    zpatch_new_saves_flag13 = flag13;
+
+    // P1 (game 0x872185): force the 0x3C-byte read path for new saves.
+    static const uint8_t* p1 = nullptr;
+    if (p1 == nullptr) p1 = scan_game("74 37 80 3D ? ? ? ? 00 75 2E 8D 84 ? ? ? ? 00 6A 1E");
+    if (p1 != nullptr)
+        wp_byte(const_cast<uint8_t*>(p1),
+                zpatch_new_saves_flag9 != 0 ? opp::ops::kJmpRel8 : opp::ops::kJzRel8);
+
+    // P2 (game 0x7D8C50): route the oversized read through the plugin's scratch
+    // buffer, resize the read, and force/NOP the branch per the save format.
+    static const uint8_t* p2 = nullptr;
+    if (p2 == nullptr) p2 = scan_game("68 BE 0C 00 00 50 E8");
+    if (p2 != nullptr)
+    {
+        auto* site = const_cast<uint8_t*>(p2);
+        int32_t original_rel = 0;
+        std::memcpy(&original_rel, site + 7, 4);
+        const auto original_target = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(site) + 11u +
+            static_cast<uint32_t>(original_rel));
+        // The call at P2+6 already is E8+rel32; MakeCALL writes the same five
+        // bytes and keeps the original's read of the old destination first.
+        injector::MakeCALL(injector::raw_ptr(site + 6),
+                           injector::raw_ptr(&abi_new_saves_read_hook), true);
+        if (zpatch_new_saves_loaddata == 0)
+            zpatch_new_saves_loaddata = original_target;
+
+        // The `push imm32` at P2+1 carries the load size: the old format reads
+        // 3262 bytes, the new one 3694.
+        constexpr uint32_t kOldSaveReadBytes = 3262;
+        constexpr uint32_t kNewSaveReadBytes = 3694;
+        wp_dword(site + 1, zpatch_new_saves_flag16 != 0 ? kNewSaveReadBytes
+                                                        : kOldSaveReadBytes);
+
+        // The `jnz rel8` five bytes before the call skips the load; for a new
+        // save it is a two-byte NOP instead (75 26 = jnz +0x26).
+        // `jnz +0x26`: the branch that skips the load for an old-format save.
+constexpr opp::ops::InstructionWindow<2> kSkipLoadBranch{{0x75, 0x26}};
+        static_assert(opp::ops::PackedLowWord(kSkipLoadBranch) == 0x2675u);
+        if (zpatch_new_saves_flag16 != 0)
+            injector::MakeNOP(injector::raw_ptr(site - 5), kSkipLoadBranch.Size(), true);
+        else
+            wp_word(site - 5, opp::ops::PackedLowWord(kSkipLoadBranch));
+    }
+
+    // P3 (game 0x8DA090): route the second LoadData call through the plugin body
+    // that consumes the extra 12-byte block for new saves, and repoint the
+    // shared LoadData slot at the function's own later call target.
+    static const uint8_t* p3 = nullptr;
+    if (p3 == nullptr) p3 = scan_game("56 E8 ? ? ? ? E8 ? ? ? ? A1 ? ? ? ? 8D 0C 85 00 00 00 00");
+    if (p3 != nullptr)
+    {
+        auto* site = const_cast<uint8_t*>(p3);
+        int32_t original_rel = 0;
+        std::memcpy(&original_rel, site + 7, 4);
+        const auto original_target = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(site) + 11u +
+            static_cast<uint32_t>(original_rel));
+        injector::MakeCALL(injector::raw_ptr(site + 6),
+                           injector::raw_ptr(&abi_new_saves_p3_hook), true);
+        if (zpatch_new_saves_p3_orig == 0)
+            zpatch_new_saves_p3_orig = original_target;
+        int32_t third_rel = 0;
+        std::memcpy(&third_rel, site + 30, 4);
+        zpatch_new_saves_loaddata = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(site) + 30u +
+            static_cast<uint32_t>(third_rel) + 4u);
+    }
+}
+
+// The prepare step of the tramp (original sub_10051FD0): if the handler
+// captured the game's save-name buffer, make sure the savegame directory
+// exists (game function found by signature) and convert "<dir>\\<save name>".
+extern "C" void abi_new_saves_prepare() noexcept
+{
+    const auto* name = reinterpret_cast<const char*>(
+        static_cast<uintptr_t>(zpatch_new_saves_src));
+    if (name == nullptr) return;
+    static const uint8_t* get_dir = nullptr;
+    if (get_dir == nullptr)
+        get_dir = scan_game("55 8B EC 83 E4 F8 83 EC 4C 56 33 C0 8D 4C 24 28");
+    if (get_dir == nullptr) return;
+    char directory[312]{};
+    char suffix = 0;
+    if (reinterpret_cast<uint8_t(__cdecl*)(int, char*, char*)>(
+            const_cast<uint8_t*>(get_dir))(0, directory, &suffix) == 0)
+        return;
+    char path[560];
+    std::snprintf(path, sizeof(path), "%s\\%s", directory, name);
+    abi_new_saves_convert(path);
+}
+
+// The two game functions the DLC discovery routine calls, published as RVAs by
+// the LoadDLCs handler (dword_1015804C register, dword_101580D0 apply).
+using DlcRegisterFn = void(__stdcall*)(int id, char* request, int flag);
+using DlcApplyFn = void(__thiscall*)(void* object, char* request);
+
+// @exact 0x10023480 LoadDLCs: __stdcall, two arguments, mov al,1 / ret 8. The
+// original sets only AL, so the upper 24 bits of EAX are preserved and a plain
+// `return 1` (mov eax,1) is observable.
+static __declspec(naked) int __stdcall abi_load_dlcs_dummy(int, int)
+{
+    __asm {
+        mov al, 1
+        ret 8
+    }
+}
+
+// @exact 0x100521E0 NewSavesCompatibility tramp: the handler E9s the savegame-
+// load entry at "89 84 24 E0 01 00 00 8B 45 08 53 33 DB" (game 0x85B093) so this
+// runs the converter first, then replicates the overwritten instruction (the
+// stack-cookie store) and the next two, and tail-jumps to match+13. Entry is by
+// JMP, so the [esp+0x1E0] store targets the same game frame slot as the original.
+static __declspec(naked) void abi_new_saves_compat()
+{
+    __asm {
+        pushad
+        call abi_new_saves_prepare
+        popad
+        mov  dword ptr [esp + 1E0h], eax
+        mov  eax, dword ptr [ebp + 8]
+        push ebx
+        xor  ebx, ebx
+        jmp  dword ptr [zpatch_new_saves_resume]
+    }
+}
+
+// NewFilesCompatibility: body 0x10051600 registers a callback with the game's
+// file-registration function; bodies 0x10051890 / 0x100518D0 are the per-file
+// update hooks (E8 sites) that resolve the asset object, hash the name and
+// register it. Helpers mirror sub_100515D0 / sub_100515E0 / sub_10051730 /
+// sub_10051610 / sub_100517E0.
+extern "C" void* abi_newfiles_cb(void** a1)  // 0x100515D0
+{
+    void* const result = *a1;
+    *reinterpret_cast<int*>(*a1) = 1;
+    return result;
+}
+// 0x100515E0 is five instructions: push callback, push hash, call the
+// published register function, add esp,8, ret. The flags at the resume come
+// from that add esp,8, so abi_newfiles_register_body keeps the naked stack
+// shape around this C helper.
+extern "C" void __cdecl abi_newfiles_register()
+{
+    // The slot is a cdecl two-argument registrar; the original cleans both
+    // arguments after the call.
+    const auto register_file = reinterpret_cast<void(__cdecl*)(uint32_t, void*)>(
+        static_cast<uintptr_t>(zpatch_newfiles_register_slot));
+    // The script-handler hash the original registers the callback under
+    // (sub_10051600's `register_file` argument).
+    constexpr uint32_t kNewFilesHandlerHash = 0x2C89A1F9u;
+    register_file(kNewFilesHandlerHash, reinterpret_cast<void*>(&abi_newfiles_cb));
+}
+extern "C" void* abi_newfiles_find_obj()  // 0x10051730
+{
+    // The original re-dereferences the container global on EVERY call
+    // (**(_DWORD**)(match+2)), so it is picked up again whenever the game rebuilds
+    // its registry; caching the container itself left a stale one that faulted in
+    // the game's container search (0x43a490).
+    static uintptr_t match = 0;
+    static bool resolved = false;
+    if (!resolved)
+    {
+        resolved = true;
+        match = newfiles_find(
+            "8B 35 ? ? ? ? 6A 00 50 E8 ? ? ? ? 83 C4 08 50 8B CE E8 ? ? ? ? 85 C0 89 07 5E 74 05");
+    }
+    if (!match) return nullptr;
+    const uint32_t global =
+        *reinterpret_cast<const uint32_t*>(reinterpret_cast<const void*>(match + 2u));
+    return global ? reinterpret_cast<void*>(*reinterpret_cast<const uint32_t*>(
+                        reinterpret_cast<const void*>(global)))
+                  : nullptr;
+}
+extern "C" int abi_newfiles_call_obj(void* obj, uint32_t hash)  // 0x10051610
+{
+    using Fn = int(__fastcall*)(void* self, int, uint32_t);
+    static uintptr_t cached = 0;
+    static bool resolved = false;
+    if (!resolved)
+    {
+        resolved = true;
+        cached = newfiles_find("85 C9 53 55 56 57 74 40 8B 6C 24 14 8D 64 24 00");
+        if (!cached) cached = newfiles_find("53 55 8B 6C 24 0C 56 57 EB 06");
+    }
+    if (!cached) return 0;
+    return reinterpret_cast<Fn>(cached)(obj, 0, hash);
+}
+extern "C" int abi_newfiles_call_add(void* self, void* str)  // 0x100517E0
+{
+    using Fn = int(__fastcall*)(void* self, int, void*);
+    static uintptr_t cached = 0;
+    static bool resolved = false;
+    if (!resolved)
+    {
+        resolved = true;
+        const uintptr_t m = newfiles_find("8B 0F 85 C9 74 ? 0F B7 41 0A 66 85 C0");
+        cached = m ? m - 20u : 0;
+    }
+    if (!cached) return 0;
+    return reinterpret_cast<Fn>(cached)(self, 0, str);
+}
+// @exact 0x10051600
+static __declspec(naked) void abi_newfiles_register_body()  // 0x10051600
+{
+    __asm {
+        pushad
+        call abi_newfiles_register
+        popad
+        ret
+    }
+}
+// The update object holds the name string at +0x10 (version A) / +0x10F
+// (version B) and the callback's first/second arguments at +8 / +4; 0x10051890
+// and 0x100518D0 differ only in those offsets.
+extern "C" char __fastcall abi_newfiles_update_a(void* self, int)  // 0x10051890
+{
+    constexpr size_t kUpdateNameOffsetA = 0x10;
+    auto* base = static_cast<unsigned char*>(self);
+    if (base[kUpdateNameOffsetA] == 0) return 0;
+    if (abi_newfiles_call_obj(abi_newfiles_find_obj(),
+                              GameHash(reinterpret_cast<const char*>(base + kUpdateNameOffsetA))))
+        abi_newfiles_call_add(base + 8, base + kUpdateNameOffsetA);
+    return 1;
+}
+extern "C" char __fastcall abi_newfiles_update_b(void* self, int)  // 0x100518D0
+{
+    constexpr size_t kUpdateNameOffsetB = 0x10F;
+    auto* base = static_cast<unsigned char*>(self);
+    if (base[kUpdateNameOffsetB] == 0) return 0;
+    if (abi_newfiles_call_obj(abi_newfiles_find_obj(),
+                              GameHash(reinterpret_cast<const char*>(base + kUpdateNameOffsetB))))
+        abi_newfiles_call_add(base + 4, base + kUpdateNameOffsetB);
+    return 1;
+}
+// DLC discovery post step (sub_10023150): enumerate \dlc\tlad\content\ / \TLAD\,
+// \dlc\TBoGT\content\ / \TBoGT\ and \EpisodeN\ next to the executable and
+// register each through the two published game RVAs. The original writes the
+// module base + RVA into the struct and hands it to the register/apply functions.
+static __declspec(naked) void __cdecl zpatch_dlc_apply_capture_edx(
+    void*, char*, DlcApplyFn, uint32_t*)
+{
+    __asm {
+        push ebp
+        mov  ebp, esp
+        mov  ecx, dword ptr [ebp + 8]
+        push dword ptr [ebp + 0Ch]
+        call dword ptr [ebp + 10h]
+        mov  eax, dword ptr [ebp + 14h]
+        mov  dword ptr [eax], edx
+        mov  esp, ebp
+        pop  ebp
+        ret
+    }
+}
+
+// The 0x104-byte path buffers sub_10023150 builds for each DLC folder.
+constexpr size_t kDlcPathCapacity = 0x104u;
+
+void* dlc_discovery_post(void* object)
+{
+    // The original allocates with a throwing operator new and ignores both its
+    // result and GetModuleFileNameA's: a failed allocation or a failed module
+    // path then builds every DLC path from uninitialized bytes. The failsafe
+    // leaves the episode list untouched instead, which is the LoadDLCs=0 state.
+    auto* const module_path =
+        static_cast<char*>(::operator new(kDlcPathCapacity, std::nothrow));
+    if (zpatch_failsafe_skip("LoadDLCs path buffer", module_path == nullptr))
+        return object;
+    const DWORD module_length = GetModuleFileNameA(nullptr, module_path, kDlcPathCapacity);
+    if (zpatch_failsafe_skip("LoadDLCs module path",
+                             module_length == 0 || module_length >= kDlcPathCapacity))
+        return object;
+    PathRemoveFileSpecA(module_path);
+    uint32_t last_apply_edx = 0;
+    bool episode254_registered = false;
+
+    // The original picks ONE path per group: the "content" layout if it exists,
+    // otherwise the legacy fallback; it never registers both.
+    const auto try_paths = [&](const char* primary, const char* fallback, int id)
+    {
+        char path[kDlcPathCapacity];
+        strcpy_s(path, kDlcPathCapacity, module_path);
+        strcat_s(path, kDlcPathCapacity, primary);
+        if (!PathFileExistsA(path))
+        {
+            if (std::strcmp(primary, fallback) == 0) return;
+            strcpy_s(path, kDlcPathCapacity, module_path);
+            strcat_s(path, kDlcPathCapacity, fallback);
+            if (!PathFileExistsA(path)) return;
+        }
+        char request[360]{};
+        strcpy_s(request, kDlcPathCapacity, path);
+        request[358] = 1;
+        *reinterpret_cast<uint32_t*>(request + 344) = 1;
+        const auto game_base = reinterpret_cast<uintptr_t>(GetModuleHandleA(nullptr));
+        const auto register_fn = reinterpret_cast<DlcRegisterFn>(
+            game_base + DlcRegisterRva());
+        const auto apply_fn = reinterpret_cast<DlcApplyFn>(
+            game_base + DlcApplyRva());
+        register_fn(id, request, 1);
+        zpatch_dlc_apply_capture_edx(object, request, apply_fn, &last_apply_edx);
+        if (id == 508) episode254_registered = true;
+    };
+
+    try_paths("\\dlc\\tlad\\content\\", "\\TLAD\\", 2);
+    try_paths("\\dlc\\TBoGT\\content\\", "\\TBoGT\\", 4);
+    for (int i = 3; i < 255; ++i)
+    {
+        // The original formats "\EpisodeN\" into a 64-byte stack buffer.
+        constexpr size_t kEpisodeSuffixCapacity = 0x40;
+        char suffix[kEpisodeSuffixCapacity];
+        zpatch_spawns_sprintf(suffix, sizeof(suffix), "\\Episode%d\\", i);
+        try_paths(suffix, suffix, 2 * i);
+    }
+    *reinterpret_cast<uint8_t*>(static_cast<uint8_t*>(object) + 358) = 2;
+    // sub_10023150's final sub_10001280 call leaves its 0x40 buffer size in EDX;
+    // PathFileExistsA preserves EDX and the caller's resume observes it. If
+    // Episode254 exists, its final apply call is the last EDX producer instead
+    // (captured by the asm helper above).
+    if (episode254_registered)
+    {
+        __asm { mov edx, last_apply_edx }
+    }
+    else
+    {
+        __asm { mov edx, 40h }
+    }
+    return object;
+}
+
+// @exact 0x10023490 LoadDLCs struct fixup: the object arrives in ESI and the
+// epilogue pops esi/ebx and cleans 0x14 stack bytes; the original instruction
+// sequence is reproduced (with our own callback slot and post step).
+// Field map of the DLC entry in ESI: +0x00/+0x40/+0x80/+0xC0/+0x100 are the five
+// per-episode flag bytes the fixup clears, +0x167 is "already loaded",
+// +0x168 the forced flag, +0xA4 the post-step marker; 0x14 is the epilogue's
+// stack cleanup.
+static __declspec(naked) void abi_load_dlcs_struct_fixup()
+{
+    __asm {
+        mov BYTE PTR [esi], 0
+        mov BYTE PTR [esi + 0x40], 0
+        mov BYTE PTR [esi + 0x80], 0
+        mov BYTE PTR [esi + 0xc0], 0
+        mov BYTE PTR [esi + 0x100], 0
+        cmp BYTE PTR [esi + 0x167], 0
+        je load
+        mov BYTE PTR [esi + 0x168], 1
+    exit_label:
+        pop esi
+        pop ebx
+        add esp, 0x14
+        ret
+    load:
+        mov ecx, esi
+        call DWORD PTR [zpatch_dlc_load_callback]
+        push esi
+        call dlc_discovery_post
+        pop esi
+        mov BYTE PTR [esi + 0xa4], 1
+        jmp exit_label
+    }
+}
+}  // extern "C"
+
+namespace
+{
+// The name -> body rows this module registers. The reference VA is the
+// original handler destination (0 when the body has none); it is provenance,
+// not an install address.
+const opp::HookBodyRow kLoadingHookBodies[] = {
+    {"abi_load_dlcs_dummy", 0x10023480u, reinterpret_cast<opp::HookBody>(&abi_load_dlcs_dummy)},
+    {"abi_load_dlcs_struct_fixup", 0x10023490u, reinterpret_cast<opp::HookBody>(&abi_load_dlcs_struct_fixup)},
+    {"abi_new_saves_compat", 0x100521E0u, reinterpret_cast<opp::HookBody>(&abi_new_saves_compat)},
+    {"abi_new_saves_convert", 0u, reinterpret_cast<opp::HookBody>(&abi_new_saves_convert)},
+    {"abi_new_saves_p3_hook", 0u, reinterpret_cast<opp::HookBody>(&abi_new_saves_p3_hook)},
+    {"abi_new_saves_prepare", 0u, reinterpret_cast<opp::HookBody>(&abi_new_saves_prepare)},
+    {"abi_new_saves_read_hook", 0u, reinterpret_cast<opp::HookBody>(&abi_new_saves_read_hook)},
+    {"abi_newfiles_call_add", 0u, reinterpret_cast<opp::HookBody>(&abi_newfiles_call_add)},
+    {"abi_newfiles_call_obj", 0u, reinterpret_cast<opp::HookBody>(&abi_newfiles_call_obj)},
+    {"abi_newfiles_cb", 0u, reinterpret_cast<opp::HookBody>(&abi_newfiles_cb)},
+    {"abi_newfiles_find_obj", 0u, reinterpret_cast<opp::HookBody>(&abi_newfiles_find_obj)},
+    {"abi_newfiles_register", 0u, reinterpret_cast<opp::HookBody>(&abi_newfiles_register)},
+    {"abi_newfiles_register_body", 0x10051600u, reinterpret_cast<opp::HookBody>(&abi_newfiles_register_body)},
+    {"abi_newfiles_update_a", 0x10051890u, reinterpret_cast<opp::HookBody>(&abi_newfiles_update_a)},
+    {"abi_newfiles_update_b", 0x100518D0u, reinterpret_cast<opp::HookBody>(&abi_newfiles_update_b)},
+};
+
+struct LoadingHookBodyRegistration
+{
+    LoadingHookBodyRegistration() noexcept
+    {
+        opp::RegisterHookBodies(kLoadingHookBodies);
+    }
+} g_loadingHookBodies;
+}  // namespace
+
+#endif  // !defined(_WIN64)

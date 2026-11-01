@@ -983,3 +983,729 @@ namespace
 } // namespace
 
 } // namespace opp::features
+
+// ---------------------------------------------------------------------------
+// Hook bodies: the machine-level entry points graphics installs.
+//
+// Each body keeps the original site's calling convention and register
+// contract; the comment above it names the original destination VA. They are
+// 32-bit only (the x64 parity dump resolves names to the original VAs).
+// ---------------------------------------------------------------------------
+#if !defined(_WIN64)
+
+using namespace opp;
+
+#include "body_helpers.inc"
+
+extern "C"
+{
+
+// ForceCarHeadlightShadows checker (original sub_1001AD20), called between
+// pushad/popad: walk the [HeadlightConeOffsets] table (dword_1015ADB8) and
+// publish the first matching offset (dword_1015B5C0) into dword_101580C0;
+// default 2.0f. The lookup and the object's model (+0x2E) are unguarded.
+void abi_fchs_check() noexcept
+{
+    const uint32_t* const hashes = zpatch_fchs_hashes;
+    uint32_t hash = hashes[0];
+    zpatch_fchs_offset = 0x40000000u;  // 2.0f, as the original
+    if (hash == 0u) return;
+    const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
+        static_cast<uintptr_t>(zpatch_model_lookup));
+    // 0x1001AD5C `call dword_10159C0C` and 0x1001AD62 `movsx eax,word [v2+2Eh]`
+    // are unguarded in the original.
+    const auto* base = reinterpret_cast<const uint8_t*>(
+        static_cast<uintptr_t>(zpatch_fchs_param));
+    if (lookup == nullptr || base == nullptr)
+        return;  // a preamble/parameter miss is a clean skip
+    static uint32_t cache_hash[512] = {};
+    static int32_t cache_index[512] = {};
+    static uint8_t cache_valid[512] = {};
+    const auto resolve = [&](uint32_t value) -> int32_t
+    {
+        const size_t slot = (value * 2654435761u) >> 23;
+        if (cache_valid[slot] != 0u && cache_hash[slot] == value)
+            return cache_index[slot];
+        int32_t resolved = -1;
+        lookup(value, &resolved);
+        cache_hash[slot] = value;
+        cache_index[slot] = resolved;
+        cache_valid[slot] = 1;
+        return resolved;
+    };
+    for (uint32_t i = 0;;)
+    {
+        const int32_t index = resolve(hash);
+        if (static_cast<int32_t>(
+                *reinterpret_cast<const int16_t*>(base + kModelIndexOffset)) == index)
+        {
+            float value = 0.0f;
+            std::memcpy(&value, &zpatch_fchs_offsets[i], sizeof(value));
+            std::memcpy(&zpatch_fchs_offset, &value, sizeof(value));
+            return;
+        }
+        ++i;
+        // The original walks into adjacent .data instead; layout-specific and
+        // unreproducible.
+        if (i == 512u) return;
+        hash = hashes[i];
+        if (hash == 0u) return;
+    }
+}
+
+// CutsceneFixes chain B's VirtualProtect slot: the body loads this slot instead
+// of the @-decorated import pointer, which the inline assembler cannot name
+// (same value).
+uint32_t zpatch_cutscene_virtualprotect = 0;
+struct CutsceneVirtualProtectInit final
+{
+    CutsceneVirtualProtectInit() noexcept
+    {
+        zpatch_cutscene_virtualprotect = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(&VirtualProtect));
+    }
+};
+CutsceneVirtualProtectInit g_cutscene_virtualprotect_init;
+
+// 0x1001af60 EmissiveLerpFix: register-exact transcription of the original
+// tramp. It saves ecx/edx, runs sub_1001AF20 (inlined: the integer state
+// machine over dword_10159CC0/CCC), then does the SSE tail and tail-jumps to
+// the resume (match-12, game 0x7F8BAD).
+//
+// The tail must stay bit-exact.
+//   cvtsi2ss xmm0, edx           merges, keeping xmm0[127:32] from the caller
+//   mulss    xmm0, [0x10159cc4]  multiplies by the slot's BYTES (match-16),
+//                                not a dereference
+//   xmm1..xmm7 untouched         the game keeps them live across the site
+// MSVC inline asm cannot spell cvtsi2ss/mulss, so the four-byte encodings are
+// emitted. Not byte-exact (the helper is inlined).
+static __declspec(naked) void abi_emissive_lerp_shim()
+{
+    __asm {
+        push eax
+        mov DWORD PTR [zpatch_emissive_ecx], ecx
+        mov DWORD PTR [zpatch_emissive_edx], edx
+        // --- inlined sub_1001AF20 (0x1001af20) ---
+        mov ecx, DWORD PTR [zpatch_emissive_ecx]
+        xor edx, edx
+        mov eax, DWORD PTR [zpatch_emissive_edx]
+        shl ecx, 4
+        sub ecx, DWORD PTR [zpatch_emissive_ecx]
+        mov DWORD PTR [zpatch_emissive_edx], 0
+        lea eax, [eax + ecx*4]
+        mov ecx, 0Ch
+        add eax, -405
+        cmp eax, 2EDh
+        __emit 0Fh
+        __emit 46h
+        __emit 0D1h                  // cmovbe edx, ecx
+        mov DWORD PTR [zpatch_emissive_ecx], edx
+        // --- reload ecx/edx exactly like the original tramp ---
+        mov ecx, DWORD PTR [zpatch_emissive_ecx]
+        mov edx, DWORD PTR [zpatch_emissive_edx]
+        __emit 0F3h
+        __emit 0Fh
+        __emit 2Ah
+        __emit 0C2h                  // cvtsi2ss xmm0, edx (merge upper bits)
+        mov eax, OFFSET zpatch_emissive_const
+        __emit 0F3h
+        __emit 0Fh
+        __emit 59h
+        __emit 00h                   // mulss xmm0, DWORD PTR [eax]
+        pop eax
+        jmp DWORD PTR [zpatch_emissive_resume]
+    }
+}
+
+// @exact 0x100068A0 CarPartsShadowFix's other slot body: calls the published
+// thunk [dword_1015B5B8] twice with (esi, 2|0, ebx, ebx, edi), pops the 20
+// argument bytes and tails to [dword_1015BDCC]. The NOPs are original bytes.
+static __declspec(naked) void abi_carparts_shadow_2()
+{
+    __asm {
+        push esi
+        nop
+        push 2
+        nop
+        push ebx
+        nop
+        push ebx
+        nop
+        push edi
+        nop
+        call dword ptr [zpatch_carparts_shadow_fn]
+        push esi
+        nop
+        push 0
+        nop
+        push ebx
+        nop
+        push ebx
+        nop
+        push edi
+        nop
+        call dword ptr [zpatch_carparts_shadow_fn]
+        nop
+        add  esp, 14h
+        nop
+        jmp  dword ptr [zpatch_carparts_resume_2]
+        __emit 0CCh   // body delimiter for verify_hook_bodies
+    }
+}
+
+// @exact 0x100068D0 CarDynamicShadowFix body B (pattern-B variant, unused on
+// 1.0.8.0 where pattern A is found): same double call through
+// [dword_1015B5B8] with (esi, 2, 0, 0, edi) / (esi, 0, 0, 0, edi), 20 argument
+// bytes popped, tail-jump to [dword_1015BDCC].
+static __declspec(naked) void abi_carparts_shadow_2b()
+{
+    __asm {
+        push esi
+        nop
+        push 2
+        nop
+        push 0
+        nop
+        push 0
+        nop
+        push edi
+        nop
+        call dword ptr [zpatch_carparts_shadow_fn]
+        nop
+        push esi
+        nop
+        push 0
+        nop
+        push 0
+        nop
+        push 0
+        nop
+        push edi
+        nop
+        call dword ptr [zpatch_carparts_shadow_fn]
+        nop
+        add  esp, 14h
+        nop
+        jmp  dword ptr [zpatch_carparts_resume_2]
+        __emit 0CCh   // body delimiter for verify_hook_bodies
+    }
+}
+
+// @exact 0x10006880 CarPartsShadowFix shim (NOPs are original bytes).
+//   cmp edi,0 / nop / je else / nop
+//   movzx ebx,word [edi+1Ch] / nop / xor esi,esi / nop
+//   test ebx,ebx / nop / jmp [dword_1015BDC8]   ; resume = match+2
+// else: nop / jmp [dword_1015BDC0]              ; resume = match+0x45
+// The EBX/ESI setup and its flags are consumed by the resumed code; edi and the
+// rest of the register state must reach the resume untouched.
+static __declspec(naked) void abi_carparts_shadow()
+{
+    __asm {
+        cmp  edi, 0
+        nop
+        je   carparts_else
+        nop
+        movzx ebx, word ptr [edi + 1Ch]
+        nop
+        xor  esi, esi
+        nop
+        test ebx, ebx
+        nop
+        jmp  dword ptr [zpatch_carparts_resume_if]
+    carparts_else:
+        nop
+        jmp  dword ptr [zpatch_carparts_resume_else]
+        __emit 0CCh   // body delimiter for verify_hook_bodies
+    }
+}
+
+// @exact 0x1001ADB0 ForceCarHeadlightShadows thunk (installer E9s the game
+// function at pattern "55 8B EC 83 E4 F0 81 EC D4 00 00 00 8B 45 20 8B",
+// game 0x8F7590, resume = match+12).
+//   mov [dword_1015BDD0],ecx; pushad; call sub_1001AD20; popad
+//   push ebp / mov ebp,esp / and esp,-16 / sub esp,0xD4  ; replayed prologue
+//   jmp [dword_1015B5BC]
+// The replay is essential: those 12 bytes belong to the function the E9
+// replaced, so the resume must run with the frame already established.
+static __declspec(naked) void abi_fchs_shim()
+{
+    __asm {
+        mov  dword ptr [zpatch_fchs_param], ecx
+        pushad
+        call abi_fchs_check
+        popad
+        push ebp
+        mov  ebp, esp
+        and  esp, 0FFFFFFF0h
+        sub  esp, 0D4h
+        jmp  dword ptr [zpatch_fchs_resume]
+    }
+}
+
+// DualVehicleHeadlights (handler 0x10006770, E9 at the game match): bodies
+// 0x100064F0 (new builds) / 0x10006630 (builds 1..6) duplicate the headlight-
+// cone draw call with the game's custom register convention (args in
+// eax/edx/ecx/ebx/ebp/edi/esi plus stack floats), saving every GPR and drawing
+// slots 1 and 2 through the published pointers before tailing to match+338.
+// abi_dual_headlights_init sets the constants the original's sub_100064D0 sets.
+extern "C" void __cdecl abi_dual_headlights_init()
+{
+    zpatch_dual_light_a = 1;
+    zpatch_dual_light_b = 2;
+}
+// @exact 0x100064F0
+static __declspec(naked) void abi_dual_headlights_new()
+{
+    __asm {
+        pushad
+        call abi_dual_headlights_init
+        popad
+        mov DWORD PTR [zpatch_dual_r_eax], eax
+        mov DWORD PTR [zpatch_dual_r_ebx], ebx
+        mov DWORD PTR [zpatch_dual_r_ecx], ecx
+        mov DWORD PTR [zpatch_dual_r_edx], edx
+        mov DWORD PTR [zpatch_dual_r_esi], esi
+        mov DWORD PTR [zpatch_dual_r_edi], edi
+        mov DWORD PTR [zpatch_dual_r_ebp], ebp
+        mov DWORD PTR [zpatch_dual_r_esp], esp
+        push 0
+        call DWORD PTR [zpatch_dual_bd0]
+        add esp, 4
+        push eax
+        mov ecx, edi
+        call DWORD PTR [zpatch_dual_be4]
+        push eax
+        mov eax, DWORD PTR [esp + 30h]
+        fld DWORD PTR [esp + 1Ch]
+        push 1
+        push DWORD PTR [zpatch_dual_light_a]
+        mov ecx, DWORD PTR [ebp + 24h]
+        sub esp, 10h
+        fstp DWORD PTR [esp + 0Ch]
+        add eax, 30h
+        fld DWORD PTR [esp + 38h]
+        fstp DWORD PTR [esp + 8]
+        fld DWORD PTR [esp + 30h]
+        fstp DWORD PTR [esp + 4]
+        fld DWORD PTR [esp + 2Ch]
+        fstp DWORD PTR [esp]
+        push eax
+        push ecx
+        movsx edx, BYTE PTR [edi + 40h]
+        mov esi, DWORD PTR [edi + 48h]
+        mov edi, DWORD PTR [zpatch_dual_bcc]
+        lea ecx, [esp + 54h]
+        call DWORD PTR [zpatch_dual_bd4]
+        add esp, 24h
+        mov eax, DWORD PTR [zpatch_dual_r_eax]
+        mov ebx, DWORD PTR [zpatch_dual_r_ebx]
+        mov ecx, DWORD PTR [zpatch_dual_r_ecx]
+        mov edx, DWORD PTR [zpatch_dual_r_edx]
+        mov esi, DWORD PTR [zpatch_dual_r_esi]
+        mov edi, DWORD PTR [zpatch_dual_r_edi]
+        mov ebp, DWORD PTR [zpatch_dual_r_ebp]
+        mov esp, DWORD PTR [zpatch_dual_r_esp]
+        push 0
+        call DWORD PTR [zpatch_dual_bd0]
+        add esp, 4
+        push eax
+        mov ecx, edi
+        call DWORD PTR [zpatch_dual_be4]
+        fld DWORD PTR [esp + 18h]
+        mov ecx, DWORD PTR [esp + 28h]
+        push eax
+        push 1
+        push DWORD PTR [zpatch_dual_light_b]
+        mov eax, DWORD PTR [ebp + 24h]
+        sub esp, 10h
+        fstp DWORD PTR [esp + 0Ch]
+        add ecx, 30h
+        fld DWORD PTR [esp + 38h]
+        fstp DWORD PTR [esp + 8]
+        fld DWORD PTR [esp + 30h]
+        fstp DWORD PTR [esp + 4]
+        fld DWORD PTR [esp + 2Ch]
+        fstp DWORD PTR [esp]
+        push ecx
+        push eax
+        movsx edx, BYTE PTR [edi + 40h]
+        mov esi, DWORD PTR [edi + 48h]
+        mov edi, DWORD PTR [zpatch_dual_bcc]
+        lea ecx, [esp + 54h]
+        call DWORD PTR [zpatch_dual_bd4]
+        add esp, 24h
+        jmp DWORD PTR [zpatch_dual_be0]
+        __emit 0CCh   // body delimiter for verify_hook_bodies (unreachable after jmp)
+    }
+}
+// @exact 0x10006630
+static __declspec(naked) void abi_dual_headlights_old()
+{
+    __asm {
+        pushad
+        call abi_dual_headlights_init
+        popad
+        mov DWORD PTR [zpatch_dual_r_eax], eax
+        mov DWORD PTR [zpatch_dual_r_ebx], ebx
+        mov DWORD PTR [zpatch_dual_r_ecx], ecx
+        mov DWORD PTR [zpatch_dual_r_edx], edx
+        mov DWORD PTR [zpatch_dual_r_esi], esi
+        mov DWORD PTR [zpatch_dual_r_edi], edi
+        mov DWORD PTR [zpatch_dual_r_ebp], ebp
+        mov DWORD PTR [zpatch_dual_r_esp], esp
+        push 0
+        call DWORD PTR [zpatch_dual_bd0]
+        add esp, 4
+        push eax
+        mov ecx, edi
+        call DWORD PTR [zpatch_dual_be4]
+        push eax
+        mov eax, DWORD PTR [esp + 30h]
+        fld DWORD PTR [esp + 20h]
+        push 1
+        push DWORD PTR [zpatch_dual_light_a]
+        mov ecx, DWORD PTR [ebp + 24h]
+        sub esp, 10h
+        fstp DWORD PTR [esp + 0Ch]
+        add eax, 30h
+        fld DWORD PTR [esp + 30h]
+        fstp DWORD PTR [esp + 8]
+        fld DWORD PTR [esp + 2Ch]
+        fstp DWORD PTR [esp + 4]
+        fld DWORD PTR [esp + 34h]
+        fstp DWORD PTR [esp]
+        push eax
+        push ecx
+        movsx edx, BYTE PTR [edi + 40h]
+        mov esi, DWORD PTR [edi + 48h]
+        mov edi, DWORD PTR [zpatch_dual_bcc]
+        lea ecx, [esp + 54h]
+        call DWORD PTR [zpatch_dual_bd4]
+        add esp, 24h
+        mov eax, DWORD PTR [zpatch_dual_r_eax]
+        mov ebx, DWORD PTR [zpatch_dual_r_ebx]
+        mov ecx, DWORD PTR [zpatch_dual_r_ecx]
+        mov edx, DWORD PTR [zpatch_dual_r_edx]
+        mov esi, DWORD PTR [zpatch_dual_r_esi]
+        mov edi, DWORD PTR [zpatch_dual_r_edi]
+        mov ebp, DWORD PTR [zpatch_dual_r_ebp]
+        mov esp, DWORD PTR [zpatch_dual_r_esp]
+        push 0
+        call DWORD PTR [zpatch_dual_bd0]
+        add esp, 4
+        push eax
+        mov ecx, edi
+        call DWORD PTR [zpatch_dual_be4]
+        fld DWORD PTR [esp + 1Ch]
+        mov ecx, DWORD PTR [esp + 28h]
+        push eax
+        push 1
+        push DWORD PTR [zpatch_dual_light_b]
+        mov eax, DWORD PTR [ebp + 24h]
+        sub esp, 10h
+        fstp DWORD PTR [esp + 0Ch]
+        add ecx, 30h
+        fld DWORD PTR [esp + 30h]
+        fstp DWORD PTR [esp + 8]
+        fld DWORD PTR [esp + 2Ch]
+        fstp DWORD PTR [esp + 4]
+        fld DWORD PTR [esp + 34h]
+        fstp DWORD PTR [esp]
+        push ecx
+        push eax
+        movsx edx, BYTE PTR [edi + 40h]
+        mov esi, DWORD PTR [edi + 48h]
+        mov edi, DWORD PTR [zpatch_dual_bcc]
+        lea ecx, [esp + 54h]
+        call DWORD PTR [zpatch_dual_bd4]
+        add esp, 24h
+        jmp DWORD PTR [zpatch_dual_be0]
+        __emit 0CCh   // body delimiter for verify_hook_bodies (unreachable after jmp)
+    }
+}
+
+// @exact 0x1001B2E0 CarDecalsFix: the original scans for
+// "8B 44 24 08 8B 48 28 81 E1 C0 03 00 00 81 F9 80 00 00 00" (unique on
+// 1.0.8.0, game 0x6F7F50) and E9s the first match to this replacement of the
+// game function's entry.
+//   a2 = [esp+8]; if ((a2[0x28] & 0x3C0) == 0x80) { a1 = [esp+4];
+//      if (a1[0x38]) return a1[0x34]; } else { a1 = [esp+4]; }
+//   return a1[0x30];   (__stdcall, ret 8)
+static __declspec(naked) void abi_car_decals_fix()
+{
+    __asm {
+        mov eax, dword ptr [esp + 8]
+        mov ecx, dword ptr [eax + 28h]
+        and ecx, 3C0h
+        cmp ecx, 80h
+        jne car_decals_other
+        mov eax, dword ptr [esp + 4]
+        cmp dword ptr [eax + 38h], 0
+        je  car_decals_load
+        mov eax, dword ptr [eax + 34h]
+        ret 8
+    car_decals_other:
+        mov eax, dword ptr [esp + 4]
+    car_decals_load:
+        mov eax, dword ptr [eax + 30h]
+        ret 8
+    }
+}
+
+// BuildingDynamicShadows: shim installed at the sig
+// `8B 47 28 C1 E8 06 83 E0 0F 83 C0`. If [edi] is one of the two handler-
+// published model hashes it takes the special resume, else it derives the shadow
+// level `(([edi+0x28]>>6)&0xf)-1` and takes the normal resume (match+0xf /
+// match+0x70).
+// @exact 0x10005AF0
+static __declspec(naked) void abi_building_dynamic_shadows()
+{
+    __asm {
+        mov eax, DWORD PTR [edi]
+        cmp eax, DWORD PTR [zpatch_bds_hash_a]
+        je bds_special
+        cmp eax, DWORD PTR [zpatch_bds_hash_b]
+        je bds_special
+        mov eax, DWORD PTR [edi + 28h]
+        shr eax, 6
+        and eax, 0Fh
+        add eax, -1
+        jmp DWORD PTR [zpatch_bds_resume_a]
+    bds_special:
+        jmp DWORD PTR [zpatch_bds_resume_b]
+    }
+}
+
+// The worker's sub_10003980: the resolver call with the salt in ECX and ESI.
+static __declspec(naked) uint32_t zpatch_cutscene_scene()
+{
+    __asm {
+        push esi
+        mov esi, ecx
+        mov eax, dword ptr [zpatch_driveby_resolver]
+        call eax
+        pop esi
+        ret
+    }
+}
+// The worker's sub_1005FE7B cookie check (cookie in ECX), same body as the
+// spawns probe's: it must preserve EAX/AL because the cutscene body returns
+// its result in AL across this call.
+static __declspec(naked) void zpatch_cutscene_cookie_check()
+{
+    __asm {
+        jmp zpatch_spawns_cookie_check_ecx
+    }
+}
+// 0x100388C0 CutsceneFixes chain B (original sub_100388C0..0x10038B3F, the dest
+// of the E8 installs the worker 0x10038B40 writes at the two camera call sites).
+// thiscall char(float). Reads a scene float through the loader-published resolver
+// (salt dword_1015803C, ecx/esi), pokes the camera function's `mov byte
+// [esp+0x1C],imm` at target+0x4E, calls it and, once the accumulated frame time
+// passes 0.3333, repeats with the immediate 0 and restores the pre-call object
+// when the position floats differ beyond (0.05,0.05,0.05,0.5,0.5,0.5).
+// @exact 0x100388C0
+static __declspec(naked) void abi_cutscene_chain_b()
+{
+    __asm {
+        push ebp
+        mov ebp, esp
+        sub esp, 0A18h
+        mov eax, dword ptr [__security_cookie]
+        xor eax, ebp
+        mov dword ptr [ebp - 4], eax
+        push esi
+        mov esi, ecx
+        mov ecx, dword ptr [zpatch_salt_3c]
+        push edi
+        mov dword ptr [ebp - 0A10h], esi
+        call zpatch_cutscene_scene
+        lea edi, [ebp - 504h]
+        mov ecx, dword ptr [eax + 0Eh]
+        mov eax, dword ptr [ecx + eax + 18h]
+        mov ecx, 140h
+        rep movsd
+        movss xmm0, dword ptr [eax + 8]
+        lea eax, [ebp - 0A08h]
+        mov esi, dword ptr [zpatch_cutscene_poke]
+        mov edi, dword ptr [zpatch_cutscene_virtualprotect]
+        dec esi
+        cvtps2pd xmm0, xmm0
+        push eax
+        push 40h
+        push 1
+        push esi
+        addsd xmm0, qword ptr [zpatch_cutscene_accum]
+        movsd qword ptr [zpatch_cutscene_accum], xmm0
+        call edi
+        lea eax, [ebp - 0A08h]
+        mov byte ptr [esi], 1
+        push eax
+        push dword ptr [ebp - 0A08h]
+        push 1
+        push esi
+        call edi
+        mov eax, dword ptr [zpatch_cutscene_target]
+        movss xmm0, dword ptr [ebp + 8]
+        push ecx
+        mov ecx, dword ptr [ebp - 0A10h]
+        mov dword ptr [ebp - 0A14h], eax
+        movss dword ptr [esp], xmm0
+        call dword ptr [ebp - 0A14h]
+        fstp qword ptr [ebp - 0A18h]
+        movsd xmm0, qword ptr [ebp - 0A18h]
+        ucomisd xmm0, qword ptr [zpatch_cutscene_zero]
+        lahf
+        test ah, 44h
+        jnp ccb_al_zero
+        mov al, 1
+        jmp ccb_al_done
+    ccb_al_zero:
+        xor al, al
+    ccb_al_done:
+        mov edx, dword ptr [ebp - 0A10h]
+        lea edi, [ebp - 0A04h]
+        movsd xmm0, qword ptr [zpatch_cutscene_limit]
+        mov ecx, 140h
+        comisd xmm0, qword ptr [zpatch_cutscene_accum]
+        mov esi, edx
+        mov byte ptr [ebp - 0A09h], al
+        rep movsd
+        ja ccb_return_al
+        mov edi, edx
+        lea eax, [ebp - 0A08h]
+        push eax
+        mov ecx, 140h
+        lea esi, [ebp - 504h]
+        rep movsd
+        mov esi, dword ptr [zpatch_cutscene_poke]
+        mov edi, dword ptr [zpatch_cutscene_virtualprotect]
+        dec esi
+        push 40h
+        push 1
+        push esi
+        call edi
+        lea eax, [ebp - 0A08h]
+        mov byte ptr [esi], 0
+        push eax
+        push dword ptr [ebp - 0A08h]
+        push 1
+        push esi
+        call edi
+        mov eax, dword ptr [zpatch_cutscene_target]
+        movss xmm0, dword ptr [ebp + 8]
+        push ecx
+        mov ecx, dword ptr [ebp - 0A10h]
+        mov dword ptr [ebp - 0A14h], eax
+        movss dword ptr [esp], xmm0
+        call dword ptr [ebp - 0A14h]
+        fstp qword ptr [ebp - 0A18h]
+        movsd xmm0, qword ptr [ebp - 0A18h]
+        xorps xmm3, xmm3
+        ucomisd xmm0, xmm3
+        lahf
+        test ah, 44h
+        jnp ccb_dl_zero
+        mov dl, 1
+        jmp ccb_dl_done
+    ccb_dl_zero:
+        xor dl, dl
+    ccb_dl_done:
+        mov eax, dword ptr [ebp - 0A10h]
+        lea edi, [ebp - 504h]
+        movss xmm1, dword ptr [zpatch_cutscene_abs_mask]
+        mov ecx, 140h
+        movss xmm2, dword ptr [zpatch_cutscene_eps_a]
+        mov esi, eax
+        rep movsd
+        movss xmm0, dword ptr [ebp - 4E4h]
+        subss xmm0, dword ptr [ebp - 9E4h]
+        andps xmm0, xmm1
+        comiss xmm0, xmm2
+        ja ccb_restore
+        movss xmm0, dword ptr [ebp - 4E0h]
+        subss xmm0, dword ptr [ebp - 9E0h]
+        andps xmm0, xmm1
+        comiss xmm0, xmm2
+        ja ccb_restore
+        movss xmm0, dword ptr [ebp - 4DCh]
+        subss xmm0, dword ptr [ebp - 9DCh]
+        andps xmm0, xmm1
+        comiss xmm0, xmm2
+        ja ccb_restore
+        movss xmm0, dword ptr [ebp - 4C4h]
+        subss xmm0, dword ptr [ebp - 9C4h]
+        movss xmm2, dword ptr [zpatch_cutscene_eps_b]
+        andps xmm0, xmm1
+        comiss xmm0, xmm2
+        ja ccb_restore
+        movss xmm0, dword ptr [ebp - 4C0h]
+        subss xmm0, dword ptr [ebp - 9C0h]
+        andps xmm0, xmm1
+        comiss xmm0, xmm2
+        ja ccb_restore
+        movss xmm0, dword ptr [ebp - 4BCh]
+        subss xmm0, dword ptr [ebp - 9BCh]
+        andps xmm0, xmm1
+        comiss xmm0, xmm2
+        ja ccb_restore
+        pop edi
+        mov al, dl
+        pop esi
+        mov ecx, dword ptr [ebp - 4]
+        xor ecx, ebp
+        call zpatch_cutscene_cookie_check
+        mov esp, ebp
+        pop ebp
+        ret 4
+    ccb_restore:
+        mov edi, eax
+        movsd qword ptr [zpatch_cutscene_accum], xmm3
+        mov al, byte ptr [ebp - 0A09h]
+        lea esi, [ebp - 0A04h]
+        mov ecx, 140h
+        rep movsd
+    ccb_return_al:
+        mov ecx, dword ptr [ebp - 4]
+        pop edi
+        xor ecx, ebp
+        pop esi
+        call zpatch_cutscene_cookie_check
+        mov esp, ebp
+        pop ebp
+        ret 4
+        __emit 0CCh
+    }
+}
+}  // extern "C"
+
+namespace
+{
+// The name -> body rows this module registers. The reference VA is the
+// original handler destination (0 when the body has none); it is provenance,
+// not an install address.
+const opp::HookBodyRow kGraphicsHookBodies[] = {
+    {"abi_building_dynamic_shadows", 0x10005AF0u, reinterpret_cast<opp::HookBody>(&abi_building_dynamic_shadows)},
+    {"abi_car_decals_fix", 0x1001B2E0u, reinterpret_cast<opp::HookBody>(&abi_car_decals_fix)},
+    {"abi_carparts_shadow", 0x10006880u, reinterpret_cast<opp::HookBody>(&abi_carparts_shadow)},
+    {"abi_carparts_shadow_2", 0x100068A0u, reinterpret_cast<opp::HookBody>(&abi_carparts_shadow_2)},
+    {"abi_carparts_shadow_2b", 0x100068D0u, reinterpret_cast<opp::HookBody>(&abi_carparts_shadow_2b)},
+    {"abi_cutscene_chain_b", 0x100388C0u, reinterpret_cast<opp::HookBody>(&abi_cutscene_chain_b)},
+    {"abi_dual_headlights_init", 0u, reinterpret_cast<opp::HookBody>(&abi_dual_headlights_init)},
+    {"abi_dual_headlights_new", 0x100064F0u, reinterpret_cast<opp::HookBody>(&abi_dual_headlights_new)},
+    {"abi_dual_headlights_old", 0x10006630u, reinterpret_cast<opp::HookBody>(&abi_dual_headlights_old)},
+    {"abi_emissive_lerp_shim", 0x1001AF60u, reinterpret_cast<opp::HookBody>(&abi_emissive_lerp_shim)},
+    {"abi_fchs_check", 0u, reinterpret_cast<opp::HookBody>(&abi_fchs_check)},
+    {"abi_fchs_shim", 0x1001ADB0u, reinterpret_cast<opp::HookBody>(&abi_fchs_shim)},
+};
+
+struct GraphicsHookBodyRegistration
+{
+    GraphicsHookBodyRegistration() noexcept
+    {
+        opp::RegisterHookBodies(kGraphicsHookBodies);
+    }
+} g_graphicsHookBodies;
+}  // namespace
+
+#endif  // !defined(_WIN64)

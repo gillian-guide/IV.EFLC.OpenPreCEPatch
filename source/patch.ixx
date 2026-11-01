@@ -1,24 +1,32 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// opp.patch - signature scanning and the guarded arm writes.
+// opp.patch - signature scanning, the guarded arm writes and the hook-body
+// registry.
 //
 // This is the FusionFix-minimal patch module: pattern normalisation and
-// scanning (pattern.hxx/.cpp) plus the helpers every install arm uses to write
+// scanning (pattern.hxx/.cpp), the helpers every install arm uses to write
 // (helpers.hxx/.cpp): the guarded SiteWritable/JumpTo/CallTo/NopAt/WriteValue/
 // WriteRaw wrappers, the Pattern/PatternAll wrappers, the arm trace and the
-// applied/skipped counters. The ABI registry itself (hooks.h + hooks.cpp)
-// stays a plain TU until the hook bodies move into the feature modules.
+// applied/skipped counters, the hook-body registry the feature modules
+// register into, and the body helpers several modules call (the runtime-pointer
+// failsafe, the guarded stores and scanner, the one-time scan guard, the /GS
+// cookie tail, the formatter and the native-script call layer).
 
 module;
 
 #include "common.hxx"
 #include "hooks.h"
+#include "rebased.h"
+#if !defined(_WIN64)
+#include "driveby_seh.h"
+#endif
 #include <cstddef>
 #include <string>
 #include <string_view>
 #include <vector>
 #include <cstdint>
 #include <cstring>
+#include <cstdarg>
 #include <initializer_list>
 #include <cstdio>
 
@@ -47,6 +55,50 @@ export namespace opp
     // True when `address` is inside the game image (defined here with the
     // scanner, exported by this module; common.hxx no longer declares it).
     bool InImage(GameImage image, uintptr_t address) noexcept;
+} // namespace opp
+
+export namespace opp
+{
+    // ---------------------------------------------------------------------
+    // The hook-body registry
+    //
+    // Every body is defined by the feature module that owns it and registered
+    // here at static-init time with its installer name and, where the original
+    // handler had one, its reference VA (provenance, not an install address).
+    // The installer resolves a body by name; the native tests also resolve a
+    // reference VA back to its body.
+    // ---------------------------------------------------------------------
+    using HookBody = void (*)();
+
+    struct HookBodyRow
+    {
+        const char* name;
+        uint32_t reference_va;  // original handler VA, or 0 when only the name is used
+        HookBody body;
+    };
+
+    // Registration is a bounded copy: no allocation and no work beyond the
+    // copy, so it is safe during static initialization under the loader lock.
+    void RegisterHookBodies(const HookBodyRow* rows, size_t count) noexcept;
+
+    template <size_t N>
+    inline void RegisterHookBodies(const HookBodyRow (&rows)[N]) noexcept
+    {
+        RegisterHookBodies(rows, N);
+    }
+
+    // Rows with a reference VA: the count the installer reports as "bodies".
+    size_t HookBodyCount() noexcept;
+
+    // The body for a reference VA (0 when the VA has no registered body).
+    uintptr_t ResolveHookBody(uint32_t reference_va, void* user = nullptr) noexcept;
+
+    // The installer's name lookup. A set resolver wins: the x64 parity dump
+    // installs its original-VA table through it and never links a real body.
+    void* AbiByName(const char* name) noexcept;
+
+    using AbiResolver = void* (*)(const char* name);
+    void SetAbiResolver(AbiResolver resolver) noexcept;
 } // namespace opp
 
 export namespace opp
@@ -236,8 +288,8 @@ export namespace opp
     // One skip line for a write that never reached the image.
     void SkipArmWrite(const char* reason) noexcept;
 
-    // Address of a machine-level body by name (see hooks/bodies.cpp). Prefer
-    // AbiTarget/JumpToBody/CallToBody, which also guard the write.
+    // Address of a machine-level body by name. Prefer AbiTarget/JumpToBody/
+    // CallToBody, which also guard the write.
     inline void* Abi(const char* name) { return AbiByName(name); }
 
     inline void JumpTo(PatchContext& ctx, const void* site, void* target)
@@ -723,3 +775,186 @@ extern "C" bool zpatch_relocate_calls(void* destination, const void* source,
     }
     return true;
 }
+
+
+// ---------------------------------------------------------------------------
+// The hook-body registry
+// ---------------------------------------------------------------------------
+namespace opp
+{
+    namespace
+    {
+        // 134 rows today; the cap has room for a new body without a reallocation
+        // (which would be illegal inside DllMain's load path).
+        constexpr size_t kMaxHookBodies = 256;
+
+        HookBodyRow g_hookBodies[kMaxHookBodies];
+        size_t g_hookBodyCount = 0;
+        AbiResolver g_abiResolver = nullptr;
+    } // namespace
+
+    void RegisterHookBodies(const HookBodyRow* rows, size_t count) noexcept
+    {
+        if (rows == nullptr)
+            return;
+        for (size_t i = 0; i < count; ++i)
+        {
+            if (g_hookBodyCount == kMaxHookBodies)
+            {
+                Log("bodies: registry full, ignoring %s",
+                    rows[i].name != nullptr ? rows[i].name : "(null)");
+                return;
+            }
+            g_hookBodies[g_hookBodyCount++] = rows[i];
+        }
+    }
+
+    size_t HookBodyCount() noexcept
+    {
+        // Rows with a reference VA: the count the installer reports as "bodies".
+        size_t count = 0;
+        for (size_t i = 0; i < g_hookBodyCount; ++i)
+        {
+            if (g_hookBodies[i].reference_va != 0u)
+                ++count;
+        }
+        return count;
+    }
+
+    uintptr_t ResolveHookBody(uint32_t reference_va, void*) noexcept
+    {
+        if (reference_va == 0u)
+            return 0;
+        for (size_t i = 0; i < g_hookBodyCount; ++i)
+        {
+            if (g_hookBodies[i].reference_va == reference_va)
+                return reinterpret_cast<uintptr_t>(g_hookBodies[i].body);
+        }
+        return 0;
+    }
+
+    void SetAbiResolver(AbiResolver resolver) noexcept
+    {
+        g_abiResolver = resolver;
+    }
+
+    // Name-based lookup for the installers: the same rows the reference-VA
+    // lookup walks, so a body cannot be added to one and forgotten in the other.
+    void* AbiByName(const char* name) noexcept
+    {
+        if (g_abiResolver != nullptr)
+        {
+            if (void* const resolved = g_abiResolver(name))
+                return resolved;
+        }
+        if (name == nullptr)
+            return nullptr;
+        for (size_t i = 0; i < g_hookBodyCount; ++i)
+        {
+            if (std::strcmp(g_hookBodies[i].name, name) == 0)
+                return reinterpret_cast<void*>(g_hookBodies[i].body);
+        }
+        return nullptr;
+    }
+} // namespace opp
+
+// ---------------------------------------------------------------------------
+// Shared body helpers (32-bit only): the bounded formatter, the native-script
+// call layer and the secure-copy slot. The helpers the bodies call and the
+// compiler inlines live in source/body_helpers.inc (one static copy per
+// module); the naked resolver and cookie-check bodies live in the module's
+// implementation unit (source/patch_impl.cpp).
+// ---------------------------------------------------------------------------
+#if !defined(_WIN64)
+using namespace opp;
+
+extern "C"
+{
+
+// Native-script "call by hash" layer (sub_100038E0 and the sub_1005Bxxx
+// wrappers): the resolver (dword_1015BDE0, game 0x626AF0 on 1.0.8.0) takes the
+// hash in ECX/ESI and the 0xA4-byte call block in EDX; the handler is cdecl with
+// one argument. The original always returns (char)1 and skips a null handler.
+extern "C" uint32_t zpatch_script_resolve(uint32_t hash);
+extern "C" uint32_t zpatch_script_resolve_with_block(uint32_t hash,
+                                                           void* block);
+extern "C" uint32_t __cdecl zpatch_script_resolve_seh(uint32_t hash,
+                                                            uint32_t edx_arg);
+
+struct zpatch_native_block final
+{
+    uint32_t m_p_return;   // +0x00 = &args
+    uint32_t m_arg_count;  // +0x04
+    uint32_t m_p_args;     // +0x08 = &args
+    uint32_t m_out_count;  // +0x0C
+    uint32_t m_out_ptrs[4];  // +0x10
+    struct record final { uint32_t v[3]; uint32_t padding; };
+    record m_records[4];        // +0x20 (sub_100038C0 zeroes v[0..2] of each)
+    uint32_t args[17];     // +0x60 (arg 0 is the return slot)
+};
+
+extern "C" char zpatch_script_call_by_hash(uint32_t hash, void* block) noexcept
+{
+    const auto handler = reinterpret_cast<void(__cdecl*)(void*)>(
+        static_cast<uintptr_t>(zpatch_script_resolve_with_block(hash, block)));
+    if (handler) handler(block);
+    return 1;
+}
+
+// One builder covers every wrapper: the sub_1005DE40/DE80 cleanup loops are
+// identical (copy out each pending record, then return args[0]; DE80 returns
+// only its low byte).
+extern "C" uint32_t zpatch_script_call(uint32_t hash, uint32_t nargs,
+                                            const uint32_t* args) noexcept
+{
+    zpatch_native_block block;
+    // The original clears the block up to (not including) the last argument:
+    // 0xA0 is offsetof(args[16]) and sizeof(block) is 0xA4.
+    static_assert(offsetof(zpatch_native_block, args[16]) == 0xA0);
+    static_assert(sizeof(zpatch_native_block) == 0xA4);
+    std::memset(&block, 0, offsetof(zpatch_native_block, args[16]));
+    for (auto& record : block.m_records)
+    {
+        record.v[0] = 0;
+        record.v[1] = 0;
+        record.v[2] = 0;
+    }
+    const auto base = static_cast<uint32_t>(
+        reinterpret_cast<uintptr_t>(block.args));
+    block.m_p_return = base;
+    block.m_p_args = base;
+    block.m_arg_count = nargs;
+    for (uint32_t i = 0; i < nargs && i < 17u; ++i) block.args[i] = args[i];
+    zpatch_script_call_by_hash(hash, &block);
+    while (block.m_out_count != 0u)
+    {
+        --block.m_out_count;
+        auto* destination = reinterpret_cast<uint32_t*>(
+            static_cast<uintptr_t>(block.m_out_ptrs[block.m_out_count]));
+        const auto& source = block.m_records[block.m_out_count];
+        destination[0] = source.v[0];
+        destination[1] = source.v[1];
+        destination[2] = source.v[2];
+    }
+    return block.args[0];
+}
+
+// sub_10001280: the original's bounded formatter (buf, size, fmt, ...).
+extern "C" int zpatch_spawns_sprintf(char* buffer, size_t size,
+                                     const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    const int result = _vsnprintf_s(buffer, size, _TRUNCATE, format, args);
+    va_end(args);
+    return result;
+}
+
+// The original's path/name helpers call the secure CRT (`strcpy_s`/`wcscpy_s`)
+// through its IAT; the volatile pointer keeps a distinct secure-copy call.
+// The secure-copy slot LocalSettingsPath and NoLiveryLimit both use; the
+// volatile pointer keeps a distinct secure-copy call.
+volatile ZpStrcpyS zpatch_secure_strcpy_s =
+    static_cast<ZpStrcpyS>(&strcpy_s);
+}  // extern "C"
+#endif  // !defined(_WIN64)

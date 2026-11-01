@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Named x86 byte values for the hand-written stores in hooks.cpp.
+// Named x86 byte values for the hand-written stores in the feature modules.
 //
 // Most writes in this tree go through injector's Make* helpers, which name the
 // operation. A few sites deliberately store a single opcode or a recovered

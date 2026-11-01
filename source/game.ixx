@@ -58,6 +58,35 @@ export namespace opp
     // 0x10003E20: true when the given module lacks the FusionFix bytes at
     // 0x20D3/0x20D7 (the original probes GTAIV.EFLC.FusionFix.asi).
     bool ModuleLacksSignature(const uint8_t* image, size_t imageSize) noexcept;
+
+    // ---------------------------------------------------------------------
+    // The ZMenuIV version guard: generic startup logic (the original rejects an
+    // outdated ZMenuIV before the menu is built), so it lives with the other
+    // process/module probes, not in the config hub.
+    // ---------------------------------------------------------------------
+    constexpr uint32_t kZMenuMinVersion = 0x35DD1u;
+    constexpr const char* kZMenuModuleName = "ZMenuIV.asi";
+    constexpr const char* kZMenuProcName = "GetZMenuVersion";
+    constexpr const char* kZMenuRejectText =
+        "Incompatible/outdated version of ZMenu detected! The game will now exit.";
+    constexpr const char* kZMenuRejectCaption = "";
+    constexpr uint32_t kZMenuRejectFlags = 0x10u;
+    constexpr uint32_t kZMenuTerminateExitCode = 0u;
+
+    enum class ZMenuGuardResult : uint8_t
+    {
+        module_absent,
+        export_absent,
+        version_ok,
+        version_rejected,
+    };
+
+    constexpr bool ZMenuVersionAccepted(uint32_t version) noexcept
+    {
+        return version >= kZMenuMinVersion;
+    }
+
+    ZMenuGuardResult ZMenuVersionGuard(uint32_t& version) noexcept;
 } // namespace opp
 
 // The rebased accessors (moved here from rebased.h with rebased.cpp). They are
@@ -1024,3 +1053,23 @@ uintptr_t FindGlobalSlot(std::string_view slot_name) noexcept
     // the publishes are skipped and counted.
     return 0;
 }
+namespace opp
+{
+    ZMenuGuardResult ZMenuVersionGuard(uint32_t& version) noexcept
+    {
+        version = 0;
+        const HMODULE module = GetModuleHandleA(kZMenuModuleName);
+        if (!module)
+            return ZMenuGuardResult::module_absent;
+
+        const auto getVersion = reinterpret_cast<int(__cdecl*)(uint32_t*, uint32_t*)>(
+            reinterpret_cast<void*>(GetProcAddress(module, kZMenuProcName)));
+        if (!getVersion)
+            return ZMenuGuardResult::export_absent;
+
+        uint32_t out = 0;
+        (void)getVersion(&version, &out); // the original ignores the result
+        return ZMenuVersionAccepted(version) ? ZMenuGuardResult::version_ok
+                                             : ZMenuGuardResult::version_rejected;
+    }
+} // namespace opp

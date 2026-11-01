@@ -20,6 +20,7 @@ import opp.patch;
 import opp.game;
 import opp.common;
 import opp.settings;
+import opp.log;
 
 namespace opp::features
 {
@@ -313,3 +314,522 @@ namespace
 } // namespace
 
 } // namespace opp::features
+
+// ---------------------------------------------------------------------------
+// Hook bodies: the machine-level entry points performance installs.
+//
+// Each body keeps the original site's calling convention and register
+// contract; the comment above it names the original destination VA. They are
+// 32-bit only (the x64 parity dump resolves names to the original VAs).
+// ---------------------------------------------------------------------------
+#if !defined(_WIN64)
+
+using namespace opp;
+
+#include "body_helpers.inc"
+
+extern "C"
+{
+
+// 0x10045a30 / 0x10045a80 ImprovedShaderStreaming: replacements for the two
+// "find shader entry" functions. Originals are __thiscall(this, query) -> entry
+// or 0 with one callee-popped argument, so __fastcall(self, edx, query)
+// reproduces the ECX=this / stack-arg / ret 4 contract: walk the vector at
+// this+8 (count at this+0xC) and return the first non-null entry whose
+// vtable[+0x10]() name passes the filter (sub_100459E0: name[4]=='h' or
+// name[4]=='p' && name[5]=='e'; sub_10045A10: name[4]=='v').
+using ShaderEntryNameFn = const void*(__fastcall*)(void* entry, int);
+using ShaderStreamFilterFn = int(__cdecl*)(const void* query, const void* name);
+int __cdecl abi_shader_stream_filter_hpe(const void*, const void* name)
+{
+    const auto* p = static_cast<const unsigned char*>(name);
+    if (!p) return 2;
+    if (p[4] == 'h') return 0;
+    if (p[4] == 'p' && p[5] == 'e') return 0;
+    return 2;
+}
+int __cdecl abi_shader_stream_filter_v(const void*, const void* name)
+{
+    const auto* p = static_cast<const unsigned char*>(name);
+    return (p && p[4] == 'v') ? 0 : 2;
+}
+namespace
+{
+void* shader_streaming_find(void* self, const void* query, ShaderStreamFilterFn filter)
+{
+    auto* base = static_cast<unsigned char*>(self);
+    const unsigned count = *reinterpret_cast<const unsigned short*>(base + 0xc);
+    auto** array = *reinterpret_cast<void***>(base + 8);
+    for (unsigned i = 0; i < count; ++i)
+    {
+        void* entry = array[i];
+        if (!entry) continue;
+        auto* vt = *reinterpret_cast<void* const* const*>(entry);
+        const auto* name = reinterpret_cast<ShaderEntryNameFn>(vt[0x10 / sizeof(void*)])(entry, 0);
+        if (filter(query, name) == 0) return entry;
+    }
+    return nullptr;
+}
+}  // namespace
+void* __fastcall abi_improved_shader_streaming_find_hpe(void* self, int, const void* query)
+{
+    return shader_streaming_find(self, query, &abi_shader_stream_filter_hpe);
+}
+void* __fastcall abi_improved_shader_streaming_find_v(void* self, int, const void* query)
+{
+    return shader_streaming_find(self, query, &abi_shader_stream_filter_v);
+}
+
+// @exact 0x10038550 RemoveRGSCLoginRequirement: no arguments, mov al,1 / ret.
+static __declspec(naked) int __cdecl abi_rgsc_login_removed()
+{
+    __asm {
+        mov al, 1
+        ret
+    }
+}
+
+// NewMemorySystem: the reimplemented CRageAllocator whose vtable (original
+// 0x100B5038) the E8 body writes into the game's allocator singleton. The
+// original swaps the arena allocator for a HeapAlloc-backed one: allocate() uses
+// unit = max(0x10, align), want = max(size, unit), HeapAllocs want + 2*unit,
+// rounds up to ((base-1)/unit + 2)*unit, stores the base offset at [p-4], fills
+// want bytes with 0xCD and registers the pointer under the critical section at
+// 0x101A0808; free() recovers the base from [p-4], HeapFrees and unregisters.
+// Only vtable[18] observes the registry, so a plain set suffices.
+// The allocator vtable's small methods. The original's calling conventions
+// are preserved; only the constructor and thunk still need their exact
+// prologue/tail-jump.
+extern "C" void __cdecl abi_nms_noop_ret0() {}
+
+// 0x10038640: constructor (thiscall; one stack argument, callee pops it).
+static __declspec(naked) void* abi_nms_ctor()
+{
+    __asm {
+        push ebp
+        mov ebp, esp
+        mov eax, dword ptr [ebp + 8]
+        push esi
+        mov esi, ecx
+        and eax, 5
+        mov dword ptr [esi], offset zpatch_nms_vtable
+        cmp al, 5
+        jne nms_ctor_done
+        push 4
+        push esi
+        call abi_nms_noop_ret0
+        add esp, 8
+    nms_ctor_done:
+        mov eax, esi
+        pop esi
+        pop ebp
+        ret 4
+        __emit 0CCh
+    }
+}
+
+// 0x10038350
+extern "C" bool __stdcall abi_nms_reject_ptr(void*) { return false; }
+
+// 0x10038540
+extern "C" void* __fastcall abi_nms_self(void* self, void* /*edx*/, void*)
+{
+    return self;
+}
+
+// 0x10001950
+extern "C" void* __fastcall abi_nms_zero_ptr(void* /*self*/, void* /*edx*/, void*)
+{
+    return nullptr;
+}
+
+// 0x10038580
+extern "C" void __stdcall abi_nms_noop_pair(void*, void*) {}
+
+// 0x10038590
+extern "C" bool __cdecl abi_nms_reject() { return false; }
+
+// 0x10038620: forward through vtable[6].
+// Tail-jumps, so the caller's return address and EBP stay untouched.
+static __declspec(naked) void abi_nms_thunk18()
+{
+    __asm {
+        push ebp
+        mov ebp, esp
+        mov eax, dword ptr [ecx]
+        pop ebp
+        jmp dword ptr [eax + 18h]
+        __emit 0CCh
+    }
+}
+
+// 0x10038630
+extern "C" void __stdcall abi_nms_noop_arg(void*) {}
+
+// 0x10038670: install the vtable in the game's allocator singleton.
+extern "C" void __cdecl abi_nms_apply()
+{
+    auto* object = reinterpret_cast<void**>(zpatch_nms_object);
+    if (object) *object = zpatch_nms_vtable;
+}
+
+namespace
+{
+// NewMemorySystem's allocation registry: the original keeps the pointers it
+// handed out in its own hash map (FNV-1a over the pointer's four bytes) under
+// the recursive critical section at 0x101A0808. Only membership is observable,
+// so the keys go in a flat open-addressing set behind an equivalent lock.
+//
+// It is a flat table rather than std::unordered_set because the set is touched
+// on *every* game allocation and free: an unordered_set node is one heap
+// allocation per insert (and a throw inside a noexcept caller on failure). The
+// table allocates only when it grows, never throws (VirtualAlloc returns null
+// and the insert is dropped), and keeps the same membership semantics.
+CRITICAL_SECTION g_nms_lock;
+
+class NmsRegistry final
+{
+public:
+    // Reserved keys: a four-byte aligned pointer can be neither zero nor all
+    // ones. Public so the self-test names them instead of repeating literals.
+    static constexpr uint32_t kNmsEmpty = 0u;
+    static constexpr uint32_t kNmsErased = 0xFFFFFFFFu;
+
+    bool insert(uint32_t key) noexcept
+    {
+        // 0 is the empty marker and 0xFFFFFFFF the erased marker; a four-byte
+        // aligned pointer can be neither.
+        if (key == kNmsEmpty || key == kNmsErased)
+            return false;
+        if (!EnsureCapacity())
+            return false;
+        return InsertNoGrow(key);
+    }
+
+    void erase(uint32_t key) noexcept
+    {
+        if (capacity_ == 0u || key == kNmsEmpty || key == kNmsErased)
+            return;
+        const size_t mask = capacity_ - 1u;
+        for (size_t probe = 0; probe <= mask; ++probe)
+        {
+            uint32_t& slot = slots_[Probe(key, probe, mask)];
+            if (slot == kNmsEmpty)
+                return;
+            if (slot == key)
+            {
+                slot = kNmsErased;
+                --count_;
+                return;
+            }
+        }
+    }
+
+    bool contains(uint32_t key) const noexcept
+    {
+        if (capacity_ == 0u || key == kNmsEmpty || key == kNmsErased)
+            return false;
+        const size_t mask = capacity_ - 1u;
+        for (size_t probe = 0; probe <= mask; ++probe)
+        {
+            const uint32_t slot = slots_[Probe(key, probe, mask)];
+            if (slot == kNmsEmpty)
+                return false;
+            if (slot == key)
+                return true;
+        }
+        return false;
+    }
+
+    size_t size() const noexcept { return count_; }
+    size_t capacity() const noexcept { return capacity_; }
+
+private:
+    static constexpr size_t kMinCapacity = 1024u;
+
+    static size_t Probe(uint32_t key, size_t probe, size_t mask) noexcept
+    {
+        // Multiplicative hash, then linear probing: the keys are aligned heap
+        // addresses, whose low bits are all zero, so the multiply is what
+        // spreads them.
+        const uint32_t mixed = key * 2654435761u;
+        return (static_cast<size_t>(mixed >> 8) + probe) & mask;
+    }
+
+    bool EnsureCapacity() noexcept
+    {
+        if (capacity_ == 0u)
+            return Grow(kMinCapacity);
+        // Keep the probe chains short: grow at 3/4 occupancy, counting erased
+        // slots because they still terminate a probe. When the table is mostly
+        // tombstones (churn), rebuild it at the same size instead of doubling,
+        // so memory stays proportional to the live count.
+        if ((used_ + 1u) * 4u >= capacity_ * 3u)
+        {
+            if (count_ * 2u <= used_)
+                return Grow(capacity_);
+            return Grow(capacity_ * 2u);
+        }
+        return true;
+    }
+
+    bool InsertNoGrow(uint32_t key) noexcept
+    {
+        const size_t mask = capacity_ - 1u;
+        size_t erased = static_cast<size_t>(-1);
+        for (size_t probe = 0; probe <= mask; ++probe)
+        {
+            uint32_t& slot = slots_[Probe(key, probe, mask)];
+            if (slot == key)
+                return true;
+            if (slot == kNmsErased && erased == static_cast<size_t>(-1))
+                erased = Probe(key, probe, mask);
+            if (slot == kNmsEmpty)
+            {
+                uint32_t& target = erased != static_cast<size_t>(-1) ? slots_[erased] : slot;
+                target = key;
+                ++count_;
+                if (erased == static_cast<size_t>(-1))
+                    ++used_;
+                return true;
+            }
+        }
+        if (erased != static_cast<size_t>(-1))
+        {
+            slots_[erased] = key;
+            ++count_;
+            return true;
+        }
+        return false;
+    }
+
+    bool Grow(size_t wanted) noexcept
+    {
+        auto* replacement = static_cast<uint32_t*>(VirtualAlloc(
+            nullptr, wanted * sizeof(uint32_t), MEM_COMMIT | MEM_RESERVE,
+            PAGE_READWRITE));
+        if (replacement == nullptr)
+        {
+            // Out of address space: keep the old table and drop this insert.
+            // Membership is only a query, so a missing entry is a false
+            // negative like the original's own allocation failure path.
+            return false;
+        }
+        uint32_t* const old = slots_;
+        const size_t old_capacity = capacity_;
+        slots_ = replacement;
+        capacity_ = wanted;
+        used_ = 0u;
+        size_t live = 0u;
+        for (size_t index = 0; index < old_capacity; ++index)
+        {
+            const uint32_t key = old[index];
+            if (key != kNmsEmpty && key != kNmsErased)
+            {
+                InsertNoGrow(key);
+                ++live;
+            }
+        }
+        count_ = live;
+        if (old != nullptr)
+            VirtualFree(old, 0, MEM_RELEASE);
+        return true;
+    }
+
+    uint32_t* slots_{};
+    size_t capacity_{};
+    size_t count_{};
+    size_t used_{};
+};
+
+NmsRegistry g_nms_allocations;
+
+struct NmsRegistryInit final
+{
+    NmsRegistryInit() noexcept { InitializeCriticalSection(&g_nms_lock); }
+};
+NmsRegistryInit g_nms_registry_init;
+}  // namespace
+
+// vtable[2] (0x10038360): HeapAlloc-backed allocate with the original's
+// alignment scheme. ECX is the object (unused by the original's body too).
+extern "C" void* __stdcall zpatch_nms_alloc(uint32_t size, uint32_t align,
+                                            uint32_t flags) noexcept
+{
+    (void)flags;
+    const uint32_t unit = align < 0x10u ? 0x10u : align;
+    const uint32_t want = size < unit ? unit : size;
+    void* base = HeapAlloc(GetProcessHeap(), 0, want + unit * 2u);
+    if (!base) return nullptr;
+    const auto raw = reinterpret_cast<uintptr_t>(base);
+    const uintptr_t aligned = ((raw - 1u) / unit + 2u) * unit;
+    *reinterpret_cast<uint32_t*>(aligned - 4u) =
+        static_cast<uint32_t>(aligned - raw);
+    auto* result = reinterpret_cast<void*>(aligned);
+    // 0xCD is the MSVC debug-heap free-fill byte; the original's allocator
+    // leaves the block with it, so the fill is kept 1:1.
+    constexpr int kDebugHeapFill = 0xCD;
+    std::memset(result, kDebugHeapFill, want);
+    EnterCriticalSection(&g_nms_lock);
+    g_nms_allocations.insert(static_cast<uint32_t>(aligned));
+    LeaveCriticalSection(&g_nms_lock);
+    return result;
+}
+
+// vtable[3] (0x10038430): recover the HeapAlloc base from [ptr-4], free it and
+// drop the pointer from the registry.
+extern "C" void __stdcall zpatch_nms_free(void* ptr) noexcept
+{
+    if (!ptr) return;
+    const auto raw = reinterpret_cast<uintptr_t>(ptr);
+    const uintptr_t base = raw - *reinterpret_cast<const uint32_t*>(raw - 4u);
+    HeapFree(GetProcessHeap(), 0, reinterpret_cast<void*>(base));
+    EnterCriticalSection(&g_nms_lock);
+    g_nms_allocations.erase(static_cast<uint32_t>(raw));
+    LeaveCriticalSection(&g_nms_lock);
+}
+
+// vtable[18] (0x100385A0): the game's "is this pointer mine" query.
+extern "C" uint8_t __stdcall zpatch_nms_contains(uint32_t key) noexcept
+{
+    EnterCriticalSection(&g_nms_lock);
+    const bool found = g_nms_allocations.contains(key);
+    LeaveCriticalSection(&g_nms_lock);
+    return found ? uint8_t{1} : uint8_t{0};
+}
+
+// Offline check for the registry above (native tests only): a local instance,
+// so the live registry is untouched. Exercises insert/erase/contains, growth
+// past the first block, tombstone reuse and the reserved keys.
+extern "C" bool zpatch_nms_registry_selftest() noexcept
+{
+    NmsRegistry registry;
+    constexpr uint32_t kKeys = 20000u;
+    uint32_t keys[kKeys];
+    // The key space is 28 bits of pointer shifted into 4-byte steps; the seed is
+    // the recovered self-test seed.
+    constexpr uint32_t kNmsKeyMask = (1u << 28) - 1u;
+    static_assert(kNmsKeyMask == 0x0FFFFFFFu);
+    constexpr uint32_t kSelfTestSeed = 0x1234'5678u;
+    uint32_t state = kSelfTestSeed;
+    for (uint32_t i = 0; i < kKeys; ++i)
+    {
+        // Aligned, 4-byte-spaced pseudo-random pointers, like the real keys.
+        state = state * 1664525u + 1013904223u;
+        keys[i] = (state & kNmsKeyMask) * 16u;
+    }
+
+    for (uint32_t i = 0; i < kKeys; ++i)
+        if (!registry.insert(keys[i])) return false;
+    if (registry.size() != kKeys) return false;
+    if (registry.capacity() <= 1024u) return false;  // grew at least once
+
+    // Duplicates are idempotent, not new entries.
+    if (!registry.insert(keys[0])) return false;
+    if (registry.size() != kKeys) return false;
+
+    // The reserved keys are never members.
+    if (registry.insert(0u)) return false;
+    if (registry.insert(NmsRegistry::kNmsErased)) return false;
+    if (registry.contains(0u) || registry.contains(NmsRegistry::kNmsErased)) return false;
+
+    // Erase every other key; the rest must survive, including across the
+    // tombstone-heavy table.
+    for (uint32_t i = 0; i < kKeys; i += 2)
+        registry.erase(keys[i]);
+    if (registry.size() != kKeys / 2) return false;
+    for (uint32_t i = 0; i < kKeys; ++i)
+        if (registry.contains(keys[i]) != ((i & 1u) != 0u)) return false;
+
+    // Re-inserting into tombstones must not grow the size past live entries.
+    for (uint32_t i = 0; i < kKeys; i += 2)
+        if (!registry.insert(keys[i])) return false;
+    if (registry.size() != kKeys) return false;
+    for (uint32_t i = 0; i < kKeys; ++i)
+        if (!registry.contains(keys[i])) return false;
+
+    // Erasing a non-member changes nothing.
+    constexpr uint32_t kNotAMember = 0xDEAD'BEE0u;  // never inserted anywhere
+    registry.erase(kNotAMember);
+    if (registry.size() != kKeys) return false;
+
+    // Churn: repeated erase-all/re-insert cycles must stay bounded instead of
+    // doubling on tombstones alone.
+    for (uint32_t cycle = 0; cycle < 8; ++cycle)
+    {
+        for (uint32_t i = 0; i < kKeys; ++i) registry.erase(keys[i]);
+        if (registry.size() != 0u) return false;
+        for (uint32_t i = 0; i < kKeys; ++i)
+            if (!registry.insert(keys[i])) return false;
+    }
+    if (!registry.contains(keys[kKeys - 1])) return false;
+    return registry.capacity() <= 4u * kKeys;
+}
+
+// The CRageAllocator vtable, entry order and per-entry conventions as the
+// original's 0x100B5038 (see the individual methods above).
+extern "C"
+{
+uintptr_t zpatch_nms_vtable[24] =
+{
+        reinterpret_cast<uintptr_t>(&abi_nms_ctor),         // [0] 0x10038640
+        reinterpret_cast<uintptr_t>(&abi_nms_reject_ptr),   // [1] 0x10038350
+        reinterpret_cast<uintptr_t>(&zpatch_nms_alloc),     // [2] 0x10038360
+        reinterpret_cast<uintptr_t>(&zpatch_nms_free),      // [3] 0x10038430
+        reinterpret_cast<uintptr_t>(&abi_nms_self),         // [4] 0x10038540
+        reinterpret_cast<uintptr_t>(&abi_nms_self),         // [5] 0x10038540
+        reinterpret_cast<uintptr_t>(&abi_nms_zero_ptr),     // [6] 0x10001950
+        reinterpret_cast<uintptr_t>(&abi_nms_zero_ptr),     // [7] 0x10001950
+        reinterpret_cast<uintptr_t>(&abi_better_mp_sync),   // [8] 0x100057F0
+        reinterpret_cast<uintptr_t>(&abi_better_mp_sync),   // [9] 0x100057F0
+        reinterpret_cast<uintptr_t>(&abi_rgsc_login_removed),  // [10] 0x10038550
+        reinterpret_cast<uintptr_t>(&abi_nms_noop_ret0),    // [11] 0x10038560
+        reinterpret_cast<uintptr_t>(&abi_savegame_fix_null),   // [12] 0x10038570
+        reinterpret_cast<uintptr_t>(&abi_nms_noop_pair),    // [13] 0x10038580
+        reinterpret_cast<uintptr_t>(&abi_nms_noop_ret0),    // [14] 0x10038560
+        reinterpret_cast<uintptr_t>(&abi_nms_reject),       // [15] 0x10038590
+        reinterpret_cast<uintptr_t>(&abi_nms_reject),       // [16] 0x10038590
+        reinterpret_cast<uintptr_t>(&abi_nms_noop_ret0),    // [17] 0x10038560
+        reinterpret_cast<uintptr_t>(&zpatch_nms_contains),  // [18] 0x100385A0
+        reinterpret_cast<uintptr_t>(&abi_nms_thunk18),      // [19] 0x10038620
+        reinterpret_cast<uintptr_t>(&abi_better_mp_sync),   // [20] 0x100057F0
+        reinterpret_cast<uintptr_t>(&abi_better_mp_sync),   // [21] 0x100057F0
+        reinterpret_cast<uintptr_t>(&abi_nms_noop_arg),     // [22] 0x10038630
+        reinterpret_cast<uintptr_t>(&abi_nms_reject),       // [23] 0x10038590
+};
+}  // extern "C"
+}  // extern "C"
+
+namespace
+{
+// The name -> body rows this module registers. The reference VA is the
+// original handler destination (0 when the body has none); it is provenance,
+// not an install address.
+const opp::HookBodyRow kPerformanceHookBodies[] = {
+    {"abi_improved_shader_streaming_find_hpe", 0x10045A30u, reinterpret_cast<opp::HookBody>(&abi_improved_shader_streaming_find_hpe)},
+    {"abi_improved_shader_streaming_find_v", 0x10045A80u, reinterpret_cast<opp::HookBody>(&abi_improved_shader_streaming_find_v)},
+    {"abi_nms_apply", 0x10038670u, reinterpret_cast<opp::HookBody>(&abi_nms_apply)},
+    {"abi_nms_ctor", 0x10038640u, reinterpret_cast<opp::HookBody>(&abi_nms_ctor)},
+    {"abi_nms_noop_arg", 0x10038630u, reinterpret_cast<opp::HookBody>(&abi_nms_noop_arg)},
+    {"abi_nms_noop_pair", 0x10038580u, reinterpret_cast<opp::HookBody>(&abi_nms_noop_pair)},
+    {"abi_nms_noop_ret0", 0x10038560u, reinterpret_cast<opp::HookBody>(&abi_nms_noop_ret0)},
+    {"abi_nms_reject", 0x10038590u, reinterpret_cast<opp::HookBody>(&abi_nms_reject)},
+    {"abi_nms_reject_ptr", 0x10038350u, reinterpret_cast<opp::HookBody>(&abi_nms_reject_ptr)},
+    {"abi_nms_self", 0x10038540u, reinterpret_cast<opp::HookBody>(&abi_nms_self)},
+    {"abi_nms_thunk18", 0x10038620u, reinterpret_cast<opp::HookBody>(&abi_nms_thunk18)},
+    {"abi_nms_zero_ptr", 0x10001950u, reinterpret_cast<opp::HookBody>(&abi_nms_zero_ptr)},
+    {"abi_rgsc_login_removed", 0x10038550u, reinterpret_cast<opp::HookBody>(&abi_rgsc_login_removed)},
+    {"abi_shader_stream_filter_hpe", 0u, reinterpret_cast<opp::HookBody>(&abi_shader_stream_filter_hpe)},
+    {"abi_shader_stream_filter_v", 0u, reinterpret_cast<opp::HookBody>(&abi_shader_stream_filter_v)},
+};
+
+struct PerformanceHookBodyRegistration
+{
+    PerformanceHookBodyRegistration() noexcept
+    {
+        opp::RegisterHookBodies(kPerformanceHookBodies);
+    }
+} g_performanceHookBodies;
+}  // namespace
+
+#endif  // !defined(_WIN64)

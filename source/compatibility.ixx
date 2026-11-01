@@ -21,6 +21,7 @@ import opp.patch;
 import opp.game;
 import opp.common;
 import opp.settings;
+import opp.log;
 
 namespace opp::features
 {
@@ -353,3 +354,169 @@ namespace
 } // namespace
 
 } // namespace opp::features
+
+// ---------------------------------------------------------------------------
+// Hook bodies: the machine-level entry points compatibility installs.
+//
+// Each body keeps the original site's calling convention and register
+// contract; the comment above it names the original destination VA. They are
+// 32-bit only (the x64 parity dump resolves names to the original VAs).
+// ---------------------------------------------------------------------------
+#if !defined(_WIN64)
+
+using namespace opp;
+
+#include "body_helpers.inc"
+
+extern "C"
+{
+
+namespace
+{
+// The GFWL update-window version dword in xlive.dll: the original's getnewver()
+// returns 0x10000E83 and its handler stores that dword at all four sites (four
+// bytes each). It is a version constant, not an instruction: 83 0E 00 10 is its
+// little-endian byte image. RVAs recovered from its writer.
+constexpr uint32_t kGfwlWindowVersion = 0x10000E83u;
+// The four flag RVAs live in hooks.h (kXliveUpdateFlag0Rva .. 3) so the test
+// suite can pin them; they are the original handler's decimal immediates.
+}  // namespace
+
+extern "C" void abi_gfwl_patch() noexcept
+{
+    if (zpatch_flag_patch4_modchecks)
+    {
+        if (zpatch_tls_static_header(zpatch_gfwl_scan_guard))
+        {
+            // _Init_thread_header claimed the guard; scan then publish the epoch.
+            const uint8_t* found =
+                scan_game("33 C4 89 84 24 A8 01 00 00 53 8B 5D 08 56 57");
+            zpatch_gfwl_site = found == nullptr
+                                           ? 0u
+                                           : static_cast<uint32_t>(
+                                                 reinterpret_cast<uintptr_t>(found));
+            zpatch_tls_static_footer(zpatch_gfwl_scan_guard);
+        }
+        if (zpatch_gfwl_site != 0)
+        {
+            uint32_t target = 0;
+            std::memcpy(&target,
+                        reinterpret_cast<const void*>(
+                            static_cast<uintptr_t>(zpatch_gfwl_site) + 30u),
+                        4);
+            // 0x10005427 writes *[site+30] without a null check.
+            wp_dword(reinterpret_cast<void*>(target), 0);
+        }
+    }
+    if (zpatch_flag_gfwl_popup)
+    {
+        // @exact 0x10005421: four dword stores into xlive.dll's update-window
+        // flags, with no base check; with xlive.dll absent the base is 0 and the
+        // original faults on that page.
+        const auto base = static_cast<uintptr_t>(zpatch_xlive_base);
+        // Without xlive.dll there is no GFWL update popup to remove: the four
+        // writes have no meaning at base 0, so the failsafe just skips them.
+        if (zpatch_failsafe_skip("RemoveGFWLUpdatePopup xlive.dll", base == 0u))
+            return;
+        wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlag0Rva),
+                 kGfwlWindowVersion);
+        wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlag1Rva),
+                 kGfwlWindowVersion);
+        wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlag2Rva),
+                 kGfwlWindowVersion);
+        wp_dword(reinterpret_cast<void*>(base + kXliveUpdateFlag3Rva),
+                 kGfwlWindowVersion);
+    }
+}
+
+// 0x10003e50 AllowHashesForIDE: the game's model-name hash function, replaced so
+// that "hash:<number>" literals are accepted (see GameHash). The original is
+// __cdecl(char*) -> unsigned int; this wrapper keeps that ABI.
+unsigned int __cdecl abi_game_hash(const char* text)
+{
+    return GameHash(text ? std::string_view{text} : std::string_view{});
+}
+
+// @exact 0x10038570 SavegameFix: xor eax,eax / ret 8 (__stdcall, two arguments).
+int __stdcall abi_savegame_fix_null(int, int) { return 0; }
+
+// 0x10045580 SavegameFix close: push [ebp+8] / call CloseHandle / xor eax,eax /
+// ret 4 (__stdcall, one argument).
+int __stdcall abi_savegame_fix_close(void* handle)
+{
+    if (handle) CloseHandle(handle);
+    return 0;
+}
+
+// 0x100455e0 SavegameFix mutex: if (!out) return 1;
+// *out = CreateMutexA(0,0,0); return 0; __stdcall, two arguments.
+int __stdcall abi_savegame_fix_mutex(void*, void** out_handle)
+{
+    if (!out_handle) return 1;
+    *out_handle = CreateMutexA(nullptr, FALSE, nullptr);
+    return 0;
+}
+
+// @exact 0x100054E0 Patch4RemoveModChecks / RemoveGFWLUpdatePopup stub: runs the
+// flag-gated helper between pushad/popad, replays the original's first two
+// instructions (its 64-bit sub of ECX:ESI from EDX:EAX into the caller's stack
+// slots) and tail-jumps to the handler-published continuation (match+12).
+static __declspec(naked) void abi_gfwl_stub()
+{
+    __asm {
+        pushad
+        call abi_gfwl_patch
+        popad
+        sub  eax, ecx
+        sbb  edx, esi
+        mov  dword ptr [esp + 0Ch], eax
+        mov  dword ptr [esp + 10h], edx
+        jmp  dword ptr [zpatch_gfwl_resume]
+        __emit 0CCh   // body delimiter for verify_hook_bodies (unreachable after jmp)
+    }
+}
+
+// 0x100455a0 SavegameFix read/copy: if (*out >= size) { if (dst) memcpy(dst, src, size);
+// *out = size; return 0; } else { *out = size; return 0x8007007A; }
+// __stdcall, five arguments (the fifth is unused by the original).
+int __stdcall abi_savegame_fix_copy(const void* src, uint32_t size, void* dst,
+                                    uint32_t* out_size, int)
+{
+    if (*out_size >= size)
+    {
+        if (dst) std::memcpy(dst, src, size);
+        *out_size = size;
+        return 0;
+    }
+    *out_size = size;
+    // 0x8007007A is HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER), the value
+    // the original's copy helper returns.
+    return static_cast<int>(HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER));
+}
+}  // extern "C"
+
+namespace
+{
+// The name -> body rows this module registers. The reference VA is the
+// original handler destination (0 when the body has none); it is provenance,
+// not an install address.
+const opp::HookBodyRow kCompatibilityHookBodies[] = {
+    {"abi_game_hash", 0x10003E50u, reinterpret_cast<opp::HookBody>(&abi_game_hash)},
+    {"abi_gfwl_patch", 0u, reinterpret_cast<opp::HookBody>(&abi_gfwl_patch)},
+    {"abi_gfwl_stub", 0x100054E0u, reinterpret_cast<opp::HookBody>(&abi_gfwl_stub)},
+    {"abi_savegame_fix_close", 0x10045580u, reinterpret_cast<opp::HookBody>(&abi_savegame_fix_close)},
+    {"abi_savegame_fix_copy", 0x100455A0u, reinterpret_cast<opp::HookBody>(&abi_savegame_fix_copy)},
+    {"abi_savegame_fix_mutex", 0x100455E0u, reinterpret_cast<opp::HookBody>(&abi_savegame_fix_mutex)},
+    {"abi_savegame_fix_null", 0x10038570u, reinterpret_cast<opp::HookBody>(&abi_savegame_fix_null)},
+};
+
+struct CompatibilityHookBodyRegistration
+{
+    CompatibilityHookBodyRegistration() noexcept
+    {
+        opp::RegisterHookBodies(kCompatibilityHookBodies);
+    }
+} g_compatibilityHookBodies;
+}  // namespace
+
+#endif  // !defined(_WIN64)

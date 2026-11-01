@@ -1,8 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
-// Hook bodies and their C API. Each body keeps the original site's calling
-// convention and register contract (the reference VA is in the comment above
-// it); the game jumps or calls straight into them.
+// Hook bodies and the C ABI they share.
+//
+// Each body lives in the feature module that installs it and registers its name
+// and reference VA with opp.patch at static-init time; the installer resolves a
+// body by name. Only the symbols that more than one module needs are declared
+// here:
+//   * the shared body helpers (the runtime-pointer failsafe, guarded stores and
+//     the game scanner, the one-time scan guard, the /GS cookie tail, the
+//     bounded formatter and the native-script call layer), defined by opp.patch;
+//   * the bodies another module's data references by address (NewMemorySystem's
+//     allocator vtable names three bodies other modules own);
+//   * the bodies the native test suite drives directly.
+// Nothing here is exported by a module; the definitions are C-linkage bodies in
+// module purviews, which the linker resolves by name.
 
 #include <cstddef>
 #include <cstdint>
@@ -10,12 +21,17 @@
 
 #if defined(_WIN32)
 
-// Maps a reference destination VA (e.g. 0x10005590) to its body. Returns 0 when
-// the destination has no live-ready body; the installer then skips that jump.
-uintptr_t ResolveHookBody(uint32_t reference_va, void* user) noexcept;
+// ---------------------------------------------------------------------------
+// Shared body constants
+// ---------------------------------------------------------------------------
 
-// Number of reference VAs with a live-ready body (for reporting).
-size_t HookBodyCount() noexcept;
+// The game's string-print script command hash: the original calls the script
+// resolver with it to report a non-ped model (sub_10037AC0) and to print spawns.
+inline constexpr uint32_t kPrintScriptHash = 0x79023CFCu;
+
+// The model index field on an entity (+0x2E). Shared by the PlayerAsPedComponents,
+// SuperLOD, ForceCarHeadlightShadows and steering bodies.
+inline constexpr size_t kModelIndexOffset = 0x2E;
 
 // The four xlive.dll dwords RemoveGFWLUpdatePopup zeroes (original handler
 // 0x10005421). Values are the original's own decimal immediates:
@@ -30,9 +46,59 @@ static_assert(kXliveUpdateFlag1Rva == 6748020u);
 static_assert(kXliveUpdateFlag2Rva == 7034320u);
 static_assert(kXliveUpdateFlag3Rva == 7034352u);
 
-// The AddOptionsInMenu integration is not implemented in this tree: the five
-// callbacks that used to be declared here had no definitions, so they were
-// removed rather than advertised.
+// ---------------------------------------------------------------------------
+// Shared body helpers
+//
+// The helpers that the bodies call and that the compiler inlined in the single
+// hook-bodies translation unit (the failsafe, the guarded stores/scanner, the
+// one-time scan guard, the /GS cookie tail and the bool script wrapper) stay
+// TU-local: source/body_helpers.inc is included inside each module that needs
+// them, so the bodies keep their original machine code. The helpers below are
+// the ones that were genuine out-of-line calls and live in opp.patch.
+// ---------------------------------------------------------------------------
+
+// The secure-copy slot LocalSettingsPath and NoLiveryLimit both use.
+using ZpStrcpyS = int(__cdecl*)(char*, size_t, const char*);
+extern "C" volatile ZpStrcpyS zpatch_secure_strcpy_s;
+
+// The /GS cookie check the tail jumps to (cookie in ECX). It must preserve EAX.
+extern "C" void zpatch_spawns_cookie_check_ecx();
+extern "C" uintptr_t __security_cookie;
+
+// sub_10001280: the original's bounded formatter (buf, size, fmt, ...).
+extern "C" int zpatch_spawns_sprintf(char* buffer, size_t size, const char* format, ...);
+
+// The native-script "call by hash" layer (sub_100038E0 and the sub_1005Bxxx
+// wrappers): the resolver takes the hash in ECX/ESI and the 0xA4-byte call block
+// in EDX. resolve_seh runs the resolver under SEH; the call builders zero the
+// block, invoke the handler and copy the out records back.
+extern "C" uint32_t zpatch_script_resolve(uint32_t hash);
+extern "C" uint32_t zpatch_script_resolve_with_block(uint32_t hash, void* block);
+extern "C" uint32_t __cdecl zpatch_script_resolve_seh(uint32_t hash, uint32_t edx_arg);
+extern "C" uint32_t __cdecl zpatch_driveby_resolve_seh(uint32_t hash, uint32_t edx_arg);
+extern "C" char zpatch_script_call_by_hash(uint32_t hash, void* block) noexcept;
+extern "C" uint32_t zpatch_script_call(uint32_t hash, uint32_t nargs,
+                                       const uint32_t* args) noexcept;
+
+// The MP-only model-name lookup (opp.multiplayer owns the catalogue). The spawn
+// diagnostics and BadPlayerModelCrashFix both print through it.
+extern "C" const char* zpatch_bpm_model_name(uint32_t hash) noexcept;
+
+// ---------------------------------------------------------------------------
+// Bodies another module's data references
+// ---------------------------------------------------------------------------
+
+// NewMemorySystem's allocator vtable (opp.performance) names the multiplayer
+// sync no-op and the savegame null return, which their own modules own. The
+// vtable's third foreign entry, the RGSC login stub, is naked and therefore
+// defined next to the vtable (a naked body in an imported module's interface
+// fails C2488); performance registers that row itself.
+extern "C" int __cdecl abi_better_mp_sync();
+extern "C" int __stdcall abi_savegame_fix_null(int, int);
+
+// ---------------------------------------------------------------------------
+// Bodies the native tests drive
+// ---------------------------------------------------------------------------
 
 extern "C" void zpatch_local_settings_capture_cwd() noexcept;
 
@@ -59,6 +125,3 @@ extern "C" uintptr_t zpatch_nms_vtable[24];
 extern "C" bool zpatch_nms_registry_selftest() noexcept;
 
 #endif  // _WIN32
-
-extern "C" void* AbiByName(const char* name) noexcept;
-

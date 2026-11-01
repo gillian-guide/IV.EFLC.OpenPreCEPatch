@@ -54,8 +54,8 @@ set(OPCEP_MODULES
 )
 
 set(OPCEP_CORE_SOURCES
-    source/hooks.cpp
     external/hooking/Hooking.Patterns.cpp
+    source/patch_impl.cpp
 )
 
 # Shared compiler contract for every target in this tree.
@@ -172,12 +172,12 @@ if(CMAKE_SIZEOF_VOID_P EQUAL 4)
     install(FILES data/plugins/IV.EFLC.OpenPreCEPatch.ini DESTINATION .)
 else()
     # -----------------------------------------------------------------------
-    # 64-bit: only the parity dump. hooks.cpp is replaced by
-    # tests/dump_stubs.cpp so no 32-bit body is ever executed.
+    # 64-bit: only the parity dump. The feature modules compile with their
+    # 32-bit hook bodies excluded, and tests/dump_stubs.cpp installs the
+    # original-VA resolver, so no 32-bit body is ever executed.
     # -----------------------------------------------------------------------
     if(OPCEP_BUILD_PARITY_DUMP)
         set(OPCEP_DUMP_SOURCES ${OPCEP_CORE_SOURCES})
-        list(REMOVE_ITEM OPCEP_DUMP_SOURCES source/hooks.cpp)
 
         add_executable(opcep_parity_dump
             tests/dump_main.cpp
