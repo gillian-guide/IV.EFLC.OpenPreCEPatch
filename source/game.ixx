@@ -64,13 +64,14 @@ export namespace opp
     // outdated ZMenuIV before the menu is built), so it lives with the other
     // process/module probes, not in the config hub.
     // ---------------------------------------------------------------------
+    // 220625 (0x35DD1): the original's minimum accepted ZMenuIV version value.
     constexpr uint32_t kZMenuMinVersion = 0x35DD1u;
     constexpr const char* kZMenuModuleName = "ZMenuIV.asi";
     constexpr const char* kZMenuProcName = "GetZMenuVersion";
     constexpr const char* kZMenuRejectText =
         "Incompatible/outdated version of ZMenu detected! The game will now exit.";
     constexpr const char* kZMenuRejectCaption = "";
-    constexpr uint32_t kZMenuRejectFlags = 0x10u;
+    constexpr uint32_t kZMenuRejectFlags = MB_ICONERROR;
     constexpr uint32_t kZMenuTerminateExitCode = 0u;
 
     enum class ZMenuGuardResult : uint8_t
@@ -108,6 +109,9 @@ namespace opp
         // incremental hash multiplies by 0x401 and finishes by 0x8001).
         constexpr uint32_t kHashMultiplier = 0x401u;
         constexpr uint32_t kHashFinalMultiplier = 0x8001u;
+        // The incremental tail constant the original's hash applies before the
+        // final shift/multiply (recovered, no derivation).
+        constexpr uint32_t kHashTailMultiplier = 9u;
         constexpr unsigned kHashShiftA = 6;
         constexpr unsigned kHashShiftB = 11;
         constexpr uint32_t kHashBias = 2;
@@ -199,13 +203,13 @@ namespace opp
                 value = (value >> kHashShiftA) ^ value;
             }
 
-            value *= 9u;
+            value *= kHashTailMultiplier;
             value = (value >> kHashShiftB) ^ value;
             value *= kHashFinalMultiplier;
             return value > 1u ? value : value + kHashBias;
         }
 
-        uint32_t ReadDword(const uint8_t* image, size_t offset) noexcept
+        uint32_t ReadImageDword(const uint8_t* image, size_t offset) noexcept
         {
             uint32_t value = 0;
             for (size_t i = 0; i < kDwordLength; ++i)
@@ -347,14 +351,14 @@ namespace opp
         //   cmp DWORD PTR [eax+0x20d3], 0xC7C47589
         //   cmp DWORD PTR [eax+0x20d7], 0x00002446
         // Offsets of the two probe dwords inside the FusionFix module.
-        constexpr size_t kFirst = 0x20d3;
-        constexpr size_t kSecond = 0x20d7;
+        constexpr size_t kCompatibilityFirstOffset = 0x20d3;
+        constexpr size_t kCompatibilitySecondOffset = 0x20d7;
 
-        if (!image || imageSize < kSecond + kDwordLength)
+        if (!image || imageSize < kCompatibilitySecondOffset + kDwordLength)
             return false;
 
-        return ReadDword(image, kFirst) != kCompatibilityFirstValue ||
-               ReadDword(image, kSecond) != kCompatibilitySecondValue;
+        return ReadImageDword(image, kCompatibilityFirstOffset) != kCompatibilityFirstValue ||
+               ReadImageDword(image, kCompatibilitySecondOffset) != kCompatibilitySecondValue;
     }
 
     bool QueryGameVersion(uint32_t& compactVersion, GameBuild& build) noexcept
@@ -674,7 +678,7 @@ extern "C"
     float zpatch_mf_step_scale = 0.1f;
     double zpatch_mf_mul_neg1_d = -1.0;
     // MouseFix's timing constants: 0x1.333334015bc21p-4 is 0.075 (the original
-// global's exact double bits), and the two pi values are its angle wrapping.
+    // global's exact double bits), and the two pi values are its angle wrapping.
     double zpatch_mf_time_mul = 0x1.333334015bc21p-4;
     double zpatch_mf_time_add = 0.025;
     double zpatch_mf_pi = 0x1.921fb5a7ed197p+1;
@@ -817,244 +821,160 @@ uintptr_t FindGlobalSymbol(std::string_view symbol) noexcept
     return 0;
 }
 
-// Slot publishes are keyed by the original global's name; 0 skips the publish.
+// Slot publishes are keyed by the original global's name; a name that is not
+// in the table is a slot this tree does not publish (0 = skip, counted).
+namespace
+{
+    struct SlotBinding final
+    {
+        std::string_view name;
+        void* address;
+    };
+
+    // The original-global -> rebuilt-global map: the key is the symbol name
+    // the recovered handler publishes, the value is this tree's rebased global.
+    // A missing name is a publish this tree does not implement.
+    constexpr SlotBinding kSlotBindings[] = {
+        // LoadDLCs: the callback slot receives the game's loader address; the two
+        // constants are the register/apply RVAs the discovery routine adds to the
+        // module base at use time.
+        {"dword_1015BDDC", &zpatch_dlc_load_callback},
+        {"dword_101580D0", &g_dlc_apply_rva},
+        {"dword_1015804C", &g_dlc_register_rva},
+        {"dword_1015AD58", &zpatch_blackscreen_resume},
+        {"dword_1015AD5C", &zpatch_blackscreen_value_ptr},
+        {"dword_1015BDFC", &zpatch_path_node_resume_ok},
+        {"dword_1015BE00", &zpatch_path_node_resume_fail},
+        {"dword_1015BE18", &zpatch_plane_crash_resume_a},
+        {"dword_1015BE14", &zpatch_plane_crash_resume_b},
+        {"dword_1015AD6C", &zpatch_wanted_level_resume},
+        {"dword_1015AD60", &zpatch_group_hack_resume},
+        {"dword_10159C70", &zpatch_smpa60_resume_a},
+        {"dword_10159C68", &zpatch_smpa60_resume_b},
+        {"dword_10159C6C", &zpatch_smpa60_resume_c},
+        {"dword_1015AD64", &zpatch_freeze_gun_resume},
+        {"dword_10159D28", &zpatch_player_ped_object},
+        {"dword_10159D20", &zpatch_player_ped_computed},
+        {"dword_10159D2C", &zpatch_player_ped_resume},
+        {"dword_10159C0C", &zpatch_model_lookup},
+        {"dword_10159CC0", &zpatch_emissive_ecx},
+        {"dword_10159CCC", &zpatch_emissive_edx},
+        {"dword_10159CC4", &zpatch_emissive_const},
+        {"dword_10159CC8", &zpatch_emissive_resume},
+        {"dword_1015BDC8", &zpatch_carparts_resume_if},
+        {"dword_1015BDC0", &zpatch_carparts_resume_else},
+        {"dword_101580AC", &zpatch_super_lod_fail},
+        {"dword_101580B0", &zpatch_super_lod_ok},
+        {"dword_101580B4", &zpatch_super_lod_lookup},
+        {"dword_10159BBC", &zpatch_episode_switch_resume_a},
+        {"dword_10159BB4", &zpatch_episode_switch_resume_b},
+        {"dword_10159BB8", &zpatch_episode_switch_resume_c},
+        {"dword_1015AD7C", &zpatch_bike_value},
+        {"dword_1015AD80", &zpatch_bike_saved},
+        {"dword_1015AD84", &zpatch_bike_resume},
+        {"dword_1015BDD4", &zpatch_collision_deadlock_should_walk},
+        {"dword_1015BDE0", &zpatch_driveby_resolver},
+        {"dword_1015BDF4", &zpatch_driveby_resume},
+        {"dword_1015BDE4", &zpatch_cutscene_target},
+        {"dword_1015BDF0", &zpatch_cutscene_poke},
+        {"dword_10159CD8", &zpatch_nms_object},
+        {"dword_10159B9C", &zpatch_nolivery_resume},
+        {"dword_10159BA4", &zpatch_nolivery_fn},
+        {"dword_10159BAC", &zpatch_nolivery_resume_d},
+        {"dword_1015AD68", &zpatch_crash_msg_getter},
+        {"dword_10159C08", &zpatch_newfiles_register_slot},
+        {"dword_1015AD50", &zpatch_benchmark_resume_a},
+        {"dword_1015AD54", &zpatch_benchmark_resume_b},
+        {"dword_10159C1C", &zpatch_bds_hash_a},
+        {"dword_10159C24", &zpatch_bds_hash_b},
+        {"dword_10159C20", &zpatch_bds_resume_a},
+        {"dword_10159C28", &zpatch_bds_resume_b},
+        {"dword_1015937C", &zpatch_copsirens_resume},
+        {"dword_10159374", &zpatch_copsirens_resume_b},
+        {"dword_1015BE10", &zpatch_ide_hook_slot},
+        {"dword_1015934C", &zpatch_speedup_t4c},
+        {"dword_10159350", &zpatch_speedup_t50},
+        {"dword_10159354", &zpatch_speedup_t54},
+        {"dword_10159358", &zpatch_speedup_t58},
+        {"dword_1015935C", &zpatch_speedup_t5c},
+        {"dword_10159360", &zpatch_speedup_t60},
+        {"dword_10159364", &zpatch_speedup_t64},
+        {"dword_10159368", &zpatch_speedup_t68},
+        // PopupHeadlightsFlag resumes (match+12 / match+10) and the checker's tables.
+        {"dword_1015D628", &zpatch_popup_resume_a},
+        {"dword_1015D62C", &zpatch_popup_resume_b},
+        // ForceCarHeadlightShadows resume (match+12 of its second pattern).
+        {"dword_1015B5BC", &zpatch_fchs_resume},
+        // BadPlayerModelCrashFix resume (match+10).
+        {"dword_10159CB8", &zpatch_bpm_resume},
+        // NewSavesCompatibility: Src is captured from the game's push immediate;
+        // dword_1015AD88 is the tramp resume.
+        {"Src", &zpatch_new_saves_src},
+        {"dword_1015AD88", &zpatch_new_saves_resume},
+        {"dword_10159C18", &zpatch_gfwl_resume},
+        {"dword_1015B5B8", &zpatch_carparts_shadow_fn},
+        {"dword_1015BDC4", &zpatch_car_dynamic_d},
+        {"dword_1015BDCC", &zpatch_carparts_resume_2},
+        // DualVehicleHeadlights's five published game pointers.
+        {"dword_10159BCC", &zpatch_dual_bcc},
+        {"dword_10159BD0", &zpatch_dual_bd0},
+        {"dword_10159BD4", &zpatch_dual_bd4},
+        {"dword_10159BE0", &zpatch_dual_be0},
+        {"dword_10159BE4", &zpatch_dual_be4},
+        // LocalSettingsPath's five game path pointers.
+        {"dword_10159D08", &zpatch_local_path_08},
+        {"dword_10159D10", &zpatch_local_path_10},
+        {"dword_10159D14", &zpatch_local_episode_ptr},
+        {"dword_10159D18", &zpatch_local_path_18},
+        {"dword_10159D1C", &zpatch_local_path_1c},
+        // FreezeCarFix / DebugPrintSpawns resume slots.
+        {"dword_10159CB0", &zpatch_spawns_orig_a},
+        {"dword_10159C98", &zpatch_spawns_orig_b},
+        {"dword_10159CBC", &zpatch_spawns_case0_resume},
+        {"dword_10159C9C", &zpatch_spawns_case1_resume},
+        {"dword_10159CA0", &zpatch_spawns_case2_resume},
+        {"dword_10159CA8", &zpatch_spawns_case3_resume},
+        {"dword_10159C7C", &zpatch_spawns_case4_resume},
+        {"dword_10159C88", &zpatch_spawns_case5_resume},
+        {"dword_10159CAC", &zpatch_spawns_case6_resume},
+        {"dword_10159C90", &zpatch_spawns_case7_resume},
+        {"dword_10159C94", &zpatch_spawns_case8_resume},
+        {"dword_10159C84", &zpatch_spawns_case9_resume},
+        // GarageModelFix resumes.
+        {"dword_10159CD4", &zpatch_garage_resume_a},
+        {"dword_10159CD0", &zpatch_garage_resume_b},
+        // Trio resumes / call target.
+        {"dword_1015AD44", &zpatch_steer_resume},
+        {"dword_1015AD4C", &zpatch_steer_vtable_fn},
+        // MouseFix publishes (the callback's slot writes).
+        {"dword_10159C50", &zpatch_mf_x},
+        {"dword_10159C3C", &zpatch_mf_y},
+        {"dword_10159C5C", &zpatch_mf_flag},
+        {"dword_10159C34", &zpatch_mf_time},
+        {"dword_10159C60", &zpatch_mf_resume_a},
+        {"dword_10159C40", &zpatch_mf_resume_b},
+        // OutOfCommissionFix publishes.
+        {"dword_10158034", &zpatch_ooc_resume},
+        {"dword_10159BF8", &zpatch_ooc_logger},
+        {"dword_10159C04", &zpatch_ooc_orig},
+    };
+} // namespace
+
 uintptr_t FindGlobalSlot(std::string_view slot_name) noexcept
 {
-    // LoadDLCs: the callback slot receives the game's loader address; the two
-    // constants are the register/apply RVAs the discovery routine adds to the
-    // module base at use time.
-    if (slot_name == "dword_1015BDDC")
-        return reinterpret_cast<uintptr_t>(&zpatch_dlc_load_callback);
-    if (slot_name == "dword_101580D0")
-        return reinterpret_cast<uintptr_t>(&g_dlc_apply_rva);
-    if (slot_name == "dword_1015804C")
-        return reinterpret_cast<uintptr_t>(&g_dlc_register_rva);
-    if (slot_name == "dword_1015AD58")
-        return reinterpret_cast<uintptr_t>(&zpatch_blackscreen_resume);
-    if (slot_name == "dword_1015AD5C")
-        return reinterpret_cast<uintptr_t>(&zpatch_blackscreen_value_ptr);
-    if (slot_name == "dword_1015BDFC")
-        return reinterpret_cast<uintptr_t>(&zpatch_path_node_resume_ok);
-    if (slot_name == "dword_1015BE00")
-        return reinterpret_cast<uintptr_t>(&zpatch_path_node_resume_fail);
-    if (slot_name == "dword_1015BE18")
-        return reinterpret_cast<uintptr_t>(&zpatch_plane_crash_resume_a);
-    if (slot_name == "dword_1015BE14")
-        return reinterpret_cast<uintptr_t>(&zpatch_plane_crash_resume_b);
-    if (slot_name == "dword_1015AD6C")
-        return reinterpret_cast<uintptr_t>(&zpatch_wanted_level_resume);
-    if (slot_name == "dword_1015AD60")
-        return reinterpret_cast<uintptr_t>(&zpatch_group_hack_resume);
-    if (slot_name == "dword_10159C70")
-        return reinterpret_cast<uintptr_t>(&zpatch_smpa60_resume_a);
-    if (slot_name == "dword_10159C68")
-        return reinterpret_cast<uintptr_t>(&zpatch_smpa60_resume_b);
-    if (slot_name == "dword_10159C6C")
-        return reinterpret_cast<uintptr_t>(&zpatch_smpa60_resume_c);
-    if (slot_name == "dword_1015AD64")
-        return reinterpret_cast<uintptr_t>(&zpatch_freeze_gun_resume);
-    if (slot_name == "dword_10159D28")
-        return reinterpret_cast<uintptr_t>(&zpatch_player_ped_object);
-    if (slot_name == "dword_10159D20")
-        return reinterpret_cast<uintptr_t>(&zpatch_player_ped_computed);
-    if (slot_name == "dword_10159D2C")
-        return reinterpret_cast<uintptr_t>(&zpatch_player_ped_resume);
-    if (slot_name == "dword_10159C0C")
-        return reinterpret_cast<uintptr_t>(&zpatch_model_lookup);
-    if (slot_name == "dword_10159CC0")
-        return reinterpret_cast<uintptr_t>(&zpatch_emissive_ecx);
-    if (slot_name == "dword_10159CCC")
-        return reinterpret_cast<uintptr_t>(&zpatch_emissive_edx);
-    if (slot_name == "dword_10159CC4")
-        return reinterpret_cast<uintptr_t>(&zpatch_emissive_const);
-    if (slot_name == "dword_10159CC8")
-        return reinterpret_cast<uintptr_t>(&zpatch_emissive_resume);
-    if (slot_name == "dword_1015BDC8")
-        return reinterpret_cast<uintptr_t>(&zpatch_carparts_resume_if);
-    if (slot_name == "dword_1015BDC0")
-        return reinterpret_cast<uintptr_t>(&zpatch_carparts_resume_else);
-    if (slot_name == "dword_101580AC")
-        return reinterpret_cast<uintptr_t>(&zpatch_super_lod_fail);
-    if (slot_name == "dword_101580B0")
-        return reinterpret_cast<uintptr_t>(&zpatch_super_lod_ok);
-    if (slot_name == "dword_101580B4")
-        return reinterpret_cast<uintptr_t>(&zpatch_super_lod_lookup);
-    if (slot_name == "dword_10159BBC")
-        return reinterpret_cast<uintptr_t>(&zpatch_episode_switch_resume_a);
-    if (slot_name == "dword_10159BB4")
-        return reinterpret_cast<uintptr_t>(&zpatch_episode_switch_resume_b);
-    if (slot_name == "dword_10159BB8")
-        return reinterpret_cast<uintptr_t>(&zpatch_episode_switch_resume_c);
-    if (slot_name == "dword_1015AD7C")
-        return reinterpret_cast<uintptr_t>(&zpatch_bike_value);
-    if (slot_name == "dword_1015AD80")
-        return reinterpret_cast<uintptr_t>(&zpatch_bike_saved);
-    if (slot_name == "dword_1015AD84")
-        return reinterpret_cast<uintptr_t>(&zpatch_bike_resume);
-    if (slot_name == "dword_1015BDD4")
-        return reinterpret_cast<uintptr_t>(&zpatch_collision_deadlock_should_walk);
-    if (slot_name == "dword_1015BDE0")
-        return reinterpret_cast<uintptr_t>(&zpatch_driveby_resolver);
-    if (slot_name == "dword_1015BDF4")
-        return reinterpret_cast<uintptr_t>(&zpatch_driveby_resume);
-    if (slot_name == "dword_1015BDE4")
-        return reinterpret_cast<uintptr_t>(&zpatch_cutscene_target);
-    if (slot_name == "dword_1015BDF0")
-        return reinterpret_cast<uintptr_t>(&zpatch_cutscene_poke);
-    if (slot_name == "dword_10159CD8")
-        return reinterpret_cast<uintptr_t>(&zpatch_nms_object);
-    if (slot_name == "dword_10159B9C")
-        return reinterpret_cast<uintptr_t>(&zpatch_nolivery_resume);
-    if (slot_name == "dword_10159BA4")
-        return reinterpret_cast<uintptr_t>(&zpatch_nolivery_fn);
-    if (slot_name == "dword_10159BAC")
-        return reinterpret_cast<uintptr_t>(&zpatch_nolivery_resume_d);
-    if (slot_name == "dword_1015AD68")
-        return reinterpret_cast<uintptr_t>(&zpatch_crash_msg_getter);
-    if (slot_name == "dword_10159C08")
-        return reinterpret_cast<uintptr_t>(&zpatch_newfiles_register_slot);
-    if (slot_name == "dword_1015AD50")
-        return reinterpret_cast<uintptr_t>(&zpatch_benchmark_resume_a);
-    if (slot_name == "dword_1015AD54")
-        return reinterpret_cast<uintptr_t>(&zpatch_benchmark_resume_b);
-    if (slot_name == "dword_10159C1C")
-        return reinterpret_cast<uintptr_t>(&zpatch_bds_hash_a);
-    if (slot_name == "dword_10159C24")
-        return reinterpret_cast<uintptr_t>(&zpatch_bds_hash_b);
-    if (slot_name == "dword_10159C20")
-        return reinterpret_cast<uintptr_t>(&zpatch_bds_resume_a);
-    if (slot_name == "dword_10159C28")
-        return reinterpret_cast<uintptr_t>(&zpatch_bds_resume_b);
-    if (slot_name == "dword_1015937C")
-        return reinterpret_cast<uintptr_t>(&zpatch_copsirens_resume);
-    if (slot_name == "dword_10159374")
-        return reinterpret_cast<uintptr_t>(&zpatch_copsirens_resume_b);
-    if (slot_name == "dword_1015BE10")
-        return reinterpret_cast<uintptr_t>(&zpatch_ide_hook_slot);
-    if (slot_name == "dword_1015934C")
-        return reinterpret_cast<uintptr_t>(&zpatch_speedup_t4c);
-    if (slot_name == "dword_10159350")
-        return reinterpret_cast<uintptr_t>(&zpatch_speedup_t50);
-    if (slot_name == "dword_10159354")
-        return reinterpret_cast<uintptr_t>(&zpatch_speedup_t54);
-    if (slot_name == "dword_10159358")
-        return reinterpret_cast<uintptr_t>(&zpatch_speedup_t58);
-    if (slot_name == "dword_1015935C")
-        return reinterpret_cast<uintptr_t>(&zpatch_speedup_t5c);
-    if (slot_name == "dword_10159360")
-        return reinterpret_cast<uintptr_t>(&zpatch_speedup_t60);
-    if (slot_name == "dword_10159364")
-        return reinterpret_cast<uintptr_t>(&zpatch_speedup_t64);
-    if (slot_name == "dword_10159368")
-        return reinterpret_cast<uintptr_t>(&zpatch_speedup_t68);
-    // PopupHeadlightsFlag resumes (match+12 / match+10) and the checker's tables.
-    if (slot_name == "dword_1015D628")
-        return reinterpret_cast<uintptr_t>(&zpatch_popup_resume_a);
-    if (slot_name == "dword_1015D62C")
-        return reinterpret_cast<uintptr_t>(&zpatch_popup_resume_b);
-    // ForceCarHeadlightShadows resume (match+12 of its second pattern).
-    if (slot_name == "dword_1015B5BC")
-        return reinterpret_cast<uintptr_t>(&zpatch_fchs_resume);
-    // BadPlayerModelCrashFix resume (match+10).
-    if (slot_name == "dword_10159CB8")
-        return reinterpret_cast<uintptr_t>(&zpatch_bpm_resume);
-    // NewSavesCompatibility: Src is captured from the game's push immediate;
-    // dword_1015AD88 is the tramp resume.
-    if (slot_name == "Src")
-        return reinterpret_cast<uintptr_t>(&zpatch_new_saves_src);
-    if (slot_name == "dword_1015AD88")
-        return reinterpret_cast<uintptr_t>(&zpatch_new_saves_resume);
-    if (slot_name == "dword_10159C18")
-        return reinterpret_cast<uintptr_t>(&zpatch_gfwl_resume);
-    if (slot_name == "dword_1015B5B8")
-        return reinterpret_cast<uintptr_t>(&zpatch_carparts_shadow_fn);
-    if (slot_name == "dword_1015BDC4")
-        return reinterpret_cast<uintptr_t>(&zpatch_car_dynamic_d);
-    if (slot_name == "dword_1015BDCC")
-        return reinterpret_cast<uintptr_t>(&zpatch_carparts_resume_2);
-    // DualVehicleHeadlights's five published game pointers.
-    if (slot_name == "dword_10159BCC")
-        return reinterpret_cast<uintptr_t>(&zpatch_dual_bcc);
-    if (slot_name == "dword_10159BD0")
-        return reinterpret_cast<uintptr_t>(&zpatch_dual_bd0);
-    if (slot_name == "dword_10159BD4")
-        return reinterpret_cast<uintptr_t>(&zpatch_dual_bd4);
-    if (slot_name == "dword_10159BE0")
-        return reinterpret_cast<uintptr_t>(&zpatch_dual_be0);
-    if (slot_name == "dword_10159BE4")
-        return reinterpret_cast<uintptr_t>(&zpatch_dual_be4);
-    // LocalSettingsPath's five game path pointers.
-    if (slot_name == "dword_10159D08")
-        return reinterpret_cast<uintptr_t>(&zpatch_local_path_08);
-    if (slot_name == "dword_10159D10")
-        return reinterpret_cast<uintptr_t>(&zpatch_local_path_10);
-    if (slot_name == "dword_10159D14")
-        return reinterpret_cast<uintptr_t>(&zpatch_local_episode_ptr);
-    if (slot_name == "dword_10159D18")
-        return reinterpret_cast<uintptr_t>(&zpatch_local_path_18);
-    if (slot_name == "dword_10159D1C")
-        return reinterpret_cast<uintptr_t>(&zpatch_local_path_1c);
-    // FreezeCarFix / DebugPrintSpawns resume slots.
-    if (slot_name == "dword_10159CB0")
-        return reinterpret_cast<uintptr_t>(&zpatch_spawns_orig_a);
-    if (slot_name == "dword_10159C98")
-        return reinterpret_cast<uintptr_t>(&zpatch_spawns_orig_b);
-    if (slot_name == "dword_10159CBC")
-        return reinterpret_cast<uintptr_t>(&zpatch_spawns_case0_resume);
-    if (slot_name == "dword_10159C9C")
-        return reinterpret_cast<uintptr_t>(&zpatch_spawns_case1_resume);
-    if (slot_name == "dword_10159CA0")
-        return reinterpret_cast<uintptr_t>(&zpatch_spawns_case2_resume);
-    if (slot_name == "dword_10159CA8")
-        return reinterpret_cast<uintptr_t>(&zpatch_spawns_case3_resume);
-    if (slot_name == "dword_10159C7C")
-        return reinterpret_cast<uintptr_t>(&zpatch_spawns_case4_resume);
-    if (slot_name == "dword_10159C88")
-        return reinterpret_cast<uintptr_t>(&zpatch_spawns_case5_resume);
-    if (slot_name == "dword_10159CAC")
-        return reinterpret_cast<uintptr_t>(&zpatch_spawns_case6_resume);
-    if (slot_name == "dword_10159C90")
-        return reinterpret_cast<uintptr_t>(&zpatch_spawns_case7_resume);
-    if (slot_name == "dword_10159C94")
-        return reinterpret_cast<uintptr_t>(&zpatch_spawns_case8_resume);
-    if (slot_name == "dword_10159C84")
-        return reinterpret_cast<uintptr_t>(&zpatch_spawns_case9_resume);
-    // GarageModelFix resumes.
-    if (slot_name == "dword_10159CD4")
-        return reinterpret_cast<uintptr_t>(&zpatch_garage_resume_a);
-    if (slot_name == "dword_10159CD0")
-        return reinterpret_cast<uintptr_t>(&zpatch_garage_resume_b);
-    // Trio resumes / call target.
-    if (slot_name == "dword_1015AD44")
-        return reinterpret_cast<uintptr_t>(&zpatch_steer_resume);
-    if (slot_name == "dword_1015AD4C")
-        return reinterpret_cast<uintptr_t>(&zpatch_steer_vtable_fn);
-    // MouseFix publishes (the callback's slot writes).
-    if (slot_name == "dword_10159C50")
-        return reinterpret_cast<uintptr_t>(&zpatch_mf_x);
-    if (slot_name == "dword_10159C3C")
-        return reinterpret_cast<uintptr_t>(&zpatch_mf_y);
-    if (slot_name == "dword_10159C5C")
-        return reinterpret_cast<uintptr_t>(&zpatch_mf_flag);
-    if (slot_name == "dword_10159C34")
-        return reinterpret_cast<uintptr_t>(&zpatch_mf_time);
-    if (slot_name == "dword_10159C60")
-        return reinterpret_cast<uintptr_t>(&zpatch_mf_resume_a);
-    if (slot_name == "dword_10159C40")
-        return reinterpret_cast<uintptr_t>(&zpatch_mf_resume_b);
-    // OutOfCommissionFix publishes.
-    if (slot_name == "dword_10158034")
-        return reinterpret_cast<uintptr_t>(&zpatch_ooc_resume);
-    if (slot_name == "dword_10159BF8")
-        return reinterpret_cast<uintptr_t>(&zpatch_ooc_logger);
-    if (slot_name == "dword_10159C04")
-        return reinterpret_cast<uintptr_t>(&zpatch_ooc_orig);
-    // SuperLODFix's resume slots are not rebased yet (their ABI body is pending);
-    // the publishes are skipped and counted.
+    for (const SlotBinding& binding : kSlotBindings)
+    {
+        if (slot_name == binding.name)
+            return reinterpret_cast<uintptr_t>(binding.address);
+    }
     return 0;
 }
+
 namespace opp
 {
+    // GetProcAddress's export: int __cdecl(uint32_t* version, uint32_t* out).
+    using GetZMenuVersionFn = int(__cdecl*)(uint32_t*, uint32_t*);
+
     ZMenuGuardResult ZMenuVersionGuard(uint32_t& version) noexcept
     {
         version = 0;
@@ -1062,8 +982,8 @@ namespace opp
         if (!module)
             return ZMenuGuardResult::module_absent;
 
-        const auto getVersion = reinterpret_cast<int(__cdecl*)(uint32_t*, uint32_t*)>(
-            reinterpret_cast<void*>(GetProcAddress(module, kZMenuProcName)));
+        const auto getVersion = GameFunction<GetZMenuVersionFn>(
+            reinterpret_cast<uintptr_t>(GetProcAddress(module, kZMenuProcName)));
         if (!getVersion)
             return ZMenuGuardResult::export_absent;
 
