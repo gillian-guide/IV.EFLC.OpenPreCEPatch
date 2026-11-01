@@ -1,7 +1,7 @@
 // zp.game - the game's identity: build classification, the version probe, the
 // process lookup and the name hash every installer and hook body uses.
 //
-// `GameBuild`, `ProcessEntry` and `GameImage` stay declared in `src/common.h`,
+// `GameBuild` and `GameImage` stay declared in `src/common.h`,
 // the header the plain translation units share; this unit owns their
 // implementations and the recovered RVA type (`GameRva`) the install arms gate
 // their writes with.
@@ -51,9 +51,6 @@ bool ComposeGameVersion(std::uint16_t major, std::uint16_t minor, std::uint16_t 
 GameBuild ClassifyGameBuild(std::uint32_t compactVersion) noexcept;
 
 const char* GameBuildName(GameBuild build) noexcept;
-
-std::uint32_t SelectGameProcess(const ProcessEntry* entries, std::size_t count,
-                                std::string_view name) noexcept;
 
 std::uint32_t FindGameProcess() noexcept;
 
@@ -242,21 +239,6 @@ const char* GameBuildName(GameBuild build) noexcept
 	case GameBuild::v12043: return "12043";
 	default: return "unknown";
 	}
-}
-
-std::uint32_t SelectGameProcess(const ProcessEntry* entries, std::size_t count,
-                                std::string_view name) noexcept
-{
-	if (!entries)
-		return 0;
-
-	for (std::size_t i = 0; i < count; ++i)
-	{
-		if (entries[i].executable.size() == name.size() &&
-		    std::memcmp(entries[i].executable.data(), name.data(), name.size()) == 0)
-			return entries[i].processId;
-	}
-	return 0;
 }
 
 std::uint32_t FindGameProcess() noexcept

@@ -26,11 +26,11 @@ import zp.patch;
 
 export
 {
-const SkipLauncherEntry* SkipLauncherEntries(std::size_t& count) noexcept;
-const SkipLauncherCollector* SkipLauncherCollectors(std::size_t& count) noexcept;
-const SkipLauncherInstall* SkipLauncherDfaInstalls(std::size_t& count) noexcept;
-const SkipLauncherInstall* SkipLauncherRomInstalls(std::size_t& count) noexcept;
-const SkipLauncherCollectedInstall* SkipLauncherDfaCollected(std::size_t& count) noexcept;
+std::span<const SkipLauncherEntry> SkipLauncherEntries() noexcept;
+std::span<const SkipLauncherCollector> SkipLauncherCollectors() noexcept;
+std::span<const SkipLauncherInstall> SkipLauncherDfaInstalls() noexcept;
+std::span<const SkipLauncherInstall> SkipLauncherRomInstalls() noexcept;
+std::span<const SkipLauncherCollectedInstall> SkipLauncherDfaCollected() noexcept;
 
 PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* resolver_user,
                               SkipLauncherReport& report,

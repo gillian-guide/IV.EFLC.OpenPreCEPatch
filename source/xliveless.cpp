@@ -294,33 +294,28 @@ bool InBounds(GameImage image, const std::uint8_t* site, std::size_t length) noe
 
 } // namespace
 
-const SkipLauncherEntry* SkipLauncherEntries(std::size_t& count) noexcept
+std::span<const SkipLauncherEntry> SkipLauncherEntries() noexcept
 {
-	count = std::size(kSkipLauncherEntries);
 	return kSkipLauncherEntries;
 }
 
-const SkipLauncherCollector* SkipLauncherCollectors(std::size_t& count) noexcept
+std::span<const SkipLauncherCollector> SkipLauncherCollectors() noexcept
 {
-	count = std::size(kSkipLauncherCollectors);
 	return kSkipLauncherCollectors;
 }
 
-const SkipLauncherInstall* SkipLauncherDfaInstalls(std::size_t& count) noexcept
+std::span<const SkipLauncherInstall> SkipLauncherDfaInstalls() noexcept
 {
-	count = std::size(kSkipLauncherDfaInstalls);
 	return kSkipLauncherDfaInstalls;
 }
 
-const SkipLauncherInstall* SkipLauncherRomInstalls(std::size_t& count) noexcept
+std::span<const SkipLauncherInstall> SkipLauncherRomInstalls() noexcept
 {
-	count = std::size(kSkipLauncherRomInstalls);
 	return kSkipLauncherRomInstalls;
 }
 
-const SkipLauncherCollectedInstall* SkipLauncherDfaCollected(std::size_t& count) noexcept
+std::span<const SkipLauncherCollectedInstall> SkipLauncherDfaCollected() noexcept
 {
-	count = std::size(kSkipLauncherDfaCollected);
 	return kSkipLauncherDfaCollected;
 }
 
@@ -332,13 +327,12 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 	if (!image.base || image.size == 0)
 		return {PatchResultCode::invalid_input, "invalid skip launcher input"};
 
-	std::size_t entryCount = 0;
-	const SkipLauncherEntry* entries = SkipLauncherEntries(entryCount);
-	std::vector<const std::uint8_t*> matches(entryCount, nullptr);
+	const std::span<const SkipLauncherEntry> entries = SkipLauncherEntries();
+	std::vector<const std::uint8_t*> matches(entries.size(), nullptr);
 
 	if (HasStage(stages, SkipLauncherStage::main))
 	{
-		for (std::size_t i = 0; i < entryCount; ++i)
+		for (std::size_t i = 0; i < entries.size(); ++i)
 		{
 			const SkipLauncherEntry& entry = entries[i];
 			hook::pattern pattern = ScanPattern(image, entry.signature);
@@ -410,11 +404,9 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 			}
 		}
 
-		std::size_t collectorCount = 0;
-		const SkipLauncherCollector* collectors = SkipLauncherCollectors(collectorCount);
-		for (std::size_t i = 0; i < collectorCount; ++i)
+		const std::span<const SkipLauncherCollector> collectors = SkipLauncherCollectors();
+		for (const SkipLauncherCollector& collector : collectors)
 		{
-			const SkipLauncherCollector& collector = collectors[i];
 			hook::pattern pattern = ScanPattern(image, collector.pattern);
 			const std::size_t hits = pattern.size();
 			if (hits == 0)
@@ -457,13 +449,12 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 	{
 		// Installs an opcode + rel32 to the reimplemented body. A body the resolver
 		// does not know, or a missing signature, counts as missing.
-		const auto InstallHooks = [&](const SkipLauncherInstall* installs, std::size_t count,
+		const auto InstallHooks = [&](std::span<const SkipLauncherInstall> installs,
 		                              std::size_t& applied,
 		                              std::size_t& missing) -> PatchResult
 		{
-			for (std::size_t i = 0; i < count; ++i)
+			for (const SkipLauncherInstall& install : installs)
 			{
-				const SkipLauncherInstall& install = installs[i];
 				const std::uintptr_t destination = resolve(install.hook, resolver_user);
 				if (!destination)
 				{
@@ -496,21 +487,17 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 
 		if (HasStage(stages, SkipLauncherStage::dfa))
 		{
-			std::size_t dfaCount = 0;
-			const SkipLauncherInstall* dfa = SkipLauncherDfaInstalls(dfaCount);
 			const auto dfaStatus =
-			    InstallHooks(dfa, dfaCount, report.dfaInstalls, report.dfaMissing);
+			    InstallHooks(SkipLauncherDfaInstalls(), report.dfaInstalls, report.dfaMissing);
 			if (!dfaStatus)
 				return dfaStatus;
 
 			// The collector tail of 0x10004850: each collected site jumps to another
 			// pattern's match.
-			std::size_t collectedCount = 0;
-			const SkipLauncherCollectedInstall* collected =
-			    SkipLauncherDfaCollected(collectedCount);
-			for (std::size_t i = 0; i < collectedCount; ++i)
+			const std::span<const SkipLauncherCollectedInstall> collected =
+			    SkipLauncherDfaCollected();
+			for (const SkipLauncherCollectedInstall& install : collected)
 			{
-				const SkipLauncherCollectedInstall& install = collected[i];
 				hook::pattern hits = ScanPattern(image, install.collector);
 				for (std::size_t t = 0; t < install.targetCount; ++t)
 				{
@@ -535,9 +522,8 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 
 		if (HasStage(stages, SkipLauncherStage::rom))
 		{
-			std::size_t romCount = 0;
-			const SkipLauncherInstall* rom = SkipLauncherRomInstalls(romCount);
-			const auto romStatus = InstallHooks(rom, romCount, report.romInstalls, report.romMissing);
+			const auto romStatus =
+			    InstallHooks(SkipLauncherRomInstalls(), report.romInstalls, report.romMissing);
 			if (!romStatus)
 				return romStatus;
 		}

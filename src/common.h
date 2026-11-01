@@ -3,6 +3,7 @@
 
 #include <array>
 #include <bit>
+#include <span>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -92,14 +93,7 @@ bool QueryGameVersion(std::uint32_t& compactVersion, GameBuild& build) noexcept;
 
 const char* GameBuildName(GameBuild build) noexcept;
 
-struct ProcessEntry
-{
-	std::string_view executable;
-	std::uint32_t processId{};
-};
 std::uint32_t FindGameProcess() noexcept;
-std::uint32_t SelectGameProcess(const ProcessEntry* entries, std::size_t count,
-                                std::string_view name) noexcept;
 
 // 0x10003E20: true when the given module lacks the FusionFix bytes at
 // 0x20D3/0x20D7 (the original probes GTAIV.EFLC.FusionFix.asi).
@@ -112,13 +106,6 @@ struct GameImage final
 	std::uint8_t* base{};
 	std::size_t size{};
 };
-
-// Applies one write: signature ops scan and write at match + offset (the offset
-// may be negative), RVA ops write at base + rva. Expected bytes are not
-// verified, exactly like the original handlers.
-PatchResult ApplyMappedOperation(GameImage image, std::string_view signature, std::int32_t offset,
-                                 std::uint32_t moduleRva, std::string_view replacement,
-                                 std::uint8_t*& writtenAt, std::size_t& written) noexcept;
 
 // The multiplayer model-name catalogue (the shipped mod's 38,455-entry table)
 // and its reverse hash lookup, used by the spawn and print hooks.
@@ -209,7 +196,7 @@ struct MenuRegistration final
 	std::uintptr_t setter;
 };
 
-const MenuRegistration* MenuRegistrations(std::size_t& count) noexcept;
+std::span<const MenuRegistration> MenuRegistrations() noexcept;
 
 // Number of successful AddIVMenuOption calls (0 when the module or its export is
 // absent).

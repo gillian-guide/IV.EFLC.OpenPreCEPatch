@@ -25,7 +25,7 @@ MenuProbeResult ProbeMenuApi(bool optionEnabled, bool modulePresent, bool attemp
 
 MenuProbeResult MenuIntegrationProbe(MenuIntegrationState& state, bool loadSucceeded) noexcept;
 
-const MenuRegistration* MenuRegistrations(std::size_t& count) noexcept;
+std::span<const MenuRegistration> MenuRegistrations() noexcept;
 
 std::size_t RegisterMenuOptions() noexcept;
 }  // export
@@ -76,9 +76,8 @@ MenuProbeResult MenuIntegrationProbe(MenuIntegrationState& state, bool loadSucce
 	return MenuProbeResult::unavailable;
 }
 
-const MenuRegistration* MenuRegistrations(std::size_t& count) noexcept
+std::span<const MenuRegistration> MenuRegistrations() noexcept
 {
-	count = std::size(kMenuRegistrations);
 	return kMenuRegistrations;
 }
 
@@ -95,12 +94,9 @@ std::size_t RegisterMenuOptions() noexcept
 	if (!add)
 		return 0;
 
-	std::size_t count = 0;
 	std::size_t total = 0;
-	const MenuRegistration* rows = MenuRegistrations(count);
-	for (std::size_t i = 0; i < count; ++i)
+	for (const MenuRegistration& row : MenuRegistrations())
 	{
-		const MenuRegistration& row = rows[i];
 		const int result = add(row.family, row.title, row.display, row.pref, row.a, row.b,
 		                       static_cast<int>(row.getter), static_cast<int>(row.setter));
 		if (result)

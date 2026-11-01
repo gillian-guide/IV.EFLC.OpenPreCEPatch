@@ -558,9 +558,8 @@ int Run()
 		CHECK(state.loadAttempts == 1); // DAT_101a843c prevents a retry
 	}
 	{
-		std::size_t rows = 0;
-		const auto* registrations = MenuRegistrations(rows);
-		CHECK(rows == 2);
+		const auto registrations = MenuRegistrations();
+		CHECK(registrations.size() == 2);
 		CHECK(std::strcmp(registrations[0].family, "PREF_DEATHMUSIC") == 0);
 		CHECK(std::strcmp(registrations[1].family, "PREF_FOCUSLOSS") == 0);
 	}
@@ -581,17 +580,11 @@ int Run()
 
 	// ---- SkipLauncher tables ----------------------------------------------
 	{
-		std::size_t n = 0;
-		const auto* entries = SkipLauncherEntries(n);
-		CHECK(entries != nullptr && n == 25);
-		const auto* collectors = SkipLauncherCollectors(n);
-		CHECK(collectors != nullptr && n == 2);
-		const auto* dfa = SkipLauncherDfaInstalls(n);
-		CHECK(dfa != nullptr && n == 6);
-		const auto* rom = SkipLauncherRomInstalls(n);
-		CHECK(rom != nullptr && n == 2);
-		const auto* collected = SkipLauncherDfaCollected(n);
-		CHECK(collected != nullptr && n == 1);
+		CHECK(SkipLauncherEntries().size() == 25);
+		CHECK(SkipLauncherCollectors().size() == 2);
+		CHECK(SkipLauncherDfaInstalls().size() == 6);
+		CHECK(SkipLauncherRomInstalls().size() == 2);
+		CHECK(SkipLauncherDfaCollected().size() == 1);
 	}
 
 	std::printf("readable tests: PASS\n");

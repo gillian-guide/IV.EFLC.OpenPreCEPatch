@@ -84,12 +84,12 @@ struct SkipLauncherCollectedInstall final
 	std::size_t targetCount;
 };
 
-// Table accessors; `count` receives the row count.
-const SkipLauncherEntry* SkipLauncherEntries(std::size_t& count) noexcept;
-const SkipLauncherCollector* SkipLauncherCollectors(std::size_t& count) noexcept;
-const SkipLauncherInstall* SkipLauncherDfaInstalls(std::size_t& count) noexcept;
-const SkipLauncherInstall* SkipLauncherRomInstalls(std::size_t& count) noexcept;
-const SkipLauncherCollectedInstall* SkipLauncherDfaCollected(std::size_t& count) noexcept;
+// Table accessors: the recovered rows as read-only spans.
+std::span<const SkipLauncherEntry> SkipLauncherEntries() noexcept;
+std::span<const SkipLauncherCollector> SkipLauncherCollectors() noexcept;
+std::span<const SkipLauncherInstall> SkipLauncherDfaInstalls() noexcept;
+std::span<const SkipLauncherInstall> SkipLauncherRomInstalls() noexcept;
+std::span<const SkipLauncherCollectedInstall> SkipLauncherDfaCollected() noexcept;
 
 // The entry whose match feeds the jump install: the original reads the second
 // entry's match into its jump-target slot.
