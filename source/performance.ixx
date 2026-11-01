@@ -175,8 +175,9 @@ namespace
 {
 // NewMemorySystem's allocation registry: the original keeps the pointers it
 // handed out in its own hash map (FNV-1a over the pointer's four bytes) under
-// the recursive critical section at 0x101A0808. Only membership is observable,
-// so the keys go in a flat open-addressing set behind an equivalent lock.
+// the recursive critical section at 0x101A0808. Only membership is observable
+// (vtable[18] asks "is this pointer mine?"), so the keys go in a flat
+// open-addressing set behind an equivalent lock.
 //
 // It is a flat table rather than std::unordered_set because the set is touched
 // on *every* game allocation and free: an unordered_set node is one heap
@@ -185,159 +186,321 @@ namespace
 // and the insert is dropped), and keeps the same membership semantics.
 CRITICAL_SECTION g_nms_lock;
 
+// One registry entry. The state is explicit so a key can never be confused with
+// a marker: Empty is a never-used slot, Occupied a live key, Erased a tombstone
+// that still terminates a probe chain. A Slot is 8 bytes (key + state byte +
+// padding); at the 3/4 load factor that is ~11 bytes per live pointer, still far
+// below the original map's per-node cost, and the type is what makes the probe
+// code readable.
+struct Slot final
+{
+    enum class State : uint8_t
+    {
+        empty,
+        occupied,
+        erased,
+    };
+
+    uint32_t key{};
+    State state{State::empty};
+
+    bool IsEmpty() const noexcept { return state == State::empty; }
+    bool IsOccupied() const noexcept { return state == State::occupied; }
+    bool IsErased() const noexcept { return state == State::erased; }
+
+    void Occupy(uint32_t value) noexcept
+    {
+        key = value;
+        state = State::occupied;
+    }
+    void Erase() noexcept { state = State::erased; }
+};
+static_assert(sizeof(Slot) == 8u, "a typed slot is a key plus its state byte");
+
+// The owning storage for the registry's slots: one VirtualAlloc block, its
+// capacity in slots and the two counters the probe policy needs. It is allocated
+// once and only replaced by NmsRegistry::Grow; the current block lives for the
+// process lifetime (the original's map does the same) and is released by
+// ~SlotTable at module detach.
+class SlotTable final
+{
+public:
+    SlotTable() noexcept = default;
+    SlotTable(const SlotTable&) = delete;
+    SlotTable& operator=(const SlotTable&) = delete;
+    SlotTable(SlotTable&& other) noexcept { Swap(other); }
+    ~SlotTable() noexcept { Release(); }
+
+    // The replacement block for Grow. The flags are the original allocator's
+    // (MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE); an empty table means
+    // VirtualAlloc failed and the caller must keep what it has.
+    static SlotTable Allocate(size_t capacity) noexcept
+    {
+        auto* slots = static_cast<Slot*>(VirtualAlloc(
+            nullptr, capacity * sizeof(Slot), MEM_COMMIT | MEM_RESERVE,
+            PAGE_READWRITE));
+        if (slots == nullptr)
+            return SlotTable{};
+        SlotTable table;
+        table.slots_ = slots;
+        table.capacity_ = capacity;
+        return table;
+    }
+
+    bool empty() const noexcept { return slots_ == nullptr; }
+    size_t capacity() const noexcept { return capacity_; }
+    size_t live() const noexcept { return live_; }
+    size_t occupied() const noexcept { return occupied_; }
+
+    Slot& At(size_t index) noexcept { return slots_[index]; }
+    const Slot& At(size_t index) const noexcept { return slots_[index]; }
+
+    // Counter bookkeeping for one insert: `reused_erased` says the key took a
+    // tombstone instead of an Empty slot, so the occupied count does not move.
+    void NoteInsert(bool reused_erased) noexcept
+    {
+        ++live_;
+        if (!reused_erased)
+            ++occupied_;
+    }
+    void NoteErase() noexcept { --live_; }
+    void ResetCounts() noexcept
+    {
+        live_ = 0u;
+        occupied_ = 0u;
+    }
+
+    void Swap(SlotTable& other) noexcept
+    {
+        Slot* const slots = slots_;
+        slots_ = other.slots_;
+        other.slots_ = slots;
+        const size_t capacity = capacity_;
+        capacity_ = other.capacity_;
+        other.capacity_ = capacity;
+        const size_t live = live_;
+        live_ = other.live_;
+        other.live_ = live;
+        const size_t occupied = occupied_;
+        occupied_ = other.occupied_;
+        other.occupied_ = occupied;
+    }
+
+    void Release() noexcept
+    {
+        if (slots_ != nullptr)
+            VirtualFree(slots_, 0, MEM_RELEASE);
+        slots_ = nullptr;
+        capacity_ = 0u;
+        live_ = 0u;
+        occupied_ = 0u;
+    }
+
+private:
+    Slot* slots_{};
+    size_t capacity_{};
+    size_t live_{};
+    size_t occupied_{};
+};
+
 class NmsRegistry final
 {
 public:
-    // Reserved keys: a four-byte aligned pointer can be neither zero nor all
-    // ones. Public so the self-test names them instead of repeating literals.
-    static constexpr uint32_t kNmsEmpty = 0u;
-    static constexpr uint32_t kNmsErased = 0xFFFFFFFFu;
+    // The two values a four-byte-aligned pointer can never be. They stay
+    // rejected so an unknown/zero key behaves exactly as before the typed slots.
+    static constexpr uint32_t kReservedZeroKey = 0u;
+    static constexpr uint32_t kReservedErasedKey = 0xFFFFFFFFu;
 
+    // The smallest table (in slots) and the probe/growth policy, named so the
+    // comments in ReserveForInsert and ProbeIndex can refer to them.
+    static constexpr size_t kMinCapacity = 1024u;
+    // Grow when the next insert would reach 3/4 of the slots, tombstones
+    // included because they still terminate a probe.
+    static constexpr size_t kGrowAtPercent = 75u;
+    // If at most half of the occupied slots are live, the table is mostly
+    // tombstones: rebuild it at the same capacity instead of doubling.
+    static constexpr size_t kRebuildWhenLiveAtMostPercent = 50u;
+    // Knuth's 32-bit multiplicative hash constant: the keys are 4-byte-aligned
+    // heap addresses whose low bits are all zero, so the multiply spreads them
+    // before the >> 8.
+    static constexpr uint32_t kHashMultiplier = 2654435761u;
+
+    // Insert `key` unless it is already a member. Returns false for a reserved
+    // key and for an allocation failure (see Grow); a duplicate returns true
+    // without changing the set, like the original's map insert.
     bool insert(uint32_t key) noexcept
     {
-        // 0 is the empty marker and 0xFFFFFFFF the erased marker; a four-byte
-        // aligned pointer can be neither.
-        if (key == kNmsEmpty || key == kNmsErased)
+        if (IsReserved(key))
             return false;
-        if (!EnsureCapacity())
+        if (!ReserveForInsert())
             return false;
         return InsertNoGrow(key);
     }
 
     void erase(uint32_t key) noexcept
     {
-        if (capacity_ == 0u || key == kNmsEmpty || key == kNmsErased)
+        if (table_.empty() || IsReserved(key))
             return;
-        const size_t mask = capacity_ - 1u;
-        for (size_t probe = 0; probe <= mask; ++probe)
-        {
-            uint32_t& slot = slots_[Probe(key, probe, mask)];
-            if (slot == kNmsEmpty)
-                return;
-            if (slot == key)
-            {
-                slot = kNmsErased;
-                --count_;
-                return;
-            }
-        }
+        Slot* const slot = Find(key);
+        if (slot == nullptr)
+            return;
+        slot->Erase();
+        table_.NoteErase();
     }
 
     bool contains(uint32_t key) const noexcept
     {
-        if (capacity_ == 0u || key == kNmsEmpty || key == kNmsErased)
+        if (table_.empty() || IsReserved(key))
             return false;
-        const size_t mask = capacity_ - 1u;
-        for (size_t probe = 0; probe <= mask; ++probe)
-        {
-            const uint32_t slot = slots_[Probe(key, probe, mask)];
-            if (slot == kNmsEmpty)
-                return false;
-            if (slot == key)
-                return true;
-        }
-        return false;
+        return Find(key) != nullptr;
     }
 
-    size_t size() const noexcept { return count_; }
-    size_t capacity() const noexcept { return capacity_; }
+    size_t size() const noexcept { return table_.live(); }
+    size_t capacity() const noexcept { return table_.capacity(); }
 
 private:
-    static constexpr size_t kMinCapacity = 1024u;
+    static constexpr size_t kNoSlot = static_cast<size_t>(-1);
 
-    static size_t Probe(uint32_t key, size_t probe, size_t mask) noexcept
+    static bool IsReserved(uint32_t key) noexcept
     {
-        // Multiplicative hash, then linear probing: the keys are aligned heap
-        // addresses, whose low bits are all zero, so the multiply is what
-        // spreads them.
-        const uint32_t mixed = key * 2654435761u;
-        return (static_cast<size_t>(mixed >> 8) + probe) & mask;
+        return key == kReservedZeroKey || key == kReservedErasedKey;
     }
 
-    bool EnsureCapacity() noexcept
+    // Multiplicative hash then linear probing: hash >> 8 keeps the multiply's
+    // high bits and `probe` walks the table linearly. The capacity is always a
+    // power of two, so the mask is the modulo.
+    static size_t ProbeIndex(uint32_t key, size_t probe, size_t mask) noexcept
     {
-        if (capacity_ == 0u)
-            return Grow(kMinCapacity);
-        // Keep the probe chains short: grow at 3/4 occupancy, counting erased
-        // slots because they still terminate a probe. When the table is mostly
-        // tombstones (churn), rebuild it at the same size instead of doubling,
-        // so memory stays proportional to the live count.
-        if ((used_ + 1u) * 4u >= capacity_ * 3u)
-        {
-            if (count_ * 2u <= used_)
-                return Grow(capacity_);
-            return Grow(capacity_ * 2u);
-        }
-        return true;
+        return (static_cast<size_t>((key * kHashMultiplier) >> 8) + probe) & mask;
     }
 
-    bool InsertNoGrow(uint32_t key) noexcept
+    // The live slot holding `key`, or nullptr when the probe reaches an Empty
+    // slot (which proves the key is absent).
+    Slot* Find(uint32_t key) noexcept
     {
-        const size_t mask = capacity_ - 1u;
-        size_t erased = static_cast<size_t>(-1);
+        const size_t mask = table_.capacity() - 1u;
         for (size_t probe = 0; probe <= mask; ++probe)
         {
-            uint32_t& slot = slots_[Probe(key, probe, mask)];
-            if (slot == key)
+            Slot& slot = table_.At(ProbeIndex(key, probe, mask));
+            if (slot.IsEmpty())
+                return nullptr;
+            if (slot.IsOccupied() && slot.key == key)
+                return &slot;
+        }
+        return nullptr;
+    }
+
+    const Slot* Find(uint32_t key) const noexcept
+    {
+        const size_t mask = table_.capacity() - 1u;
+        for (size_t probe = 0; probe <= mask; ++probe)
+        {
+            const Slot& slot = table_.At(ProbeIndex(key, probe, mask));
+            if (slot.IsEmpty())
+                return nullptr;
+            if (slot.IsOccupied() && slot.key == key)
+                return &slot;
+        }
+        return nullptr;
+    }
+
+    // Make room for one more insert, following the policy above. Never touches
+    // the table unless it grows.
+    bool ReserveForInsert() noexcept
+    {
+        if (table_.empty())
+            return Grow(kMinCapacity);
+        if ((table_.occupied() + 1u) * 100u < table_.capacity() * kGrowAtPercent)
+            return true;
+        if (table_.live() * 100u <= table_.occupied() * kRebuildWhenLiveAtMostPercent)
+            return Grow(table_.capacity());
+        return Grow(table_.capacity() * 2u);
+    }
+
+    // Insert into the current table; never allocates. A duplicate is a no-op; a
+    // tombstone is reused before an Empty slot, and the first tombstone seen is
+    // used if the probe runs off the end.
+    bool InsertNoGrow(uint32_t key) noexcept
+    {
+        const size_t mask = table_.capacity() - 1u;
+        size_t erased = kNoSlot;
+        for (size_t probe = 0; probe <= mask; ++probe)
+        {
+            const size_t index = ProbeIndex(key, probe, mask);
+            Slot& slot = table_.At(index);
+            if (slot.IsOccupied() && slot.key == key)
                 return true;
-            if (slot == kNmsErased && erased == static_cast<size_t>(-1))
-                erased = Probe(key, probe, mask);
-            if (slot == kNmsEmpty)
+            if (slot.IsErased() && erased == kNoSlot)
+                erased = index;
+            if (slot.IsEmpty())
             {
-                uint32_t& target = erased != static_cast<size_t>(-1) ? slots_[erased] : slot;
-                target = key;
-                ++count_;
-                if (erased == static_cast<size_t>(-1))
-                    ++used_;
+                if (erased != kNoSlot)
+                {
+                    table_.At(erased).Occupy(key);
+                    table_.NoteInsert(true);
+                }
+                else
+                {
+                    slot.Occupy(key);
+                    table_.NoteInsert(false);
+                }
                 return true;
             }
         }
-        if (erased != static_cast<size_t>(-1))
+        if (erased != kNoSlot)
         {
-            slots_[erased] = key;
-            ++count_;
+            table_.At(erased).Occupy(key);
+            table_.NoteInsert(true);
             return true;
         }
         return false;
     }
 
+    // The replacement block for one growth step.
+    static SlotTable AllocateReplacement(size_t wanted) noexcept
+    {
+        return SlotTable::Allocate(wanted);
+    }
+
+    // Make the replacement live and reset the new table's counters. The previous
+    // table is handed back through `replacement`, so the caller can rehash from
+    // it and then release it.
+    void Publish(SlotTable& replacement) noexcept
+    {
+        table_.Swap(replacement);
+        table_.ResetCounts();
+    }
+
+    // Re-insert every live key of `old` into the current (new) table. `old` is
+    // still owned by the caller until it releases it.
+    void RehashInto(const SlotTable& old) noexcept
+    {
+        for (size_t index = 0; index < old.capacity(); ++index)
+        {
+            const Slot& slot = old.At(index);
+            if (slot.IsOccupied())
+                InsertNoGrow(slot.key);
+        }
+    }
+
+    // Allocate a replacement at `wanted` slots, rehash into it and release the
+    // old block. On allocation failure nothing changes and the caller's insert
+    // returns false: the game still gets its block, but the pointer is missing
+    // from "is this pointer mine", so that query answers false for it (a false
+    // negative). The original's map insert failure has the same observable
+    // result.
     bool Grow(size_t wanted) noexcept
     {
-        auto* replacement = static_cast<uint32_t*>(VirtualAlloc(
-            nullptr, wanted * sizeof(uint32_t), MEM_COMMIT | MEM_RESERVE,
-            PAGE_READWRITE));
-        if (replacement == nullptr)
-        {
-            // Out of address space: keep the old table and drop this insert.
-            // Membership is only a query, so a missing entry is a false
-            // negative like the original's own allocation failure path.
+        SlotTable replacement = AllocateReplacement(wanted);
+        if (replacement.empty())
             return false;
-        }
-        uint32_t* const old = slots_;
-        const size_t old_capacity = capacity_;
-        slots_ = replacement;
-        capacity_ = wanted;
-        used_ = 0u;
-        size_t live = 0u;
-        for (size_t index = 0; index < old_capacity; ++index)
-        {
-            const uint32_t key = old[index];
-            if (key != kNmsEmpty && key != kNmsErased)
-            {
-                InsertNoGrow(key);
-                ++live;
-            }
-        }
-        count_ = live;
-        if (old != nullptr)
-            VirtualFree(old, 0, MEM_RELEASE);
+        Publish(replacement);     // table_ = new block, replacement = old block
+        RehashInto(replacement);  // fill table_ from the old block
+        replacement.Release();    // free the old block
         return true;
     }
 
-    uint32_t* slots_{};
-    size_t capacity_{};
-    size_t count_{};
-    size_t used_{};
+    SlotTable table_;
 };
 
 NmsRegistry g_nms_allocations;
@@ -354,14 +517,22 @@ NmsRegistryInit g_nms_registry_init;
 extern "C" void* __stdcall zpatch_nms_alloc(uint32_t size, uint32_t align,
                                             uint32_t flags) noexcept
 {
+    // The allocator's third argument is ignored by the original as well.
     (void)flags;
-    const uint32_t unit = align < 0x10u ? 0x10u : align;
+    // The original's alignment scheme: a unit is at least 16 bytes, the payload
+    // is at least one unit, the HeapAlloc block reserves two spare units (the
+    // alignment slack and the offset dword the game reads back), and the
+    // returned pointer is unit-aligned past the first unit.
+    constexpr uint32_t kMinUnit = 0x10u;
+    constexpr uint32_t kSpareUnits = 2u;
+    constexpr size_t kBaseOffsetSize = sizeof(uint32_t);
+    const uint32_t unit = align < kMinUnit ? kMinUnit : align;
     const uint32_t want = size < unit ? unit : size;
-    void* base = HeapAlloc(GetProcessHeap(), 0, want + unit * 2u);
+    void* base = HeapAlloc(GetProcessHeap(), 0, want + unit * kSpareUnits);
     if (!base) return nullptr;
     const auto raw = reinterpret_cast<uintptr_t>(base);
-    const uintptr_t aligned = ((raw - 1u) / unit + 2u) * unit;
-    *reinterpret_cast<uint32_t*>(aligned - 4u) =
+    const uintptr_t aligned = ((raw - 1u) / unit + kSpareUnits) * unit;
+    *reinterpret_cast<uint32_t*>(aligned - kBaseOffsetSize) =
         static_cast<uint32_t>(aligned - raw);
     auto* result = reinterpret_cast<void*>(aligned);
     // 0xCD is the MSVC debug-heap free-fill byte; the original's allocator
@@ -379,8 +550,12 @@ extern "C" void* __stdcall zpatch_nms_alloc(uint32_t size, uint32_t align,
 extern "C" void __stdcall zpatch_nms_free(void* ptr) noexcept
 {
     if (!ptr) return;
+    // The allocate path stored (aligned - HeapAlloc base) in the dword just
+    // before the returned pointer.
+    constexpr size_t kBaseOffsetSize = sizeof(uint32_t);
     const auto raw = reinterpret_cast<uintptr_t>(ptr);
-    const uintptr_t base = raw - *reinterpret_cast<const uint32_t*>(raw - 4u);
+    const uintptr_t base =
+        raw - *reinterpret_cast<const uint32_t*>(raw - kBaseOffsetSize);
     HeapFree(GetProcessHeap(), 0, reinterpret_cast<void*>(base));
     EnterCriticalSection(&g_nms_lock);
     g_nms_allocations.erase(static_cast<uint32_t>(raw));
@@ -403,33 +578,39 @@ extern "C" bool zpatch_nms_registry_selftest() noexcept
 {
     NmsRegistry registry;
     constexpr uint32_t kKeys = 20000u;
-    uint32_t keys[kKeys];
+    std::array<uint32_t, kKeys> keys{};
     // The key space is 28 bits of pointer shifted into 4-byte steps; the seed is
-    // the recovered self-test seed.
+    // the recovered self-test seed and the generator is the recovered LCG.
     constexpr uint32_t kNmsKeyMask = (1u << 28) - 1u;
     static_assert(kNmsKeyMask == 0x0FFFFFFFu);
     constexpr uint32_t kSelfTestSeed = 0x1234'5678u;
+    constexpr uint32_t kSelfTestAlignment = 16u;
+    constexpr uint32_t kLcgMultiplier = 1664525u;
+    constexpr uint32_t kLcgIncrement = 1013904223u;
     uint32_t state = kSelfTestSeed;
     for (uint32_t i = 0; i < kKeys; ++i)
     {
         // Aligned, 4-byte-spaced pseudo-random pointers, like the real keys.
-        state = state * 1664525u + 1013904223u;
-        keys[i] = (state & kNmsKeyMask) * 16u;
+        state = state * kLcgMultiplier + kLcgIncrement;
+        keys[i] = (state & kNmsKeyMask) * kSelfTestAlignment;
     }
 
     for (uint32_t i = 0; i < kKeys; ++i)
         if (!registry.insert(keys[i])) return false;
     if (registry.size() != kKeys) return false;
-    if (registry.capacity() <= 1024u) return false;  // grew at least once
+    // It must have grown past the first block at least once.
+    if (registry.capacity() <= NmsRegistry::kMinCapacity) return false;
 
     // Duplicates are idempotent, not new entries.
     if (!registry.insert(keys[0])) return false;
     if (registry.size() != kKeys) return false;
 
     // The reserved keys are never members.
-    if (registry.insert(0u)) return false;
-    if (registry.insert(NmsRegistry::kNmsErased)) return false;
-    if (registry.contains(0u) || registry.contains(NmsRegistry::kNmsErased)) return false;
+    if (registry.insert(NmsRegistry::kReservedZeroKey)) return false;
+    if (registry.insert(NmsRegistry::kReservedErasedKey)) return false;
+    if (registry.contains(NmsRegistry::kReservedZeroKey) ||
+        registry.contains(NmsRegistry::kReservedErasedKey))
+        return false;
 
     // Erase every other key; the rest must survive, including across the
     // tombstone-heavy table.
@@ -453,7 +634,8 @@ extern "C" bool zpatch_nms_registry_selftest() noexcept
 
     // Churn: repeated erase-all/re-insert cycles must stay bounded instead of
     // doubling on tombstones alone.
-    for (uint32_t cycle = 0; cycle < 8; ++cycle)
+    constexpr uint32_t kChurnCycles = 8u;
+    for (uint32_t cycle = 0; cycle < kChurnCycles; ++cycle)
     {
         for (uint32_t i = 0; i < kKeys; ++i) registry.erase(keys[i]);
         if (registry.size() != 0u) return false;
@@ -461,14 +643,17 @@ extern "C" bool zpatch_nms_registry_selftest() noexcept
             if (!registry.insert(keys[i])) return false;
     }
     if (!registry.contains(keys[kKeys - 1])) return false;
-    return registry.capacity() <= 4u * kKeys;
+    constexpr size_t kMaxChurnCapacityFactor = 4u;
+    return registry.capacity() <= kMaxChurnCapacityFactor * kKeys;
 }
 
 // The CRageAllocator vtable, entry order and per-entry conventions as the
-// original's 0x100B5038 (see the individual methods above).
+// original's 0x100B5038 (see the individual methods above). The uintptr_t
+// entries are the ABI itself: a vtable is an array of code addresses in the
+// original's data layout, which is why the addresses are stored, not typed.
 extern "C"
 {
-uintptr_t zpatch_nms_vtable[24] =
+uintptr_t zpatch_nms_vtable[kNmsVtableEntries] =
 {
         reinterpret_cast<uintptr_t>(&abi_nms_ctor),         // [0] 0x10038640
         reinterpret_cast<uintptr_t>(&abi_nms_reject_ptr),   // [1] 0x10038350
