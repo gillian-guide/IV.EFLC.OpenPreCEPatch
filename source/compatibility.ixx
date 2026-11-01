@@ -67,12 +67,14 @@ extern "C" void abi_gfwl_patch() noexcept
         }
         if (zpatch_gfwl_site != 0)
         {
-            uint32_t target = 0;
-            std::memcpy(&target,
-                        reinterpret_cast<const void*>(
-                            static_cast<uintptr_t>(zpatch_gfwl_site) + 30u),
-                        4);
-            // 0x10005427 writes *[site+30] without a null check.
+            // The handler's second write dereferences the operand at site+30
+            // (the dword holding the update-window flag address) and zeroes it;
+            // 0x10005427 does so without a null check.
+            constexpr ptrdiff_t kGfwlFlagAddressOperand = 30;
+            const uint32_t target = ReadDword(
+                reinterpret_cast<const uint8_t*>(
+                    static_cast<uintptr_t>(zpatch_gfwl_site)) +
+                kGfwlFlagAddressOperand);
             wp_dword(reinterpret_cast<void*>(target), 0);
         }
     }
@@ -140,7 +142,7 @@ static __declspec(naked) void abi_gfwl_stub()
         mov  dword ptr [esp + 0Ch], eax
         mov  dword ptr [esp + 10h], edx
         jmp  dword ptr [zpatch_gfwl_resume]
-        __emit 0CCh   // body delimiter for verify_hook_bodies (unreachable after jmp)
+        __emit 0CCh   // body delimiter for tools/opcep_bodycheck.py (unreachable)
     }
 }
 
@@ -261,10 +263,11 @@ namespace opp::features
         const GameImage& image = ctx.image;
 
         // The recovered handler wrote per-build RVAs. Each site is now the
-        // pre-write instruction window at that RVA (research 08 §3.2), so a build
-        // whose bytes do not match installs nothing instead of writing a stale
-        // address. The build gate stays because several windows also resolve on
-        // builds the original did not patch here.
+        // pre-write instruction window at that RVA (the rows proved by
+        // tools/opcep_sigcheck.py on the on-disk builds), so a build whose bytes
+        // do not match installs nothing instead of writing a stale address. The
+        // build gate stays because several windows also resolve on builds the
+        // original did not patch here.
         //
         // Every site is matched before the first write: the seven adjacent
         // one-byte NOPs live inside each other's windows, so a scan after a write
@@ -284,79 +287,100 @@ namespace opp::features
             return pattern.size() > 0 ? pattern.get(0).get<uint8_t>() : nullptr;
         };
 
-        // Patch 6 (1060) modded-file checks: one jump over the check, two flag
-        // bytes cleared, seven operand bytes NOPed, two short jumps forced.
+        // The two builds' windows: the same actions in the original order.
+        // 1.0.6.0 has one jump over the check, 1.0.7.0 two (the short +0x12 and
+        // the +0x87 one); the remaining five windows are shared except for the
+        // two short-jump windows' tails.
+        struct ModCheckRow final
+        {
+            const char* jump;
+            uintptr_t jump_delta;
+            const char* jump_alt;  // 1.0.7.0's second jump; null for 1.0.6.0
+            uintptr_t jump_alt_delta;
+            const char* clear_a;
+            const char* clear_b;
+            const char* nop_run;
+            const char* short_jump_a;
+            const char* short_jump_b;
+        };
+        constexpr ModCheckRow kRows[] = {
+            // 1.0.6.0 (1060): one jump over the check, two flag bytes cleared,
+            // seven operand bytes NOPed, two short jumps forced.
+            {"75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8",
+             kModCheckJumpDelta, nullptr, 0,
+             "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74",
+             "01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8",
+             "C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8",
+             "74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? 83 C4 ?? 68",
+             "74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F"},
+            // 1.0.7.0 (1070): the same shape with two jumps, and its own
+            // RVAs/signatures.
+            {"75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D",
+             kModCheckShortJumpDelta,
+             "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8", kModCheckJumpDelta,
+             "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74",
+             "01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8",
+             "C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8",
+             "74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? ?? ?? ?? 68",
+             "74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F"},
+        };
+
+        // The scanned sites. Every scan of a row happens before its first write:
+        // the windows overlap (the NOP run sits inside the others), so a scan
+        // after a write would miss the neighbours.
+        struct ModCheckSites final
+        {
+            uint8_t* jump;
+            uint8_t* jump_alt;
+            uint8_t* clear_a;
+            uint8_t* clear_b;
+            uint8_t* nop_run;
+            uint8_t* short_jump_a;
+            uint8_t* short_jump_b;
+        };
+
+        const auto find_row = [&](const ModCheckRow& row) {
+            ModCheckSites sites{};
+            sites.jump = findSite(row.jump);
+            if (row.jump_alt != nullptr)
+                sites.jump_alt = findSite(row.jump_alt);
+            sites.clear_a = findSite(row.clear_a);
+            sites.clear_b = findSite(row.clear_b);
+            sites.nop_run = findSite(row.nop_run);
+            sites.short_jump_a = findSite(row.short_jump_a);
+            sites.short_jump_b = findSite(row.short_jump_b);
+            return sites;
+        };
+
+        const auto apply_row = [&](const ModCheckRow& row, const ModCheckSites& sites) {
+            if (sites.jump != nullptr)
+                JumpTo(ctx, sites.jump, sites.jump + row.jump_delta);
+            if (sites.jump_alt != nullptr)
+                JumpTo(ctx, sites.jump_alt, sites.jump_alt + row.jump_alt_delta);
+            if (sites.clear_a != nullptr)
+                WriteValue<uint8_t>(ctx, sites.clear_a, kFlagOff);
+            if (sites.clear_b != nullptr)
+                WriteValue<uint8_t>(ctx, sites.clear_b, kFlagOff);
+            if (sites.nop_run != nullptr)
+            {
+                for (size_t i = 0; i < kModCheckNopCount; ++i)
+                    NopAt(ctx, sites.nop_run + i, 1);
+            }
+            if (sites.short_jump_a != nullptr)
+                WriteValue<uint8_t>(ctx, sites.short_jump_a, opp::ops::kJmpRel8);
+            if (sites.short_jump_b != nullptr)
+                WriteValue<uint8_t>(ctx, sites.short_jump_b, opp::ops::kJmpRel8);
+        };
+
         if (ctx.build == GameBuild::v1060)
         {
-            uint8_t* const jumpOverCheck =
-                findSite("75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8");
-            uint8_t* const clearA =
-                findSite("01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74");
-            uint8_t* const clearB =
-                findSite("01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8");
-            // The seven NOPs are consecutive bytes of one instruction run; the
-            // first byte is the anchor and the run is match+0..match+6.
-            uint8_t* const nopRun =
-                findSite("C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8");
-            uint8_t* const shortJumpA =
-                findSite("74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? 83 C4 ?? 68");
-            uint8_t* const shortJumpB =
-                findSite("74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F");
-
-            if (jumpOverCheck != nullptr)
-                JumpTo(ctx, jumpOverCheck, jumpOverCheck + kModCheckJumpDelta);
-            if (clearA != nullptr)
-                WriteValue<uint8_t>(ctx, clearA, kFlagOff);
-            if (clearB != nullptr)
-                WriteValue<uint8_t>(ctx, clearB, kFlagOff);
-            if (nopRun != nullptr)
-            {
-                for (size_t i = 0; i < kModCheckNopCount; ++i)
-                    NopAt(ctx, nopRun + i, 1);
-            }
-            if (shortJumpA != nullptr)
-                WriteValue<uint8_t>(ctx, shortJumpA, opp::ops::kJmpRel8);
-            if (shortJumpB != nullptr)
-                WriteValue<uint8_t>(ctx, shortJumpB, opp::ops::kJmpRel8);
+            const ModCheckSites sites = find_row(kRows[0]);
+            apply_row(kRows[0], sites);
         }
-
-        // Patch 7 (1070) modded-file checks: the same shape with two jumps, and
-        // its own RVAs/signatures.
         if (ctx.build == GameBuild::v1070)
         {
-            uint8_t* const jumpOverCheckA =
-                findSite("75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D");
-            uint8_t* const jumpOverCheckB =
-                findSite("75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8");
-            uint8_t* const clearA =
-                findSite("01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74");
-            uint8_t* const clearB =
-                findSite("01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8");
-            // Same run shape as 1.0.6.0, one build-earlier RVA.
-            uint8_t* const nopRun =
-                findSite("C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8");
-            uint8_t* const shortJumpA =
-                findSite("74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? ?? ?? ?? 68");
-            uint8_t* const shortJumpB =
-                findSite("74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F");
-
-            if (jumpOverCheckA != nullptr)
-                JumpTo(ctx, jumpOverCheckA, jumpOverCheckA + kModCheckShortJumpDelta);
-            if (jumpOverCheckB != nullptr)
-                JumpTo(ctx, jumpOverCheckB, jumpOverCheckB + kModCheckJumpDelta);
-            if (clearA != nullptr)
-                WriteValue<uint8_t>(ctx, clearA, kFlagOff);
-            if (clearB != nullptr)
-                WriteValue<uint8_t>(ctx, clearB, kFlagOff);
-            if (nopRun != nullptr)
-            {
-                for (size_t i = 0; i < kModCheckNopCount; ++i)
-                    NopAt(ctx, nopRun + i, 1);
-            }
-            if (shortJumpA != nullptr)
-                WriteValue<uint8_t>(ctx, shortJumpA, opp::ops::kJmpRel8);
-            if (shortJumpB != nullptr)
-                WriteValue<uint8_t>(ctx, shortJumpB, opp::ops::kJmpRel8);
+            const ModCheckSites sites = find_row(kRows[1]);
+            apply_row(kRows[1], sites);
         }
     }
 
@@ -368,9 +392,10 @@ namespace opp::features
 
         TraceArm("RemoveRGSCLoginRequirement");
 
-        // RemoveRGSCLoginRequirement: no option gate in the original. The
-        // pattern handles every build; 1.0.8.0 has an RVA fallback because the
-        // pattern is absent there (original handler 0x10045490).
+        // RemoveRGSCLoginRequirement: the original installs it unconditionally;
+        // this tree gates it on the option. The pattern handles every build;
+        // 1.0.8.0 has an RVA fallback because the pattern is absent there
+        // (original handler 0x10045490).
         if (ctx.Option("RemoveRGSCLoginRequirement", "0"))
         {
             const GameImage& image = ctx.image;
@@ -403,21 +428,34 @@ namespace opp::features
 
         TraceArm("SavegameFix");
 
-        // SavegameFix: 2 siginstalls, 1 sigwrite
+        // SavegameFix: 2 siginstalls, 1 sigwrite. Offsets are relative to the
+        // two matches: the five call sites before the loop's match, the jnz pair
+        // NOP'd at it, and the five calls around the second match.
         if (ctx.Option("SavegameFix", "1"))
         {
             const GameImage& image = ctx.image;
+            constexpr ptrdiff_t kCloseBeforeLoop = -73;
+            constexpr ptrdiff_t kCopyBeforeLoopA = -143;
+            constexpr ptrdiff_t kCopyBeforeLoopB = -176;
+            constexpr ptrdiff_t kMutexBeforeLoop = -280;
+            constexpr ptrdiff_t kNullBeforeLoop = -240;
+            constexpr size_t kLoopBranchLength = 2;
+            constexpr ptrdiff_t kMutexBeforeSecond = -86;
+            constexpr ptrdiff_t kNullBeforeSecond = -47;
+            constexpr ptrdiff_t kCopyAtSecond = 10;
+            constexpr ptrdiff_t kCopyAfterSecond = 90;
+            constexpr ptrdiff_t kCloseAfterSecond = 128;
 
             {
                 if (auto pattern = Pattern(image, "75 ? 83 C1 01 83 C0 01 83 F9 04"); pattern.size() > 0)
                 {
                     uint8_t* match = pattern.get(0).get<uint8_t>();
-                    CallTo(ctx, match - 73, OPP_BODY(abi_savegame_fix_close));
-                    CallTo(ctx, match - 143, OPP_BODY(abi_savegame_fix_copy));
-                    CallTo(ctx, match - 176, OPP_BODY(abi_savegame_fix_copy));
-                    CallTo(ctx, match - 280, OPP_BODY(abi_savegame_fix_mutex));
-                    CallTo(ctx, match - 240, OPP_BODY(abi_savegame_fix_null));
-                    NopAt(ctx, pattern.get(0).get<uint8_t>(), 2);
+                    CallTo(ctx, match + kCloseBeforeLoop, OPP_BODY(abi_savegame_fix_close));
+                    CallTo(ctx, match + kCopyBeforeLoopA, OPP_BODY(abi_savegame_fix_copy));
+                    CallTo(ctx, match + kCopyBeforeLoopB, OPP_BODY(abi_savegame_fix_copy));
+                    CallTo(ctx, match + kMutexBeforeLoop, OPP_BODY(abi_savegame_fix_mutex));
+                    CallTo(ctx, match + kNullBeforeLoop, OPP_BODY(abi_savegame_fix_null));
+                    NopAt(ctx, match, kLoopBranchLength);
                 }
             }
 
@@ -425,18 +463,17 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                CallTo(ctx, match - 86, OPP_BODY(abi_savegame_fix_mutex));
-                CallTo(ctx, match - 47, OPP_BODY(abi_savegame_fix_null));
-                CallTo(ctx, match + 10, OPP_BODY(abi_savegame_fix_copy));
-                CallTo(ctx, match + 90, OPP_BODY(abi_savegame_fix_copy));
-                CallTo(ctx, match + 128, OPP_BODY(abi_savegame_fix_close));
+                CallTo(ctx, match + kMutexBeforeSecond, OPP_BODY(abi_savegame_fix_mutex));
+                CallTo(ctx, match + kNullBeforeSecond, OPP_BODY(abi_savegame_fix_null));
+                CallTo(ctx, match + kCopyAtSecond, OPP_BODY(abi_savegame_fix_copy));
+                CallTo(ctx, match + kCopyAfterSecond, OPP_BODY(abi_savegame_fix_copy));
+                CallTo(ctx, match + kCloseAfterSecond, OPP_BODY(abi_savegame_fix_close));
             }
         }
 
     }
 
 
-    // SkipLauncher
     // GFWLProtectionDisabler (standalone GFWLProtectionDisabler2019.asi)
 
     void InstallGFWLProtectionDisabler(PatchContext& ctx)
