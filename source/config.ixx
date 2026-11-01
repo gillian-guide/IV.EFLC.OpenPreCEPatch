@@ -29,7 +29,7 @@ module;
 #include <string_view>
 #include <vector>
 #include "ini_template.hxx"
-#include <IniReader.h>
+#include "ini_file.h"
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -332,10 +332,8 @@ namespace opp
 
     void Config::Load()
     {
-        // The bundled reader parses the whole file here, once. Its document is
+        // The plain-TU reader parses the whole file here, once. Its document is
         // copied into the arena/index below; the reader is then discarded.
-        CIniReader reader(path_);
-
         struct Pending
         {
             uint32_t sectionOffset;
@@ -355,24 +353,20 @@ namespace opp
             return std::pair{offset, static_cast<uint32_t>(text.size())};
         };
 
-        // mINI's document is iterated in file order; its parser has already
-        // trimmed the names and collapsed duplicate keys last-wins.
-        for (const std::string& sectionName : reader.GetSections())
+        // The document is iterated in file order; the reader has already trimmed
+        // the names and collapsed duplicate keys last-wins.
+        for (const ini::Entry& entry : ini::ReadDocument(path_))
         {
-            for (const std::string& keyName : reader.GetKeys(sectionName))
-            {
-                const std::string raw = reader.GetRawValue(sectionName, keyName);
-                bool absent = false;
-                const std::string_view value = StripQuotes(raw, absent);
-                if (absent)
-                    continue;  // a lone quote: mINI falls back to the default
+            bool absent = false;
+            const std::string_view value = StripQuotes(entry.value, absent);
+            if (absent)
+                continue;  // a lone quote: mINI falls back to the default
 
-                const auto [sectionOffset, sectionLength] = append(sectionName);
-                const auto [keyOffset, keyLength] = append(keyName);
-                const auto [valueOffset, valueLength] = append(value);
-                pending.push_back({sectionOffset, sectionLength, keyOffset, keyLength,
-                                   valueOffset, valueLength});
-            }
+            const auto [sectionOffset, sectionLength] = append(entry.section);
+            const auto [keyOffset, keyLength] = append(entry.key);
+            const auto [valueOffset, valueLength] = append(value);
+            pending.push_back({sectionOffset, sectionLength, keyOffset, keyLength,
+                               valueOffset, valueLength});
         }
 
         entries_.reserve(pending.size());
@@ -629,7 +623,6 @@ namespace opp
 
     namespace
     {
-        constexpr std::string_view kMissing = "\x01opcep-missing";
         constexpr const char* kOwnName = "IV.EFLC.OpenPreCEPatch.ini";
         constexpr const char* kLegacyName = "ZolikaPatch.ini";
 
@@ -760,17 +753,16 @@ namespace opp
             return keys;
         }
 
-        bool Has(CIniReader& ini, const char* section, const char* key, std::string& value)
+        bool Has(const ini::Reader& ini, const char* section, const char* key, std::string& value)
         {
-            value = ini.ReadString(section, key, kMissing);
-            return value != kMissing;
+            return ini.Has(section, key, value);
         }
 
         // The old file keeps every option in [Options]. The grouped file uses
         // subsystem sections, so a conversion must look in both places (and in
         // every section, for a partially converted file). The section list is
         // OptionSections(), the same one the option lookup uses.
-        std::string ReadLegacy(CIniReader& ini, const char* key, const char* section,
+        std::string ReadLegacy(const ini::Reader& ini, const char* key, const char* section,
                                const char* defaultValue)
         {
             std::string value;
@@ -797,7 +789,7 @@ namespace opp
             return file.good();
         }
 
-        std::string BuildFromLegacy(CIniReader& legacy)
+        std::string BuildFromLegacy(const ini::Reader& legacy)
         {
             std::string misc;
             const bool hasMisc = Has(legacy, "Options", "MiscFixes", misc) ||
@@ -860,7 +852,7 @@ namespace opp
                 {
                     const std::string prefix = "Car" + std::to_string(i);
                     const std::string name =
-                        legacy.ReadString(table, prefix + "Name", "");
+                        legacy.Read(table, prefix + "Name", "");
                     if (name.empty())
                         continue;
 
@@ -870,7 +862,7 @@ namespace opp
                         any = true;
                     }
 
-                    const std::string value = legacy.ReadString(table, prefix + suffix, "0");
+                    const std::string value = legacy.Read(table, prefix + suffix, "0");
                     out << prefix << "Name = " << name << '\n';
                     out << prefix << suffix << " = " << value << '\n';
                 }
@@ -915,7 +907,7 @@ namespace opp
         if (std::filesystem::exists(legacy))
         {
             const std::string legacyText = ReadText(legacy);
-            CIniReader reader(std::filesystem::absolute(legacy));
+            ini::Reader reader(std::filesystem::absolute(legacy));
             const std::string text = BuildFromLegacy(reader);
 
             // Anything the template has no row for cannot be carried over. Name

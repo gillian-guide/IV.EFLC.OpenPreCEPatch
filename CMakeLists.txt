@@ -55,6 +55,7 @@ set(OPCEP_MODULES
 
 set(OPCEP_CORE_SOURCES
     external/hooking/Hooking.Patterns.cpp
+    source/ini_file.cpp
     source/patch_impl.cpp
 )
 
