@@ -82,59 +82,19 @@ extern "C" char abi_death_music_install() noexcept
     }
     if (zpatch_death_music_site != 0)
     {
+        // The original randomises the track push immediate to 1..5:
+        // `rand() % kDeathMusicTrackCount + kFirstDeathMusicTrack`.
+        constexpr int kDeathMusicTrackCount = 5;
+        constexpr int kFirstDeathMusicTrack = 1;
         auto* site = reinterpret_cast<uint8_t*>(
             static_cast<uintptr_t>(zpatch_death_music_site) + 1);
         injector::WriteMemory<uint8_t>(  // push imm8
-            injector::raw_ptr(site), static_cast<uint8_t>(std::rand() % 5 + 1), true);
+            injector::raw_ptr(site),
+            static_cast<uint8_t>(std::rand() % kDeathMusicTrackCount +
+                                 kFirstDeathMusicTrack),
+            true);
     }
     return 1;
-}
-
-// BorderlessWindowed: the two window-proc shims (0x10005890 = Unicode /
-// 0x10005900 = ANSI). The installer replaces the game's `call [DefWindowProc]`
-// with E8 -> body and NOPs the leftover byte; the body does the one-time style
-// fixup then defers to the real DefWindowProc. Its `ret 0x10` consumes the
-// DefWindowProc argument slots like the replaced call, so the game's own
-// `pop edi/esi/ebp/ebx; add esp,0x10; ret 0x10` still unwinds correctly.
-extern "C" LRESULT __stdcall abi_borderless_w(HWND hwnd, UINT msg, WPARAM wparam,
-                                              LPARAM lparam)
-{
-    if (!zpatch_borderless_w_done)
-    {
-        SetWindowPos(hwnd, reinterpret_cast<HWND>(static_cast<INT_PTR>(-2)), 0, 0, 0, 0, 3);
-        // Clear caption/sysmenu/thickframe/minimise/maximise (0xFF30FFFF) and
-        // the topmost extended bit; both are the original's style masks.
-        constexpr LONG kBorderlessStyleMask = static_cast<LONG>(0xFF30FFFFu);
-        static_assert(kBorderlessStyleMask ==
-                      ~static_cast<LONG>(WS_CAPTION | WS_SYSMENU | WS_THICKFRAME |
-                                         WS_MINIMIZEBOX | WS_MAXIMIZEBOX));
-        SetWindowLongA(hwnd, GWL_STYLE,
-                       GetWindowLongA(hwnd, GWL_STYLE) & kBorderlessStyleMask);
-        SetWindowLongA(hwnd, GWL_EXSTYLE,
-                       GetWindowLongA(hwnd, GWL_EXSTYLE) & ~static_cast<LONG>(WS_EX_TOPMOST));
-        zpatch_borderless_w_done = 1;
-    }
-    return DefWindowProcW(hwnd, msg, wparam, lparam);
-}
-extern "C" LRESULT __stdcall abi_borderless_a(HWND hwnd, UINT msg, WPARAM wparam,
-                                              LPARAM lparam)
-{
-    if (!zpatch_borderless_a_done)
-    {
-        SetWindowPos(hwnd, reinterpret_cast<HWND>(static_cast<INT_PTR>(-2)), 0, 0, 0, 0, 3);
-        // Clear caption/sysmenu/thickframe/minimise/maximise (0xFF30FFFF) and
-        // the topmost extended bit; both are the original's style masks.
-        constexpr LONG kBorderlessStyleMask = static_cast<LONG>(0xFF30FFFFu);
-        static_assert(kBorderlessStyleMask ==
-                      ~static_cast<LONG>(WS_CAPTION | WS_SYSMENU | WS_THICKFRAME |
-                                         WS_MINIMIZEBOX | WS_MAXIMIZEBOX));
-        SetWindowLongA(hwnd, GWL_STYLE,
-                       GetWindowLongA(hwnd, GWL_STYLE) & kBorderlessStyleMask);
-        SetWindowLongA(hwnd, GWL_EXSTYLE,
-                       GetWindowLongA(hwnd, GWL_EXSTYLE) & ~static_cast<LONG>(WS_EX_TOPMOST));
-        zpatch_borderless_a_done = 1;
-    }
-    return DefWindowProcA(hwnd, msg, wparam, lparam);
 }
 }  // extern "C"
 
@@ -165,7 +125,11 @@ namespace opp::features
                 {
                     auto* match = pattern.get(0).get<uint8_t>();
 
-                    NopAt(ctx, match - 9, 9);
+                    // The nine-byte argument-setup sequence before the
+                    // `cmp [ebp+18], 1C` check is NOP'd by the original.
+                    constexpr ptrdiff_t kPipeBombNopOffset = -9;
+                    constexpr size_t kPipeBombNopLength = 9;
+                    NopAt(ctx, match + kPipeBombNopOffset, kPipeBombNopLength);
                 }
             }
         }
@@ -180,23 +144,29 @@ namespace opp::features
 
         TraceArm("RestoreDeathMusic");
 
-        // RestoreDeathMusic: 3 siginstalls
+        // RestoreDeathMusic: 3 siginstalls. The first two call sites are 13
+        // bytes before their matches (the E8 replaced there); the third is the
+        // call at the match itself.
         if (ctx.Option("RestoreDeathMusic", "0"))
         {
             const GameImage& image = ctx.image;
+            constexpr ptrdiff_t kCallBeforeFirstSite = -13;
+            constexpr ptrdiff_t kCallBeforeSecondSite = -13;
 
             if (auto pattern = Pattern(image, "0F 57 C0 F3 0F 11 86 20 02 00 00"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                CallTo(ctx, match - 13, OPP_BODY(abi_death_music_install));
+                CallTo(ctx, match + kCallBeforeFirstSite,
+                       OPP_BODY(abi_death_music_install));
             }
 
             if (auto pattern = Pattern(image, "C7 86 04 02 00 00 04 00 00 00 E9"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                CallTo(ctx, match - 13, OPP_BODY(abi_death_music_enabled));
+                CallTo(ctx, match + kCallBeforeSecondSite,
+                       OPP_BODY(abi_death_music_enabled));
             }
 
             if (auto pattern = Pattern(image, "E8 ? ? ? ? 84 C0 74 C6 8B BE"); pattern.size() > 0)

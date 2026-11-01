@@ -115,9 +115,6 @@ extern "C" uint32_t zpatch_copsirens_models[512]; // dword_10159380
 extern "C" uint32_t zpatch_popuplights_models[512];  // dword_1015CE28
 extern "C" uint32_t zpatch_wheelangle_models[512];   // dword_1015A538
 extern "C" uint32_t zpatch_wheelangle_angles[512];   // dword_10159D38
-// BorderlessWindowed: the two one-shot style-fixup flags.
-extern "C" uint8_t zpatch_borderless_w_done;  // byte_101A8445
-extern "C" uint8_t zpatch_borderless_a_done;  // byte_101A8444
 // SpeedupBugFix: eight pointers to the game's timing float constants.
 extern "C" uint32_t zpatch_speedup_t4c;  // dword_1015934C
 extern "C" uint32_t zpatch_speedup_t50;  // dword_10159350

@@ -488,8 +488,6 @@ extern "C"
     uint32_t zpatch_popuplights_models[512] = {}; // dword_1015CE28
     uint32_t zpatch_wheelangle_models[512] = {};  // dword_1015A538
     uint32_t zpatch_wheelangle_angles[512] = {};  // dword_10159D38
-    uint8_t zpatch_borderless_w_done = 0;         // byte_101A8445
-    uint8_t zpatch_borderless_a_done = 0;         // byte_101A8444
     uint32_t zpatch_speedup_t4c = 0;              // dword_1015934C
     uint32_t zpatch_speedup_t50 = 0;              // dword_10159350
     uint32_t zpatch_speedup_t54 = 0;              // dword_10159354

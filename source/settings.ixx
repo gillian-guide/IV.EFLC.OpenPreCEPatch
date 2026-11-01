@@ -111,8 +111,16 @@ void zpatch_copy_wpath(wchar_t* dst, size_t cap, const wchar_t* src) noexcept
 }
 }  // namespace
 
-// The cert cap the original's strcpy_s/wcscpy_s path copies use.
+// The 0x200 cap the original's strcpy_s/wcscpy_s path copies use.
 constexpr size_t kSettingsPathCapacity = 0x200u;
+
+// The game's episode selector values (1 = TLAD, 2 = TBoGT; anything else is the
+// base game), and the capacities of the three path buffers the step builds.
+constexpr int kEpisodeTlad = 1;
+constexpr int kEpisodeTbogt = 2;
+constexpr size_t kAnsiIvCapacity = 16;
+constexpr size_t kAnsiEpisodeCapacity = 32;
+constexpr size_t kWideEpisodeCapacity = 32;
 
 extern "C" void zpatch_local_settings_step() noexcept
 {
@@ -123,19 +131,19 @@ extern "C" void zpatch_local_settings_step() noexcept
                             : 0;
     const char* ansi_name = "GTA IV";
     const wchar_t* wide_name = L"GTA IV";
-    if (episode == 1)
+    if (episode == kEpisodeTlad)
     {
         ansi_name = "TLaD";
         wide_name = L"TLaD";
     }
-    else if (episode == 2)
+    else if (episode == kEpisodeTbogt)
     {
         ansi_name = "TBoGT";
         wide_name = L"TBoGT";
     }
-    char ansi_iv[16];
-    char ansi_episode[32];
-    wchar_t wide_episode[32];
+    char ansi_iv[kAnsiIvCapacity];
+    char ansi_episode[kAnsiEpisodeCapacity];
+    wchar_t wide_episode[kWideEpisodeCapacity];
     // sub_10050D10 copies the literal "\saves\GTA IV\" into ansi_iv, independent
     // of the episode.
     zpatch_build_ansi_path(ansi_iv, "GTA IV");
@@ -163,6 +171,9 @@ extern "C" void zpatch_local_settings_step() noexcept
 // @exact 0x100512F0 LocalSettingsPath detour: entered via E9 at the path-setup
 // function's epilogue (game 0x856EE6, swallowing pop edi/esi/ebx; ret plus one
 // int3 pad), runs the path-rewrite helper between pushad/popad and replays it.
+// Contract: no arguments; entered by JMP, never called; pushad/popad preserve
+// every GPR and EFLAGS, and the three pops + ret reproduce the overwritten
+// epilogue so the caller's stack frame is unchanged.
 [[maybe_unused]] static __declspec(naked) void abi_local_settings_detour()
 {
     __asm {
@@ -173,12 +184,14 @@ extern "C" void zpatch_local_settings_step() noexcept
         pop esi
         pop ebx
         ret
-        __emit 0CCh   // body delimiter for verify_hook_bodies (unreachable after ret)
+        __emit 0CCh   // body delimiter for tools/opcep_bodycheck.py (unreachable)
     }
 }
 // @exact 0x10051300 LocalSettingsPath fallback detour (pattern absent on
 // 1.0.8.0): same helper, then re-issues the original 5-arg call through ESI and
-// the two-pop epilogue.
+// the two-pop epilogue. Contract: as above; ESI holds the call target the
+// original epilogue's caller set, and the four pushed zeros + 0x1C replay its
+// arguments.
 [[maybe_unused]] static __declspec(naked) void abi_local_settings_fallback_detour()
 {
     __asm {
@@ -193,7 +206,7 @@ extern "C" void zpatch_local_settings_step() noexcept
         pop esi
         pop edi
         ret
-        __emit 0CCh   // body delimiter for verify_hook_bodies (unreachable after ret)
+        __emit 0CCh   // body delimiter for tools/opcep_bodycheck.py (unreachable)
     }
 }
 }  // extern "C"

@@ -48,7 +48,10 @@ namespace opp
         // The achievement hook and the install pass log from different threads.
         // Format one whole line and emit it with a single call so lines cannot
         // interleave (the CRT locks the stream for the duration of each write).
-        char line[2048];
+        // The capacity fits the longest line an arm emits (a signature miss plus
+        // its arm name); a longer one is truncated, never split.
+        constexpr size_t kLogLineCapacity = 2048;
+        char line[kLogLineCapacity];
         va_list args;
         va_start(args, format);
         const int used = std::vsnprintf(line, sizeof(line), format, args);
