@@ -22,12 +22,12 @@ default and the game versions each option applies to.
 - Fix the high-FPS problems: cutscenes, bike physics, the 300 FPS speedup, VSync, driveby aim and the mouse deadzone.
 - Raise the PtrNode and vehicle limits, remove the livery limit and reimplement memory allocation.
 - Fix the emissive-light, reversing-light and LOD fade-in bugs, and add car, object and building shadows.
-- Add dual headlights, full-quality reflections and high-quality night shadows.
+- Add dual headlights and night shadows.
 - Add compatibility for newer `script.img`/`radiohud` files, newer savefiles, any `.sco` file and the Complete Edition folder structure and files.
 - Remove the GFWL savegame CRC check, Social Club login, GFWL update popup and modded-file checks.
 - Add the APC/Buzzard, explosive weapons, police weapons and TBoGT aircraft height limit.
 - Add the popup headlights, sirens, plane parts, engine block and steering wheel support.
-- Add the pipe-bomb icon, raw `.ide` hashes, `gta.dat` override, death music, IVMenuAPI options, Niko ped clothes and the GTAC spawn log.
+- Add the pipe-bomb icon, raw `.ide` hashes, `gta.dat` override, death music, Niko ped clothes and the GTAC spawn log.
 - Shorten the intro screens, skip the main menu, move savegames and settings into the game folder, add borderless windowed mode, keep rendering while unfocused, and fix the VRAM detection.
 
 ## Installation
