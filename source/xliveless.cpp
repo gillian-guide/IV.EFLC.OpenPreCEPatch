@@ -24,12 +24,6 @@ constexpr std::uint8_t kNopByte = 0x90;
 constexpr std::uint8_t kJumpOpcode = 0xE9;
 constexpr std::uint16_t kCollectorStubLength = 4;
 
-template <typename T, std::size_t N>
-constexpr std::size_t CountOf(const T (&)[N]) noexcept
-{
-	return N;
-}
-
 // The main table's patches: stores relative to a signature match, in the order
 // the original handler (0x10045CE0) applies them. Byte arrays stay literal hex
 // so they compare directly against the original handler's data;
@@ -208,35 +202,35 @@ constexpr SkipLauncherWrite kSkipEntryWrites_24[] = {
 };
 
 constexpr SkipLauncherEntry kSkipLauncherEntries[] = {
-	{"84 DB 0F 85 43 01 00 00 8D 4C 24 28 8B C1", kSkipEntryWrites_0, CountOf(kSkipEntryWrites_0)},
+	{"84 DB 0F 85 43 01 00 00 8D 4C 24 28 8B C1", kSkipEntryWrites_0, std::size(kSkipEntryWrites_0)},
 	{"68 ? ? ? ? 89 35 ? ? ? ? E8 ? ? ? ? 83 C4 04 84 C0 0F 84", nullptr, 0},
-	{"74 EC 38 5E 06 74 E7 68", kSkipEntryWrites_2, CountOf(kSkipEntryWrites_2)},
-	{"74 C4 8B 07 3B 46 18 75 BD 68", kSkipEntryWrites_3, CountOf(kSkipEntryWrites_3)},
-	{"3B 56 18 0F 85", kSkipEntryWrites_4, CountOf(kSkipEntryWrites_4)},
-	{"3B 4E 18 0F 85", kSkipEntryWrites_5, CountOf(kSkipEntryWrites_5)},
+	{"74 EC 38 5E 06 74 E7 68", kSkipEntryWrites_2, std::size(kSkipEntryWrites_2)},
+	{"74 C4 8B 07 3B 46 18 75 BD 68", kSkipEntryWrites_3, std::size(kSkipEntryWrites_3)},
+	{"3B 56 18 0F 85", kSkipEntryWrites_4, std::size(kSkipEntryWrites_4)},
+	{"3B 4E 18 0F 85", kSkipEntryWrites_5, std::size(kSkipEntryWrites_5)},
 	{"0F 85 ? ? ? ? 8B 8C 24 ? ? ? ? 5F 5E 5B 33 CC C6", kSkipEntryWrites_6,
-		CountOf(kSkipEntryWrites_6)},
-	{"3B 46 18 75 BD", kSkipEntryWrites_7, CountOf(kSkipEntryWrites_7)},
+		std::size(kSkipEntryWrites_6)},
+	{"3B 46 18 75 BD", kSkipEntryWrites_7, std::size(kSkipEntryWrites_7)},
 	{"57 51 C7 44 24 ? ? ? ? ? C7 44 24 ? ? ? ? ? C7 44 24", kSkipEntryWrites_8,
-		CountOf(kSkipEntryWrites_8)},
-	{"8B 56 1C 3B 56 20 ? ? 6A 00 6A 00", kSkipEntryWrites_9, CountOf(kSkipEntryWrites_9)},
-	{"89 35 ? ? ? ? E8 ? ? ? ? 83 C4 04 84 C0", kSkipEntryWrites_10, CountOf(kSkipEntryWrites_10)},
-	{"8B 50 2C 3B 50 30", kSkipEntryWrites_11, CountOf(kSkipEntryWrites_11)},
-	{"8B 48 2C 83 EC 78", kSkipEntryWrites_12, CountOf(kSkipEntryWrites_12)},
-	{"8B 48 2C 83 EC 74", kSkipEntryWrites_13, CountOf(kSkipEntryWrites_13)},
-	{"8B 48 2C 3B 48 30 74 03", kSkipEntryWrites_14, CountOf(kSkipEntryWrites_14)},
-	{"8B 48 2C 3B 48 30 53", kSkipEntryWrites_15, CountOf(kSkipEntryWrites_15)},
-	{"8B 48 2C 3B 48 30 74 11", kSkipEntryWrites_16, CountOf(kSkipEntryWrites_16)},
-	{"8B 48 2C 3B 48 30 75 DC 8D 54 24 18", kSkipEntryWrites_17, CountOf(kSkipEntryWrites_17)},
-	{"8B 48 2C 3B 48 30 75 DC 8D 54 24 1C", kSkipEntryWrites_18, CountOf(kSkipEntryWrites_18)},
-	{"8B 0D ? ? ? ? 8B 51 2C", kSkipEntryWrites_19, CountOf(kSkipEntryWrites_19)},
-	{"51 53 55 56 57 8B 3D ? ? ? ? 8B 47 2C", kSkipEntryWrites_20, CountOf(kSkipEntryWrites_20)},
-	{"3B C7 0F 85 ? ? ? ? 85 C0", kSkipEntryWrites_21, CountOf(kSkipEntryWrites_21)},
+		std::size(kSkipEntryWrites_8)},
+	{"8B 56 1C 3B 56 20 ? ? 6A 00 6A 00", kSkipEntryWrites_9, std::size(kSkipEntryWrites_9)},
+	{"89 35 ? ? ? ? E8 ? ? ? ? 83 C4 04 84 C0", kSkipEntryWrites_10, std::size(kSkipEntryWrites_10)},
+	{"8B 50 2C 3B 50 30", kSkipEntryWrites_11, std::size(kSkipEntryWrites_11)},
+	{"8B 48 2C 83 EC 78", kSkipEntryWrites_12, std::size(kSkipEntryWrites_12)},
+	{"8B 48 2C 83 EC 74", kSkipEntryWrites_13, std::size(kSkipEntryWrites_13)},
+	{"8B 48 2C 3B 48 30 74 03", kSkipEntryWrites_14, std::size(kSkipEntryWrites_14)},
+	{"8B 48 2C 3B 48 30 53", kSkipEntryWrites_15, std::size(kSkipEntryWrites_15)},
+	{"8B 48 2C 3B 48 30 74 11", kSkipEntryWrites_16, std::size(kSkipEntryWrites_16)},
+	{"8B 48 2C 3B 48 30 75 DC 8D 54 24 18", kSkipEntryWrites_17, std::size(kSkipEntryWrites_17)},
+	{"8B 48 2C 3B 48 30 75 DC 8D 54 24 1C", kSkipEntryWrites_18, std::size(kSkipEntryWrites_18)},
+	{"8B 0D ? ? ? ? 8B 51 2C", kSkipEntryWrites_19, std::size(kSkipEntryWrites_19)},
+	{"51 53 55 56 57 8B 3D ? ? ? ? 8B 47 2C", kSkipEntryWrites_20, std::size(kSkipEntryWrites_20)},
+	{"3B C7 0F 85 ? ? ? ? 85 C0", kSkipEntryWrites_21, std::size(kSkipEntryWrites_21)},
 	{"0F 85 ? ? ? ? 85 C0 0F 84 ? ? ? ? E8 ? ? ? ? 85 D2", kSkipEntryWrites_22,
-		CountOf(kSkipEntryWrites_22)},
-	{"83 EC 24 A1 ? ? ? ? 8B 48 14 53 55 56 57", kSkipEntryWrites_23, CountOf(kSkipEntryWrites_23)},
+		std::size(kSkipEntryWrites_22)},
+	{"83 EC 24 A1 ? ? ? ? 8B 48 14 53 55 56 57", kSkipEntryWrites_23, std::size(kSkipEntryWrites_23)},
 	{"83 EC 08 8B 0D ? ? ? ? 8B 51 14 8D 04 24 50 6A 00 52", kSkipEntryWrites_24,
-		CountOf(kSkipEntryWrites_24)},
+		std::size(kSkipEntryWrites_24)},
 };
 
 constexpr SkipLauncherCollector kSkipLauncherCollectors[] = {
@@ -280,7 +274,7 @@ constexpr SkipLauncherCollectedTarget kDfaCollectedTargets_0[] = {
 
 constexpr SkipLauncherCollectedInstall kSkipLauncherDfaCollected[] = {
 	{"A1 ? ? ? ? B9 A7 FA DC 5C F7 E1 8B 0D ? ? ? ? 33 F6", kDfaCollectedTargets_0,
-		CountOf(kDfaCollectedTargets_0)},
+		std::size(kDfaCollectedTargets_0)},
 };
 
 // A signature scan over the caller-owned image, in the original's hook::pattern
@@ -302,31 +296,31 @@ bool InBounds(GameImage image, const std::uint8_t* site, std::size_t length) noe
 
 const SkipLauncherEntry* SkipLauncherEntries(std::size_t& count) noexcept
 {
-	count = CountOf(kSkipLauncherEntries);
+	count = std::size(kSkipLauncherEntries);
 	return kSkipLauncherEntries;
 }
 
 const SkipLauncherCollector* SkipLauncherCollectors(std::size_t& count) noexcept
 {
-	count = CountOf(kSkipLauncherCollectors);
+	count = std::size(kSkipLauncherCollectors);
 	return kSkipLauncherCollectors;
 }
 
 const SkipLauncherInstall* SkipLauncherDfaInstalls(std::size_t& count) noexcept
 {
-	count = CountOf(kSkipLauncherDfaInstalls);
+	count = std::size(kSkipLauncherDfaInstalls);
 	return kSkipLauncherDfaInstalls;
 }
 
 const SkipLauncherInstall* SkipLauncherRomInstalls(std::size_t& count) noexcept
 {
-	count = CountOf(kSkipLauncherRomInstalls);
+	count = std::size(kSkipLauncherRomInstalls);
 	return kSkipLauncherRomInstalls;
 }
 
 const SkipLauncherCollectedInstall* SkipLauncherDfaCollected(std::size_t& count) noexcept
 {
-	count = CountOf(kSkipLauncherDfaCollected);
+	count = std::size(kSkipLauncherDfaCollected);
 	return kSkipLauncherDfaCollected;
 }
 
@@ -649,15 +643,15 @@ DWORD WINAPI RomThread(LPVOID)
 		if (!atom)
 			return 1;
 	}
-	CreateWindowExA(0, reinterpret_cast<LPCSTR>(static_cast<std::uintptr_t>(atom)), "", 0, 0, 0, 0,
-	                0, HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
+	CreateWindowExA(0, reinterpret_cast<LPCSTR>(MAKEINTATOM(atom)), "", 0, 0, 0, 0, 0,
+	                HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
 	MSG msg;
 	while (GetMessageA(&msg, nullptr, 0, 0))
 	{
 		TranslateMessage(&msg);
 		DispatchMessageA(&msg);
 	}
-	UnregisterClassA(reinterpret_cast<LPCSTR>(static_cast<std::uintptr_t>(atom)), wc.hInstance);
+	UnregisterClassA(reinterpret_cast<LPCSTR>(MAKEINTATOM(atom)), wc.hInstance);
 	return 0;
 }
 

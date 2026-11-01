@@ -273,38 +273,38 @@ void ApplyLoadDLCs(const PatchContext& ctx)
 			// signature below is the research-08 candidate that verifies as exactly
 			// one hit at its site on this build; the gate is unchanged. Sites are
 			// scanned in ascending order, before any of them is written.
-			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52"); p.size() > 0)
+			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x4137CD
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x4137CD
 				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
 				// the original patches this site twice; keep the duplicate write
 				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
 			}
-			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); p.size() > 0)
+			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x41445C
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x41445C
 				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpA_1060.site(ctx.gameBase)), true); //jmp
 			}
-			if (auto p = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8"); p.size() > 0)
+			if (auto pattern = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x4144D4
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x4144D4
 				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
 				// duplicate write kept
 				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
 			}
-			if (auto p = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); p.size() > 0)
+			if (auto pattern = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x41450E
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x41450E
 				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpB_1060.site(ctx.gameBase)), true); //jmp
 			}
-			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); p.size() > 0)
+			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x41453A
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x41453A
 				injector::MakeCALL(site, reinterpret_cast<void*>(kLoadDlcsCall_1060.site(ctx.gameBase)), true); //call
 			}
-			if (auto p = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); p.size() > 0)
+			if (auto pattern = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x41453F
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x41453F
 				injector::MakeNOP(site, 12, true); //nop
 			}
 		}
@@ -315,38 +315,38 @@ void ApplyLoadDLCs(const PatchContext& ctx)
 			// signature below is the research-08 candidate that verifies as exactly
 			// one hit at its site on this build; the gate is unchanged. Sites are
 			// scanned in ascending order, before any of them is written.
-			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52"); p.size() > 0)
+			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x41356D
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x41356D
 				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
 				// the original patches this site twice; keep the duplicate write
 				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
 			}
-			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); p.size() > 0)
+			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x4141FC
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x4141FC
 				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpA_1070.site(ctx.gameBase)), true); //jmp
 			}
-			if (auto p = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E"); p.size() > 0)
+			if (auto pattern = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x414274
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x414274
 				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
 				// duplicate write kept
 				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
 			}
-			if (auto p = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); p.size() > 0)
+			if (auto pattern = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x4142AE
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x4142AE
 				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpB_1070.site(ctx.gameBase)), true); //jmp
 			}
-			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); p.size() > 0)
+			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x4142DA
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x4142DA
 				injector::MakeCALL(site, reinterpret_cast<void*>(kLoadDlcsCall_1070.site(ctx.gameBase)), true); //call
 			}
-			if (auto p = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); p.size() > 0)
+			if (auto pattern = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x4142DF
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x4142DF
 				injector::MakeNOP(site, 12, true); //nop
 			}
 		}
@@ -357,38 +357,38 @@ void ApplyLoadDLCs(const PatchContext& ctx)
 			// signature below is the research-08 candidate that verifies as exactly
 			// one hit at its site on this build; the gate is unchanged. Sites are
 			// scanned in ascending order, before any of them is written.
-			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 4C 24 ?? 51 8D 94 24 ?? ?? ?? ?? 52"); p.size() > 0)
+			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 4C 24 ?? 51 8D 94 24 ?? ?? ?? ?? 52"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x48F558
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x48F558
 				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
 				// the original patches this site twice; keep the duplicate write
 				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
 			}
-			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); p.size() > 0)
+			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x49035C
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x49035C
 				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpA_1080.site(ctx.gameBase)), true); //jmp
 			}
-			if (auto p = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6"); p.size() > 0)
+			if (auto pattern = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x4903D4
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x4903D4
 				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
 				// duplicate write kept
 				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
 			}
-			if (auto p = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); p.size() > 0)
+			if (auto pattern = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x49040E
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x49040E
 				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpB_1080.site(ctx.gameBase)), true); //jmp
 			}
-			if (auto p = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); p.size() > 0)
+			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x49043A
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x49043A
 				injector::MakeCALL(site, reinterpret_cast<void*>(kLoadDlcsCall_1080.site(ctx.gameBase)), true); //call
 			}
-			if (auto p = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); p.size() > 0)
+			if (auto pattern = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x49043F
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x49043F
 				injector::MakeNOP(site, 12, true); //nop
 			}
 		}

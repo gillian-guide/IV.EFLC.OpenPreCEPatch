@@ -305,37 +305,37 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 			// The original wrote these packed-entry-stub bytes by RVA. Each
 			// signature below is the candidate research 08 verified as exactly one
 			// hit at its site on this build, re-validated by research 11.
-			if (auto p = Pattern(image, "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74"); p.size() > 0)
+			if (auto pattern = Pattern(image, "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x0038AC
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x0038AC
 				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); // stub byte -> 0
 			}
-			if (auto p = Pattern(image, "74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? 83 C4 ?? 68"); p.size() > 0)
+			if (auto pattern = Pattern(image, "74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? 83 C4 ?? 68"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x00392E
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00392E
 				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true); //jmp
 			}
-			if (auto p = Pattern(image, "01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8"); p.size() > 0)
+			if (auto pattern = Pattern(image, "01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x00397E
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00397E
 				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); // stub byte -> 0
 			}
-			if (auto p = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); p.size() > 0)
+			if (auto pattern = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x003982
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x003982
 				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksEntryJmp_1060.site(ctx.gameBase)), true); //jmp
 			}
-			if (auto p = Pattern(image, "74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F"); p.size() > 0)
+			if (auto pattern = Pattern(image, "74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x003A14
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x003A14
 				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true); //jmp
 			}
 			// The original NOPs the seven bytes at 0x42E7..0x42ED. One scan at the
 			// instruction plus match+0..+6 is equivalent and order-independent; the
 			// old per-byte windows relied on the ascending write order (research 11).
-			if (auto p = Pattern(image, "C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8"); p.size() > 0)
+			if (auto pattern = Pattern(image, "C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x0042E7..0x0042ED
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x0042E7..0x0042ED
 				injector::MakeNOP(site, 7, true); //nop x7
 			}
 		}
@@ -345,42 +345,42 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 			// The original wrote these packed-entry-stub bytes by RVA. Each
 			// signature below is the candidate research 08 verified as exactly one
 			// hit at its site on this build, re-validated by research 11.
-			if (auto p = Pattern(image, "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74"); p.size() > 0)
+			if (auto pattern = Pattern(image, "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x00388C
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00388C
 				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); // stub byte -> 0
 			}
-			if (auto p = Pattern(image, "75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D"); p.size() > 0)
+			if (auto pattern = Pattern(image, "75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x00389C
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00389C
 				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksMidJmp_1070.site(ctx.gameBase)), true); //jmp
 			}
-			if (auto p = Pattern(image, "74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? ?? ?? ?? 68"); p.size() > 0)
+			if (auto pattern = Pattern(image, "74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? ?? ?? ?? 68"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x00390E
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00390E
 				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true); //jmp
 			}
-			if (auto p = Pattern(image, "01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8"); p.size() > 0)
+			if (auto pattern = Pattern(image, "01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x00395E
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00395E
 				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); // stub byte -> 0
 			}
-			if (auto p = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); p.size() > 0)
+			if (auto pattern = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x003962
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x003962
 				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksCaseJmp_1070.site(ctx.gameBase)), true); //jmp
 			}
-			if (auto p = Pattern(image, "74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F"); p.size() > 0)
+			if (auto pattern = Pattern(image, "74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x0039F4
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x0039F4
 				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true); //jmp
 			}
 			// The original NOPs the seven bytes at 0x42C7..0x42CD; one scan at the
 			// instruction plus match+0..+6 replaces the seven per-byte windows
 			// (research 11 §5).
-			if (auto p = Pattern(image, "C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8"); p.size() > 0)
+			if (auto pattern = Pattern(image, "C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x0042C7..0x0042CD
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x0042C7..0x0042CD
 				injector::MakeNOP(site, 7, true); //nop x7
 			}
 		}
@@ -456,9 +456,9 @@ void ApplyPatch7RemoveModChecks(const PatchContext& ctx)
 			// signature below is the candidate research 08 verified as exactly one
 			// hit at its site on this build; the scans run in ascending address
 			// order so no candidate is read after an earlier site was overwritten.
-			if (auto p = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); p.size() > 0)
+			if (auto pattern = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x003982
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x003982
 				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksEntryJmp_1060.site(ctx.gameBase)), true); //jmp
 			}
 		}
@@ -469,14 +469,14 @@ void ApplyPatch7RemoveModChecks(const PatchContext& ctx)
 			// signature below is the candidate research 08 verified as exactly one
 			// hit at its site on this build; the scans run in ascending address
 			// order so no candidate is read after an earlier site was overwritten.
-			if (auto p = Pattern(image, "75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D"); p.size() > 0)
+			if (auto pattern = Pattern(image, "75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x00389C
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00389C
 				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksMidJmp_1070.site(ctx.gameBase)), true); //jmp
 			}
-			if (auto p = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); p.size() > 0)
+			if (auto pattern = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); pattern.size() > 0)
 			{
-				auto* site = p.get(0).get<std::uint8_t>(); // 0x003962
+				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x003962
 				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksCaseJmp_1070.site(ctx.gameBase)), true); //jmp
 			}
 		}

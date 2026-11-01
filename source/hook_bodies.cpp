@@ -132,6 +132,10 @@ constexpr std::uint32_t kNewFilesRegistrarKey = 0x2C89A1F9u;
 // NewSaves: header layout and the "SAVE" magic the reader checks.
 constexpr std::size_t kSaveHeaderSize = 0x110u;
 constexpr std::size_t kSaveMagicOffset = 0x0C;
+// The save-name buffers sub_10051FD0/1FE0 use: the game directory buffer and the
+// "<dir>\\<save name>" path built before converting.
+constexpr std::size_t kSaveDirectoryCapacity = 312;
+constexpr std::size_t kSaveFilePathCapacity = 560;
 // NewSaves' flag16 restore branch: 75 26 = jne +0x26 (the two bytes the original
 // writes back over the forced short jump).
 constexpr std::uint16_t kJneRel8Plus38 = 0x2675u;
@@ -1895,12 +1899,12 @@ extern "C" void abi_new_saves_prepare() noexcept
 	if (get_dir == nullptr)
 		get_dir = scan_game("55 8B EC 83 E4 F8 83 EC 4C 56 33 C0 8D 4C 24 28");
 	if (get_dir == nullptr) return;
-	char directory[312]{};
+	char directory[kSaveDirectoryCapacity]{};
 	char suffix = 0;
 	if (reinterpret_cast<std::uint8_t(__cdecl*)(int, char*, char*)>(
 	        const_cast<std::uint8_t*>(get_dir))(0, directory, &suffix) == 0)
 		return;
-	char path[560];
+	char path[kSaveFilePathCapacity];
 	std::snprintf(path, sizeof(path), "%s\\%s", directory, name);
 	abi_new_saves_convert(path);
 }
@@ -3988,10 +3992,11 @@ extern "C" LRESULT __stdcall abi_borderless_w(HWND hwnd, UINT msg, WPARAM wparam
 {
 	if (!zpatch_borderless_w_done)
 	{
-		SetWindowPos(hwnd, reinterpret_cast<HWND>(static_cast<INT_PTR>(-2)), 0, 0, 0, 0, 3);
+		SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
 		SetWindowLongA(hwnd, GWL_STYLE,
 		               GetWindowLongA(hwnd, GWL_STYLE) & static_cast<LONG>(kBorderlessStyleMask));
-		SetWindowLongA(hwnd, GWL_EXSTYLE, GetWindowLongA(hwnd, GWL_EXSTYLE) & ~static_cast<LONG>(8));
+		SetWindowLongA(hwnd, GWL_EXSTYLE,
+		               GetWindowLongA(hwnd, GWL_EXSTYLE) & ~static_cast<LONG>(WS_EX_TOPMOST));
 		zpatch_borderless_w_done = 1;
 	}
 	return DefWindowProcW(hwnd, msg, wparam, lparam);
@@ -4001,10 +4006,11 @@ extern "C" LRESULT __stdcall abi_borderless_a(HWND hwnd, UINT msg, WPARAM wparam
 {
 	if (!zpatch_borderless_a_done)
 	{
-		SetWindowPos(hwnd, reinterpret_cast<HWND>(static_cast<INT_PTR>(-2)), 0, 0, 0, 0, 3);
+		SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
 		SetWindowLongA(hwnd, GWL_STYLE,
 		               GetWindowLongA(hwnd, GWL_STYLE) & static_cast<LONG>(kBorderlessStyleMask));
-		SetWindowLongA(hwnd, GWL_EXSTYLE, GetWindowLongA(hwnd, GWL_EXSTYLE) & ~static_cast<LONG>(8));
+		SetWindowLongA(hwnd, GWL_EXSTYLE,
+		               GetWindowLongA(hwnd, GWL_EXSTYLE) & ~static_cast<LONG>(WS_EX_TOPMOST));
 		zpatch_borderless_a_done = 1;
 	}
 	return DefWindowProcA(hwnd, msg, wparam, lparam);

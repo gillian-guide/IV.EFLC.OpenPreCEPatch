@@ -396,6 +396,8 @@ void ApplyEpisodicVehicleSupport(const PatchContext& ctx)
 		             GameBuild::v1130, GameBuild::v12043}))
 		{
 
+			// The recovered check sites: the original writes one NOP run per site, in
+			// its row order (the first two blocks keep both hits of a multi-hit scan).
 			{
 				if (auto pattern = Pattern(image, "7C 18 0F BF 4E 2E"); pattern.size() > 0)
 				{
