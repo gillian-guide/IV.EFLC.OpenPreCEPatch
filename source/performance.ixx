@@ -189,34 +189,27 @@ namespace
 // (VirtualAlloc returns null and the insert is dropped) and keeps the same membership.
 CRITICAL_SECTION g_nms_lock;
 
-// One registry entry. The state is explicit so a key can never be confused with a marker:
-// Empty is a never-used slot, Occupied a live key, Erased a tombstone that still terminates
-// a probe chain. 8 bytes (key + state byte + padding), ~11 bytes per live pointer at the
-// 3/4 load factor.
+// One registry entry. The key is a 4-byte-aligned heap pointer, so its low bit is free:
+// 0 is Empty, 1 is Erased and every other value is the Occupied key. Keeping the state in
+// the key preserves the original's 4-byte slot table; the typed 8-byte version (key +
+// state + padding) doubled the registry's memory on every allocation, which is a real
+// regression on a 32-bit game near its limit.
 struct Slot final
 {
-    enum class State : uint8_t
-    {
-        empty,
-        occupied,
-        erased,
-    };
+    static constexpr uint32_t kEmpty = 0u;
+    static constexpr uint32_t kErased = 1u;
 
-    uint32_t key{};
-    State state{State::empty};
+    uint32_t value{};
 
-    bool IsEmpty() const noexcept { return state == State::empty; }
-    bool IsOccupied() const noexcept { return state == State::occupied; }
-    bool IsErased() const noexcept { return state == State::erased; }
+    bool IsEmpty() const noexcept { return value == kEmpty; }
+    bool IsOccupied() const noexcept { return value != kEmpty && value != kErased; }
+    bool IsErased() const noexcept { return value == kErased; }
+    uint32_t key() const noexcept { return value; }
 
-    void Occupy(uint32_t value) noexcept
-    {
-        key = value;
-        state = State::occupied;
-    }
-    void Erase() noexcept { state = State::erased; }
+    void Occupy(uint32_t key) noexcept { value = key; }
+    void Erase() noexcept { value = kErased; }
 };
-static_assert(sizeof(Slot) == 8u, "a typed slot is a key plus its state byte");
+static_assert(sizeof(Slot) == 4u, "the registry keeps the original's 4-byte slots");
 
 // The owning storage for the registry's slots: one VirtualAlloc block, its
 // capacity in slots and the two counters the probe policy needs. It is allocated
@@ -385,7 +378,7 @@ private:
             Slot& slot = table_.At(ProbeIndex(key, probe, mask));
             if (slot.IsEmpty())
                 return nullptr;
-            if (slot.IsOccupied() && slot.key == key)
+            if (slot.IsOccupied() && slot.key() == key)
                 return &slot;
         }
         return nullptr;
@@ -399,7 +392,7 @@ private:
             const Slot& slot = table_.At(ProbeIndex(key, probe, mask));
             if (slot.IsEmpty())
                 return nullptr;
-            if (slot.IsOccupied() && slot.key == key)
+            if (slot.IsOccupied() && slot.key() == key)
                 return &slot;
         }
         return nullptr;
@@ -429,7 +422,7 @@ private:
         {
             const size_t index = ProbeIndex(key, probe, mask);
             Slot& slot = table_.At(index);
-            if (slot.IsOccupied() && slot.key == key)
+            if (slot.IsOccupied() && slot.key() == key)
                 return true;
             if (slot.IsErased() && erased == kNoSlot)
                 erased = index;
@@ -480,7 +473,7 @@ private:
         {
             const Slot& slot = old.At(index);
             if (slot.IsOccupied())
-                InsertNoGrow(slot.key);
+                InsertNoGrow(slot.key());
         }
     }
 
