@@ -15,8 +15,8 @@ Three results per body:
         blindly: internal branch targets are compared as body-relative deltas,
         every other module address is bound original<->port and the binding is
         required to be a bijection over all bodies, and bindings the source
-        already documents (`src/rebased.h` slot comments and the
-        `FindGlobalSlot("dword_...")` publishes) must agree by symbol name.
+        already documents (`src/rebased.h` slot comments and the hook-bodies
+        unit's `kGlobalSlots` rows) must agree by symbol name.
   INFO  a compiled C++ replacement. Its contract is the documented instruction
         range: the original function's extent is disassembled and printed next
         to the source comment that documents the replacement. The tool never
@@ -58,6 +58,14 @@ DEFAULT_ORIGINAL = ROOT.parent / "game_refs/ZolikaPatch_original.asi.off"
 # relocated, never compared as a number.
 MODULE_LO = 0x10000000
 MODULE_HI = 0x10200000
+
+# The documented slot bindings the source carries: the `kGlobalSlots` table rows
+# and the older `if (slot_name == ...)` publishes the table replaced.
+TABLE_SLOT = re.compile(r'\{\s*"(?P<name>\w+)"\s*,\s*&(?P<sym>\w+)\s*\}')
+SLOT_PUBLISH = re.compile(
+    r'if\s*\(\s*slot_name\s*==\s*"(?P<name>\w+)"\s*\)\s*'
+    r"return\s+reinterpret_cast<std::uintptr_t>\(\s*&(?P<sym>\w+)\s*\)"
+)
 
 # Original trampolines that MSVC serves through a private per-caller copy in the
 # rebuild: one original VA maps to several identical port helpers. The rebuild's
@@ -253,26 +261,29 @@ def find_symbol(symbols: dict[str, int], name: str):
 def parse_documented_bindings(source_text: str, rebased_text: str) -> dict[int, str]:
     """original global VA -> port symbol, as documented by the source itself.
 
-    Two forms are parsed: `src/rebased.h`'s `extern "C" T symbol; // dword_1015..`
-    declarations and the hook-bodies unit's
-    `if (slot_name == "dword_1015..") return &symbol;` publishes. A learned binding that contradicts either is a FAIL.
+    Three forms are parsed: `src/rebased.h`'s `extern "C" T symbol; // dword_1015..`
+    declarations, the hook-bodies unit's `kGlobalSlots` rows
+    (`{"dword_1015..", &symbol}`), and the older
+    `if (slot_name == "dword_1015..") return &symbol;` publishes. A learned
+    binding that contradicts any form is a FAIL.
     """
     documented: dict[int, str] = {}
+
+    def bind(name: str, symbol: str) -> None:
+        hex_tail = re.search(r"_([0-9A-Fa-f]{8})$", name)
+        if hex_tail:
+            documented.setdefault(int(hex_tail.group(1), 16), symbol)
+
     decl = re.compile(
         r'extern\s+"C"\s+[^;]*?\b(?P<sym>\w+)\s*(?:\[[^\]]*\])?\s*;\s*'
         r"//\s*(?:\w+\s+)?(?:dword|byte|word|unk|off|Src)_(?P<va>[0-9A-Fa-f]{8})\b"
     )
     for match in decl.finditer(rebased_text):
         documented.setdefault(int(match.group("va"), 16), match.group("sym"))
-    slot = re.compile(
-        r'if\s*\(\s*slot_name\s*==\s*"(?P<name>\w+)"\s*\)\s*'
-        r"return\s+reinterpret_cast<std::uintptr_t>\(\s*&(?P<sym>\w+)\s*\)"
-    )
-    for match in slot.finditer(source_text):
-        name = match.group("name")
-        hex_tail = re.search(r"_([0-9A-Fa-f]{8})$", name)
-        if hex_tail:
-            documented.setdefault(int(hex_tail.group(1), 16), match.group("sym"))
+    for table in TABLE_SLOT.finditer(source_text):
+        bind(table.group("name"), table.group("sym"))
+    for match in SLOT_PUBLISH.finditer(source_text):
+        bind(match.group("name"), match.group("sym"))
     return documented
 
 
