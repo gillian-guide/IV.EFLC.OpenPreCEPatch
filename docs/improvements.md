@@ -164,13 +164,13 @@ in `tests/dump_abi.inc`), **30** name-only helper rows, and `abi_garage_entry_a`
 which has no recovered VA and gets the synthetic dump-only VA `0x0F000001`. All
 134 names still have a body definition or an `OPP_BODY` install site.
 
-Four plain C bodies are **not** claimed byte-identical because the TU split made
-the compiler re-decide helper inlining: `abi_bpm_check`,
-`abi_death_music_install`, `abi_gfwl_patch`, `abi_new_saves_convert`. They carry
-no `@exact` contract (ordinary `__cdecl` bodies, not mid-function shims); stack
-frame, register allocation or helper inlining differ, the calling convention and
-observable behaviour do not, and the write-set oracles prove the install path is
-unchanged.
+Four plain `__cdecl` bodies are **not** claimed byte-identical because the TU
+split made the compiler re-decide helper inlining: `abi_bpm_check`,
+`abi_death_music_install`, `abi_gfwl_patch`, `abi_new_saves_convert`. They have
+no `@exact` byte contract and are not mid-function shims; their compiled form
+differs by stack frame, register allocation or helper inlining, and behavioural
+equivalence is **not asserted or verified** (there is no runtime oracle for
+them). The write-set oracles only prove the install path is unchanged.
 
 ## Backlog (documented, not gates)
 
