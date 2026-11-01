@@ -11,6 +11,8 @@ module;
 #include "common.hxx"
 #include "common.h"
 
+#include <filesystem>
+
 export module zp.log;
 
 import zp.common;
@@ -31,15 +33,45 @@ void Trace(const char* name);
 #if defined(ZP_TRACE_INSTALLS)
 namespace
 {
-// The one trace-log handle: opened on first use. A failed open is retried by
-// the next event (the original per-site code did the same), so the helper only
-// returns the current handle and every caller still treats null as silent.
-std::FILE* TraceLog() noexcept
+// The owned trace log. Opening is lazy and retried on the next event when the
+// first open failed, so a log file created later still receives writes (the
+// original per-site std::fopen did the same). The release ASI never compiles
+// this block.
+class TraceLog final
 {
-	static std::FILE* log = nullptr;
-	if (log == nullptr)
-		log = std::fopen("ZolikaPatch.trace.log", "a");
+public:
+	std::ofstream* Stream() noexcept
+	{
+		if (stream_.is_open())
+			return &stream_;
+		stream_.clear();
+		stream_.open(path_, std::ios::app);
+		return stream_.is_open() ? &stream_ : nullptr;
+	}
+
+private:
+	std::filesystem::path path_ = "ZolikaPatch.trace.log";
+	std::ofstream stream_;
+};
+
+TraceLog& TraceFile() noexcept
+{
+	static TraceLog log;
 	return log;
+}
+
+// The 8-digit upper-case hex the old fprintf format printed. One value per
+// stream expression; the buffer is trace-only scratch.
+const char* Hex(std::uint32_t value) noexcept
+{
+	static char text[9];
+	std::snprintf(text, sizeof(text), "%08lX", static_cast<unsigned long>(value));
+	return text;
+}
+
+const char* HeapState() noexcept
+{
+	return HeapValidate(GetProcessHeap(), 0, nullptr) ? "ok" : "BAD";
 }
 }  // namespace
 
@@ -52,26 +84,18 @@ LONG WINAPI TraceFault(EXCEPTION_POINTERS* info)
 	static int seen = 0;
 	if (++seen > 8)
 		return EXCEPTION_CONTINUE_SEARCH;
-	std::FILE* const log = TraceLog();
+	std::ofstream* const log = TraceFile().Stream();
 	if (log == nullptr)
 		return EXCEPTION_CONTINUE_SEARCH;
 
-	std::fprintf(log,
-	             "fault %d code=%08lX eip=%08lX esp=%08lX eax=%08lX ecx=%08lX edx=%08lX "
-	             "ebx=%08lX esi=%08lX edi=%08lX ebp=%08lX\n",
-	             seen, static_cast<unsigned long>(record->ExceptionCode),
-	             static_cast<unsigned long>(context->Eip),
-	             static_cast<unsigned long>(context->Esp),
-	             static_cast<unsigned long>(context->Eax),
-	             static_cast<unsigned long>(context->Ecx),
-	             static_cast<unsigned long>(context->Edx),
-	             static_cast<unsigned long>(context->Ebx),
-	             static_cast<unsigned long>(context->Esi),
-	             static_cast<unsigned long>(context->Edi),
-	             static_cast<unsigned long>(context->Ebp));
-	std::fprintf(log, "fault addr=%08lX thread=%lu\n",
-	             static_cast<unsigned long>(record->ExceptionInformation[1]),
-	             static_cast<unsigned long>(GetCurrentThreadId()));
+	*log << "fault " << seen << " code=" << Hex(record->ExceptionCode)
+	     << " eip=" << Hex(context->Eip) << " esp=" << Hex(context->Esp)
+	     << " eax=" << Hex(context->Eax) << " ecx=" << Hex(context->Ecx)
+	     << " edx=" << Hex(context->Edx) << " ebx=" << Hex(context->Ebx)
+	     << " esi=" << Hex(context->Esi) << " edi=" << Hex(context->Edi)
+	     << " ebp=" << Hex(context->Ebp) << "\n";
+	*log << "fault addr=" << Hex(static_cast<std::uint32_t>(record->ExceptionInformation[1]))
+	     << " thread=" << static_cast<unsigned long>(GetCurrentThreadId()) << "\n";
 
 	// Every stack dword that lies inside a mapped image is a candidate return
 	// address; resolve it to module+offset so the call chain is readable.
@@ -93,11 +117,13 @@ LONG WINAPI TraceFault(EXCEPTION_POINTERS* info)
 		for (const char* c = module; *c; ++c)
 			if (*c == '\\' || *c == '/')
 				base_name = c + 1;
-		std::fprintf(log, "frame %02d %08lX %s+%08lX\n", i,
-		             static_cast<unsigned long>(value), base_name,
-		             static_cast<unsigned long>(value - reinterpret_cast<std::uintptr_t>(mbi.AllocationBase)));
+		*log << "frame " << i << " " << Hex(static_cast<std::uint32_t>(value)) << " "
+		     << base_name << "+"
+		     << Hex(static_cast<std::uint32_t>(
+		                value - reinterpret_cast<std::uintptr_t>(mbi.AllocationBase)))
+		     << "\n";
 	}
-	std::fflush(log);
+	log->flush();
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
@@ -105,24 +131,23 @@ LONG WINAPI TraceFault(EXCEPTION_POINTERS* info)
 // can be located from ZolikaPatch.trace.log.
 void TraceBoot(const char* stage)
 {
-	std::FILE* const log = TraceLog();
+	std::ofstream* const log = TraceFile().Stream();
 	if (log == nullptr)
 		return;
-	std::fprintf(log, "stage %s\n", stage);
+	*log << "stage " << stage << "\n";
 	// A corrupted heap only faults at the next allocation; validating here names
 	// the stage that corrupted it, not the allocation that noticed.
-	std::fprintf(log, "heap %s stage:%s\n",
-	             HeapValidate(GetProcessHeap(), 0, nullptr) ? "ok" : "BAD", stage);
-	std::fflush(log);
+	*log << "heap " << HeapState() << " stage:" << stage << "\n";
+	log->flush();
 }
 
 void TraceBootValue(const char* label, std::uintptr_t value)
 {
-	std::FILE* const log = TraceLog();
+	std::ofstream* const log = TraceFile().Stream();
 	if (log == nullptr)
 		return;
-	std::fprintf(log, "stage %s %08lX\n", label, static_cast<unsigned long>(value));
-	std::fflush(log);
+	*log << "stage " << label << " " << Hex(static_cast<std::uint32_t>(value)) << "\n";
+	log->flush();
 }
 #else
 void TraceBoot(const char*) {}
@@ -136,29 +161,20 @@ void InstallFaultTracer()
 #endif
 }
 
-// The arm tracer: one pass over every arm, in the order PatchGame runs them.
-#if defined(ZP_TRACE_WRITES)
-namespace injector
-{
-const char* g_traceArm = "?";
-}
-#endif
-
 #if defined(ZP_TRACE_INSTALLS)
 // Debug builds only: name the arm that is about to run, so a boot fault can
 // be narrowed down from the log.
 void Trace(const char* name)
 {
-	std::FILE* const log = TraceLog();
+	std::ofstream* const log = TraceFile().Stream();
 	if (log == nullptr)
 		return;
-	std::fprintf(log, "arm %s\n", name);
-	std::fprintf(log, "heap %s arm:%s\n",
-	             HeapValidate(GetProcessHeap(), 0, nullptr) ? "ok" : "BAD", name);
+	*log << "arm " << name << "\n";
+	*log << "heap " << HeapState() << " arm:" << name << "\n";
 #if defined(ZP_TRACE_WRITES)
 	injector::g_traceArm = name;
 #endif
-	std::fflush(log);
+	log->flush();
 }
 #else
 void Trace(const char*) {}

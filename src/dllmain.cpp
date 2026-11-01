@@ -48,6 +48,16 @@ char iniPath[MAX_PATH];
 // (declared in src/patches.h so the feature modules link it).
 bool bMenuIntegration = false;
 
+#if defined(ZP_TRACE_WRITES)
+namespace injector
+{
+// The trace write shim names the arm it is in; the definition must live in
+// this plain TU, because a definition inside a module purview has module
+// linkage and would not bind to the shim's extern declaration.
+const char* g_traceArm = "?";
+}  // namespace injector
+#endif
+
 namespace
 {
 
