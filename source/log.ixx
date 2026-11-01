@@ -150,7 +150,7 @@ void Trace(const char* name)
 #if defined(ZP_TRACE_WRITES)
 	injector::g_traceArm = name;
 #endif
-	std::fflush(log); //patch
+	std::fflush(log);
 }
 #else
 void Trace(const char*) {}

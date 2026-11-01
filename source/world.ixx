@@ -43,7 +43,7 @@ void ApplyNoPhysicsSleep(const PatchContext& ctx)
 		{
 			auto* target = MatchPointer(pattern, -38);
 			if (target != nullptr)
-				injector::WriteMemory<std::uint32_t>(target, 0u, true); //patch
+				injector::WriteMemory<std::uint32_t>(target, 0u, true); // 0 -> physics sleep off
 		}
 	}
 }
@@ -60,21 +60,21 @@ void ApplyIncreasePtrNodes(const PatchContext& ctx)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint32_t>(match + 8, kPtrNodeCount, true); //patch
+			injector::WriteMemory<std::uint32_t>(match + 8, kPtrNodeCount, true); // node count = 320000
 		}
 
 		if (auto pattern = Pattern(image, "6A 10 ? ? ? ? ? 68 80 3E 00 00"); pattern.size() > 0)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint32_t>(match + 8, kPtrNodeCountAlt, true); //patch
+			injector::WriteMemory<std::uint32_t>(match + 8, kPtrNodeCountAlt, true); // node count = 64000
 		}
 
 		if (auto pattern = Pattern(image, "6A 14 ? ? ? ? ? 68 80 3E 00 00"); pattern.size() > 0)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint32_t>(match + 8, kPtrNodeCountAlt, true); //patch
+			injector::WriteMemory<std::uint32_t>(match + 8, kPtrNodeCountAlt, true); // node count = 64000
 		}
 	}
 }

@@ -240,8 +240,8 @@ void ApplyMiscFixes(const PatchContext& ctx)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match, kMovEaxOpcode, true); //patch
-			injector::WriteMemory<std::uint32_t>(match + 1, kTrueValue, true); //patch
+			injector::WriteMemory<std::uint8_t>(match, kMovEaxOpcode, true); // cmp eax,1 -> mov eax,1
+			injector::WriteMemory<std::uint32_t>(match + 1, kTrueValue, true); // cmp eax,1 -> mov eax,1
 		}
 
 		if (auto pattern = Pattern(image, "8B 54 24 04 52 A3"); pattern.size() > 0)
@@ -308,7 +308,7 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 			if (auto p = Pattern(image, "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x0038AC
-				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); //patch: clear the entry-stub byte
+				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); // stub byte -> 0
 			}
 			if (auto p = Pattern(image, "74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? 83 C4 ?? 68"); p.size() > 0)
 			{
@@ -318,7 +318,7 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 			if (auto p = Pattern(image, "01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x00397E
-				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); //patch: clear the entry-stub byte
+				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); // stub byte -> 0
 			}
 			if (auto p = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); p.size() > 0)
 			{
@@ -348,7 +348,7 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 			if (auto p = Pattern(image, "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x00388C
-				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); //patch: clear the entry-stub byte
+				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); // stub byte -> 0
 			}
 			if (auto p = Pattern(image, "75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D"); p.size() > 0)
 			{
@@ -363,7 +363,7 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 			if (auto p = Pattern(image, "01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8"); p.size() > 0)
 			{
 				auto* site = p.get(0).get<std::uint8_t>(); // 0x00395E
-				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); //patch: clear the entry-stub byte
+				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); // stub byte -> 0
 			}
 			if (auto p = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); p.size() > 0)
 			{
@@ -402,7 +402,8 @@ void ApplyPopupHeadlightsFlag(const PatchContext& ctx)
 
 			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_popup_headlights), true); //jmp
 			injector::WriteMemory<std::uint8_t>(match + 10, kShortJmpOpcode, true); //jmp
-			injector::WriteMemory<std::uint32_t>(match + 82, AddressOf(&zpatch_popup_angle), true); //patch
+			injector::WriteMemory<std::uint32_t>(match + 82, AddressOf(&zpatch_popup_angle),
+			                                    true); // fld operand -> our angle
 		}
 
 		if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
@@ -418,7 +419,8 @@ void ApplyPopupHeadlightsFlag(const PatchContext& ctx)
 
 			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_popup_headlights_edx), true); //jmp
 			injector::WriteMemory<std::uint8_t>(match + 10, kShortJmpOpcode, true); //jmp
-			injector::WriteMemory<std::uint32_t>(match + 82, AddressOf(&zpatch_popup_angle), true); //patch
+			injector::WriteMemory<std::uint32_t>(match + 82, AddressOf(&zpatch_popup_angle),
+			                                    true); // fld operand -> our angle
 		}
 	}
 }

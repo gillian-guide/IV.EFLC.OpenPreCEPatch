@@ -38,7 +38,6 @@ void PublishShakingEngineBlock(const PatchContext& ctx);
 void PublishMovingPlaneParts(const PatchContext& ctx);
 void ApplyBikeFeetFix(const PatchContext& ctx);
 void ApplyBikePhoneAnimsFix(const PatchContext& ctx);
-void ApplyDualVehicleHeadlights(const PatchContext& ctx);
 void ApplyEpisodicVehicleSupport(const PatchContext& ctx);
 void ApplyHighFPSBikePhysicsFix(const PatchContext& ctx);
 void ApplyInfiniteCarBottomDistance(const PatchContext& ctx);
@@ -70,8 +69,8 @@ constexpr std::uint8_t kRet8High = 0x00u;       // high byte of the imm16
 constexpr std::uint16_t kCutsceneBranchDisp = 0x009Eu;  // je +0x9E
 constexpr std::uint8_t kCutsceneJmpDisp = 0x2Au;        // jmp +0x2A
 constexpr std::uint32_t kVehicleStructLimit = 100u;     // 0x64: struct count
-constexpr std::uint32_t kPtrNodeInitial = 0x400u;       // 0x400
-constexpr std::uint32_t kModelLimitIncrease = 0x100u;   // 0x100
+constexpr std::uint32_t kVehicleModelLimit = 0x400u;    // 1024 models (raised cap)
+constexpr std::uint32_t kShadowSizeForced = 0x100u;    // push 0x504 -> 0x100
 struct SpawnCase final
 {
 	std::uint32_t offset;
@@ -264,31 +263,40 @@ void PublishGarageModelFix(const PatchContext& ctx)
 	}
 }
 
+namespace
+{
+// The three steering/engine/plane options publish the same three slots and
+// install the same three sites (the shared sub_10004C70 consumer plus the two
+// detours); only their INI keys differ.
+void PublishSteerSlots(const PatchContext& ctx)
+{
+	const GameImage& image = ctx.image;
+
+	if (auto pattern = Pattern(image, "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"); pattern.size() > 0)
+	{
+		zpatch_steer_resume = MatchAddress(pattern, 16);
+		zpatch_steer_vtable_fn = MatchTarget(pattern, 423, 427);
+	}
+
+	if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
+	{
+		zpatch_steer_resume = MatchAddress(pattern, 16);
+		zpatch_steer_vtable_fn = MatchTarget(pattern, 140, 144);
+	}
+
+	if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
+	{
+		zpatch_ide_hook_slot = MatchAddress(pattern, -1);
+	}
+}
+}  // namespace
+
 void PublishMovingSteeringWheelSupport(const PatchContext& ctx)
 {
 	Trace("publish MovingSteeringWheelSupport");
 	// MovingSteeringWheelSupport: 5 slots
 	if (ctx.Option("MovingSteeringWheelSupport", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"); pattern.size() > 0)
-		{
-			zpatch_steer_resume = MatchAddress(pattern, 16);
-			zpatch_steer_vtable_fn = MatchTarget(pattern, 423, 427);
-		}
-
-		if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
-		{
-			zpatch_steer_resume = MatchAddress(pattern, 16);
-			zpatch_steer_vtable_fn = MatchTarget(pattern, 140, 144);
-		}
-
-		if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
-		{
-			zpatch_ide_hook_slot = MatchAddress(pattern, -1);
-		}
-	}
+		PublishSteerSlots(ctx);
 }
 
 void PublishShakingEngineBlock(const PatchContext& ctx)
@@ -296,26 +304,7 @@ void PublishShakingEngineBlock(const PatchContext& ctx)
 	Trace("publish ShakingEngineBlock");
 	// ShakingEngineBlock: 5 slots
 	if (ctx.Option("ShakingEngineBlock", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"); pattern.size() > 0)
-		{
-			zpatch_steer_resume = MatchAddress(pattern, 16);
-			zpatch_steer_vtable_fn = MatchTarget(pattern, 423, 427);
-		}
-
-		if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
-		{
-			zpatch_steer_resume = MatchAddress(pattern, 16);
-			zpatch_steer_vtable_fn = MatchTarget(pattern, 140, 144);
-		}
-
-		if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
-		{
-			zpatch_ide_hook_slot = MatchAddress(pattern, -1);
-		}
-	}
+		PublishSteerSlots(ctx);
 }
 
 void PublishMovingPlaneParts(const PatchContext& ctx)
@@ -323,26 +312,7 @@ void PublishMovingPlaneParts(const PatchContext& ctx)
 	Trace("publish MovingPlaneParts");
 	// MovingPlaneParts: 5 slots
 	if (ctx.Option("MovingPlaneParts", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"); pattern.size() > 0)
-		{
-			zpatch_steer_resume = MatchAddress(pattern, 16);
-			zpatch_steer_vtable_fn = MatchTarget(pattern, 423, 427);
-		}
-
-		if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
-		{
-			zpatch_steer_resume = MatchAddress(pattern, 16);
-			zpatch_steer_vtable_fn = MatchTarget(pattern, 140, 144);
-		}
-
-		if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
-		{
-			zpatch_ide_hook_slot = MatchAddress(pattern, -1);
-		}
-	}
+		PublishSteerSlots(ctx);
 }
 
 void ApplyBikeFeetFix(const PatchContext& ctx)
@@ -379,15 +349,6 @@ void ApplyBikePhoneAnimsFix(const PatchContext& ctx)
 	}
 }
 
-void ApplyDualVehicleHeadlights(const PatchContext& ctx)
-{
-	Trace("DualVehicleHeadlights");
-	// DualVehicleHeadlights
-	if (ctx.Option("DualVehicleHeadlights", "1"))
-	{
-	}
-}
-
 void ApplyEpisodicVehicleSupport(const PatchContext& ctx)
 {
 	Trace("EpisodicVehicleSupport");
@@ -404,12 +365,12 @@ void ApplyEpisodicVehicleSupport(const PatchContext& ctx)
 			if (auto pattern = Pattern(image, "44 80 0F ?? 02 75 ?? E8 ?? ?? ?? ?? 3B C3 74 ?? 8D"); pattern.size() > 0)
 			{
 				injector::WriteMemory<std::uint32_t>(pattern.get(0).get<std::uint8_t>(),
-				                                     AddressOf(&zpatch_episode_flag), true); //patch
+				                                     AddressOf(&zpatch_episode_flag), true); // operand -> our flag
 			}
 			if (auto pattern = Pattern(image, "44 80 0F ?? 02 0F 85 94 00 ?? ?? ?? ?? 24 ?? 85 D2 0F 84 ?? ?? ?? ?? 8B"); pattern.size() > 0)
 			{
 				injector::WriteMemory<std::uint32_t>(pattern.get(0).get<std::uint8_t>(),
-				                                     AddressOf(&zpatch_episode_flag), true); //patch
+				                                     AddressOf(&zpatch_episode_flag), true); // operand -> our flag
 			}
 		}
 
@@ -418,12 +379,12 @@ void ApplyEpisodicVehicleSupport(const PatchContext& ctx)
 			if (auto pattern = Pattern(image, "54 D7 12 01 02 75 ?? E8 ?? ?? ?? ?? 3B C3 74 ?? 8D"); pattern.size() > 0)
 			{
 				injector::WriteMemory<std::uint32_t>(pattern.get(0).get<std::uint8_t>(),
-				                                     AddressOf(&zpatch_episode_flag), true); //patch
+				                                     AddressOf(&zpatch_episode_flag), true); // operand -> our flag
 			}
 			if (auto pattern = Pattern(image, "54 D7 12 01 02 0F 85 94 00 ?? ?? ?? ?? 24 ?? 85 D2 0F 84 ?? ?? ?? ?? 8B"); pattern.size() > 0)
 			{
 				injector::WriteMemory<std::uint32_t>(pattern.get(0).get<std::uint8_t>(),
-				                                     AddressOf(&zpatch_episode_flag), true); //patch
+				                                     AddressOf(&zpatch_episode_flag), true); // operand -> our flag
 			}
 		}
 
@@ -709,7 +670,7 @@ void ApplyReversingLightFix(const PatchContext& ctx)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint8_t>(match + 8, kPushadOpcode, true); //patch
+			injector::WriteMemory<std::uint8_t>(match + 8, kPushadOpcode, true); // push 0x64 -> pushad
 		}
 	}
 }
@@ -776,7 +737,8 @@ void ApplyForceCarHeadlightShadows(const PatchContext& ctx)
 			injector::WriteMemory<std::uint8_t>(match + 6, kShortJmpOpcode, true); //jmp
 			injector::MakeJMP(match + 95, reinterpret_cast<void*>(match + 476), true); //jmp
 			injector::WriteMemory<std::uint8_t>(match + 379, kShortJmpOpcode, true); //jmp
-			injector::WriteMemory<std::uint32_t>(match + 211, AddressOf(&zpatch_fchs_offset), true); //patch
+			injector::WriteMemory<std::uint32_t>(match + 211, AddressOf(&zpatch_fchs_offset),
+			                                    true); // fld operand -> our offset
 		}
 
 		if (auto pattern = Pattern(image, "55 8B EC 83 E4 F0 81 EC D4 00 00 00 8B 45 20 8B"); pattern.size() > 0)
@@ -790,9 +752,9 @@ void ApplyForceCarHeadlightShadows(const PatchContext& ctx)
 			if (auto pattern = Pattern(image, "8D 4C 24 50 51 68 04 05 00 00"); pattern.size() > 0)
 			{
 				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6),
-				                                    kShadowPushA & kByteMask, true); //patch
+				                                    kShadowPushA & kByteMask, true); // force 0x504, low byte
 				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(7),
-				                                    (kShadowPushA >> 8) & kByteMask, true); //patch
+				                                    (kShadowPushA >> 8) & kByteMask, true); // force 0x504, high byte
 			}
 		}
 
@@ -800,9 +762,9 @@ void ApplyForceCarHeadlightShadows(const PatchContext& ctx)
 			if (auto pattern = Pattern(image, "8D 44 24 50 50 68 04 01 00 00"); pattern.size() > 0)
 			{
 				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6),
-				                                    kShadowPushB & kByteMask, true); //patch
+				                                    kShadowPushB & kByteMask, true); // force 0x104, low byte
 				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(7),
-				                                    (kShadowPushB >> 8) & kByteMask, true); //patch
+				                                    (kShadowPushB >> 8) & kByteMask, true); // force 0x104, high byte
 			}
 		}
 
@@ -924,7 +886,8 @@ void ApplyCarDynamicShadowFix(const PatchContext& ctx)
 		{
 			if (auto pattern = Pattern(image, "50 68 04 01 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
 			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(2), kZeroByte, true); //patch
+				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(2), kZeroByte,
+				                                    true); // shadow size 0x104 -> 0x100
 			}
 		}
 
@@ -959,7 +922,7 @@ void ApplyCarDynamicShadowFix(const PatchContext& ctx)
 			{
 				auto* match = pattern.get(0).get<std::uint8_t>();
 
-				injector::WriteMemory<std::uint32_t>(match + 2, kModelLimitIncrease, true); //patch
+				injector::WriteMemory<std::uint32_t>(match + 2, kShadowSizeForced, true); // push 0x504 -> 0x100
 			}
 		}
 	}
@@ -989,35 +952,41 @@ void ApplyGarageModelFix(const PatchContext& ctx)
 	}
 }
 
+namespace
+{
+void ApplySteerSites(const PatchContext& ctx)
+{
+	const GameImage& image = ctx.image;
+
+	if (auto pattern = Pattern(image, "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"); pattern.size() > 0)
+	{
+		auto* match = pattern.get(0).get<std::uint8_t>();
+
+		injector::MakeJMP(match + 2, reinterpret_cast<void*>(&abi_steer_detour_eax), true); //jmp
+	}
+
+	if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
+	{
+		auto* match = pattern.get(0).get<std::uint8_t>();
+
+		injector::MakeJMP(match + 2, reinterpret_cast<void*>(&abi_steer_detour_edx), true); //jmp
+	}
+
+	if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
+	{
+		auto* match = pattern.get(0).get<std::uint8_t>();
+
+		injector::MakeJMP(match - 10, reinterpret_cast<void*>(&abi_copsirens_ide), true); //jmp
+	}
+}
+}  // namespace
+
 void ApplyMovingSteeringWheelSupport(const PatchContext& ctx)
 {
 	Trace("MovingSteeringWheelSupport");
 	// MovingSteeringWheelSupport: 3 siginstalls
 	if (ctx.Option("MovingSteeringWheelSupport", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match + 2, reinterpret_cast<void*>(&abi_steer_detour_eax), true); //jmp
-		}
-
-		if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match + 2, reinterpret_cast<void*>(&abi_steer_detour_edx), true); //jmp
-		}
-
-		if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match - 10, reinterpret_cast<void*>(&abi_copsirens_ide), true); //jmp
-		}
-	}
+		ApplySteerSites(ctx);
 }
 
 void ApplyShakingEngineBlock(const PatchContext& ctx)
@@ -1025,30 +994,7 @@ void ApplyShakingEngineBlock(const PatchContext& ctx)
 	Trace("ShakingEngineBlock");
 	// ShakingEngineBlock: 3 siginstalls
 	if (ctx.Option("ShakingEngineBlock", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match + 2, reinterpret_cast<void*>(&abi_steer_detour_eax), true); //jmp
-		}
-
-		if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match + 2, reinterpret_cast<void*>(&abi_steer_detour_edx), true); //jmp
-		}
-
-		if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match - 10, reinterpret_cast<void*>(&abi_copsirens_ide), true); //jmp
-		}
-	}
+		ApplySteerSites(ctx);
 }
 
 void ApplyMovingPlaneParts(const PatchContext& ctx)
@@ -1056,32 +1002,8 @@ void ApplyMovingPlaneParts(const PatchContext& ctx)
 	Trace("MovingPlaneParts");
 	// MovingPlaneParts: 3 siginstalls
 	if (ctx.Option("MovingPlaneParts", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match + 2, reinterpret_cast<void*>(&abi_steer_detour_eax), true); //jmp
-		}
-
-		if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match + 2, reinterpret_cast<void*>(&abi_steer_detour_edx), true); //jmp
-		}
-
-		if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match - 10, reinterpret_cast<void*>(&abi_copsirens_ide), true); //jmp
-		}
-	}
+		ApplySteerSites(ctx);
 }
-
 void ApplyCarDecalsFix(const PatchContext& ctx)
 {
 	Trace("CarDecalsFix");
@@ -1186,7 +1108,7 @@ void ApplyIncreaseVehicleModelLimit(const PatchContext& ctx)
 		{
 			auto* target = MatchPointer(pattern, 77);
 			if (target != nullptr)
-				injector::WriteMemory<std::uint32_t>(target, kPtrNodeInitial, true); //patch
+				injector::WriteMemory<std::uint32_t>(target, kVehicleModelLimit, true); // model limit = 1024
 		}
 	}
 }
@@ -1205,7 +1127,7 @@ void ApplyIncreaseVehicleStructLimit(const PatchContext& ctx)
 
 			injector::WriteMemory<std::uint8_t>(match + 6,
 			                                    static_cast<std::uint8_t>(kVehicleStructLimit),
-			                                    true); //patch
+			                                    true); // struct count = 100
 		}
 	}
 }

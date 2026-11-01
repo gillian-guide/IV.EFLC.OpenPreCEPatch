@@ -58,11 +58,14 @@ void PublishOutOfCommissionFix(const PatchContext& ctx)
 
 		if (auto pattern = Pattern(image, "A9 39 44 24 18"); pattern.size() > 0)
 		{
+			// match+0x11: the movq xmm0 resume the branch body returns to.
 			zpatch_ooc_resume = MatchAddress(pattern, 17);
 		}
 
 		if (auto pattern = Pattern(image, "E8 ? ? ? ? 8B 74 24 14 83 C4 08 6A 00 56"); pattern.size() > 0)
 		{
+			// The logger call is the E8 at match-0x33 (operand -0x32, next -0x2E);
+			// the match itself is the E8 whose original target the wrapper replays.
 			zpatch_ooc_logger = MatchTarget(pattern, -50, -46);
 			zpatch_ooc_orig = MatchTarget(pattern, 1, 5);
 		}
@@ -82,61 +85,32 @@ void ApplyEpisodicWeaponSupport(const PatchContext& ctx)
 		             GameBuild::v1061, GameBuild::v1100, GameBuild::v1110, GameBuild::v1120,
 		             GameBuild::v1130, GameBuild::v12043}))
 		{
-
-			if (auto pattern = Pattern(image, "75 5B 83 3D ? ? ? ? 00 75"); pattern.size() > 0)
+			// The original's eight rows: each site reads `[episode] == 2`; a row
+			// NOPs either the comparison at the match or the branch that follows
+			// the six-byte `cmp [abs],2`.
+			struct EpisodicWeaponSite final
 			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match, 2, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 0F 85 8C 01 00 00"); pattern.size() > 0)
+				std::string_view signature;
+				std::ptrdiff_t offset;
+				std::size_t length;
+			};
+			constexpr EpisodicWeaponSite kSites[] = {
+			    {"75 5B 83 3D ? ? ? ? 00 75", 0, 2},
+			    {"83 3D ? ? ? ? 02 0F 85 8C 01 00 00", 7, 6},
+			    {"83 3D ? ? ? ? 02 0F 8C D5 00", 0, 13},
+			    {"83 3D ? ? ? ? 02 75 20 8B CD E8", 7, 2},
+			    {"83 3D ? ? ? ? 02 75 50", 7, 2},
+			    {"83 3D ? ? ? ? 02 7C 21 8B 44 24 0C", 7, 2},
+			    {"83 3D ? ? ? ? 02 7C 32 8B 41", 7, 2},
+			    {"83 3D ? ? ? ? 02 7C 7D 8B 4C 24 0C", 7, 2},
+			};
+			for (const EpisodicWeaponSite& site : kSites)
 			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match + 7, 6, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 0F 8C D5 00"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match, 13, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 20 8B CD E8"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match + 7, 2, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 50"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match + 7, 2, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 21 8B 44 24 0C"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match + 7, 2, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 32 8B 41"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match + 7, 2, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 7D 8B 4C 24 0C"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match + 7, 2, true); //nop
+				if (auto pattern = Pattern(image, site.signature); pattern.size() > 0)
+				{
+					injector::MakeNOP(pattern.get(0).get<std::uint8_t>(site.offset),
+					                  site.length, true); //nop
+				}
 			}
 		}
 	}

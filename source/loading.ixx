@@ -404,8 +404,10 @@ void ApplyLocalSettingsPath(const PatchContext& ctx)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint32_t>(match + 16, AddressOf(&zpatch_local_saves_slot), true); //patch
-			injector::WriteMemory<std::uint32_t>(match + 32, AddressOf(&zpatch_local_iv_suffix), true); //patch
+			injector::WriteMemory<std::uint32_t>(match + 16, AddressOf(&zpatch_local_saves_slot),
+			                                    true); // call slot -> our thunk
+			injector::WriteMemory<std::uint32_t>(match + 32, AddressOf(&zpatch_local_iv_suffix),
+			                                    true); // "\GTA IV" push -> our suffix
 		}
 
 		if (auto pattern = Pattern(image, "7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D6 5F 5E 5B C3"); pattern.size() > 0)
@@ -719,7 +721,8 @@ void ApplyFastLoading(const PatchContext& ctx)
 		{
 			if (auto pattern = Pattern(image, "6A 0A E8 ? ? ? ? 83 C7 0A 83 C4 04 81 FF E8 03 00 00 75 02 33 FF"); pattern.size() > 0)
 			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(1), kZeroByte, true); //patch
+				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(1), kZeroByte,
+				                                    true); // sleep 10 -> 0
 			}
 		}
 	}
@@ -739,7 +742,7 @@ void ApplyStartupTimeFix(const PatchContext& ctx)
 				for (std::size_t i = 0; i < pattern.size(); ++i)
 					injector::WriteMemory<std::uint32_t>(
 					    pattern.get(i).get<std::uint8_t>() + 6,
-					    static_cast<std::uint32_t>(FindGlobalValue("StartupTimeFix")), true); //patch
+					    static_cast<std::uint32_t>(FindGlobalValue("StartupTimeFix")), true); // push our startup-time dword
 			}
 		}
 	}
@@ -757,10 +760,16 @@ void ApplyNoLoadingSleep(const PatchContext& ctx)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemory<std::uint32_t>(match + 1, 0u, true); //patch
+			injector::WriteMemory<std::uint32_t>(match + 1, 0u, true); // 5000 ms -> 0
 		}
 	}
 }
+
+// The operand each arm retargets: the `push <imm32>` path pointer, and the two
+// operands that load the vsync flag in the two VSyncFix call shapes.
+constexpr std::ptrdiff_t kOverridePathOperand = 1;
+constexpr std::ptrdiff_t kVsyncFlagOperandA = 30;
+constexpr std::ptrdiff_t kVsyncFlagOperandB = 13;
 
 void ApplyOverrideGTADatPath(const PatchContext& ctx)
 {
@@ -775,7 +784,8 @@ void ApplyOverrideGTADatPath(const PatchContext& ctx)
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
 			injector::WriteMemory<std::uint32_t>(
-			    match + 1, static_cast<std::uint32_t>(FindGlobalValue("OverrideGTADatPath")), true); //patch
+			    match + kOverridePathOperand,
+			    static_cast<std::uint32_t>(FindGlobalValue("OverrideGTADatPath")), true); // push
 		}
 	}
 }
@@ -798,7 +808,8 @@ void ApplyVSyncFix(const PatchContext& ctx)
 				auto* match = pattern.get(0).get<std::uint8_t>();
 
 				injector::WriteMemory<std::uint32_t>(
-			    match + 30, static_cast<std::uint32_t>(FindGlobalValue("VSyncFix")), true); //patch
+				    match + kVsyncFlagOperandA,
+				    static_cast<std::uint32_t>(FindGlobalValue("VSyncFix")), true); // pointer
 			}
 
 			if (auto pattern = Pattern(image, "8B 10 50 8B 82 A8 00 00 00 FF D0 83"); pattern.size() > 0)
@@ -806,7 +817,8 @@ void ApplyVSyncFix(const PatchContext& ctx)
 				auto* match = pattern.get(0).get<std::uint8_t>();
 
 				injector::WriteMemory<std::uint32_t>(
-			    match + 13, static_cast<std::uint32_t>(FindGlobalValue("VSyncFix")), true); //patch
+				    match + kVsyncFlagOperandB,
+				    static_cast<std::uint32_t>(FindGlobalValue("VSyncFix")), true); // pointer
 			}
 		}
 	}

@@ -59,6 +59,19 @@ constexpr GameRva kSuperLodFail_1080{0x540E67u};
 constexpr GameRva kSuperLodOk_1080{0x540E1Fu};
 constexpr GameRva kSuperLodLookup_1080{0x4DD2D0u};
 
+// The per-build set PublishSuperLODFix publishes; the build column is the gate.
+struct SuperLodTargets final
+{
+	GameBuild build;
+	GameRva fail;
+	GameRva ok;
+	GameRva lookup;
+};
+constexpr SuperLodTargets kSuperLodTargets[] = {
+    {GameBuild::v1070, kSuperLodFail_1070, kSuperLodOk_1070, kSuperLodLookup_1070},
+    {GameBuild::v1080, kSuperLodFail_1080, kSuperLodOk_1080, kSuperLodLookup_1080},
+};
+
 void PublishBuildingDynamicShadows(const PatchContext& ctx)
 {
 	Trace("publish BuildingDynamicShadows");
@@ -110,18 +123,13 @@ void PublishSuperLODFix(const PatchContext& ctx)
 	{
 		const GameImage& image = ctx.image;
 
-		if (ctx.build == GameBuild::v1070)
+		for (const SuperLodTargets& targets : kSuperLodTargets)
 		{
-			zpatch_super_lod_fail = AddressOf(kSuperLodFail_1070.site_ptr(image.base));
-			zpatch_super_lod_ok = AddressOf(kSuperLodOk_1070.site_ptr(image.base));
-			zpatch_super_lod_lookup = AddressOf(kSuperLodLookup_1070.site_ptr(image.base));
-		}
-
-		if (ctx.build == GameBuild::v1080)
-		{
-			zpatch_super_lod_fail = AddressOf(kSuperLodFail_1080.site_ptr(image.base));
-			zpatch_super_lod_ok = AddressOf(kSuperLodOk_1080.site_ptr(image.base));
-			zpatch_super_lod_lookup = AddressOf(kSuperLodLookup_1080.site_ptr(image.base));
+			if (ctx.build != targets.build)
+				continue;
+			zpatch_super_lod_fail = AddressOf(targets.fail.site_ptr(image.base));
+			zpatch_super_lod_ok = AddressOf(targets.ok.site_ptr(image.base));
+			zpatch_super_lod_lookup = AddressOf(targets.lookup.site_ptr(image.base));
 		}
 	}
 }
@@ -194,7 +202,8 @@ void ApplyBuildingDynamicShadows(const PatchContext& ctx)
 		{
 			if (auto pattern = Pattern(image, "50 68 04 01 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
 			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(2), kZeroByte, true); //patch
+				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(2), kZeroByte,
+				                                    true); // shadow size 0x104 -> 0x100
 			}
 		}
 
@@ -205,12 +214,6 @@ void ApplyBuildingDynamicShadows(const PatchContext& ctx)
 			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_building_dynamic_shadows), true); //jmp
 		}
 	}
-	// RemoveUselessChecks: the original handler applies its singles and its RVA
-	// tables in one go, as the loader's 27th option read (right after
-	// BuildingDynamicShadows). The port's arm list is alphabetical, so this is
-	// the nearest equivalent slot. The early position is load-bearing: the tables
-	// overwrite one fixed byte of MiscFixes' and RestoreDeathMusic's signatures,
-	// so those two later installs are suppressed exactly as in the original.
 }
 
 void ApplyEmissiveLerpFix(const PatchContext& ctx)
@@ -366,16 +369,7 @@ void ApplySuperLODFix(const PatchContext& ctx)
 		// The original jumped at 0x4A3CE9 (1.0.7.0) / 0x540E19 (1.0.8.0). The
 		// recovered signature is the same on both and unique per gated build
 		// (research 08), so scan inside the gate instead of naming the RVA.
-		if (ctx.build == GameBuild::v1070)
-		{
-			if (auto pattern = Pattern(image, "F6 40 ?? ?? 74 ?? 85 ED 0F 85 ?? ?? ?? ?? 55 6A ?? E8 ?? ?? ?? ?? 8B F8"); pattern.size() > 0)
-			{
-				injector::MakeJMP(pattern.get(0).get<std::uint8_t>(),
-				                  reinterpret_cast<void*>(&abi_super_lod_fix_shim), true); //jmp
-			}
-		}
-
-		if (ctx.build == GameBuild::v1080)
+		if (BuildIs(ctx.build, {GameBuild::v1070, GameBuild::v1080}))
 		{
 			if (auto pattern = Pattern(image, "F6 40 ?? ?? 74 ?? 85 ED 0F 85 ?? ?? ?? ?? 55 6A ?? E8 ?? ?? ?? ?? 8B F8"); pattern.size() > 0)
 			{

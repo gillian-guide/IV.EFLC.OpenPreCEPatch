@@ -85,32 +85,28 @@ void ApplyMouseFix(const PatchContext& ctx)
 			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_mouse_axis_neg), true); //jmp
 		}
 
-		if (auto pattern = Pattern(image, "83 C4 08 F7 D8 F3 0F 2A C0 6A 00 8B CE F3 0F 11 07"); pattern.size() > 0)
+		// The two sites differ only in the model's axis operands (6A 00 / 8B CE and
+		// 6A 01 / 8B CB); each gets the same movd replacement at +5/+33 and the two
+		// two-byte nops that disable the original cvtsi2ss prologue at +3/+31.
+		constexpr std::string_view kMovdSitePatterns[] = {
+		    "83 C4 08 F7 D8 F3 0F 2A C0 6A 00 8B CE F3 0F 11 07",
+		    "83 C4 08 F7 D8 F3 0F 2A C0 6A 01 8B CB F3 0F 11 07",
+		};
+		for (const std::string_view site : kMovdSitePatterns)
 		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+			if (auto pattern = Pattern(image, site); pattern.size() > 0)
+			{
+				auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::WriteMemoryRaw(injector::raw_ptr(match + 5),
-			                         const_cast<std::uint8_t*>(kMovdXmm0Eax),
-			                         sizeof(kMovdXmm0Eax), true); //movd xmm0, eax
-			injector::WriteMemoryRaw(injector::raw_ptr(match + 33),
-			                         const_cast<std::uint8_t*>(kMovdXmm0Eax),
-			                         sizeof(kMovdXmm0Eax), true); //movd xmm0, eax
-			injector::MakeNOP(match + 3, 2, true); //nop
-			injector::MakeNOP(match + 31, 2, true); //nop
-		}
-
-		if (auto pattern = Pattern(image, "83 C4 08 F7 D8 F3 0F 2A C0 6A 01 8B CB F3 0F 11 07"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::WriteMemoryRaw(injector::raw_ptr(match + 5),
-			                         const_cast<std::uint8_t*>(kMovdXmm0Eax),
-			                         sizeof(kMovdXmm0Eax), true); //movd xmm0, eax
-			injector::WriteMemoryRaw(injector::raw_ptr(match + 33),
-			                         const_cast<std::uint8_t*>(kMovdXmm0Eax),
-			                         sizeof(kMovdXmm0Eax), true); //movd xmm0, eax
-			injector::MakeNOP(match + 3, 2, true); //nop
-			injector::MakeNOP(match + 31, 2, true); //nop
+				injector::WriteMemoryRaw(injector::raw_ptr(match + 5),
+				                         const_cast<std::uint8_t*>(kMovdXmm0Eax),
+				                         sizeof(kMovdXmm0Eax), true); //movd xmm0, eax
+				injector::WriteMemoryRaw(injector::raw_ptr(match + 33),
+				                         const_cast<std::uint8_t*>(kMovdXmm0Eax),
+				                         sizeof(kMovdXmm0Eax), true); //movd xmm0, eax
+				injector::MakeNOP(match + 3, 2, true); //nop
+				injector::MakeNOP(match + 31, 2, true); //nop
+			}
 		}
 
 		if (auto pattern = Pattern(image, "83 C4 08 F7 D8 F3 0F 2A C8 F3 0F 10 46"); pattern.size() > 0)
@@ -160,7 +156,7 @@ void ApplyDoNotPauseOnMinimize(const PatchContext& ctx)
 			if (auto pattern = Pattern(image, "6A 0A 56 50 FF D2 A1"); pattern.size() > 0)
 			{
 				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(1),
-			                                    kMinimizePauseTick, true); //patch
+			                                    kMinimizePauseTick, true); // minimize wait 10 -> 6
 			}
 		}
 

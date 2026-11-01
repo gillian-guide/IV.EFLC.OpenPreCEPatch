@@ -643,11 +643,15 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 	ApplyBlackscreenFix(ctx);
 	ApplyBuildingAlphaFix(ctx);
 	ApplyBuildingDynamicShadows(ctx);
+	// The original applies its singles and RVA tables as the loader's 27th
+	// option read, after BuildingDynamicShadows. The early position is
+	// load-bearing: the tables overwrite one byte of the MiscFixes and
+	// RestoreDeathMusic signatures, suppressing both later arms exactly as in
+	// the original (`zp_dump --ordering` pins it).
 	ApplyRemoveUselessChecks(ctx);
 	ApplyCollisionDeadlockFix(ctx);
 	ApplyCombinedRadioFreezeFix(ctx);
 	ApplyCopSirensFlag(ctx);
-	ApplyDualVehicleHeadlights(ctx);
 	ApplyEmissiveLerpFix(ctx);
 	ApplyEpisodeSwitchFreezeFix(ctx);
 	ApplyEpisodicVehicleSupport(ctx);
