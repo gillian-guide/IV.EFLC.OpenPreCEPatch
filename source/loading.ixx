@@ -78,31 +78,36 @@ constexpr GameRva kLoadDlcsJmpA_1080{0x4903B8u};   // 0x4903B8: jmp target
 constexpr GameRva kLoadDlcsJmpB_1080{0x49042Cu};   // 0x49042C: jmp target
 constexpr GameRva kLoadDlcsCall_1080{0x48FBB0u};   // 0x48FBB0: call target
 
+// The per-build published slots (callback / register / apply); the build column
+// is the gate, and a build without a row publishes nothing.
+struct DlcPublish final
+{
+	GameBuild build;
+	GameRva callback;
+	GameRva registerRva;
+	GameRva applyRva;
+};
+constexpr DlcPublish kDlcPublish[] = {
+    {GameBuild::v1060, kDlcLoadCallback_1060, kDlcRegister_1060, kDlcApply_1060},
+    {GameBuild::v1070, kDlcLoadCallback_1070, kDlcRegister_1070, kDlcApply_1070},
+    {GameBuild::v1080, kDlcLoadCallback_1080, kDlcRegister_1080, kDlcApply_1080},
+};
+
 void PublishLoadDLCs(const PatchContext& ctx)
 {
 	Trace("publish LoadDLCs");
 	// LoadDLCs: 9 rvas
 	if (ctx.Option("LoadDLCs", "1"))
 	{
-		if (ctx.build == GameBuild::v1060)
+		for (const DlcPublish& row : kDlcPublish)
 		{
-			zpatch_dlc_load_callback = static_cast<std::uint32_t>(kDlcLoadCallback_1060.site(ctx.gameBase));
-			DlcRegisterRva() = kDlcRegister_1060.value;
-			DlcApplyRva() = kDlcApply_1060.value;
-		}
-
-		if (ctx.build == GameBuild::v1070)
-		{
-			zpatch_dlc_load_callback = static_cast<std::uint32_t>(kDlcLoadCallback_1070.site(ctx.gameBase));
-			DlcRegisterRva() = kDlcRegister_1070.value;
-			DlcApplyRva() = kDlcApply_1070.value;
-		}
-
-		if (ctx.build == GameBuild::v1080)
-		{
-			zpatch_dlc_load_callback = static_cast<std::uint32_t>(kDlcLoadCallback_1080.site(ctx.gameBase));
-			DlcApplyRva() = kDlcApply_1080.value;
-			DlcRegisterRva() = kDlcRegister_1080.value;
+			if (ctx.build != row.build)
+				continue;
+			zpatch_dlc_load_callback =
+			    static_cast<std::uint32_t>(row.callback.site(ctx.gameBase));
+			DlcRegisterRva() = row.registerRva.value;
+			DlcApplyRva() = row.applyRva.value;
+			break;
 		}
 	}
 }

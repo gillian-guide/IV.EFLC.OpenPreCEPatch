@@ -52,6 +52,8 @@ constexpr float kFloatQuarter = 0.25f;
 constexpr float kFloatHalf = 0.5f;
 constexpr float kDrivebyFov = 45.0f;
 constexpr float kPiOver2 = 1.5707964f;  // the original's rounded pi/2
+// The steering tilt uses a double pi (the original's 3.141592653589793).
+constexpr double kPi = 3.141592653589793;
 constexpr float kFchsOffset = 2.0f;
 constexpr float kBikeSpeedThreshold = 0.0066666668f;
 constexpr float kCutsceneEps = 0.05f;
@@ -1687,10 +1689,10 @@ extern "C" std::uint32_t abi_steer_body() noexcept
 		    vehicle + kVehicleBoneOffset);
 		const float lock = *reinterpret_cast<const float*>(
 		    static_cast<std::uintptr_t>(lock_owner) + kVehicleLockOwnerOffset);
-		const float turn = static_cast<float>(static_cast<double>(steering / lock) *
-		                                      -3.141592653589793);
+		const float turn =
+		    static_cast<float>(static_cast<double>(steering / lock) * -kPi);
 		float tilt = 0.0f;
-		for (int i = 0; i < 512; ++i)
+		for (int i = 0; i < static_cast<int>(kVehicleLightSlotCount); ++i)
 		{
 			const std::uint32_t hash = zpatch_wheelangle_models[i];
 			if (hash == 0u) break;
@@ -3891,20 +3893,20 @@ extern "C" __declspec(naked) void abi_building_dynamic_shadows()
 // jump to the resume; the IDE hook fills the model-hash tables the checks read.
 extern "C" int abi_copsirens_check_a()  // sub_10005F70
 {
-	static const char* const kPolice[] =
-	{
-			"police",     "police2",    "police3",  "police4",   "noose",      "pstockade",
-			"nstockade",  "polpatriot", "fbi",      "n_police",  "n_police2",  "n_polpatriot",
-			"n_pstockade", nullptr};
+	// The twelve police model names the original compares, in its table order.
+	constexpr std::array<std::string_view, 13> kPolice = {
+	    "police",    "police2",   "police3", "police4",    "noose",      "pstockade",
+	    "nstockade", "polpatriot", "fbi",     "n_police",   "n_police2",  "n_polpatriot",
+	    "n_pstockade"};
 	const auto lookup = reinterpret_cast<int(__cdecl*)(std::uint32_t, std::int32_t*)>(
 	    static_cast<std::uintptr_t>(zpatch_model_lookup));
 	const std::int32_t index = static_cast<std::int32_t>(zpatch_copsirens_index);
 	zpatch_copsirens_flag = 0;
 	// sub_10005F70's `call dword_10159C0C` is unguarded.
-	for (int i = 0; kPolice[i]; ++i)
+	for (const std::string_view name : kPolice)
 	{
 		std::int32_t out = -1;
-		lookup(GameHash(kPolice[i]), &out);
+		lookup(GameHash(name), &out);
 		if (out == index)
 		{
 			zpatch_copsirens_flag = 1;
@@ -3983,7 +3985,7 @@ extern "C" void abi_ide_parse()  // sub_10003FA0
 	    reinterpret_cast<const void*>(static_cast<std::uintptr_t>(zpatch_ide_model) + 60u));
 	const auto append = [](std::uint32_t* array, std::uint32_t value)
 	{
-		for (int i = 0; i < 512; ++i)
+		for (int i = 0; i < static_cast<int>(kVehicleLightSlotCount); ++i)
 		{
 			if (array[i] == value) return;
 			if (array[i] == 0)

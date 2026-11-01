@@ -80,6 +80,8 @@ namespace
 // "AA ?? BB" spells one byte per three characters; there is no separator after
 // the last token.
 constexpr std::size_t kSignatureTokenWidth = 3;
+// The two digits of a normalised byte.
+constexpr char kHexDigits[] = "0123456789ABCDEF";
 
 std::size_t PatternLength(std::string_view normalized) noexcept
 {
@@ -90,16 +92,18 @@ std::size_t PatternLength(std::string_view normalized) noexcept
 // 16) and compares the low byte; "?" and "??" are the only wildcards. A few
 // signatures carry three-digit tokens such as "485", which the original reads as
 // 0x85 - reproducing that here matters.
-void ParseToken(std::string_view token, int& value, bool& wildcard)
+// One signature token: a wildcard, or the low byte of its parsed value.
+struct SignatureToken final
+{
+	int value;
+	bool wildcard;
+};
+
+SignatureToken ParseToken(std::string_view token)
 {
 	if (token == "?" || token == "??")
-	{
-		wildcard = true;
-		value = 0;
-		return;
-	}
+		return {0, true};
 
-	wildcard = false;
 	std::size_t i = 0;
 	while (i < token.size() && IsWhite(token[i]))
 		++i;
@@ -131,7 +135,7 @@ void ParseToken(std::string_view token, int& value, bool& wildcard)
 		accumulated = accumulated * 16u + static_cast<std::uint32_t>(digit);
 	}
 
-	value = static_cast<int>((negative ? 0u - accumulated : accumulated) & kByteMask);
+	return {static_cast<int>((negative ? 0u - accumulated : accumulated) & kByteMask), false};
 }
 
 // Re-emit the pattern as the strict "AA ?? BB" form Hooking.Patterns expects.
@@ -154,22 +158,19 @@ bool Normalize(std::string_view signature, std::string& out)
 			++i;
 		const std::string_view token = signature.substr(start, i - start);
 
-		int value = 0;
-		bool wildcard = false;
-		ParseToken(token, value, wildcard);
+		const SignatureToken parsed = ParseToken(token);
 
 		if (!out.empty())
 			out.push_back(' ');
 
-		if (wildcard)
+		if (parsed.wildcard)
 		{
 			out.push_back('?');
 		}
 		else
 		{
-			static const char kHex[] = "0123456789ABCDEF";
-			out.push_back(kHex[(value >> 4) & kNibbleMask]);
-			out.push_back(kHex[value & kNibbleMask]);
+			out.push_back(kHexDigits[(parsed.value >> 4) & kNibbleMask]);
+			out.push_back(kHexDigits[parsed.value & kNibbleMask]);
 		}
 		any = true;
 	}

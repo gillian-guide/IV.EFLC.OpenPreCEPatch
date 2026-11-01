@@ -297,14 +297,15 @@ bool QueryGameVersion(std::uint32_t& compactVersion, GameBuild& build) noexcept
 	if (infoSize == 0)
 		return false;
 
-	auto* info = new (std::nothrow) std::uint8_t[infoSize];
+	std::unique_ptr<std::uint8_t[]> info(new (std::nothrow) std::uint8_t[infoSize]);
 	if (!info)
 		return false;
 
 	VS_FIXEDFILEINFO* fixed = nullptr;
 	UINT fixedSize = 0;
-	const BOOL queried = GetFileVersionInfoA(executable, ignored, infoSize, info) &&
-	                     VerQueryValueA(info, "\\", reinterpret_cast<void**>(&fixed), &fixedSize);
+	const BOOL queried =
+	    GetFileVersionInfoA(executable, ignored, infoSize, info.get()) &&
+	    VerQueryValueA(info.get(), "\\", reinterpret_cast<void**>(&fixed), &fixedSize);
 
 	bool result = false;
 	if (queried && fixed && fixedSize >= sizeof(VS_FIXEDFILEINFO) &&
@@ -320,6 +321,5 @@ bool QueryGameVersion(std::uint32_t& compactVersion, GameBuild& build) noexcept
 			build = ClassifyGameBuild(compactVersion);
 	}
 
-	delete[] info;
 	return result;
 }

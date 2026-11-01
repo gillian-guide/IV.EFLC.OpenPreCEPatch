@@ -208,89 +208,72 @@ void ApplyMiscFixes(const PatchContext& ctx)
 	{
 		const GameImage& image = ctx.image;
 
-		if (auto pattern = Pattern(image, "74 05 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 83 C4 04 B9"); pattern.size() > 0)
+		// The twelve recovered patches, in the handler's order. `kind` selects the
+		// write shape; `value` is the byte written (the second jump byte for jmp2).
+		enum class MiscWriteKind : std::uint8_t
 		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::WriteMemory<std::uint8_t>(match, kShortJmpOpcode, true); //jmp
-		}
-
-		if (auto pattern = Pattern(image, "75 28 6A 00 6A 00 68 ? ? ? ? E8 ? ? ? ? 83 C4 0C"); pattern.size() > 0)
+			byte,
+			jmp2,
+			nop2,
+			movEax,
+		};
+		struct MiscFixSite final
 		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::WriteMemory<std::uint8_t>(match, kShortJmpOpcode, true); //jmp
-		}
-
-		if (auto pattern = Pattern(image, "81 EC ? ? ? ? A1 ? ? ? ? 33 C4 89 84 24 ? ? ? ? 53 ? 6A 3C 33 DB 8D 44 24 ? 53 50 E8"); pattern.size() > 0)
+			std::string_view signature;
+			MiscWriteKind kind;
+			std::ptrdiff_t offset;
+			std::uint8_t value;
+		};
+		constexpr MiscFixSite kSites[] = {
+		    {"74 05 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 83 C4 04 B9", MiscWriteKind::byte, 0,
+		     kShortJmpOpcode},
+		    {"75 28 6A 00 6A 00 68 ? ? ? ? E8 ? ? ? ? 83 C4 0C", MiscWriteKind::byte, 0,
+		     kShortJmpOpcode},
+		    {"81 EC ? ? ? ? A1 ? ? ? ? 33 C4 89 84 24 ? ? ? ? 53 ? 6A 3C 33 DB 8D 44 24 ? 53 50 E8",
+		     MiscWriteKind::byte, 0, kRetOpcode},
+		    {"83 C4 ? 3B 46 20", MiscWriteKind::byte, 12, kShortJmpOpcode},
+		    {"83 F8 01 75 30 A3", MiscWriteKind::movEax, 0, kTrueValue},
+		    {"8B 54 24 04 52 A3", MiscWriteKind::jmp2, 0, kMiscJmpDispC9},
+		    {"C7 05 ? ? ? ? 03 00 00 00 33 C0 5E 59 C3 C7", MiscWriteKind::jmp2, 0,
+		     kMiscJmpDisp0D},
+		    {"C7 06 ? ? ? ? 74 19", MiscWriteKind::byte, 6, kShortJmpOpcode},
+		    {"FF 15 ? ? ? ? 85 C0 75 04 32", MiscWriteKind::nop2, 8, 0},
+		    {"FF 15 ? ? ? ? 85 C0 75 07 A0", MiscWriteKind::nop2, 8, 0},
+		    {"FF 15 ? ? ? ? 85 C0 75 18", MiscWriteKind::nop2, 8, 0},
+		};
+		for (const MiscFixSite& site : kSites)
 		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::WriteMemory<std::uint8_t>(match, kRetOpcode, true); //ret
-		}
-
-		if (auto pattern = Pattern(image, "83 C4 ? 3B 46 20"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::WriteMemory<std::uint8_t>(match + 12, kShortJmpOpcode, true); //jmp
-		}
-
-		if (auto pattern = Pattern(image, "83 F8 01 75 30 A3"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::WriteMemory<std::uint8_t>(match, kMovEaxOpcode, true); // cmp eax,1 -> mov eax,1
-			injector::WriteMemory<std::uint32_t>(match + 1, kTrueValue, true); // cmp eax,1 -> mov eax,1
-		}
-
-		if (auto pattern = Pattern(image, "8B 54 24 04 52 A3"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			// `jmp +0xC9` written as its two bytes (there is no short-jump API).
-			injector::WriteMemory<std::uint8_t>(match, kShortJmpOpcode, true);      //jmp
-			injector::WriteMemory<std::uint8_t>(match + 1, kMiscJmpDispC9, true);  // +0xC9
-		}
-
-		if (auto pattern = Pattern(image, "C7 05 ? ? ? ? 03 00 00 00 33 C0 5E 59 C3 C7"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			// `jmp +0x0D` written as its two bytes (there is no short-jump API).
-			injector::WriteMemory<std::uint8_t>(match, kShortJmpOpcode, true);      //jmp
-			injector::WriteMemory<std::uint8_t>(match + 1, kMiscJmpDisp0D, true);  // +0x0D
-		}
-
-		if (auto pattern = Pattern(image, "C7 06 ? ? ? ? 74 19"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::WriteMemory<std::uint8_t>(match + 6, kShortJmpOpcode, true); //jmp
-		}
-
-		if (auto pattern = Pattern(image, "FF 15 ? ? ? ? 85 C0 75 04 32"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeNOP(match + 8, 2, true); //nop
-		}
-
-		if (auto pattern = Pattern(image, "FF 15 ? ? ? ? 85 C0 75 07 A0"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeNOP(match + 8, 2, true); //nop
-		}
-
-		if (auto pattern = Pattern(image, "FF 15 ? ? ? ? 85 C0 75 18"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeNOP(match + 8, 2, true); //nop
+			if (auto pattern = Pattern(image, site.signature); pattern.size() > 0)
+			{
+				auto* match = pattern.get(0).get<std::uint8_t>();
+				switch (site.kind)
+				{
+				case MiscWriteKind::byte:
+					injector::WriteMemory<std::uint8_t>(match + site.offset, site.value,
+					                                    true); //byte
+					break;
+				case MiscWriteKind::jmp2:
+					// `jmp rel8` written as its two bytes (there is no short-jump API).
+					injector::WriteMemory<std::uint8_t>(match + site.offset, kShortJmpOpcode,
+					                                    true); //jmp
+					injector::WriteMemory<std::uint8_t>(match + site.offset + 1, site.value,
+					                                    true); //disp
+					break;
+				case MiscWriteKind::nop2:
+					injector::MakeNOP(match + site.offset, 2, true); //nop
+					break;
+				case MiscWriteKind::movEax:
+					injector::WriteMemory<std::uint8_t>(match + site.offset, kMovEaxOpcode,
+					                                    true); //mov eax
+					injector::WriteMemory<std::uint32_t>(match + site.offset + 1, site.value,
+					                                    true); //imm32
+					break;
+				}
+			}
 		}
 	}
 }
+
 
 void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 {

@@ -152,19 +152,15 @@ void ApplyDoNotPauseOnMinimize(const PatchContext& ctx)
 	{
 		const GameImage& image = ctx.image;
 
+		if (auto pattern = Pattern(image, "6A 0A 56 50 FF D2 A1"); pattern.size() > 0)
 		{
-			if (auto pattern = Pattern(image, "6A 0A 56 50 FF D2 A1"); pattern.size() > 0)
-			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(1),
-			                                    kMinimizePauseTick, true); // minimize wait 10 -> 6
-			}
+			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(1),
+			                                    kMinimizePauseTick, true); // wait 10 -> 6
 		}
 
+		if (auto pattern = Pattern(image, "75 ? 8B 0D ? ? ? ? 51 FF 15 ? ? ? ? 85 C0 75 ? 8B 15"); pattern.size() > 0)
 		{
-			if (auto pattern = Pattern(image, "75 ? 8B 0D ? ? ? ? 51 FF 15 ? ? ? ? 85 C0 75 ? 8B 15"); pattern.size() > 0)
-			{
-				injector::MakeNOP(pattern.get(0).get<std::uint8_t>(), 2, true); //nop
-			}
+			injector::MakeNOP(pattern.get(0).get<std::uint8_t>(), 2, true); //nop
 		}
 	}
 }
