@@ -385,8 +385,9 @@ extern "C" void __cdecl abi_newfiles_register()
 {
     // The slot is a cdecl two-argument registrar; the original cleans both
     // arguments after the call.
-    const auto register_file = reinterpret_cast<void(__cdecl*)(uint32_t, void*)>(
-        static_cast<uintptr_t>(zpatch_newfiles_register_slot));
+    using RegisterFileFn = void(__cdecl*)(uint32_t, void*);
+    const auto register_file =
+        GameFunction<RegisterFileFn>(static_cast<uintptr_t>(zpatch_newfiles_register_slot));
     // The script-handler hash the original registers the callback under
     // (sub_10051600's `register_file` argument).
     constexpr uint32_t kNewFilesHandlerHash = 0x2C89A1F9u;
@@ -395,9 +396,10 @@ extern "C" void __cdecl abi_newfiles_register()
 extern "C" void* abi_newfiles_find_obj()  // 0x10051730
 {
     // The original re-dereferences the container global on EVERY call
-    // (**(_DWORD**)(match+2)), so it is picked up again whenever the game rebuilds
-    // its registry; caching the container itself left a stale one that faulted in
-    // the game's container search (0x43a490).
+    // (`mov esi, [match+2]`), so it is picked up again whenever the game
+    // rebuilds its registry; caching the container itself left a stale one that
+    // faulted in the game's container search (0x43a490).
+    constexpr ptrdiff_t kContainerGlobalOperand = 2;
     static uintptr_t match = 0;
     static bool resolved = false;
     if (!resolved)
@@ -408,9 +410,9 @@ extern "C" void* abi_newfiles_find_obj()  // 0x10051730
     }
     if (!match) return nullptr;
     const uint32_t global =
-        *reinterpret_cast<const uint32_t*>(reinterpret_cast<const void*>(match + 2u));
-    return global ? reinterpret_cast<void*>(*reinterpret_cast<const uint32_t*>(
-                        reinterpret_cast<const void*>(global)))
+        Field(reinterpret_cast<const uint8_t*>(match), kContainerGlobalOperand);
+    return global ? reinterpret_cast<void*>(
+                        *reinterpret_cast<const uint32_t*>(reinterpret_cast<const void*>(global)))
                   : nullptr;
 }
 extern "C" int abi_newfiles_call_obj(void* obj, uint32_t hash)  // 0x10051610
@@ -425,21 +427,24 @@ extern "C" int abi_newfiles_call_obj(void* obj, uint32_t hash)  // 0x10051610
         if (!cached) cached = newfiles_find("53 55 8B 6C 24 0C 56 57 EB 06");
     }
     if (!cached) return 0;
-    return reinterpret_cast<Fn>(cached)(obj, 0, hash);
+    return GameFunction<Fn>(cached)(obj, 0, hash);
 }
 extern "C" int abi_newfiles_call_add(void* self, void* str)  // 0x100517E0
 {
     using Fn = int(__fastcall*)(void* self, int, void*);
+    // The pattern matches 20 bytes into the original function; the write body
+    // keeps pointing at its entry, which is that many bytes before the match.
+    constexpr uintptr_t kFunctionHeadroom = 20u;
     static uintptr_t cached = 0;
     static bool resolved = false;
     if (!resolved)
     {
         resolved = true;
         const uintptr_t m = newfiles_find("8B 0F 85 C9 74 ? 0F B7 41 0A 66 85 C0");
-        cached = m ? m - 20u : 0;
+        cached = m ? m - kFunctionHeadroom : 0;
     }
     if (!cached) return 0;
-    return reinterpret_cast<Fn>(cached)(self, 0, str);
+    return GameFunction<Fn>(cached)(self, 0, str);
 }
 // @exact 0x10051600
 static __declspec(naked) void abi_newfiles_register_body()  // 0x10051600
@@ -457,27 +462,34 @@ static __declspec(naked) void abi_newfiles_register_body()  // 0x10051600
 extern "C" char __fastcall abi_newfiles_update_a(void* self, int)  // 0x10051890
 {
     constexpr size_t kUpdateNameOffsetA = 0x10;
+    constexpr ptrdiff_t kUpdateArgOffsetA = 8;
     auto* base = static_cast<unsigned char*>(self);
     if (base[kUpdateNameOffsetA] == 0) return 0;
     if (abi_newfiles_call_obj(abi_newfiles_find_obj(),
                               GameHash(reinterpret_cast<const char*>(base + kUpdateNameOffsetA))))
-        abi_newfiles_call_add(base + 8, base + kUpdateNameOffsetA);
+        abi_newfiles_call_add(base + kUpdateArgOffsetA, base + kUpdateNameOffsetA);
     return 1;
 }
 extern "C" char __fastcall abi_newfiles_update_b(void* self, int)  // 0x100518D0
 {
     constexpr size_t kUpdateNameOffsetB = 0x10F;
+    constexpr ptrdiff_t kUpdateArgOffsetB = 4;
     auto* base = static_cast<unsigned char*>(self);
     if (base[kUpdateNameOffsetB] == 0) return 0;
     if (abi_newfiles_call_obj(abi_newfiles_find_obj(),
                               GameHash(reinterpret_cast<const char*>(base + kUpdateNameOffsetB))))
-        abi_newfiles_call_add(base + 4, base + kUpdateNameOffsetB);
+        abi_newfiles_call_add(base + kUpdateArgOffsetB, base + kUpdateNameOffsetB);
     return 1;
 }
 // DLC discovery post step (sub_10023150): enumerate \dlc\tlad\content\ / \TLAD\,
 // \dlc\TBoGT\content\ / \TBoGT\ and \EpisodeN\ next to the executable and
 // register each through the two published game RVAs. The original writes the
 // module base + RVA into the struct and hands it to the register/apply functions.
+//
+// Naked only to capture EDX: the apply function returns its second value in EDX
+// and the caller's resume reads it. Contract: __cdecl, four dword arguments
+// (object, request, apply function, out-EDX); no return value; the caller cleans
+// the stack.
 static __declspec(naked) void __cdecl zpatch_dlc_apply_capture_edx(
     void*, char*, DlcApplyFn, uint32_t*)
 {
@@ -495,8 +507,23 @@ static __declspec(naked) void __cdecl zpatch_dlc_apply_capture_edx(
     }
 }
 
-// The 0x104-byte path buffers sub_10023150 builds for each DLC folder.
+// The 0x104-byte path buffer the discovery routine builds for each DLC folder.
 constexpr size_t kDlcPathCapacity = 0x104u;
+// sub_10023150's per-folder request struct and the two fields it sets before
+// handing the request to the game's register function (recovered stack layout).
+constexpr size_t kDlcRequestSize = 360u;
+constexpr size_t kDlcRequestModeOffset = 358u;  // byte, set to 1
+constexpr size_t kDlcRequestFlagOffset = 344u;  // dword, set to 1
+constexpr uint8_t kDlcRequestRegistered = 1u;
+// The DLC entry's post-discovery state byte (the fixup body sets +0xA4 after it).
+constexpr size_t kDlcEntryPostStateOffset = 358u;
+constexpr uint8_t kDlcEntryPostState = 2u;
+// Episode 254 is the one the original treats as the last apply producer.
+constexpr int kEpisode254Id = 508;
+// The episode loop's recovered bounds and id formula: "\Episode3" .. "\Episode254".
+constexpr int kFirstEpisodeNumber = 3;
+constexpr int kEpisodeNumberLimit = 255;  // exclusive
+constexpr int kEpisodeIdMultiplier = 2;
 
 void* dlc_discovery_post(void* object)
 {
@@ -530,31 +557,32 @@ void* dlc_discovery_post(void* object)
             strcat_s(path, kDlcPathCapacity, fallback);
             if (!PathFileExistsA(path)) return;
         }
-        char request[360]{};
+        char request[kDlcRequestSize]{};
         strcpy_s(request, kDlcPathCapacity, path);
-        request[358] = 1;
-        *reinterpret_cast<uint32_t*>(request + 344) = 1;
+        request[kDlcRequestModeOffset] = kDlcRequestRegistered;
+        *reinterpret_cast<uint32_t*>(request + kDlcRequestFlagOffset) =
+            kDlcRequestRegistered;
         const auto game_base = reinterpret_cast<uintptr_t>(GetModuleHandleA(nullptr));
-        const auto register_fn = reinterpret_cast<DlcRegisterFn>(
-            game_base + DlcRegisterRva());
-        const auto apply_fn = reinterpret_cast<DlcApplyFn>(
-            game_base + DlcApplyRva());
-        register_fn(id, request, 1);
+        const auto register_fn =
+            GameFunction<DlcRegisterFn>(game_base + DlcRegisterRva());
+        const auto apply_fn = GameFunction<DlcApplyFn>(game_base + DlcApplyRva());
+        register_fn(id, request, kDlcRequestRegistered);
         zpatch_dlc_apply_capture_edx(object, request, apply_fn, &last_apply_edx);
-        if (id == 508) episode254_registered = true;
+        if (id == kEpisode254Id) episode254_registered = true;
     };
 
     try_paths("\\dlc\\tlad\\content\\", "\\TLAD\\", 2);
     try_paths("\\dlc\\TBoGT\\content\\", "\\TBoGT\\", 4);
-    for (int i = 3; i < 255; ++i)
+    for (int i = kFirstEpisodeNumber; i < kEpisodeNumberLimit; ++i)
     {
         // The original formats "\EpisodeN\" into a 64-byte stack buffer.
         constexpr size_t kEpisodeSuffixCapacity = 0x40;
         char suffix[kEpisodeSuffixCapacity];
         zpatch_spawns_sprintf(suffix, sizeof(suffix), "\\Episode%d\\", i);
-        try_paths(suffix, suffix, 2 * i);
+        try_paths(suffix, suffix, kEpisodeIdMultiplier * i);
     }
-    *reinterpret_cast<uint8_t*>(static_cast<uint8_t*>(object) + 358) = 2;
+    *reinterpret_cast<uint8_t*>(static_cast<uint8_t*>(object) +
+                                kDlcEntryPostStateOffset) = kDlcEntryPostState;
     // sub_10023150's final sub_10001280 call leaves its 0x40 buffer size in EDX;
     // PathFileExistsA preserves EDX and the caller's resume observes it. If
     // Episode254 exists, its final apply call is the last EDX producer instead
@@ -633,6 +661,33 @@ namespace opp::features
             // (1.0.6.0 0x4144D4->0x414560, 1.0.7.0 0x414274->0x414300,
             // 1.0.8.0 0x4903D4->0x490460: the same 0x8C on every gated build).
             constexpr uintptr_t kDlcCallbackDelta = 0x8C;
+            // The per-gated-build instruction windows: the struct-fixup site
+            // (the callback is 0x8C past it), the register helper and the apply
+            // helper. The apply window is identical on all three builds; the
+            // register window's stack-cookie dword differs (40 2F F4 / 40 3F F4
+            // / 40 2C F6) and 1.0.8.0's ends differently.
+            struct DlcWindows final
+            {
+                GameBuild build;
+                const char* fixup;
+                const char* register_helper;
+                const char* apply_helper;
+            };
+            constexpr DlcWindows kWindows[] = {
+                {GameBuild::v1060,
+                 "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8",
+                 "81 EC 0C 02 00 00 A1 40 2F F4 00 33 C4 89 84 24 08 02 00 00 53 55 56 57",
+                 "51 53 8B D9 0F B7 8B 50 01 00 00 55 56 33 ED 85"},
+                {GameBuild::v1070,
+                 "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E 5B",
+                 "81 EC 0C 02 00 00 A1 40 3F F4 00 33 C4 89 84 24 08 02 00 00 53 55 56 57",
+                 "51 53 8B D9 0F B7 8B 50 01 00 00 55 56 33 ED 85"},
+                {GameBuild::v1080,
+                 "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6",
+                 "81 EC 0C 02 00 00 A1 40 2C F6 00 33 C4 89 84 24 08 02 00 00 53 55 56 8B",
+                 "51 53 8B D9 0F B7 8B 50 01 00 00 55 56 33 ED 85"},
+            };
+
             const GameImage& image = ctx.image;
 
             // The two helpers the discovery loop calls are entries too, so the
@@ -651,33 +706,15 @@ namespace opp::features
                     kDlcCallbackDelta);
             };
 
-            if (ctx.build == GameBuild::v1060)
+            for (const DlcWindows& windows : kWindows)
             {
-                if (auto pattern = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8"); pattern.size() > 0)
+                if (ctx.build != windows.build)
+                    continue;
+                if (auto pattern = Pattern(image, windows.fixup); pattern.size() > 0)
                     publishCallback(pattern);
-                if (auto pattern = Pattern(image, "81 EC 0C 02 00 00 A1 40 2F F4 00 33 C4 89 84 24 08 02 00 00 53 55 56 57"); pattern.size() > 0)
+                if (auto pattern = Pattern(image, windows.register_helper); pattern.size() > 0)
                     DlcRegisterRva() = AsRva(pattern.get(0).get<uint8_t>());
-                if (auto pattern = Pattern(image, "51 53 8B D9 0F B7 8B 50 01 00 00 55 56 33 ED 85"); pattern.size() > 0)
-                    DlcApplyRva() = AsRva(pattern.get(0).get<uint8_t>());
-            }
-
-            if (ctx.build == GameBuild::v1070)
-            {
-                if (auto pattern = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E 5B"); pattern.size() > 0)
-                    publishCallback(pattern);
-                if (auto pattern = Pattern(image, "81 EC 0C 02 00 00 A1 40 3F F4 00 33 C4 89 84 24 08 02 00 00 53 55 56 57"); pattern.size() > 0)
-                    DlcRegisterRva() = AsRva(pattern.get(0).get<uint8_t>());
-                if (auto pattern = Pattern(image, "51 53 8B D9 0F B7 8B 50 01 00 00 55 56 33 ED 85"); pattern.size() > 0)
-                    DlcApplyRva() = AsRva(pattern.get(0).get<uint8_t>());
-            }
-
-            if (ctx.build == GameBuild::v1080)
-            {
-                if (auto pattern = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6"); pattern.size() > 0)
-                    publishCallback(pattern);
-                if (auto pattern = Pattern(image, "81 EC 0C 02 00 00 A1 40 2C F6 00 33 C4 89 84 24 08 02 00 00 53 55 56 8B"); pattern.size() > 0)
-                    DlcRegisterRva() = AsRva(pattern.get(0).get<uint8_t>());
-                if (auto pattern = Pattern(image, "51 53 8B D9 0F B7 8B 50 01 00 00 55 56 33 ED 85"); pattern.size() > 0)
+                if (auto pattern = Pattern(image, windows.apply_helper); pattern.size() > 0)
                     DlcApplyRva() = AsRva(pattern.get(0).get<uint8_t>());
             }
         }
@@ -703,7 +740,11 @@ namespace opp::features
         // the original statement order for the same reason.
         if (ctx.Option("LoadDLCs", "1"))
         {
+            if (ctx.build != GameBuild::v1060 && ctx.build != GameBuild::v1070 &&
+                ctx.build != GameBuild::v1080)
+                return;
             const GameImage& image = ctx.image;
+            const bool is1080 = ctx.build == GameBuild::v1080;
 
             // Destinations as deltas from the site: +0x5C jumps into the same
             // block, +0x1E skips the fixup (identical on 1.0.6.0/1.0.7.0), and
@@ -712,75 +753,52 @@ namespace opp::features
             constexpr uintptr_t kJumpOverFixup = 0x1E;
             constexpr uintptr_t kHelperCallBeforeSite = 0x70A;
             constexpr uintptr_t kHelperCallBeforeSite1080 = 0x88A;
+            // The call following the site whose twelve bytes the original NOPs.
+            constexpr size_t kTailSiteLength = 12;
 
             const auto findSite = [&image](const char* signature) -> uint8_t* {
                 auto pattern = Pattern(image, signature);
                 return pattern.size() > 0 ? pattern.get(0).get<uint8_t>() : nullptr;
             };
 
-            // The two jumps and the trailing NOP share their shape on 1.0.6.0
-            // and 1.0.7.0, so the block is written once per build with the
-            // build's own windows.
-            if (ctx.build == GameBuild::v1060 || ctx.build == GameBuild::v1070)
-            {
-                const bool first = ctx.build == GameBuild::v1060;
+            // The dummy-call and struct-fixup windows differ per build;
+            // 1.0.6.0/1.0.7.0 share the dummy-call window, 1.0.8.0 has its own.
+            const char* const dummyCallSignature =
+                is1080
+                    ? "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 4C 24 ?? 51 8D 94 24 ?? ?? ?? ?? 52 E8"
+                    : "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52";
+            const char* const structFixupSignature =
+                ctx.build == GameBuild::v1060
+                    ? "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8"
+                    : (ctx.build == GameBuild::v1070
+                           ? "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E 5B"
+                           : "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6");
 
-                uint8_t* const dummyCall = findSite(
-                    "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52");
-                uint8_t* const earlyJump = findSite(
-                    "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24");
-                uint8_t* const structFixup = findSite(
-                    first ? "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8"
-                          : "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E 5B");
-                uint8_t* const skipFixupJump = findSite(
-                    "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E");
-                uint8_t* const helperCall = findSite(
-                    "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E");
-                uint8_t* const tail = findSite(
-                    "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC");
+            uint8_t* const dummyCall = findSite(dummyCallSignature);
+            uint8_t* const earlyJump = findSite(
+                "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24");
+            uint8_t* const structFixup = findSite(structFixupSignature);
+            uint8_t* const skipFixupJump = findSite(
+                "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E");
+            uint8_t* const helperCall = findSite(
+                "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E");
+            uint8_t* const tail = findSite(
+                "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC");
 
-                if (dummyCall != nullptr)
-                    CallTo(ctx, dummyCall, OPP_BODY(abi_load_dlcs_dummy));
-                if (earlyJump != nullptr)
-                    JumpTo(ctx, earlyJump, earlyJump + kJumpIntoSameBlock);
-                if (structFixup != nullptr)
-                    JumpTo(ctx, structFixup, OPP_BODY(abi_load_dlcs_struct_fixup));
-                if (skipFixupJump != nullptr)
-                    JumpTo(ctx, skipFixupJump, skipFixupJump + kJumpOverFixup);
-                if (helperCall != nullptr)
-                    CallTo(ctx, helperCall, helperCall - kHelperCallBeforeSite);
-                if (tail != nullptr)
-                    NopAt(ctx, tail, 12);
-            }
-
-            if (ctx.build == GameBuild::v1080)
-            {
-                uint8_t* const dummyCall = findSite(
-                    "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 4C 24 ?? 51 8D 94 24 ?? ?? ?? ?? 52 E8");
-                uint8_t* const earlyJump = findSite(
-                    "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24");
-                uint8_t* const structFixup = findSite(
-                    "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6");
-                uint8_t* const skipFixupJump = findSite(
-                    "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E");
-                uint8_t* const helperCall = findSite(
-                    "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E");
-                uint8_t* const tail = findSite(
-                    "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC");
-
-                if (dummyCall != nullptr)
-                    CallTo(ctx, dummyCall, OPP_BODY(abi_load_dlcs_dummy));
-                if (earlyJump != nullptr)
-                    JumpTo(ctx, earlyJump, earlyJump + kJumpIntoSameBlock);
-                if (structFixup != nullptr)
-                    JumpTo(ctx, structFixup, OPP_BODY(abi_load_dlcs_struct_fixup));
-                if (skipFixupJump != nullptr)
-                    JumpTo(ctx, skipFixupJump, skipFixupJump + kJumpOverFixup);
-                if (helperCall != nullptr)
-                    CallTo(ctx, helperCall, helperCall - kHelperCallBeforeSite1080);
-                if (tail != nullptr)
-                    NopAt(ctx, tail, 12);
-            }
+            if (dummyCall != nullptr)
+                CallTo(ctx, dummyCall, OPP_BODY(abi_load_dlcs_dummy));
+            if (earlyJump != nullptr)
+                JumpTo(ctx, earlyJump, earlyJump + kJumpIntoSameBlock);
+            if (structFixup != nullptr)
+                JumpTo(ctx, structFixup, OPP_BODY(abi_load_dlcs_struct_fixup));
+            if (skipFixupJump != nullptr)
+                JumpTo(ctx, skipFixupJump, skipFixupJump + kJumpOverFixup);
+            if (helperCall != nullptr)
+                CallTo(ctx, helperCall,
+                       helperCall - (is1080 ? kHelperCallBeforeSite1080
+                                            : kHelperCallBeforeSite));
+            if (tail != nullptr)
+                NopAt(ctx, tail, kTailSiteLength);
         }
 
     }
@@ -800,7 +818,10 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "68 64 28 C8 67 E8"); pattern.size() > 0)
             {
-                zpatch_newfiles_register_slot = MatchTarget(pattern, 6, 10);
+                // The E8 at +5 calls the registrar; its rel32 operand is at +6.
+                constexpr ptrdiff_t kRegisterCallOperand = 6;
+                zpatch_newfiles_register_slot =
+                    BranchDestination(pattern.get(0).get<uint8_t>(), kRegisterCallOperand);
             }
         }
 
@@ -837,7 +858,10 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                JumpTo(ctx, match + 28, OPP_BODY(abi_newfiles_register_body));
+                // The E8 to the registrar sits at +28 in this window.
+                constexpr ptrdiff_t kRegisterBodyCall = 28;
+                JumpTo(ctx, match + kRegisterBodyCall,
+                       OPP_BODY(abi_newfiles_register_body));
             }
         }
 
@@ -856,19 +880,24 @@ namespace opp::features
         // missing on 1000/1004/1040 and EFLC.
         if (ctx.Option("NewSavesCompatibility", "1") &&
             BuildIs(ctx.build, {GameBuild::v1060, GameBuild::v1061, GameBuild::v1070,
-                                GameBuild::v1080}) &&
-            Pattern(ctx.image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08").size() > 0)
+                                GameBuild::v1080}))
         {
             const GameImage& image = ctx.image;
+            // The save-name operand is the `push imm32` of the tramp site's
+            // first instruction; the resume is the instruction after the
+            // 13-byte prologue the tramp overwrites.
+            constexpr ptrdiff_t kSaveNameOperand = 1;
+            constexpr ptrdiff_t kResumeAfterPrologue = 13;
 
-            if (auto pattern = Pattern(image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08"); pattern.size() > 0)
+            auto boot = Pattern(image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08");
+            if (boot.size() > 0)
             {
-                zpatch_new_saves_src = *pattern.get(0).get<uint32_t>(1);
-            }
-
-            if (auto pattern = Pattern(image, "89 84 24 E0 01 00 00 8B 45 08 53 33 DB"); pattern.size() > 0)
-            {
-                zpatch_new_saves_resume = MatchAddress(pattern, 13);
+                zpatch_new_saves_src = *boot.get(0).get<uint32_t>(kSaveNameOperand);
+                if (auto pattern = Pattern(image, "89 84 24 E0 01 00 00 8B 45 08 53 33 DB"); pattern.size() > 0)
+                {
+                    zpatch_new_saves_resume =
+                        MatchAddress(pattern, kResumeAfterPrologue);
+                }
             }
         }
 
@@ -882,19 +911,21 @@ namespace opp::features
 
         TraceArm("NewSavesCompatibility");
 
-        // NewSavesCompatibility: 1 siginstall, 1 sigjump
+        // NewSavesCompatibility: 1 sigjump. The savegame-load entry is only
+        // redirected when both the tramp site and the entry window exist.
         if (ctx.Option("NewSavesCompatibility", "1") &&
             BuildIs(ctx.build, {GameBuild::v1060, GameBuild::v1061, GameBuild::v1070,
-                                GameBuild::v1080}) &&
-            Pattern(ctx.image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08").size() > 0)
+                                GameBuild::v1080}))
         {
             const GameImage& image = ctx.image;
 
-            if (auto pattern = Pattern(image, "89 84 24 E0 01 00 00 8B 45 08 53 33 DB"); pattern.size() > 0)
+            if (Pattern(image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08").size() > 0)
             {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpTo(ctx, match, OPP_BODY(abi_new_saves_compat));
+                if (auto pattern = Pattern(image, "89 84 24 E0 01 00 00 8B 45 08 53 33 DB"); pattern.size() > 0)
+                {
+                    JumpTo(ctx, pattern.get(0).get<uint8_t>(),
+                           OPP_BODY(abi_new_saves_compat));
+                }
             }
         }
 
@@ -917,7 +948,12 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                WriteValue<uint32_t>(ctx, match + 1, static_cast<uint32_t>(FindGlobalValue("OverrideGTADatPath")));
+                // The `push imm32` operand names the gta.dat path pointer the
+                // original pushes; the arm points it at the configured path.
+                constexpr ptrdiff_t kGtaDatPathOperand = 1;
+                WriteValue<uint32_t>(ctx, match + kGtaDatPathOperand,
+                                     static_cast<uint32_t>(
+                                         FindGlobalValue("OverrideGTADatPath")));
             }
         }
 
@@ -946,7 +982,11 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                WriteValue<uint8_t>(ctx, match + 8, opp::ops::kJmpRel8);
+                // `mov ds:X,edi` (6 bytes) + `test ebp,ebp` (2) put the `jz`
+                // opcode at +8; the original flips it to a `jmp`.
+                constexpr ptrdiff_t kSignatureBranchOffset = 8;
+                WriteValue<uint8_t>(ctx, match + kSignatureBranchOffset,
+                                    opp::ops::kJmpRel8);
             }
         }
 
