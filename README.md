@@ -74,10 +74,7 @@ build scope; if a behaviour differs from the shipped plugin, that is a bug in th
 ## Credits
 
 - **Zolika1351** — author of ZolikaPatch, the mod this code reconstructs.
-- **XLivelessAddon** — the launcher/DRM bypass and the xliveless design that ZolikaPatch's loader descends from.
-- **LINK/2012** — the `injector` header library.
-- **CitizenFX contributors** — `Hooking.Patterns`, and the `Hooking.h` / `Hooking.cpp` hook framework carried in the tree.
-- **Takashi Tosaka** — `jitasm.h`, the runtime assembler the original project built its hooks on.
+- **ThirteenAG and the FusionFix contributors** — the project layout, build and hook conventions this repository follows
 - **Turbine** — the Feather INI parser, whose `INI<>` call shape this project's reader keeps.
 - **Rockstar Games / Take-Two** — GTA IV and EFLC. This project is not affiliated with or endorsed by them.
 
