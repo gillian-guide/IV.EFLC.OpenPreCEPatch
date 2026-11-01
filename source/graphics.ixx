@@ -1,7 +1,9 @@
 // zp.graphics - Rendering: shadows, alpha, emissive lerp, reflections, LOD, shader
 // streaming, VRAM, the cutscene chain and the window style.
 //
-// One arm per INI option, in the original loader's order. `Publish*` publishes
+// One arm per INI option, in the order this tree has always run its arms (the
+// recovered loader's order was never reproduced exactly; see
+// docs/architecture.md, "Option blocks"). `Publish*` publishes
 // the game addresses a body reads (the whole publish stage runs before any arm
 // writes a site); `Apply*` installs the option. Each block is the shipped mod's
 // arm verbatim: the recovered pattern, its offsets and the bytes it stores.

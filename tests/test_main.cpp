@@ -11,6 +11,7 @@
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -482,18 +483,39 @@ int Run()
 		CHECK(tables.popupAngles[511].modelHash == 123);
 		CHECK(!tables.popupAngles[1].populated);
 		CHECK(tables.headlightOffsets[1].value == 3.5f);
-		// A malformed row is skipped, not fatal: one typo must not disable every
-		// unrelated installer (the original's 512-slot loop keeps going). The rest
-		// of the tables is rebuilt from this document.
+
+		// A name whose value is missing or unparseable faults: the original calls
+		// std::stof and lets the exception escape uncaught (sub_100523C0: strtof at
+		// 0x10052763, the endptr/errno checks at 0x10052772/0x1005277E, then
+		// _Xinvalid_argument 0x10063120 / _Xout_of_range 0x10063124 with the
+		// messages below). Skipping the row instead would be a fault-avoidance
+		// divergence, so the loader must throw here.
+		auto loadThrows = [](const ConfigDocument& document) -> std::string_view
+		{
+			VehicleLightTables out;
+			try
+			{
+				(void)LoadVehicleLightTables(document, out);
+			}
+			catch (const std::invalid_argument& error)
+			{
+				return error.what();
+			}
+			catch (const std::out_of_range& error)
+			{
+				return error.what();
+			}
+			return {};
+		};
 		ConfigDocument broken;
 		CHECK(ParseConfig("[PopupLightAngles]\nCar1Name=police\nCar1Angle=invalid\n", broken));
-		CHECK(LoadVehicleLightTables(broken, tables));
-		CHECK(!tables.popupAngles[0].populated);
-		CHECK(!tables.headlightOffsets[1].populated);
+		CHECK(loadThrows(broken) == "invalid stof argument");
 		ConfigDocument missingValue;
 		CHECK(ParseConfig("[PopupLightAngles]\nCar2Name=police\n", missingValue));
-		CHECK(LoadVehicleLightTables(missingValue, tables));
-		CHECK(!tables.popupAngles[1].populated);
+		CHECK(loadThrows(missingValue) == "invalid stof argument");
+		ConfigDocument outOfRange;
+		CHECK(ParseConfig("[PopupLightAngles]\nCar1Name=police\nCar1Angle=1e999\n", outOfRange));
+		CHECK(loadThrows(outOfRange) == "stof argument out of range");
 	}
 
 	// ---- pattern parser ----------------------------------------------------

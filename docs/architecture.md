@@ -67,13 +67,13 @@ The original compares the build id at `dword_1015BE04` before it reads the INI f
 
 ## Option blocks
 
-`PatchGame` is the reconstruction's own arm schedule: every INI option appears as an inline `if (ctx.Option(...)) { ... }` block, in an order derived from the recovered loader but **not** the original loader's order (measured first-reference rank displacements reach 89: `NoLODLightHeightCutoff` original 3 → here 90, `CarDecalsFix` 0 → 79, `NoPhysicsSleep` 1 → 85, `LocalSettingsPath` 93 → 12). Each block gates on its key (and its build), scans the site and calls `injector::` directly; resume slots are assigned before the site they describe is overwritten, because the original reads them out of the site first. That is also why the slot phase runs before the write phase.
+`PatchGame` is the reconstruction's own arm schedule. Each INI option's arm is a function in its feature module (`source/<feature>.ixx`: `Publish*` for the slot phase, `Apply*` for the install), and `PatchGame` is the ordered list of calls. The arms run in the order this tree has always used: derived from the recovered loader but **not** the original loader's order (measured first-reference rank displacements reach 89: `NoLODLightHeightCutoff` original 3 → here 90, `CarDecalsFix` 0 → 79, `NoPhysicsSleep` 1 → 85, `LocalSettingsPath` 93 → 12). Each arm gates on its key (and its build), scans the site and calls `injector::` directly; the slot publishes all run before the first install, because a site write destroys the signature a later publish scans for, and because the original reads a site's original bytes before overwriting them.
 
-One ordering relation is load-bearing and pinned by `zp_dump --ordering`: `RemoveUselessChecks` must run before `MiscFixes` and `RestoreDeathMusic`. Re-ordering the rest of the arms to the recovered loader order is a separate change that would need a per-build dump proof (the 1.0.8.0 hash alone is not sufficient) and is not part of this tree yet.
+Two ordering relations are load-bearing and pinned by `zp_dump --ordering`: every publish runs before any install, and `RemoveUselessChecks` runs before `MiscFixes` and `RestoreDeathMusic`. Re-ordering the rest of the arms to the recovered loader order is a separate change that would need a per-build dump proof (the 1.0.8.0 hash alone is not sufficient) and is not part of this tree yet.
 
 `RemoveUselessChecks` is applied once, after the `BuildingDynamicShadows` arm, as the original applies it once (the loader's 27th option read). The position is load-bearing in one respect: its tables are already written when `MiscFixes` and `RestoreDeathMusic` scan, so their signatures are destroyed and those two installs are suppressed exactly as in the original. Moving it after either arm re-enables that install, and `tests/dump_main.cpp --ordering` fails if that happens.
 
-The blocks were recovered from the shipped ASI as row tables and emitted once by `tools/gen_installers.py`; they are ordinary source now and no longer depend on those tables.
+The arms were recovered from the shipped ASI as row tables and emitted once by `tools/gen_installers.py`; they are ordinary source now (moved verbatim into the feature modules by the module split) and no longer depend on those tables.
 
 The cross-option rules are ordinary `if` conditions in the blocks that need them:
 

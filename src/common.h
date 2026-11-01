@@ -140,9 +140,10 @@ struct VehicleLightTables
 	std::array<VehicleLightValue, 512> headlightOffsets{};
 };
 
-// FUN_100523c0's two 512-slot INI loops. Missing model names leave holes; numeric
-// parsing follows strtof's prefix acceptance.
-PatchResult LoadVehicleLightTables(const ConfigDocument&, VehicleLightTables&) noexcept;
+// FUN_100523c0's two 512-slot INI loops. Missing model names leave holes; the
+// value conversion is the original's std::stof, so a missing or unparseable
+// value throws (invalid_argument / out_of_range) and is not skipped.
+PatchResult LoadVehicleLightTables(const ConfigDocument&, VehicleLightTables&);
 
 // FUN_10044310 / FUN_1001ad20 look a model up through the game's callback. The
 // adapter keeps those lookups free of any pointer into GTA IV.

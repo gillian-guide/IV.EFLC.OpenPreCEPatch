@@ -128,7 +128,7 @@ void InstallFaultTracer()
 #endif
 }
 
-// One pass over every arm, in the original loader's order.
+// The arm tracer: one pass over every arm, in the order PatchGame runs them.
 #if defined(ZP_TRACE_WRITES)
 namespace injector
 {

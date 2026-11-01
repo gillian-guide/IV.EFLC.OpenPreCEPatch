@@ -11,7 +11,8 @@ be checked offline:
   compares, its LaunchWithPlayGTAIV switch and the per-build RVA rows);
 - INI parsing, comments, BOM, duplicate keys, absent-key defaults and the "exactly 1" rule;
 - the 38,455-entry model catalogue (first/last/unknown);
-- vehicle-light parsing, atomic rejection and duplicate-angle semantics;
+- vehicle-light parsing: the missing-name skip, the duplicate-angle last-wins rule
+  and the malformed/missing-value throw (`std::stof`, as the original does);
 - the signature parser, including the original's three-digit-token quirk;
 - IVMenuAPI probing and registration rows;
 - the ZMenuIV version threshold and message constants;

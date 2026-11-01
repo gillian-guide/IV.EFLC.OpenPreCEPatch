@@ -8,7 +8,7 @@
 // logical piece per .ixx). This is the only plain translation unit left: it keeps
 // the entry point, the loader pipeline (`SetStuff`), its helpers and the probe
 // (`FindGamePointers`). The install arms live in the feature modules and
-// `PatchGame` only walks them, in the original loader's order.
+// `PatchGame` only walks them, in the order this tree has always run them.
 
 #include "pch.h"
 
@@ -363,7 +363,8 @@ void ApplyLaunchWithPlayGTAIV(GameBuild build, GameImage image, INI<>& ini)
 
 // ---- the loader pipeline -------------------------------------------------
 //
-// `SetStuff` is the whole load-time pipeline, in the original loader's order.
+// `SetStuff` is the whole load-time pipeline, in the order the recovered loader
+// runs its stages.
 // Each phase is one named step; the install arms themselves live in the feature
 // modules (`source/<feature>.ixx`) and `PatchGame` only walks them. The order is
 // the behaviour: no phase may move.
@@ -500,7 +501,7 @@ void SetStuff()
 	(void)FindGamePointers(gameImage);
 	ReportDoubleLoad(ini, gameImage);
 
-	// Phase 6: the install pass (the feature modules, in the loader's order).
+	// Phase 6: the install pass (the feature modules, in this tree's arm order).
 	TraceBoot("patchgame");
 	PatchGame(build, gameImage, config);
 
@@ -611,7 +612,7 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID /*reserved*/)
 
 
 // The option pass: the arms live in the feature modules (`source/<feature>.ixx`),
-// in the original loader's order. `PatchGame` only walks that order.
+// in the order this tree has always run them. `PatchGame` only walks that order.
 void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 {
 	PatchContext ctx{image, reinterpret_cast<std::uintptr_t>(image.base), build,
@@ -619,7 +620,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 
 	// Publish every slot before any arm writes a site: a site write can
 	// overwrite the signature a later arm's slot publish scans for. The feature
-	// modules own the blocks; the order here is the original loader's order, and
+	// modules own the blocks; the order here is the one this tree has always run, and
 	// it is the only ordering there is (no phase graph).
 	PublishBadPlayerModelCrashFix(ctx);
 	PublishBlackscreenFix(ctx);
@@ -667,7 +668,7 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 	PublishCutsceneFixes(ctx);
 	PublishRemoveGFWLUpdatePopup(ctx);
 
-	// Installs, in the original loader's order.
+	// Installs, in the same arm order.
 	ApplyAimProjectileCrashFix(ctx);
 	ApplyAllowHashesForIDE(ctx);
 	ApplyBadPlayerModelCrashFix(ctx);

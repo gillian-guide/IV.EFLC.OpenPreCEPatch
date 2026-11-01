@@ -77,6 +77,14 @@ set(ZP_SOURCES
   src/catalogue_data.cpp
 )
 
+# The 32-bit runtime libraries exist only for the targets that are 32-bit: the
+# shipped ASI, the native tests and the offline state driver. A dump-only
+# configure must not even define them -- the dump is a 64-bit tool with its own
+# injector shim and its own module library (zp_dump_modules), and building these
+# here fails on the 32-bit-only sources (src/driveby_seh.h's #error) even though
+# nothing links them.
+if(ZP_BUILD_ASI OR ZP_BUILD_TESTS OR ZP_BUILD_STATE_DUMP)
+
 # The shared runtime support library. EXCLUDE_FROM_ALL: the write-set dump
 # recompiles the sources it needs against its own 64-bit injector shim, so a
 # dump-only configure must not build the 32-bit xliveless module.
@@ -99,12 +107,14 @@ target_sources(zp_modules PUBLIC FILE_SET CXX_MODULES FILES ${ZP_MODULE_UNITS}
                                                         ${ZP_ASI_MODULE_UNITS})
 target_sources(zp_modules PRIVATE source/hook_bodies.cpp source/xliveless.cpp)
 target_include_directories(zp_modules PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/source
-                                              ${CMAKE_CURRENT_SOURCE_DIR}/src
-                                              ${ZP_EXT_INJECTOR}
-                                              ${ZP_EXT_PATTERNS})
+                                             ${CMAKE_CURRENT_SOURCE_DIR}/src
+                                             ${ZP_EXT_INJECTOR}
+                                             ${ZP_EXT_PATTERNS})
 target_compile_features(zp_modules PUBLIC cxx_std_23)
 target_compile_definitions(zp_modules PUBLIC UNICODE _UNICODE NOMINMAX)
 target_link_libraries(zp PUBLIC zp_modules)
+
+endif()  # ZP_BUILD_ASI OR ZP_BUILD_TESTS OR ZP_BUILD_STATE_DUMP
 
 if(ZP_BUILD_ASI)
   if(NOT WIN32)
