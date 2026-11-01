@@ -11,8 +11,16 @@ be checked offline:
   compares, its LaunchWithPlayGTAIV switch and the per-build RVA rows);
 - INI parsing, comments, BOM, duplicate keys, absent-key defaults and the "exactly 1" rule;
 - the 38,455-entry model catalogue (first/last/unknown);
-- vehicle-light parsing: the missing-name skip, the duplicate-angle last-wins rule
-  and the malformed/missing-value throw (`std::stof`, as the original does);
+- vehicle-light parsing: the empty/missing-name skip, the duplicate-angle
+  last-wins rule and the missing/malformed-value throw (`std::stof`, as the
+  original does). The assertions name the original's two messages, and the
+  behaviour is the original's `sub_100523C0`: only an empty or missing
+  `Car<N>Name` is skipped (std::string compare `call 0x1005AF10`, skip branch
+  `jne 0x1005289D` at `0x10052638`); the value is converted with `_errno`
+  (`0x10052745`) + `strtof` (`0x10052763`), and the endptr/errno checks at
+  `0x10052772` / `0x1005277E` call `_Xinvalid_argument` (IAT `0x10063120`,
+  "invalid stof argument" at `0x10063A24`) and `_Xout_of_range` (IAT
+  `0x10063124`, "stof argument out of range" at `0x10063A80`), uncaught;
 - the signature parser, including the original's three-digit-token quirk;
 - IVMenuAPI probing and registration rows;
 - the ZMenuIV version threshold and message constants;

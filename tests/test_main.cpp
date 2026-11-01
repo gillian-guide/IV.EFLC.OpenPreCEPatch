@@ -516,6 +516,19 @@ int Run()
 		ConfigDocument outOfRange;
 		CHECK(ParseConfig("[PopupLightAngles]\nCar1Name=police\nCar1Angle=1e999\n", outOfRange));
 		CHECK(loadThrows(outOfRange) == "stof argument out of range");
+
+		// An *empty* name is not a row: the original's std::string compare
+		// (0x1005AF10, skip branch 0x10052638) treats a missing key and an empty
+		// value the same, so the slot is skipped and nothing is stored - even
+		// though its value key is present and parseable.
+		ConfigDocument emptyName;
+		CHECK(ParseConfig("[PopupLightAngles]\nCar2Name=\nCar2Angle=45\n", emptyName));
+		VehicleLightTables emptyNameTables;
+		CHECK(LoadVehicleLightTables(emptyName, emptyNameTables));
+		CHECK(!emptyNameTables.popupAngles[1].populated);
+		CHECK(emptyNameTables.popupAngles[1].modelHash == 0u);
+		CHECK(emptyNameTables.popupAngles[1].value == 0.0f);
+		CHECK(!emptyNameTables.headlightOffsets[1].populated);
 	}
 
 	// ---- pattern parser ----------------------------------------------------

@@ -18,7 +18,8 @@ SetStuff
   phase 3  SkipLauncher (+ DFA + ROM stages), FixPCIDKickbug
   phase 4  IVMenuAPI registration, LocalSettingsPath capture
   phase 5  the probe: game pointers + hash salts, double-load guard
-  phase 6  PatchGame (every INI-gated install, in the loader's order)
+  phase 6  PatchGame (every INI-gated install, in this tree's arm order: derived
+           from the recovered loader, not identical to it; see "Option blocks")
   phase 7  LaunchWithPlayGTAIV
 ```
 
@@ -31,7 +32,7 @@ The support code is split into modules under `source/`: `common`, `game`, `patch
 | `src/dllmain.cpp` | the plain TU: `DllMain`, the loader pipeline (`SetStuff` and its phases), `PatchGame`'s straight call sequence, `FindGamePointers`, the INI/config helpers, the SkipLauncher/DFA/launcher stages |
 | `source/hook_bodies.ixx`, `source/hook_bodies.cpp` | the rebased globals, the hook bodies (interface declares, implementation unit defines: MSVC rejects naked bodies in an imported interface) and the resolver (`BodyId`/`kAbiBodies`) |
 | `source/xliveless.ixx`, `source/xliveless.cpp` | SkipLauncher/DFA/ROM stages, file-API hooks and the ROM window |
-| `source/<feature>.ixx` | one module per feature group: that group's `Publish*`/`Apply*` arms, patterns, constants and config reads, in the loader's order |
+| `source/<feature>.ixx` | one module per feature group: that group's `Publish*`/`Apply*` arms, patterns, constants and config reads, in this tree's arm order |
 | `source/patch.ixx` | signature normalisation and scans, all-hit collection, the mapped-image write and the arms' scan/write helpers |
 | `source/game.ixx`, `source/common.ixx`, `source/log.ixx`, `source/config.ixx` | build identity, shared bounds/text/byte helpers, the boot/fault trace, the config document |
 | `source/useless_checks.ixx` | RemoveUselessChecks module: the original handler's three write shapes over its five RVA tables and 23 singles |
@@ -71,7 +72,7 @@ The original compares the build id at `dword_1015BE04` before it reads the INI f
 
 Two ordering relations are load-bearing and pinned by `zp_dump --ordering`: every publish runs before any install, and `RemoveUselessChecks` runs before `MiscFixes` and `RestoreDeathMusic`. Re-ordering the rest of the arms to the recovered loader order is a separate change that would need a per-build dump proof (the 1.0.8.0 hash alone is not sufficient) and is not part of this tree yet.
 
-`RemoveUselessChecks` is applied once, after the `BuildingDynamicShadows` arm, as the original applies it once (the loader's 27th option read). The position is load-bearing in one respect: its tables are already written when `MiscFixes` and `RestoreDeathMusic` scan, so their signatures are destroyed and those two installs are suppressed exactly as in the original. Moving it after either arm re-enables that install, and `tests/dump_main.cpp --ordering` fails if that happens.
+`RemoveUselessChecks` is applied once, after the `BuildingDynamicShadows` arm, as the original applies it once (the loader's 27th option read). The position is load-bearing in one respect: its tables are already written when `MiscFixes` and `RestoreDeathMusic` scan, so their signatures are destroyed and those two installs are suppressed exactly as in the original. Moving it after either arm re-enables that install, and the `zp_dump --ordering` CTest (`zp_dump_ordering`) fails if that happens.
 
 The arms were recovered from the shipped ASI as row tables and emitted once by `tools/gen_installers.py`; they are ordinary source now (moved verbatim into the feature modules by the module split) and no longer depend on those tables.
 
