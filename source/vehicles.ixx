@@ -925,17 +925,23 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "E8 ? ? ? ? C0 E0 ? 32 86 6F 0F 00"); pattern.size() > 0)
             {
-                zpatch_copsirens_resume = MatchAddress(pattern, 5);
+                // The resume after the five-byte E8.
+                constexpr ptrdiff_t kResumeOffset = 5;
+                zpatch_copsirens_resume = MatchAddress(pattern, kResumeOffset);
             }
 
             if (auto pattern = Pattern(image, "0F BF 41 2E 39 05"); pattern.size() > 0)
             {
-                zpatch_copsirens_resume_b = MatchAddress(pattern, 28);
+                // The second resume 28 bytes into the match.
+                constexpr ptrdiff_t kResumeBOffset = 28;
+                zpatch_copsirens_resume_b = MatchAddress(pattern, kResumeBOffset);
             }
 
             if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
             {
-                zpatch_ide_hook_slot = MatchAddress(pattern, -1);
+                // The shared IDE parser hook slot is the byte before the match.
+                constexpr ptrdiff_t kIdeSlotOffset = -1;
+                zpatch_ide_hook_slot = MatchAddress(pattern, kIdeSlotOffset);
             }
         }
 
@@ -965,14 +971,19 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                JumpTo(ctx, match + 22, OPP_BODY(abi_copsirens_b));
+                // The model-check detour's entry, 22 bytes into the match.
+                constexpr ptrdiff_t kCopSirensBodyOffset = 22;
+                JumpTo(ctx, match + kCopSirensBodyOffset, OPP_BODY(abi_copsirens_b));
             }
 
             if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                JumpTo(ctx, match - 10, OPP_BODY(abi_copsirens_ide));
+                // The shared IDE parser hook is installed 10 bytes before the
+                // match (the body rewrites the match-1 slot).
+                constexpr ptrdiff_t kCopSirensIdeOffset = -10;
+                JumpTo(ctx, match + kCopSirensIdeOffset, OPP_BODY(abi_copsirens_ide));
             }
         }
 
@@ -1325,6 +1336,59 @@ namespace opp::features
     }
 
 
+    // MovingPlaneParts / MovingSteeringWheelSupport / ShakingEngineBlock are
+    // three INI arms over the same five slots: two steering-call resumes with
+    // their call targets, and the shared IDE parser hook. The first pattern is
+    // the EAX call variant, the second the EDX one; the calls' resumes are 16
+    // bytes into the match and the IDE slot is the byte before its match.
+    namespace
+    {
+        constexpr const char* kSteerEaxPattern =
+            "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0";
+        constexpr const char* kSteerEdxPattern =
+            "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2";
+        constexpr const char* kIdeHookPattern = "0C 83 88 94 00 00 00 04";
+        constexpr ptrdiff_t kSteerResumeOffset = 16;
+        constexpr ptrdiff_t kSteerEaxCallOperand = 423;
+        constexpr ptrdiff_t kSteerEdxCallOperand = 140;
+        constexpr ptrdiff_t kSteerInstallOffset = 2;
+        constexpr ptrdiff_t kSteerIdeHookSlotOffset = -1;
+        constexpr ptrdiff_t kSteerIdeInstallOffset = -10;
+
+        void PublishSteerSlots(PatchContext& ctx)
+        {
+            const GameImage& image = ctx.image;
+            if (auto pattern = Pattern(image, kSteerEaxPattern); pattern.size() > 0)
+            {
+                zpatch_steer_resume = MatchAddress(pattern, kSteerResumeOffset);
+                zpatch_steer_vtable_fn = BranchDestination(
+                    pattern.get(0).get<uint8_t>(), kSteerEaxCallOperand);
+            }
+            if (auto pattern = Pattern(image, kSteerEdxPattern); pattern.size() > 0)
+            {
+                zpatch_steer_resume = MatchAddress(pattern, kSteerResumeOffset);
+                zpatch_steer_vtable_fn = BranchDestination(
+                    pattern.get(0).get<uint8_t>(), kSteerEdxCallOperand);
+            }
+            if (auto pattern = Pattern(image, kIdeHookPattern); pattern.size() > 0)
+                zpatch_ide_hook_slot = MatchAddress(pattern, kSteerIdeHookSlotOffset);
+        }
+
+        void InstallSteerSlots(PatchContext& ctx)
+        {
+            const GameImage& image = ctx.image;
+            if (auto pattern = Pattern(image, kSteerEaxPattern); pattern.size() > 0)
+                JumpTo(ctx, pattern.get(0).get<uint8_t>() + kSteerInstallOffset,
+                       OPP_BODY(abi_steer_detour_eax));
+            if (auto pattern = Pattern(image, kSteerEdxPattern); pattern.size() > 0)
+                JumpTo(ctx, pattern.get(0).get<uint8_t>() + kSteerInstallOffset,
+                       OPP_BODY(abi_steer_detour_edx));
+            if (auto pattern = Pattern(image, kIdeHookPattern); pattern.size() > 0)
+                JumpTo(ctx, pattern.get(0).get<uint8_t>() + kSteerIdeInstallOffset,
+                       OPP_BODY(abi_copsirens_ide));
+        }
+    } // namespace
+
     // publish MovingPlaneParts
 
     void PublishMovingPlaneParts(PatchContext& ctx)
@@ -1332,28 +1396,9 @@ namespace opp::features
 
         TraceArm("publish MovingPlaneParts");
 
-        // MovingPlaneParts: 5 slots
+        // MovingPlaneParts: 5 slots (the shared steering slots).
         if (ctx.Option("MovingPlaneParts", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"); pattern.size() > 0)
-            {
-                zpatch_steer_resume = MatchAddress(pattern, 16);
-                zpatch_steer_vtable_fn = MatchTarget(pattern, 423, 427);
-            }
-
-            if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
-            {
-                zpatch_steer_resume = MatchAddress(pattern, 16);
-                zpatch_steer_vtable_fn = MatchTarget(pattern, 140, 144);
-            }
-
-            if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
-            {
-                zpatch_ide_hook_slot = MatchAddress(pattern, -1);
-            }
-        }
+            PublishSteerSlots(ctx);
 
     }
 
@@ -1365,32 +1410,9 @@ namespace opp::features
 
         TraceArm("MovingPlaneParts");
 
-        // MovingPlaneParts: 3 siginstalls
+        // MovingPlaneParts: 3 siginstalls (the shared steering sites).
         if (ctx.Option("MovingPlaneParts", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpTo(ctx, match + 2, OPP_BODY(abi_steer_detour_eax));
-            }
-
-            if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpTo(ctx, match + 2, OPP_BODY(abi_steer_detour_edx));
-            }
-
-            if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpTo(ctx, match - 10, OPP_BODY(abi_copsirens_ide));
-            }
-        }
+            InstallSteerSlots(ctx);
 
     }
 
@@ -1402,28 +1424,9 @@ namespace opp::features
 
         TraceArm("publish MovingSteeringWheelSupport");
 
-        // MovingSteeringWheelSupport: 5 slots
+        // MovingSteeringWheelSupport: 5 slots (the shared steering slots).
         if (ctx.Option("MovingSteeringWheelSupport", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"); pattern.size() > 0)
-            {
-                zpatch_steer_resume = MatchAddress(pattern, 16);
-                zpatch_steer_vtable_fn = MatchTarget(pattern, 423, 427);
-            }
-
-            if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
-            {
-                zpatch_steer_resume = MatchAddress(pattern, 16);
-                zpatch_steer_vtable_fn = MatchTarget(pattern, 140, 144);
-            }
-
-            if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
-            {
-                zpatch_ide_hook_slot = MatchAddress(pattern, -1);
-            }
-        }
+            PublishSteerSlots(ctx);
 
     }
 
@@ -1435,32 +1438,9 @@ namespace opp::features
 
         TraceArm("MovingSteeringWheelSupport");
 
-        // MovingSteeringWheelSupport: 3 siginstalls
+        // MovingSteeringWheelSupport: 3 siginstalls (the shared steering sites).
         if (ctx.Option("MovingSteeringWheelSupport", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpTo(ctx, match + 2, OPP_BODY(abi_steer_detour_eax));
-            }
-
-            if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpTo(ctx, match + 2, OPP_BODY(abi_steer_detour_edx));
-            }
-
-            if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpTo(ctx, match - 10, OPP_BODY(abi_copsirens_ide));
-            }
-        }
+            InstallSteerSlots(ctx);
 
     }
 
@@ -1479,19 +1459,30 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "74 52 8D B5 3C 01 00 00 83 FB 04"); pattern.size() > 0)
             {
-                zpatch_nolivery_fn = MatchTarget(pattern, -6, -2);
-                zpatch_nolivery_resume_d = MatchAddress(pattern, 90);
+                // The call operand at -6 (its next instruction is at -2); the
+                // resume is 90 bytes into the match.
+                constexpr ptrdiff_t kNoliveryCallOperandA = -6;
+                constexpr ptrdiff_t kNoliveryResumeDOffsetA = 90;
+                auto* match = pattern.get(0).get<uint8_t>();
+                zpatch_nolivery_fn = BranchDestination(match - 2, kNoliveryCallOperandA);
+                zpatch_nolivery_resume_d = MatchAddress(pattern, kNoliveryResumeDOffsetA);
             }
 
             if (auto pattern = Pattern(image, "8B 8C 83 3C 01 00 00 0F BF 53 48"); pattern.size() > 0)
             {
-                zpatch_nolivery_resume = MatchAddress(pattern, 13);
+                // The resume is 13 bytes into the match (after its prologue).
+                constexpr ptrdiff_t kNoliveryResumeOffset = 13;
+                zpatch_nolivery_resume = MatchAddress(pattern, kNoliveryResumeOffset);
             }
 
             if (auto pattern = Pattern(image, "8D AF 3C 01 00 00 8D 54 24 20"); pattern.size() > 0)
             {
-                zpatch_nolivery_fn = MatchTarget(pattern, -8, -4);
-                zpatch_nolivery_resume_d = MatchAddress(pattern, 84);
+                // The same call shape as the first row, four bytes earlier.
+                constexpr ptrdiff_t kNoliveryCallOperandB = -8;
+                constexpr ptrdiff_t kNoliveryResumeDOffsetB = 84;
+                auto* match = pattern.get(0).get<uint8_t>();
+                zpatch_nolivery_fn = BranchDestination(match - 4, kNoliveryCallOperandB);
+                zpatch_nolivery_resume_d = MatchAddress(pattern, kNoliveryResumeDOffsetB);
             }
         }
 
@@ -1514,8 +1505,11 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                JumpTo(ctx, match - 237, OPP_BODY(abi_nolivery_b));
-                JumpTo(ctx, match - 199, OPP_BODY(abi_nolivery_c));
+                // The three no-livery body entries relative to their shared match.
+                constexpr ptrdiff_t kNoliveryBodyBOffset = -237;
+                constexpr ptrdiff_t kNoliveryBodyCOffset = -199;
+                JumpTo(ctx, match + kNoliveryBodyBOffset, OPP_BODY(abi_nolivery_b));
+                JumpTo(ctx, match + kNoliveryBodyCOffset, OPP_BODY(abi_nolivery_c));
                 JumpTo(ctx, match, OPP_BODY(abi_nolivery_a));
             }
 
@@ -1523,7 +1517,8 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                JumpTo(ctx, match + 2, OPP_BODY(abi_nolivery_d));
+                constexpr ptrdiff_t kNoliveryBodyDOffset = 2;
+                JumpTo(ctx, match + kNoliveryBodyDOffset, OPP_BODY(abi_nolivery_d));
             }
 
             if (auto pattern = Pattern(image, "8D AF 3C 01 00 00 8D 54 24 20"); pattern.size() > 0)
@@ -1587,20 +1582,25 @@ namespace opp::features
             // second site's resume.
             if (auto pattern = Pattern(image, "0F BF 46 2E 3B 05 ? ? ? ? 75 ? A1"); pattern.size() > 0)
             {
-                zpatch_popup_resume_b = MatchAddress(pattern, 10);
-                zpatch_popup_resume_a = MatchAddress(pattern, 12);
+                constexpr ptrdiff_t kResumeBOffset = 10;
+                constexpr ptrdiff_t kResumeAOffset = 12;
+                zpatch_popup_resume_b = MatchAddress(pattern, kResumeBOffset);
+                zpatch_popup_resume_a = MatchAddress(pattern, kResumeAOffset);
             }
             else if (auto patternB = Pattern(image, "0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1"); patternB.size() > 0)
             {
-                zpatch_popup_resume_b = MatchAddress(patternB, 10);
-                zpatch_popup_resume_a = MatchAddress(patternB, 12);
+                constexpr ptrdiff_t kResumeBOffset = 10;
+                constexpr ptrdiff_t kResumeAOffset = 12;
+                zpatch_popup_resume_b = MatchAddress(patternB, kResumeBOffset);
+                zpatch_popup_resume_a = MatchAddress(patternB, kResumeAOffset);
             }
 
             // The IDE parser hook is independent of the two model tests and is
             // shared with the other arms that install it.
             if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
             {
-                zpatch_ide_hook_slot = MatchAddress(pattern, -1);
+                constexpr ptrdiff_t kIdeSlotOffset = -1;
+                zpatch_ide_hook_slot = MatchAddress(pattern, kIdeSlotOffset);
             }
         }
 
@@ -1624,24 +1624,33 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
+                // The `jz` at +10 and the `fld` operand at +82 that now loads our
+                // pi/2 float.
+                constexpr ptrdiff_t kBranchOffset = 10;
+                constexpr ptrdiff_t kAngleOperand = 82;
                 JumpTo(ctx, match, OPP_BODY(abi_popup_headlights));
-                WriteValue<uint8_t>(ctx, match + 10, opp::ops::kJmpRel8);
-                WriteValue<uint32_t>(ctx, match + 82, AddressOf(&zpatch_popup_angle));
+                WriteValue<uint8_t>(ctx, match + kBranchOffset, opp::ops::kJmpRel8);
+                WriteValue<uint32_t>(ctx, match + kAngleOperand,
+                                     AddressOf(&zpatch_popup_angle));
             }
             else if (auto patternB = Pattern(image, "0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1"); patternB.size() > 0)
             {
                 auto* match = patternB.get(0).get<uint8_t>();
 
+                constexpr ptrdiff_t kBranchOffset = 10;
+                constexpr ptrdiff_t kAngleOperand = 82;
                 JumpTo(ctx, match, OPP_BODY(abi_popup_headlights_edx));
-                WriteValue<uint8_t>(ctx, match + 10, opp::ops::kJmpRel8);
-                WriteValue<uint32_t>(ctx, match + 82, AddressOf(&zpatch_popup_angle));
+                WriteValue<uint8_t>(ctx, match + kBranchOffset, opp::ops::kJmpRel8);
+                WriteValue<uint32_t>(ctx, match + kAngleOperand,
+                                     AddressOf(&zpatch_popup_angle));
             }
 
             if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                JumpTo(ctx, match - 10, OPP_BODY(abi_copsirens_ide));
+                constexpr ptrdiff_t kPopupIdeInstallOffset = -10;
+                JumpTo(ctx, match + kPopupIdeInstallOffset, OPP_BODY(abi_copsirens_ide));
             }
         }
 
@@ -1655,28 +1664,9 @@ namespace opp::features
 
         TraceArm("publish ShakingEngineBlock");
 
-        // ShakingEngineBlock: 5 slots
+        // ShakingEngineBlock: 5 slots (the shared steering slots).
         if (ctx.Option("ShakingEngineBlock", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"); pattern.size() > 0)
-            {
-                zpatch_steer_resume = MatchAddress(pattern, 16);
-                zpatch_steer_vtable_fn = MatchTarget(pattern, 423, 427);
-            }
-
-            if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
-            {
-                zpatch_steer_resume = MatchAddress(pattern, 16);
-                zpatch_steer_vtable_fn = MatchTarget(pattern, 140, 144);
-            }
-
-            if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
-            {
-                zpatch_ide_hook_slot = MatchAddress(pattern, -1);
-            }
-        }
+            PublishSteerSlots(ctx);
 
     }
 
@@ -1688,32 +1678,9 @@ namespace opp::features
 
         TraceArm("ShakingEngineBlock");
 
-        // ShakingEngineBlock: 3 siginstalls
+        // ShakingEngineBlock: 3 siginstalls (the shared steering sites).
         if (ctx.Option("ShakingEngineBlock", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpTo(ctx, match + 2, OPP_BODY(abi_steer_detour_eax));
-            }
-
-            if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpTo(ctx, match + 2, OPP_BODY(abi_steer_detour_edx));
-            }
-
-            if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpTo(ctx, match - 10, OPP_BODY(abi_copsirens_ide));
-            }
-        }
+            InstallSteerSlots(ctx);
 
     }
 
