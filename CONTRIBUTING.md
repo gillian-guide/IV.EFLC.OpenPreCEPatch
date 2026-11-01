@@ -56,7 +56,7 @@ injector::MakeCALL(site, reinterpret_cast<void*>(&abi_body), true);
 
 - Tabs for indentation, braces on their own line, one statement per line.
 - Keep lines under ~110 columns where the expression allows it.
-- The option blocks in `PatchGame` follow the original loader's order.
+- Each option's arm is a function in its feature module (`source/<feature>.ixx`, `Publish*` for the slot phase and `Apply*` for the install); `PatchGame` only walks them. The arm order is this tree's own (see `docs/architecture.md`); two relations are load-bearing and must not change: every publish runs before any install, and `RemoveUselessChecks` runs before `MiscFixes`/`RestoreDeathMusic`.
 
 ## Lint baseline
 
