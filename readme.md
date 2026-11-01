@@ -52,28 +52,10 @@ differently from the original: GFWL achievements now work alongside Steam's.
 If an old `ZolikaPatch.ini` is present and `IV.EFLC.OpenPreCEPatch.ini` is not, the ASI imports
 the old values on first run and writes the grouped file. The old file is left untouched.
 
-## Original options that are not implemented
-
-An old `ZolikaPatch.ini` is imported key by key into the grouped file. These original options have
-no row there on purpose; the import writes one `legacy key ... not imported` line per dropped key
-to `IV.EFLC.OpenPreCEPatch.log` and lists them in the report the loader keeps
-(`LegacyImportReport`):
-
-| option | why |
-| --- | --- |
-| `AddOptionsInMenu` | the menu integration is not implemented |
-| `FixPCIDKickbug` | not implemented in this tree |
-| `ForceDynamicShadowsEverywhere` | not implemented in this tree |
-| `HighQualityReflections` | not implemented in this tree |
-| `NoPhysicsSleep` | not implemented in this tree |
-| `RemoveBoundingBoxCulling` | not implemented in this tree |
-| `RemoveUselessChecks` | the build-gated RVA table is not carried by this tree |
-
 `BorderlessWindowed`, `DoNotPauseOnMinimize`, `LocalSettingsPath`, `SkipIntro`, `SkipLauncher`,
 `SkipMenu` and `VRAMFix` belong to the
 [XLivelessAddon](https://github.com/gillian-guide/XLivelessAddon) companion, which reads the same
-legacy keys from its own INI; the import lists them separately so they are not mistaken for
-missing features.
+legacy keys from its own INI.
 
 ## Building
 
@@ -103,17 +85,9 @@ static CRT, `/BASE:0x10000000`, the `external/` submodules) are in `CMakeLists.t
 
 ## Credits
 
-- **Zolika1351** — author of ZolikaPatch, the original mod whose options, defaults, signatures and
-  behaviour this project preserves.
-- **GTAmodding / XLivelessAddon contributors** — the launcher/DRM bypass and the xliveless file
-  layer the original loader descends from.
-- **ThirteenAG and the FusionFix contributors** — the project layout, build and hook conventions
-  this repository follows, the reference for compatibility work, and the intro/windowed logic used
-  by the separate XLivelessAddon companion (GPL-3.0).
+- **Zolika1351** — author of ZolikaPatch, the original mod whose options, defaults, signatures and behaviour this project preserves.
+- **ThirteenAG and the FusionFix contributors** — the project layout, build and hook conventions this repository follows
 - **LINK/2012** — the `injector` memory-write library.
 - **CitizenFX and ThirteenAG** — `Hooking.Patterns`.
-- **ThirteenAG** — `IniReader`, the injector fork and the packaging conventions.
-- **The readable reconstruction contributors** — the verified reimplementation of the original ASI
-  from which the installer arms and hook bodies were ported.
 
 Licensed under the GNU General Public License, version 3 or later; see `LICENSE` and `NOTICE`.
