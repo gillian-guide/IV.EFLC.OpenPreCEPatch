@@ -14,6 +14,9 @@ module;
 #include "opcodes.hxx"
 
 #include <new>
+#include <memory>
+#include <optional>
+#include <span>
 #include <shlwapi.h>
 export module opp.loading;
 
@@ -109,131 +112,232 @@ extern "C" int32_t abi_new_saves_p3_hook() noexcept
     return result;
 }
 
-// The converter's chunk scan, split out so the native tests can drive it
-// without a game image. `guarded` enables the folded NewSavesCompatibility
-// checks; `seek` enables the fseek-over-payload path. With both 0 this is the
-// original loop: every fread result is ignored and the underflow/malloc are
-// unchecked.
-//
-// The three outputs are the original's new-format probes: 1 when the chunk at
-// that index has the new format's total size. `chunk13_new` is the p3 hook's
-// gate; `chunk16_new` selects the 3694-byte P2 read; `chunk9_new` gates P1.
-extern "C" bool zpatch_new_saves_scan(void* handle, int guarded, int seek,
-                                      uint32_t* chunk9_new, uint32_t* chunk16_new,
-                                      uint32_t* chunk13_new) noexcept
-{
-    auto* file = static_cast<std::FILE*>(handle);
-    if (file == nullptr) return false;
-    // The save header is 0x110 bytes; the format magic "SAVE" sits at +0xC and
-    // each of the 18 chunks starts with a 9-byte header whose dword at +5 is the
-    // chunk's total size.
-    constexpr size_t kSaveHeaderSize = 0x110;
-    constexpr size_t kSaveChunkHeaderSize = 9;
-    constexpr size_t kSaveMagicOffset = 0x0C;
-    constexpr uint32_t kSaveMagic = 0x45564153u;  // "SAVE"
-    constexpr int kSaveChunkCount = 18;
-    // The three chunks whose size tells the formats apart (the original's
-    // recovered indices); each size constant is the new format's chunk total.
-    constexpr int kChunk9Index = 9;
-    constexpr int kChunk13Index = 13;
-    constexpr int kChunk16Index = 16;
-    constexpr uint32_t kNewFormatChunk9Size = 19525u;
-    constexpr uint32_t kNewFormatChunk13Size = 5953u;
-    constexpr uint32_t kNewFormatChunk16Size = 3703u;
-    uint8_t header[kSaveHeaderSize];
-    if (guarded != 0)
-    {
-        // Opt-in guard: a short header cannot carry a magic/chunk table.
-        if (std::fread(header, kSaveHeaderSize, 1, file) != 1)
-            return false;
-    }
-    else
-    {
-        std::fread(header, kSaveHeaderSize, 1, file);  // return ignored, like the original
-    }
-    uint32_t magic = 0;
-    std::memcpy(&magic, header + kSaveMagicOffset, 4);
-    if (magic != kSaveMagic)
-        return false;
+}  // extern "C"
 
-    uint32_t chunk9_state = 0;
-    uint32_t chunk16_state = 0;
-    uint32_t chunk13_state = 0;
-    for (int i = 0; i < kSaveChunkCount; ++i)
+// ---------------------------------------------------------------------------
+// The save-format scanner
+//
+// The converter reads the game's save through a cursor, so the byte-level steps
+// have names: the 0x110-byte header, the 9-byte chunk headers, the per-chunk
+// payload step and the 18-chunk walk. The game hands the scan a std::FILE*, so
+// the cursor wraps it instead of replacing it with an ifstream (the fread/fseek
+// conventions and the unchecked-malloc fault are the original's).
+//
+// The three new-format probes are the scanner's only output: chunk 13 gates the
+// p3 hook, chunk 16 selects the 3694-byte P2 read and chunk 9 gates P1.
+// ---------------------------------------------------------------------------
+namespace
+{
+// True when a scan validates every read/size and seeks over payloads (the
+// converter's shipped path). All-false is the original loop: every fread result
+// is ignored, the size underflow passes and the payload malloc is unchecked. The
+// pair is a named policy so a caller cannot swap the two booleans' meaning.
+constexpr opp::SaveScanPolicy kConverterScan{true, true};
+constexpr opp::SaveScanPolicy kOriginalScan{false, false};
+
+// The original allocates the payload with malloc; the deleter keeps that
+// allocator (and its fault) while making the ownership RAII.
+struct FreeDeleter final
+{
+    void operator()(void* pointer) const noexcept { std::free(pointer); }
+};
+
+// Owned std::FILE*: the converter's own save file closes on every return.
+struct FileCloser final
+{
+    void operator()(std::FILE* file) const noexcept
     {
-        uint8_t chunk[kSaveChunkHeaderSize];
-        const size_t chunk_read = std::fread(chunk, kSaveChunkHeaderSize, 1, file);
-        if (guarded != 0 && chunk_read != 1)
-            return false;
-        uint32_t size = 0;
-        std::memcpy(&size, chunk + 5, 4);
-        if (guarded != 0 && size < kSaveChunkHeaderSize)
-        {
-            // The original underflows the allocation count here.
-            return false;
-        }
-        zpatch_new_saves_chunk_len = size;                  // dword_1015AD90
-        zpatch_new_saves_element_count = size - kSaveChunkHeaderSize;  // dword_1015ADA0
-        bool skipped = false;
-        // fseek takes a long: only seek when the element count fits one.
-        constexpr uint32_t kSeekCountLimit = 0x7FFFFFFFu;
-        if (seek != 0 && size >= kSaveChunkHeaderSize &&
-            zpatch_new_saves_element_count <= kSeekCountLimit)
-        {
-            // Only the 9-byte chunk headers are needed; seek over the payload.
-            skipped = std::fseek(file,
-                                 static_cast<long>(zpatch_new_saves_element_count),
-                                 SEEK_CUR) == 0;
-        }
-        if (!skipped)
-        {
-            if (zpatch_new_saves_element_count == 0u &&
-                (guarded != 0 || seek != 0))
-            {
-                // A header-only chunk is valid; do not treat malloc(0) == null
-                // as an allocation failure. With both keys off this branch is
-                // skipped so the original malloc/fread/free still runs.
-            }
-            else
-            {
-                void* payload = std::malloc(zpatch_new_saves_element_count);
-                if (guarded != 0 && payload == nullptr)
-                    return false;
-                const size_t payload_read =
-                    std::fread(payload, 1, zpatch_new_saves_element_count, file);
-                std::free(payload);
-                if (guarded != 0 && payload_read != zpatch_new_saves_element_count)
-                    return false;
-            }
-        }
-        if (i == kChunk9Index) chunk9_state = size == kNewFormatChunk9Size ? 1u : 0u;
-        if (i == kChunk16Index) chunk16_state = size == kNewFormatChunk16Size ? 1u : 0u;
-        if (i == kChunk13Index) chunk13_state = size == kNewFormatChunk13Size ? 1u : 0u;
+        if (file != nullptr)
+            std::fclose(file);
     }
-    if (chunk9_new != nullptr) *chunk9_new = chunk9_state;
-    if (chunk16_new != nullptr) *chunk16_new = chunk16_state;
-    if (chunk13_new != nullptr) *chunk13_new = chunk13_state;
-    return true;
+};
+
+// The save header is 0x110 bytes; the format magic "SAVE" sits at +0xC and each
+// of the 18 chunks starts with a 9-byte header whose dword at +5 is the chunk's
+// total size.
+constexpr size_t kSaveHeaderSize = 0x110;
+constexpr size_t kSaveChunkHeaderSize = 9;
+constexpr size_t kSaveMagicOffset = 0x0C;
+constexpr size_t kSaveChunkSizeOffset = 5;
+constexpr uint32_t kSaveMagic = 0x45564153u;  // "SAVE"
+constexpr size_t kSaveChunkCount = 18;
+// The three chunks whose size tells the formats apart (the original's recovered
+// indices); each size constant is the new format's chunk total.
+constexpr size_t kChunk9Index = 9;
+constexpr size_t kChunk13Index = 13;
+constexpr size_t kChunk16Index = 16;
+constexpr uint32_t kNewFormatChunk9Size = 19525u;
+constexpr uint32_t kNewFormatChunk13Size = 5953u;
+constexpr uint32_t kNewFormatChunk16Size = 3703u;
+// fseek takes a long; the element count is only seekable when it fits one.
+constexpr uint32_t kSeekCountLimit = 0x7FFFFFFFu;
+
+// The game-owned std::FILE*: one named operation per original libc call.
+class FileCursor final
+{
+public:
+    explicit FileCursor(std::FILE* file) noexcept : file_(file) {}
+
+    [[nodiscard]] bool Valid() const noexcept { return file_ != nullptr; }
+
+    // fread(item, 1): the header/chunk read, which asks for one whole item. Only
+    // the unchecked policy ignores the answer.
+    [[nodiscard]] bool ReadItem(std::span<std::byte> item) noexcept
+    {
+        return item.empty() || std::fread(item.data(), item.size(), 1, file_) == 1;
+    }
+
+    // fread(ptr, 1, n): the payload read, whose partial result the unchecked
+    // policy ignores.
+    [[nodiscard]] size_t ReadBytes(std::span<std::byte> bytes) noexcept
+    {
+        return std::fread(bytes.data(), 1, bytes.size(), file_);
+    }
+
+    [[nodiscard]] bool Seek(long offset) noexcept
+    {
+        return std::fseek(file_, offset, SEEK_CUR) == 0;
+    }
+
+    // The raw handle, used only for the original's null-payload fault path.
+    [[nodiscard]] std::FILE* Handle() const noexcept { return file_; }
+
+private:
+    std::FILE* file_;
+};
+
+// Reads a little-endian dword out of a byte buffer (the save file's own order).
+[[nodiscard]] uint32_t LoadDword(const std::byte* bytes) noexcept
+{
+    uint32_t value = 0;
+    std::memcpy(&value, bytes, sizeof(value));
+    return value;
 }
+
+// Reads the 0x110-byte header and checks the "SAVE" magic. The unchecked policy
+// ignores a short read and still inspects the buffer, exactly like the original.
+[[nodiscard]] bool ReadSaveHeader(FileCursor& file, opp::SaveScanPolicy policy) noexcept
+{
+    std::array<std::byte, kSaveHeaderSize> header{};
+    const bool read = file.ReadItem(header);
+    if (policy.validate && !read)
+        return false;
+    return LoadDword(header.data() + kSaveMagicOffset) == kSaveMagic;
+}
+
+// Reads one 9-byte chunk header and returns its total size. A size below the
+// header is the original's allocation-count underflow; only the validating
+// policy rejects it.
+[[nodiscard]] std::optional<uint32_t> ReadChunkHeader(FileCursor& file,
+                                                      opp::SaveScanPolicy policy) noexcept
+{
+    std::array<std::byte, kSaveChunkHeaderSize> header{};
+    const bool read = file.ReadItem(header);
+    if (policy.validate && !read)
+        return std::nullopt;
+    const uint32_t size = LoadDword(header.data() + kSaveChunkSizeOffset);
+    if (policy.validate && size < kSaveChunkHeaderSize)
+        return std::nullopt;
+    return size;
+}
+
+// The per-chunk payload step: seek over the payload when asked (the 9-byte
+// headers are all the scan needs), skip a header-only chunk, or read it into the
+// original's unchecked malloc buffer. The buffer frees through std::free; on
+// allocation failure the validating policy stops and the original policy passes
+// the null pointer to fread, which is the fault the 1:1 path keeps.
+[[nodiscard]] bool SkipPayload(FileCursor& file, uint32_t chunk_size,
+                               opp::SaveScanPolicy policy) noexcept
+{
+    const uint32_t element_count = chunk_size - kSaveChunkHeaderSize;
+    if (policy.skip_payload && chunk_size >= kSaveChunkHeaderSize &&
+        element_count <= kSeekCountLimit)
+    {
+        if (file.Seek(static_cast<long>(element_count)))
+            return true;
+    }
+    if (element_count == 0u && (policy.validate || policy.skip_payload))
+        return true;  // a header-only chunk: malloc(0) == nullptr is not a failure
+
+    void* const raw = std::malloc(element_count);
+    const std::unique_ptr<void, FreeDeleter> payload(raw);
+    if (policy.validate && raw == nullptr)
+        return false;
+    if (raw == nullptr)
+        return std::fread(raw, 1, element_count, file.Handle()) == element_count;
+    const auto bytes = std::span<std::byte>(static_cast<std::byte*>(raw), element_count);
+    const size_t read = file.ReadBytes(bytes);
+    return !policy.validate || read == element_count;
+}
+
+// Walks the 18 chunks in file order, publishing the chunk-length/element-count
+// globals on each iteration (the original's converter state) and recording the
+// three format probes.
+[[nodiscard]] std::optional<opp::SaveChunkProbes> ScanChunks(
+    FileCursor& file, opp::SaveScanPolicy policy) noexcept
+{
+    opp::SaveChunkProbes probes{};
+    for (size_t index = 0; index < kSaveChunkCount; ++index)
+    {
+        const std::optional<uint32_t> size = ReadChunkHeader(file, policy);
+        if (!size)
+            return std::nullopt;
+        zpatch_new_saves_chunk_len = *size;                             // dword_1015AD90
+        zpatch_new_saves_element_count = *size - kSaveChunkHeaderSize;  // dword_1015ADA0
+        if (!SkipPayload(file, *size, policy))
+            return std::nullopt;
+        if (index == kChunk9Index)
+            probes.chunk9_new = *size == kNewFormatChunk9Size;
+        if (index == kChunk16Index)
+            probes.chunk16_new = *size == kNewFormatChunk16Size;
+        if (index == kChunk13Index)
+            probes.chunk13_new = *size == kNewFormatChunk13Size;
+    }
+    return probes;
+}
+
+// The whole scan: header, then the 18 chunks.
+[[nodiscard]] std::optional<opp::SaveChunkProbes> ScanSaveFile(
+    FileCursor& file, opp::SaveScanPolicy policy) noexcept
+{
+    if (!file.Valid())
+        return std::nullopt;
+    if (!ReadSaveHeader(file, policy))
+        return std::nullopt;
+    return ScanChunks(file, policy);
+}
+}  // namespace
+
+// Native-test/inspection seam: one typed result instead of three out-pointers.
+// The game-facing hook bodies above keep their ABI; only this test entry (and
+// hook.h's declaration) changed.
+extern "C" opp::SaveScanResult zpatch_new_saves_scan(
+    void* handle, opp::SaveScanPolicy policy) noexcept
+{
+    FileCursor file(static_cast<std::FILE*>(handle));
+    if (const std::optional<opp::SaveChunkProbes> probes = ScanSaveFile(file, policy))
+        return {true, *probes};
+    return {};
+}
+
+extern "C"
+{
 
 // The NewSavesCompatibility converter (original sub_10051B30): parse the save's
 // 0x110-byte header (magic "SAVE" at +0xC), walk 18 chunks of 9-byte header +
 // payload, record the new-format chunk sizes, then patch three game sites.
 extern "C" void abi_new_saves_convert(const char* path) noexcept
 {
-    std::FILE* file = std::fopen(path, "rb");
-    if (!file) return;
-    uint32_t chunk9_new = 0;
-    uint32_t chunk16_new = 0;
-    uint32_t chunk13_new = 0;
-    const bool parsed = zpatch_new_saves_scan(
-        file, 1, 1,
-        &chunk9_new, &chunk16_new, &chunk13_new);
-    std::fclose(file);
-    if (!parsed) return;  // including the original wrong-magic early return
-    zpatch_new_saves_chunk9_new = static_cast<uint8_t>(chunk9_new);
-    zpatch_new_saves_chunk16_new = static_cast<uint8_t>(chunk16_new);
-    zpatch_new_saves_chunk13_new = static_cast<uint8_t>(chunk13_new);
+    const std::unique_ptr<std::FILE, FileCloser> file(std::fopen(path, "rb"));
+    if (!file)
+        return;
+    FileCursor cursor(file.get());
+    const std::optional<SaveChunkProbes> probes = ScanSaveFile(cursor, kConverterScan);
+    if (!probes)
+        return;  // including the original wrong-magic early return
+    zpatch_new_saves_chunk9_new = probes->chunk9_new ? 1u : 0u;
+    zpatch_new_saves_chunk16_new = probes->chunk16_new ? 1u : 0u;
+    zpatch_new_saves_chunk13_new = probes->chunk13_new ? 1u : 0u;
 
     // P1 (game 0x872185): force the 0x3C-byte read path for new saves.
     static const uint8_t* p1 = nullptr;

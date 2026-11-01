@@ -571,26 +571,23 @@ namespace
     void TestNewSavesScan()
     {
         const std::filesystem::path path = "opcep_new_saves_test.bin";
-        uint32_t flag9 = 0;
-        uint32_t flag16 = 0;
-        uint32_t flag13 = 0;
 
         WriteNewSaveFile(path, false, false);
-        for (int guarded = 0; guarded <= 1; ++guarded)
+        for (int validate = 0; validate <= 1; ++validate)
         {
-            for (int seek = 0; seek <= 1; ++seek)
+            for (int skip = 0; skip <= 1; ++skip)
             {
                 std::FILE* file = std::fopen(path.string().c_str(), "rb");
                 CHECK(file != nullptr);
                 if (!file)
                     continue;
-                const bool ok = zpatch_new_saves_scan(file, guarded, seek, &flag9,
-                                                      &flag16, &flag13);
+                const opp::SaveScanResult scan = zpatch_new_saves_scan(
+                    file, {validate != 0, skip != 0});
                 std::fclose(file);
-                CHECK(ok);
-                CHECK(flag9 == 1);
-                CHECK(flag16 == 1);
-                CHECK(flag13 == 1);
+                CHECK(scan.ok);
+                CHECK(scan.probes.chunk9_new);
+                CHECK(scan.probes.chunk16_new);
+                CHECK(scan.probes.chunk13_new);
             }
         }
 
@@ -599,7 +596,7 @@ namespace
         CHECK(file != nullptr);
         if (file)
         {
-            CHECK(!zpatch_new_saves_scan(file, 1, 0, &flag9, &flag16, &flag13));
+            CHECK(!zpatch_new_saves_scan(file, {true, false}).ok);
             std::fclose(file);
         }
 
@@ -608,7 +605,7 @@ namespace
         CHECK(file != nullptr);
         if (file)
         {
-            CHECK(!zpatch_new_saves_scan(file, 1, 0, &flag9, &flag16, &flag13));
+            CHECK(!zpatch_new_saves_scan(file, {true, false}).ok);
             std::fclose(file);
         }
 
@@ -628,13 +625,13 @@ namespace
             CHECK(file != nullptr);
             if (file)
             {
-                CHECK(zpatch_new_saves_scan(file, 1, 0, &flag9, &flag16, &flag13));
+                CHECK(zpatch_new_saves_scan(file, {true, false}).ok);
                 std::fclose(file);
                 file = std::fopen(path.string().c_str(), "rb");
                 CHECK(file != nullptr);
                 if (file)
                 {
-                    CHECK(zpatch_new_saves_scan(file, 1, 1, &flag9, &flag16, &flag13));
+                    CHECK(zpatch_new_saves_scan(file, {true, true}).ok);
                     std::fclose(file);
                 }
             }

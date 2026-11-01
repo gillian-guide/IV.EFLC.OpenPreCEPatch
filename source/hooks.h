@@ -117,13 +117,34 @@ extern "C" void zpatch_local_settings_capture_cwd() noexcept;
 // checks its Adler-32 trailer and verifies the golden archive (native tests only).
 extern "C" bool zpatch_ooc_selftest() noexcept;
 
-// NewSavesCompatibility chunk scan, split out for the native tests. `handle` is
-// a std::FILE*; guarded enables the folded guard checks, seek the seek path. The
-// three outputs are the new-format chunk-size probes (1 = new format at that
-// chunk index); chunk13 gates the p3 hook.
-extern "C" bool zpatch_new_saves_scan(void* handle, int guarded, int seek,
-                                      uint32_t* chunk9_new, uint32_t* chunk16_new,
-                                      uint32_t* chunk13_new) noexcept;
+// Save-scan types shared with the native test seam. The game-facing hook bodies
+// keep their own ABI; this seam is internal.
+namespace opp
+{
+struct SaveScanPolicy final
+{
+    bool validate;      // check every read and size (the folded guard checks)
+    bool skip_payload;  // seek over payloads instead of reading them
+};
+
+struct SaveChunkProbes final
+{
+    bool chunk9_new;
+    bool chunk16_new;
+    bool chunk13_new;
+};
+
+struct SaveScanResult final
+{
+    bool ok;
+    SaveChunkProbes probes;
+};
+} // namespace opp
+
+// Scans an open save file with `policy`: one typed result instead of three
+// out-pointers. `handle` is a std::FILE*; chunk13 gates the p3 hook.
+extern "C" opp::SaveScanResult zpatch_new_saves_scan(void* handle,
+                                                     opp::SaveScanPolicy policy) noexcept;
 
 // NewMemorySystem: the reimplemented CRageAllocator methods (vtable[2]/[3]/[18]
 // of the original 0x100B5038) and the vtable the E8 body writes into the game's
