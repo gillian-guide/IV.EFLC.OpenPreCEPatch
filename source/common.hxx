@@ -2,13 +2,11 @@
 //
 // Third-party and platform headers only.
 //
-// Every module interface unit includes this in its global module fragment; the
-// shared project types (GameBuild, GameImage, PatchContext, ...) are exported by
-// `opp.common`, and the INI document by `opp.config`. A module purview must not
-// see a project header, so nothing here declares project entities.
-//
-// The layout follows GTAIV.EFLC.FusionFix: a flat `source/` root, `external/`
-// for the vendored submodules and `data/plugins/` for the shipped INI.
+// Every module interface unit includes this in its global module fragment; the shared
+// project types are exported by `opp.common` and the INI document by `opp.config`. A
+// module purview must not see a project header, so nothing here declares project
+// entities. Layout follows GTAIV.EFLC.FusionFix: flat `source/`, `external/` for the
+// vendored submodules, `data/plugins/` for the shipped INI.
 
 #pragma once
 

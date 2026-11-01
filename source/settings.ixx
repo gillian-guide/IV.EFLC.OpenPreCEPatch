@@ -22,13 +22,9 @@ import opp.patch;
 import opp.common;
 import opp.game;
 import opp.log;
-// ---------------------------------------------------------------------------
-// Hook bodies: the machine-level entry points settings installs.
-//
-// Each body keeps the original site's calling convention and register
-// contract; the comment above it names the original destination VA. They are
-// 32-bit only (the x64 parity dump resolves names to the original VAs).
-// ---------------------------------------------------------------------------
+// Hook bodies: the machine-level entry points settings installs. Each keeps the original
+// site's calling convention and register contract (its comment names the destination VA);
+// 32-bit only - the x64 parity dump resolves names to the original VAs.
 #if !defined(_WIN64)
 
 using namespace opp;

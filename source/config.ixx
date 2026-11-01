@@ -1,27 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// INI access. The file is parsed once by the bundled IniReader
-// (external/inireader, the mINI reader the original loader used) and copied into
-// a stable, NUL-terminated arena plus a hash index, so every option read is an
-// O(1) lookup with no allocation and no exception. The grammar is mINI's by
-// construction, not a reimplementation: section/key are case-sensitive, the
-// last duplicate wins, a whole-line comment starts with `;`, `#` or `//`, an
-// inline comment (`;`, `//` or `#`) is stripped only when preceded by a space
-// and only after the first `=`, one leading and one trailing quote are stripped
-// independently (mINI's ReadString; a lone leading quote makes the key behave as
-// absent), and a UTF-8 BOM/CRLF is tolerated.
+// INI access. The file is parsed once by the bundled IniReader (external/inireader, the
+// mINI reader the original loader used) and copied into a stable, NUL-terminated arena
+// plus a hash index, so every option read is an O(1) lookup with no allocation and no
+// exception. The grammar is mINI's by construction: section/key are case-sensitive, the
+// last duplicate wins, a whole-line comment starts with `;`, `#` or `//`, an inline
+// comment is stripped only when preceded by a space and only after the first `=`, one
+// leading and one trailing quote are stripped independently (a lone leading quote makes
+// the key behave as absent), and a UTF-8 BOM/CRLF is tolerated.
 //
-// Option semantics stay the original's: a present value is enabled when it
-// parses to exactly 1 (std::stoi's base-10 prefix grammar: "1abc" is 1), and an
-// absent key falls back to the default the installer asks for. The original
-// threw std::invalid_argument out of DllMain for `Key=` or `Key=abc`; that is
-// the fault this tree replaces with a logged fallback to the same default
-// (improvements.md, "install-time failsafes").
+// Option semantics stay the original's: a present value is enabled when it parses to
+// exactly 1 (std::stoi's base-10 prefix grammar: "1abc" is 1) and an absent key falls
+// back to the default the installer asks for. The original threw std::invalid_argument
+// out of DllMain for `Key=` or `Key=abc`; this tree replaces that fault with a logged
+// fallback to the same default (improvements.md, "install-time failsafes").
 //
-// This module also owns the two INI-adjacent pieces the original loader had
-// elsewhere: the FusionFix overlap gate (an option FusionFix already patches is
-// forced off) and the first-run creation/legacy import of the grouped INI.
-// Both are part of answering "what does this INI say?".
+// Also here: the FusionFix overlap gate (an option FusionFix already patches is forced
+// off) and the first-run creation/legacy import of the grouped INI.
 
 module;
 
@@ -94,18 +89,14 @@ export namespace opp
         // True when the key exists in the section, even when its value is empty.
         [[nodiscard]] bool Has(std::string_view section, std::string_view key) const noexcept;
 
-        // The original's INI gate: a present value is enabled when it parses to
-        // exactly 1; an absent key uses `defaultValue`. A present but
-        // unparseable value (empty, "abc") is logged once and also uses the
-        // default, so it can never escape the install pass as an exception.
+        // The original's INI gate: a present value is enabled when it parses to exactly 1;
+        // an absent key uses `defaultValue`. A present but unparseable value (empty,
+        // "abc") is logged once and also uses the default, so it can never escape the
+        // install pass as an exception.
         //
-        // The option catalogue is the generated tests/parity/option_defaults.tsv:
-        // one row per (key, absent-key default, shipped-INI value), regenerated
-        // from these call sites by tools/gen_option_defaults.py, and checked by
-        // the opcep_option_defaults CTest. The shipped INI is the user-facing
-        // surface. There is deliberately no second typed table in this module:
-        // it would duplicate the defaults and drift from the call sites that
-        // actually read them (the OA-3 decision).
+        // The catalogue is the generated tests/parity/option_defaults.tsv (checked by the
+        // opcep_option_defaults CTest); there is deliberately no second typed table here,
+        // which would duplicate the defaults and drift from the call sites (OA-3).
         [[nodiscard]] bool Option(const char* key, const char* defaultValue) const noexcept;
 
         // The same read without the FusionFix gate. Used only for the one-time
@@ -485,11 +476,9 @@ namespace opp
         if (result.status == IntStatus::ok)
             return result.value == 1;
 
-        // A present but unparseable value (`Key=`, `Key=abc`) used to throw
-        // std::invalid_argument out of DllMain. Fall back to the same default an
-        // absent key uses, log this read, and count it for the one-line summary.
-        // The log is per read (several arms may read the same key); the counter
-        // is what the end-of-pass summary reports.
+        // A present but unparseable value (`Key=`, `Key=abc`) used to throw out of
+        // DllMain. Fall back to the same default an absent key uses and count it for the
+        // end-of-pass summary; the log line is per read (several arms may read the key).
         ++invalidValues_;
         Log("config: invalid value for %s: \"%s\", using default %s", key, value,
             defaultValue);

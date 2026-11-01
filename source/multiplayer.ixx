@@ -2,9 +2,8 @@
 //
 // multiplayer
 //
-// One function per INI arm, in the original loader order. The bodies are the
-// readable reconstruction's verified arms; only the wrapper and the arm trace
-// are ours.
+// One function per INI arm, in the original loader order; the bodies are the
+// readable reconstruction's verified arms, the wrapper and the arm trace ours.
 
 module;
 
@@ -32,13 +31,9 @@ export namespace opp
     std::string_view ModelNameFromHash(uint32_t hash) noexcept;
 }
 
-// ---------------------------------------------------------------------------
-// Hook bodies: the machine-level entry points multiplayer installs.
-//
-// Each body keeps the original site's calling convention and register
-// contract; the comment above it names the original destination VA. They are
-// 32-bit only (the x64 parity dump resolves names to the original VAs).
-// ---------------------------------------------------------------------------
+// Hook bodies: the machine-level entry points multiplayer installs. Each keeps the original
+// site's calling convention and register contract (its comment names the destination VA);
+// 32-bit only - the x64 parity dump resolves names to the original VAs.
 #if !defined(_WIN64)
 
 using namespace opp;

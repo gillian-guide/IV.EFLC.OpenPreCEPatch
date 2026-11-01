@@ -2,11 +2,9 @@
 //
 // Named x86 byte values for the hand-written stores in the feature modules.
 //
-// Most writes in this tree go through injector's Make* helpers, which name the
-// operation. A few sites deliberately store a single opcode or a recovered
-// instruction window; those values are spelled here so a reader sees which byte
-// is an opcode, which is an operand and which is fill, instead of decoding a
-// packed integer by eye.
+// Most writes go through injector's Make* helpers, which name the operation. Where a site
+// stores a single opcode or a recovered instruction window, the value is spelled here so
+// a reader sees which byte is an opcode, which an operand and which fill.
 
 #pragma once
 
@@ -27,10 +25,9 @@ namespace opp::ops
     inline constexpr uint8_t kRet = 0xC3;        // C3
     inline constexpr uint8_t kPushad = 0x60;     // 60
 
-    // A recovered instruction window: `size` raw bytes copied verbatim over the
-    // site. Windows are given as bytes because the original stores them as
-    // packed integers, where the opcode/operand/fill split is invisible and the
-    // meaning depends on little-endianness.
+    // A recovered instruction window: `size` raw bytes copied verbatim over the site.
+    // Bytes, because the original stores packed integers whose opcode/operand/fill split
+    // is invisible and whose meaning depends on little-endianness.
     template <size_t N>
     struct InstructionWindow
     {

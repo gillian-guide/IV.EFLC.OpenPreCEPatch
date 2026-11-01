@@ -2,11 +2,10 @@
 //
 // opp.common — the shared types every module speaks.
 //
-// This module owns the small value types the pipeline and the feature modules
-// pass around: the build enum, the mapped game image, the per-arm context, the
-// scan match and the patch result. `common.hxx` is third-party/platform headers
-// only; the INI document is `opp.config`, imported here so PatchContext's inline
-// Option can call Config::Option.
+// Owns the small value types the pipeline and the feature modules pass around: the build
+// enum, the mapped game image, the per-arm context, the scan match and the patch result.
+// `common.hxx` is third-party/platform headers only; the INI document is `opp.config`,
+// imported here so PatchContext's inline Option can call Config::Option.
 
 module;
 

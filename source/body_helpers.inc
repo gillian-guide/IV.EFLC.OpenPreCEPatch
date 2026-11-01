@@ -2,14 +2,11 @@
 //
 // Body helpers that more than one feature module's bodies call.
 //
-// These were TU-local functions in the single hook-bodies translation unit.
-// They are included *inside* each module that needs them instead of being
-// exported from opp.patch: the compiler inlines them into the bodies they guard,
-// and moving them out of line would change the bodies' machine code (a body
-// contract change this migration must not make). `static` keeps one copy per
-// importing module, exactly as before.
-//
-// Included from the module purview after `import opp.patch;`/`import opp.log;`.
+// These were TU-local functions in the single hook-bodies translation unit. They are
+// included *inside* each module that needs them rather than exported from opp.patch: the
+// compiler inlines them into the bodies they guard, and moving them out of line would
+// change the bodies' machine code. `static` keeps one copy per importing module, as
+// before. Included from the module purview after `import opp.patch;`/`import opp.log;`.
 
 #pragma once
 

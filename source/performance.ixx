@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // performance
-//
-// One function per INI arm, in the original loader order. The bodies are the
-// readable reconstruction's verified arms; only the wrapper and the arm trace
-// are ours.
+// One function per INI arm, in the original loader order; the bodies are the
+// readable reconstruction's verified arms, the wrapper and the arm trace ours.
 
 module;
 
@@ -22,13 +20,9 @@ import opp.common;
 import opp.settings;
 import opp.log;
 
-// ---------------------------------------------------------------------------
-// Hook bodies: the machine-level entry points performance installs.
-//
-// Each body keeps the original site's calling convention and register
-// contract; the comment above it names the original destination VA. They are
-// 32-bit only (the x64 parity dump resolves names to the original VAs).
-// ---------------------------------------------------------------------------
+// Hook bodies: the machine-level entry points performance installs. Each keeps the original
+// site's calling convention and register contract (its comment names the destination VA);
+// 32-bit only - the x64 parity dump resolves names to the original VAs.
 #if !defined(_WIN64)
 
 using namespace opp;
@@ -184,25 +178,21 @@ extern "C" void __cdecl abi_nms_apply()
 
 namespace
 {
-// NewMemorySystem's allocation registry: the original keeps the pointers it
-// handed out in its own hash map (FNV-1a over the pointer's four bytes) under
-// the recursive critical section at 0x101A0808. Only membership is observable
-// (vtable[18] asks "is this pointer mine?"), so the keys go in a flat
-// open-addressing set behind an equivalent lock.
+// NewMemorySystem's allocation registry: the original keeps the pointers it handed out in
+// its own hash map (FNV-1a over the pointer's four bytes) under the recursive critical
+// section at 0x101A0808. Only membership is observable (vtable[18] asks "is this pointer
+// mine?"), so the keys go in a flat open-addressing set behind an equivalent lock.
 //
-// It is a flat table rather than std::unordered_set because the set is touched
-// on *every* game allocation and free: an unordered_set node is one heap
-// allocation per insert (and a throw inside a noexcept caller on failure). The
-// table allocates only when it grows, never throws (VirtualAlloc returns null
-// and the insert is dropped), and keeps the same membership semantics.
+// Flat rather than std::unordered_set because the set is touched on *every* allocation
+// and free: an unordered_set node costs one heap allocation per insert (and a throw in a
+// noexcept caller on failure). This table allocates only when it grows, never throws
+// (VirtualAlloc returns null and the insert is dropped) and keeps the same membership.
 CRITICAL_SECTION g_nms_lock;
 
-// One registry entry. The state is explicit so a key can never be confused with
-// a marker: Empty is a never-used slot, Occupied a live key, Erased a tombstone
-// that still terminates a probe chain. A Slot is 8 bytes (key + state byte +
-// padding); at the 3/4 load factor that is ~11 bytes per live pointer, still far
-// below the original map's per-node cost, and the type is what makes the probe
-// code readable.
+// One registry entry. The state is explicit so a key can never be confused with a marker:
+// Empty is a never-used slot, Occupied a live key, Erased a tombstone that still terminates
+// a probe chain. 8 bytes (key + state byte + padding), ~11 bytes per live pointer at the
+// 3/4 load factor.
 struct Slot final
 {
     enum class State : uint8_t

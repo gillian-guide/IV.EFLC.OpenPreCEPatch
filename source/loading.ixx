@@ -2,9 +2,8 @@
 //
 // loading
 //
-// One function per INI arm, in the original loader order. The bodies are the
-// readable reconstruction's verified arms; only the wrapper and the arm trace
-// are ours.
+// One function per INI arm, in the original loader order; the bodies are the
+// readable reconstruction's verified arms, the wrapper and the arm trace ours.
 
 module;
 
@@ -27,13 +26,9 @@ import opp.common;
 import opp.settings;
 import opp.log;
 
-// ---------------------------------------------------------------------------
-// Hook bodies: the machine-level entry points loading installs.
-//
-// Each body keeps the original site's calling convention and register
-// contract; the comment above it names the original destination VA. They are
-// 32-bit only (the x64 parity dump resolves names to the original VAs).
-// ---------------------------------------------------------------------------
+// Hook bodies: the machine-level entry points loading installs. Each keeps the original
+// site's calling convention and register contract (its comment names the destination VA);
+// 32-bit only - the x64 parity dump resolves names to the original VAs.
 #if !defined(_WIN64)
 
 using namespace opp;
@@ -115,17 +110,14 @@ extern "C" int32_t abi_new_saves_p3_hook() noexcept
 }  // extern "C"
 
 // ---------------------------------------------------------------------------
-// The save-format scanner
+// The save-format scanner: the converter reads the game's save through a cursor, so the
+// byte-level steps have names (the 0x110-byte header, the 9-byte chunk headers, the
+// per-chunk payload step, the 18-chunk walk). The game hands the scan a std::FILE*, so the
+// cursor wraps it rather than replacing it with an ifstream - the fread/fseek conventions
+// and the unchecked-malloc fault are the original's.
 //
-// The converter reads the game's save through a cursor, so the byte-level steps
-// have names: the 0x110-byte header, the 9-byte chunk headers, the per-chunk
-// payload step and the 18-chunk walk. The game hands the scan a std::FILE*, so
-// the cursor wraps it instead of replacing it with an ifstream (the fread/fseek
-// conventions and the unchecked-malloc fault are the original's).
-//
-// The three new-format probes are the scanner's only output: chunk 13 gates the
-// p3 hook, chunk 16 selects the 3694-byte P2 read and chunk 9 gates P1.
-// ---------------------------------------------------------------------------
+// The three new-format probes are its only output: chunk 13 gates the p3 hook, chunk 16
+// selects the 3694-byte P2 read, chunk 9 gates P1.
 namespace
 {
 // True when a scan validates every read/size and seeks over payloads (the

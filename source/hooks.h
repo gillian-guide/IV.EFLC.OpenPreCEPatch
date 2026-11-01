@@ -2,17 +2,13 @@
 #pragma once
 // Hook bodies and the C ABI they share.
 //
-// Each body lives in the feature module whose arms install it; the arm takes the
-// body's address directly through OPP_BODY (no name table). Only the symbols
-// that more than one module needs are declared here:
-//   * the shared body helpers that were genuine out-of-line calls (the bounded
-//     formatter, the native-script call layer, the secure-copy slot), defined by
-//     opp.patch — the helpers the bodies inline live in body_helpers.inc;
-//   * the bodies another module's data references by address (NewMemorySystem's
-//     allocator vtable names bodies other modules own);
-//   * the bodies the native test suite drives directly.
-// Nothing here is exported by a module; the definitions are C-linkage bodies in
-// module purviews, which the linker resolves by name.
+// Each body lives in the feature module whose arms install it and the arm takes its
+// address through OPP_BODY (no name table). Only symbols more than one module needs are
+// here: the shared out-of-line helpers (opp.patch; the helpers the bodies inline live in
+// body_helpers.inc), the bodies another module's data references by address
+// (NewMemorySystem's allocator vtable), and the bodies the native tests drive.
+// Nothing here is exported by a module: the definitions are C-linkage bodies in module
+// purviews, which the linker resolves by name.
 
 #include <cstddef>
 #include <cstdint>

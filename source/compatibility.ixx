@@ -2,9 +2,8 @@
 //
 // compatibility
 //
-// One function per INI arm, in the original loader order. The bodies are the
-// readable reconstruction's verified arms; only the wrapper and the arm trace
-// are ours.
+// One function per INI arm, in the original loader order; the bodies are the
+// readable reconstruction's verified arms, the wrapper and the arm trace ours.
 
 module;
 
@@ -23,13 +22,9 @@ import opp.common;
 import opp.settings;
 import opp.log;
 
-// ---------------------------------------------------------------------------
-// Hook bodies: the machine-level entry points compatibility installs.
-//
-// Each body keeps the original site's calling convention and register
-// contract; the comment above it names the original destination VA. They are
-// 32-bit only (the x64 parity dump resolves names to the original VAs).
-// ---------------------------------------------------------------------------
+// Hook bodies: the machine-level entry points compatibility installs. Each keeps the original
+// site's calling convention and register contract (its comment names the destination VA);
+// 32-bit only - the x64 parity dump resolves names to the original VAs.
 #if !defined(_WIN64)
 
 using namespace opp;
@@ -262,20 +257,19 @@ namespace opp::features
 
         const GameImage& image = ctx.image;
 
-        // The recovered handler wrote per-build RVAs. Each site is now the
-        // pre-write instruction window at that RVA (the rows proved by
-        // tools/opcep_sigcheck.py on the on-disk builds), so a build whose bytes
-        // do not match installs nothing instead of writing a stale address. The
-        // build gate stays because several windows also resolve on builds the
-        // original did not patch here.
+        // The recovered handler wrote per-build RVAs; each site is now the pre-write
+        // instruction window at that RVA (the rows proved by tools/opcep_sigcheck.py on the
+        // on-disk builds), so a build whose bytes do not match installs nothing instead of
+        // writing a stale address. The build gate stays because several windows also resolve
+        // on builds the original did not patch here.
         //
-        // Every site is matched before the first write: the seven adjacent
-        // one-byte NOPs live inside each other's windows, so a scan after a write
-        // would silently lose the neighbours (the double-scan defect).
-        // Destination deltas from a scan to the trampoline the recovered jumps
-        // target: +0x87 skips the whole check (1.0.6.0 0x003982->0x003A09,
-        // 1.0.7.0 0x003962->0x0039E9) and +0x12 is 1.0.7.0's shorter skip
-        // (0x00389C->0x0038AE). Both are the same on every gated build.
+        // Every site is matched before the first write: the seven adjacent one-byte NOPs
+        // live inside each other's windows, so a scan after a write would lose the
+        // neighbours (the double-scan defect).
+        //
+        // Destination deltas from a scan to the trampoline: +0x87 skips the whole check
+        // (1.0.6.0 0x003982->0x003A09, 1.0.7.0 0x003962->0x0039E9), +0x12 is 1.0.7.0's
+        // shorter skip (0x00389C->0x0038AE). Both are the same on every gated build.
         constexpr uintptr_t kModCheckJumpDelta = 0x87;
         constexpr uintptr_t kModCheckShortJumpDelta = 0x12;
         // A cleared flag byte (the recovery's "the check is off" value).

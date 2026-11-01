@@ -2,11 +2,10 @@
 //
 // opp.patch - signature scanning, the guarded arm writes and the body ABI.
 //
-// This is the FusionFix-minimal patch module: signature normalisation and
-// scanning, the guarded writes every install arm uses (SiteWritable, JumpTo,
-// CallTo, NopAt, WriteValue, WriteRaw and their no-read variants), the Pattern
-// wrappers, the arm trace and counters, the shared body helpers several modules
-// call, and the resolver the x64 parity dump uses for OPP_BODY.
+// The FusionFix-minimal patch module: signature normalisation and scanning, the guarded
+// writes every arm uses (SiteWritable, JumpTo, CallTo, NopAt, WriteValue, WriteRaw and
+// their no-read variants), the Pattern wrappers, the arm trace and counters, the shared
+// body helpers, and the resolver the x64 parity dump uses for OPP_BODY.
 
 module;
 
@@ -194,13 +193,12 @@ export namespace opp
             static_cast<uint32_t>(displacement));
     }
 
-    // A five-byte branch written the way the original's collector writes it
-    // (opcode + rel32). injector::MakeCALL/MakeJMP first call GetBranchDestination,
-    // which for a `FF 15 <disp32>` site dereferences the operand; that read is
-    // discarded, and it is the only difference from the original. Use this where
-    // the dereference would read memory the site does not point into (e.g. a byte
-    // of the operand is overwritten by the same arm). Only WriteMemoryRaw is
-    // guaranteed by every injector shim, so the rel32 is built here.
+    // A five-byte branch written as opcode + rel32, the way the original's collector
+    // writes it. injector::MakeCALL/MakeJMP first call GetBranchDestination, which for a
+    // `FF 15 <disp32>` site dereferences the operand; that read is discarded here, the
+    // only difference from the original. Use this where the dereference would read memory
+    // the site does not point into (e.g. a byte of the operand is overwritten by the same
+    // arm). Only WriteMemoryRaw exists in every injector shim, so the rel32 is built here.
     inline void WriteBranchNoRead(uint8_t* site, uint8_t opcode, void* destination)
     {
         uint8_t bytes[kBranchLength];
@@ -230,24 +228,15 @@ export namespace opp
     // tracing on, writes one log line before the arm runs.
     void TraceArm(const char* name);
 
-    // ---------------------------------------------------------------------
-    // Arm failsafes
-    //
-    // Every arm write goes through one of these instead of calling
-    // injector:: directly. Each checks, before touching the image:
-    //   * the site and every byte it would overwrite is inside the game image,
-    //     or (for an option that deliberately patches another module, e.g.
-    //     xlive.dll) inside one committed allocation;
-    //   * the destination body resolved (a withheld or unverified body skips
-    //     instead of installing a jump to 0).
-    // A failed check writes one log line naming the arm and leaves the image
-    // untouched: that is what the original loader does when a signature does
-    // not match, so an unhealthy image degrades to a clean skip, never a
-    // fault. On a healthy image every check passes and the write set is
-    // byte-identical to the unchecked form.
-    //
-    // The arm's own option and build gate stays in the arm, where the original
-    // handler had it; these helpers only make the write itself safe.
+    // Arm failsafes: every arm write goes through one of these instead of calling
+    // injector:: directly. Before touching the image each checks that the site and every
+    // byte it would overwrite is inside the game image (or, for an option that patches
+    // another module such as xlive.dll, inside one committed allocation) and that the
+    // destination body resolved. A failed check writes one log line naming the arm and
+    // leaves the image untouched - the original loader's own signature-miss behaviour, so
+    // an unhealthy image degrades to a clean skip, never a fault, and a healthy image
+    // produces a byte-identical write set. The arm's option and build gate stays in the
+    // arm; these helpers only make the write itself safe.
     bool SiteWritable(const PatchContext& ctx, const void* site, size_t length) noexcept;
 
     // A site inside another loaded module (the GFWL option patches xlive.dll).

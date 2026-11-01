@@ -2,10 +2,9 @@
 //
 // opp.log — the synchronous trace log.
 //
-// The original mod wrote a trace log next to the ASI; the line shape (stage,
-// build, option, result) is unchanged so existing diagnostics keep working.
-// This module is a leaf: it depends only on the CRT, so every other module may
-// log without creating a cycle.
+// The original wrote a trace log next to the ASI; the line shape (stage, build, option,
+// result) is unchanged so existing diagnostics keep working. A leaf module: it depends
+// only on the CRT, so anything may log without creating a cycle.
 
 module;
 

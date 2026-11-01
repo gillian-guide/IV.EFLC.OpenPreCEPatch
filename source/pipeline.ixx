@@ -2,22 +2,21 @@
 //
 // opp.pipeline - the install tiers and the two loader passes.
 //
-// The schedule is the FusionFix event model: the pipeline owns three tiers
-// (publish, install, post); each feature module subscribes its arms at static
-// init time and the pipeline runs the tiers in order. There is no central arm
-// list, phase enum or dependency graph: the tier is the ordering contract.
+// The schedule is the FusionFix event model: three tiers (publish, install, post); each
+// feature module subscribes its arms at static init and the pipeline runs the tiers in
+// order. There is no central arm list, phase enum or dependency graph: the tier is the
+// ordering contract.
 //
-// Inside a tier the arms run in *name* order, not subscription order: the
-// subscription order is the executable's static-init (link) order, which differs
-// between the ASI, the dump and the tests, and two arms that patch the same site
-// must not depend on which binary runs them. Name order is deterministic in every
-// binary; the 96-cell matrix and the 18 crossbuild write sets prove it is
-// write-equivalent to the old shipping schedule (the only visible difference is
-// which of two identical writers is credited for the five shared VEHICLES bytes).
-// tests/order_golden.txt freezes the per-tier arm set.
+// Inside a tier the arms run in *name* order, not subscription order: subscription order
+// is the executable's static-init (link) order, which differs between the ASI, the dump
+// and the tests, and two arms that patch the same site must not depend on which binary
+// runs them. Name order is deterministic everywhere; the 96-cell matrix and the 18
+// crossbuild write sets prove it is write-equivalent to the old schedule (the only
+// visible difference is which of two identical writers is credited for the five shared
+// VEHICLES bytes). tests/order_golden.txt freezes the per-tier arm set.
 //
-// This file also keeps the install driver (the old patches.*), the
-// unconditional pointer preamble (preamble.*) and the launcher-name post step.
+// This file also keeps the install driver, the unconditional pointer preamble and the
+// launcher-name post step.
 
 module;
 
