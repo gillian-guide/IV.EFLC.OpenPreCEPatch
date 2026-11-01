@@ -1494,6 +1494,23 @@ namespace opp::features
         {
             const GameImage& image = ctx.image;
 
+            // The naked bodies tail-jump through the handler-published resume
+            // and call the published count function. If any publish pattern
+            // missed, those slots are not game addresses; installing the bodies
+            // would jump/call through the stale values. The failsafe skips the
+            // arm instead (the original handler's signature-miss behaviour).
+#if !defined(_WIN64)
+            const auto is_game_address = [&ctx](uint32_t va) {
+                const auto base = reinterpret_cast<uintptr_t>(ctx.image.base);
+                return base != 0u && va >= base && (va - base) < ctx.image.size;
+            };
+            if (zpatch_failsafe_skip("NoLiveryLimit publish",
+                                     !is_game_address(zpatch_nolivery_resume) ||
+                                         !is_game_address(zpatch_nolivery_resume_d) ||
+                                         !is_game_address(zpatch_nolivery_fn)))
+                return;
+#endif
+
             if (auto pattern = Pattern(image, "8B 8C 83 3C 01 00 00 0F BF 53 48"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();

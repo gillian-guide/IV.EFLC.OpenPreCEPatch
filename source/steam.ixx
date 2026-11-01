@@ -228,6 +228,28 @@ namespace opp
             return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES;
         }
 
+        // The system GFWL xlive.dll is packed; its ordinal-5278 export is a
+        // protector thunk that uses the caller's return address as part of the
+        // anti-tamper check. The IAT hook changes that return address (the call
+        // now comes from this ASI), so the protector worker faults and takes the
+        // game down. The local xliveless xlive.dll is a plain build and is the
+        // supported environment for this hook; only hook that one.
+        bool IsProtectedSystemXlive(HMODULE xlive) noexcept
+        {
+            if (xlive == nullptr)
+                return false;
+            char module_path[MAX_PATH] = {};
+            if (GetModuleFileNameA(xlive, module_path, MAX_PATH) == 0)
+                return false;
+            char windows[MAX_PATH] = {};
+            const UINT length = GetWindowsDirectoryA(windows, MAX_PATH);
+            if (length == 0 || length >= MAX_PATH)
+                return false;
+            if (_strnicmp(module_path, windows, length) != 0)
+                return false;
+            return module_path[length] == '\\' || module_path[length] == '\0';
+        }
+
         // SteamAPI_Init takes the AppID from the environment the Steam client
         // passes to the process it launched. When the game is started directly
         // (desktop shortcut to PlayGTAIV.exe) with the client running, that
@@ -428,6 +450,16 @@ namespace opp
             // Retail/GFWL install: simply do not run the Steam path.
             g_disabled = true;
             Log("steam: not applicable (no steam_api.dll), skipped");
+            return false;
+        }
+        if (IsProtectedSystemXlive(GetModuleHandleA("xlive.dll")))
+        {
+            // The IAT hook is unsafe against the packed system GFWL xlive: its
+            // export is a protector thunk, and the hook's return address trips
+            // it. The local xliveless build is the supported environment.
+            g_disabled = true;
+            Log("steam: protected system xlive.dll, IAT hook skipped "
+                "(local xliveless is required for the Steam mirror)");
             return false;
         }
 
