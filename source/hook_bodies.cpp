@@ -136,6 +136,14 @@ constexpr std::size_t kSaveMagicOffset = 0x0C;
 // "<dir>\\<save name>" path built before converting.
 constexpr std::size_t kSaveDirectoryCapacity = 312;
 constexpr std::size_t kSaveFilePathCapacity = 560;
+
+// The original allocators are std::malloc/std::free. This deleter lets the
+// buffers be owned without changing the allocator, and without adding a guard
+// the original does not have.
+struct FreeDeleter final
+{
+	void operator()(void* pointer) const noexcept { std::free(pointer); }
+};
 // NewSaves' flag16 restore branch: 75 26 = jne +0x26 (the two bytes the original
 // writes back over the forced short jump).
 constexpr std::uint16_t kJneRel8Plus38 = 0x2675u;
@@ -735,6 +743,63 @@ template <typename Fn>
 Fn GameFunction(std::uintptr_t va) noexcept
 {
 	return reinterpret_cast<Fn>(va);
+}
+
+// The save file is this code's own file: an owned stream in the original's
+// binary read-only mode. A short read leaves the rest of the buffer untouched
+// and is ignored, exactly like the original's unchecked std::fread calls.
+class SaveFile final
+{
+public:
+	explicit SaveFile(const char* path) : stream_(path, std::ios::binary) {}
+
+	bool IsOpen() const noexcept { return stream_.is_open(); }
+
+	void Read(std::span<std::byte> out) noexcept
+	{
+		ReadRaw(out.data(), static_cast<std::uint32_t>(out.size()));
+	}
+
+	// The unchecked-payload path: the original hands std::malloc's pointer
+	// straight to fread, so a null block faults inside the read. Keep that.
+	void ReadRaw(std::byte* out, std::uint32_t bytes) noexcept
+	{
+		stream_.read(reinterpret_cast<char*>(out), static_cast<std::streamsize>(bytes));
+	}
+
+private:
+	std::ifstream stream_;
+};
+
+std::array<std::byte, kSaveHeaderSize> ReadSaveHeader(SaveFile& file) noexcept
+{
+	std::array<std::byte, kSaveHeaderSize> header;
+	file.Read(header);
+	return header;
+}
+
+// One chunk header: the dword at +5 is the chunk's total size (payload follows).
+struct SaveChunk final
+{
+	std::uint32_t size;
+	std::uint32_t payload;
+};
+
+SaveChunk ReadChunkHeader(SaveFile& file, std::span<std::byte> chunk) noexcept
+{
+	file.Read(chunk);
+	std::uint32_t size = 0;
+	std::memcpy(&size, chunk.data() + kSaveChunkSizeOffset, sizeof(size));
+	return {size, size - kSaveChunkHeaderSize};
+}
+
+// The original mallocs the payload unchecked and passes it to fread. The
+// unique_ptr adds ownership only (same malloc/free, no null guard), so the
+// fault on a failed allocation is unchanged.
+void ReadPayload(SaveFile& file, std::uint32_t bytes) noexcept
+{
+	const std::unique_ptr<void, FreeDeleter> payload(std::malloc(bytes));
+	file.ReadRaw(static_cast<std::byte*>(payload.get()), bytes);
 }
 
 extern "C"
@@ -1802,38 +1867,26 @@ extern "C" std::int32_t abi_new_saves_p3_hook() noexcept
 
 extern "C" void abi_new_saves_convert(const char* path) noexcept
 {
-	std::FILE* file = std::fopen(path, "rb");
-	if (!file) return;
-	std::array<std::uint8_t, kSaveHeaderSize> header;
-	std::fread(header.data(), header.size(), 1, file);  // return ignored, like the original
+	SaveFile file(path);
+	if (!file.IsOpen()) return;
+	const std::array<std::byte, kSaveHeaderSize> header = ReadSaveHeader(file);
 	std::uint32_t magic = 0;
 	std::memcpy(&magic, header.data() + kSaveMagicOffset, sizeof(magic));
-	if (magic != kSaveMagic)  // "SAVE"
-	{
-		std::fclose(file);
-		return;
-	}
+	if (magic != kSaveMagic) return;  // "SAVE"
 	for (std::size_t i = 0; i < kSaveChunkCount; ++i)
 	{
-		std::array<std::uint8_t, kSaveChunkHeaderSize> chunk;
-		std::fread(chunk.data(), chunk.size(), 1, file);
-		std::uint32_t size = 0;
-		std::memcpy(&size, chunk.data() + kSaveChunkSizeOffset, sizeof(size));
-		zpatch_new_saves_chunk_len = size;                  // dword_1015AD90
-		zpatch_new_saves_element_count = size - kSaveChunkHeaderSize;  // dword_1015ADA0
-		// The original's allocation is unchecked: a failed malloc passes null to
-		// fread and faults, so no null guard is added here.
-		void* payload = std::malloc(zpatch_new_saves_element_count);
-		std::fread(payload, 1, zpatch_new_saves_element_count, file);
-		std::free(payload);
+		std::array<std::byte, kSaveChunkHeaderSize> chunk;
+		const SaveChunk info = ReadChunkHeader(file, chunk);
+		zpatch_new_saves_chunk_len = info.size;           // dword_1015AD90
+		zpatch_new_saves_element_count = info.payload;    // dword_1015ADA0
+		ReadPayload(file, info.payload);
 		if (i == 9)
-			zpatch_new_saves_force_new_read = size == kSaveChunk9SizeNew ? 1u : 0u;
+			zpatch_new_saves_force_new_read = info.size == kSaveChunk9SizeNew ? 1u : 0u;
 		if (i == 16)
-			zpatch_new_saves_new_chunk16 = size == kSaveChunk16SizeNew ? 1u : 0u;
+			zpatch_new_saves_new_chunk16 = info.size == kSaveChunk16SizeNew ? 1u : 0u;
 		if (i == 13)
-			zpatch_new_saves_extra_block = size == kSaveChunk13SizeNew ? 1u : 0u;
+			zpatch_new_saves_extra_block = info.size == kSaveChunk13SizeNew ? 1u : 0u;
 	}
-	std::fclose(file);
 
 	// P1 (game 0x872185): force the 0x3C-byte read path for new saves.
 	static const std::uint8_t* p1 = nullptr;
@@ -1899,14 +1952,14 @@ extern "C" void abi_new_saves_prepare() noexcept
 	if (get_dir == nullptr)
 		get_dir = scan_game("55 8B EC 83 E4 F8 83 EC 4C 56 33 C0 8D 4C 24 28");
 	if (get_dir == nullptr) return;
-	char directory[kSaveDirectoryCapacity]{};
+	std::array<char, kSaveDirectoryCapacity> directory{};
 	char suffix = 0;
 	if (reinterpret_cast<std::uint8_t(__cdecl*)(int, char*, char*)>(
-	        const_cast<std::uint8_t*>(get_dir))(0, directory, &suffix) == 0)
+	        const_cast<std::uint8_t*>(get_dir))(0, directory.data(), &suffix) == 0)
 		return;
-	char path[kSaveFilePathCapacity];
-	std::snprintf(path, sizeof(path), "%s\\%s", directory, name);
-	abi_new_saves_convert(path);
+	std::array<char, kSaveFilePathCapacity> path;
+	std::snprintf(path.data(), path.size(), "%s\\%s", directory.data(), name);
+	abi_new_saves_convert(path.data());
 }
 }  // extern "C"
 

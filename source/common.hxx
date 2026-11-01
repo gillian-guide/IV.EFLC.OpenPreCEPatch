@@ -38,7 +38,9 @@
 #include <initializer_list>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <new>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_set>
