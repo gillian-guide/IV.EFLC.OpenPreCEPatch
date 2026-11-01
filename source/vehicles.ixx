@@ -184,34 +184,36 @@ void PublishForceCarHeadlightShadows(const PatchContext& ctx)
 void PublishFreezeCarFix(const PatchContext& ctx)
 {
 	Trace("publish FreezeCarFix");
-	// FreezeCarFix: 12 slots
-	if (ctx.Option("FreezeCarFix", "1") &&
-	    Pattern(ctx.image, "32 DB 8B 54 24 24 52 E8 ? ? ? ? 8B F0").size() > 0)
+	// FreezeCarFix: 12 slots. The recovered gate is keyed on the first pattern, so
+	// one scan both gates and supplies its match.
+	if (ctx.Option("FreezeCarFix", "1"))
 	{
 		const GameImage& image = ctx.image;
 
-		if (auto pattern = Pattern(image, "32 DB 8B 54 24 24 52 E8 ? ? ? ? 8B F0"); pattern.size() > 0)
+		if (auto primary = Pattern(image, "32 DB 8B 54 24 24 52 E8 ? ? ? ? 8B F0");
+		    primary.size() > 0)
 		{
-			zpatch_spawns_orig_a = MatchTarget(pattern, 8, 12);
-		}
+			zpatch_spawns_orig_a = MatchTarget(primary, 8, 12);
 
 		if (auto pattern = Pattern(image, "8B 4C 24 28 8B 54 24 24 50 51 52 E8 ? ? ? ? 5F 5E 5D 5B"); pattern.size() > 0)
 		{
 			zpatch_spawns_orig_b = MatchTarget(pattern, 12, 16);
 		}
 
-		if (auto pattern = Pattern(image, "E9 A1 02 00 00 83 FF 09 0F 87 F2 00 00 00"); pattern.size() > 0)
-		{
-			zpatch_spawns_case9_resume = MatchTarget(pattern, 247, 251);
-			zpatch_spawns_case6_resume = MatchTarget(pattern, 181, 185);
-			zpatch_spawns_case1_resume = MatchTarget(pattern, 62, 66);
-			zpatch_spawns_case2_resume = MatchTarget(pattern, 87, 91);
-			zpatch_spawns_case4_resume = MatchTarget(pattern, 137, 141);
-			zpatch_spawns_case7_resume = MatchTarget(pattern, 203, 207);
-			zpatch_spawns_case3_resume = MatchTarget(pattern, 112, 116);
-			zpatch_spawns_case5_resume = MatchTarget(pattern, 159, 163);
-			zpatch_spawns_case8_resume = MatchTarget(pattern, 225, 229);
-			zpatch_spawns_case0_resume = MatchTarget(pattern, 37, 41);
+			if (auto pattern = Pattern(image, "E9 A1 02 00 00 83 FF 09 0F 87 F2 00 00 00");
+			    pattern.size() > 0)
+			{
+				zpatch_spawns_case9_resume = MatchTarget(pattern, 247, 251);
+				zpatch_spawns_case6_resume = MatchTarget(pattern, 181, 185);
+				zpatch_spawns_case1_resume = MatchTarget(pattern, 62, 66);
+				zpatch_spawns_case2_resume = MatchTarget(pattern, 87, 91);
+				zpatch_spawns_case4_resume = MatchTarget(pattern, 137, 141);
+				zpatch_spawns_case7_resume = MatchTarget(pattern, 203, 207);
+				zpatch_spawns_case3_resume = MatchTarget(pattern, 112, 116);
+				zpatch_spawns_case5_resume = MatchTarget(pattern, 159, 163);
+				zpatch_spawns_case8_resume = MatchTarget(pattern, 225, 229);
+				zpatch_spawns_case0_resume = MatchTarget(pattern, 37, 41);
+			}
 		}
 	}
 }

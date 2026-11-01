@@ -214,20 +214,21 @@ void PublishPlayerAsPedComponentsFix(const PatchContext& ctx)
 void PublishSMPA60Fix(const PatchContext& ctx)
 {
 	Trace("publish SMPA60Fix");
-	// SMPA60Fix: 3 slots
-	if (ctx.Option("SMPA60Fix", "1") && Pattern(ctx.image, "01 96 98 00 00 00 8B 47 04 29 46 54 8B 4F 0C").size() > 0)
+	// SMPA60Fix: 3 slots. The recovered gate is keyed on the primary pattern, so
+	// one scan both gates and supplies the match+136 resume.
+	if (ctx.Option("SMPA60Fix", "1"))
 	{
 		const GameImage& image = ctx.image;
 
-		if (auto pattern = Pattern(image, "8B 48 70 83 C0 40 50 51 8D 51 10"); pattern.size() > 0)
+		if (auto primary = Pattern(image, "01 96 98 00 00 00 8B 47 04 29 46 54 8B 4F 0C");
+		    primary.size() > 0)
 		{
-			zpatch_smpa60_resume_a = MatchAddress(pattern, 28);
-			zpatch_smpa60_resume_b = MatchAddress(pattern, 14);
-		}
-
-		if (auto pattern = Pattern(image, "01 96 98 00 00 00 8B 47 04 29 46 54 8B 4F 0C"); pattern.size() > 0)
-		{
-			zpatch_smpa60_resume_c = MatchAddress(pattern, 136);
+			if (auto pattern = Pattern(image, "8B 48 70 83 C0 40 50 51 8D 51 10"); pattern.size() > 0)
+			{
+				zpatch_smpa60_resume_a = MatchAddress(pattern, 28);
+				zpatch_smpa60_resume_b = MatchAddress(pattern, 14);
+			}
+			zpatch_smpa60_resume_c = MatchAddress(primary, 136);
 		}
 	}
 }
@@ -543,23 +544,24 @@ void ApplySMPA60Fix(const PatchContext& ctx)
 {
 	Trace("SMPA60Fix");
 	// SMPA60Fix: 1 literal, 1 siginstall, 1 sigjump
-	if (ctx.Option("SMPA60Fix", "1") && Pattern(ctx.image, "01 96 98 00 00 00 8B 47 04 29 46 54 8B 4F 0C").size() > 0)
+	if (ctx.Option("SMPA60Fix", "1"))
 	{
 		const GameImage& image = ctx.image;
 
-		if (auto pattern = Pattern(image, "01 96 98 00 00 00 8B 47 04 29 46 54 8B 4F 0C"); pattern.size() > 0)
+		if (auto primary = Pattern(image, "01 96 98 00 00 00 8B 47 04 29 46 54 8B 4F 0C");
+		    primary.size() > 0)
 		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+			auto* match = primary.get(0).get<std::uint8_t>();
 
 			injector::MakeJMP(match + 123, reinterpret_cast<void*>(&abi_smpa60_tail_shim), true); //jmp
 			injector::WriteMemory<std::uint8_t>(match - 38, kShortJmpOpcode, true); //jmp
-		}
 
-		if (auto pattern = Pattern(image, "8B 48 70 83 C0 40 50 51 8D 51 10"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+			if (auto pattern = Pattern(image, "8B 48 70 83 C0 40 50 51 8D 51 10"); pattern.size() > 0)
+			{
+				auto* shim = pattern.get(0).get<std::uint8_t>();
 
-			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_smpa60_shim), true); //jmp
+				injector::MakeJMP(shim, reinterpret_cast<void*>(&abi_smpa60_shim), true); //jmp
+			}
 		}
 	}
 }

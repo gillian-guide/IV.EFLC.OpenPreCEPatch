@@ -29,6 +29,20 @@ void Trace(const char* name);
 }  // export
 
 #if defined(ZP_TRACE_INSTALLS)
+namespace
+{
+// The one trace-log handle: opened on first use. A failed open is retried by
+// the next event (the original per-site code did the same), so the helper only
+// returns the current handle and every caller still treats null as silent.
+std::FILE* TraceLog() noexcept
+{
+	static std::FILE* log = nullptr;
+	if (log == nullptr)
+		log = std::fopen("ZolikaPatch.trace.log", "a");
+	return log;
+}
+}  // namespace
+
 // Debug builds only: log the first fault with its registers and the raw stack, so
 // the module and call site that caused it can be identified from the log.
 LONG WINAPI TraceFault(EXCEPTION_POINTERS* info)
@@ -38,9 +52,7 @@ LONG WINAPI TraceFault(EXCEPTION_POINTERS* info)
 	static int seen = 0;
 	if (++seen > 8)
 		return EXCEPTION_CONTINUE_SEARCH;
-	static std::FILE* log = nullptr;
-	if (log == nullptr)
-		log = std::fopen("ZolikaPatch.trace.log", "a");
+	std::FILE* const log = TraceLog();
 	if (log == nullptr)
 		return EXCEPTION_CONTINUE_SEARCH;
 
@@ -93,9 +105,7 @@ LONG WINAPI TraceFault(EXCEPTION_POINTERS* info)
 // can be located from ZolikaPatch.trace.log.
 void TraceBoot(const char* stage)
 {
-	static std::FILE* log = nullptr;
-	if (log == nullptr)
-		log = std::fopen("ZolikaPatch.trace.log", "a");
+	std::FILE* const log = TraceLog();
 	if (log == nullptr)
 		return;
 	std::fprintf(log, "stage %s\n", stage);
@@ -108,9 +118,7 @@ void TraceBoot(const char* stage)
 
 void TraceBootValue(const char* label, std::uintptr_t value)
 {
-	static std::FILE* log = nullptr;
-	if (log == nullptr)
-		log = std::fopen("ZolikaPatch.trace.log", "a");
+	std::FILE* const log = TraceLog();
 	if (log == nullptr)
 		return;
 	std::fprintf(log, "stage %s %08lX\n", label, static_cast<unsigned long>(value));
@@ -141,7 +149,7 @@ const char* g_traceArm = "?";
 // be narrowed down from the log.
 void Trace(const char* name)
 {
-	static std::FILE* log = std::fopen("ZolikaPatch.trace.log", "a");
+	std::FILE* const log = TraceLog();
 	if (log == nullptr)
 		return;
 	std::fprintf(log, "arm %s\n", name);

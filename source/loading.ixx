@@ -165,19 +165,22 @@ void PublishNewMemorySystem(const PatchContext& ctx)
 void PublishNewSavesCompatibility(const PatchContext& ctx)
 {
 	Trace("publish NewSavesCompatibility");
-	// NewSavesCompatibility: 3 slots
-	if (ctx.Option("NewSavesCompatibility", "1") && Pattern(ctx.image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08").size() > 0)
+	// NewSavesCompatibility: 3 slots. The recovered gate is keyed on the first
+	// pattern, so one scan both gates and captures the pushed name pointer.
+	if (ctx.Option("NewSavesCompatibility", "1"))
 	{
 		const GameImage& image = ctx.image;
 
-		if (auto pattern = Pattern(image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08"); pattern.size() > 0)
+		if (auto primary = Pattern(image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08");
+		    primary.size() > 0)
 		{
-			zpatch_new_saves_src = *pattern.get(0).get<std::uint32_t>(1);
-		}
+			zpatch_new_saves_src = *primary.get(0).get<std::uint32_t>(1);
 
-		if (auto pattern = Pattern(image, "89 84 24 E0 01 00 00 8B 45 08 53 33 DB"); pattern.size() > 0)
-		{
-			zpatch_new_saves_resume = MatchAddress(pattern, 13);
+			if (auto pattern = Pattern(image, "89 84 24 E0 01 00 00 8B 45 08 53 33 DB");
+			    pattern.size() > 0)
+			{
+				zpatch_new_saves_resume = MatchAddress(pattern, 13);
+			}
 		}
 	}
 }
@@ -479,15 +482,20 @@ void ApplyNewSavesCompatibility(const PatchContext& ctx)
 {
 	Trace("NewSavesCompatibility");
 	// NewSavesCompatibility: 1 siginstall, 1 sigjump
-	if (ctx.Option("NewSavesCompatibility", "1") && Pattern(ctx.image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08").size() > 0)
+	if (ctx.Option("NewSavesCompatibility", "1"))
 	{
 		const GameImage& image = ctx.image;
 
-		if (auto pattern = Pattern(image, "89 84 24 E0 01 00 00 8B 45 08 53 33 DB"); pattern.size() > 0)
+		if (auto primary = Pattern(image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08");
+		    primary.size() > 0)
 		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+			if (auto pattern = Pattern(image, "89 84 24 E0 01 00 00 8B 45 08 53 33 DB");
+			    pattern.size() > 0)
+			{
+				auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_new_saves_compat), true); //jmp
+				injector::MakeJMP(match, reinterpret_cast<void*>(&abi_new_saves_compat), true); //jmp
+			}
 		}
 	}
 }
@@ -677,18 +685,13 @@ void ApplyBenchmarkFix(const PatchContext& ctx)
 		            {GameBuild::v1000, GameBuild::v1040, GameBuild::v1004, GameBuild::v1060,
 		             GameBuild::v1070, GameBuild::v1061, GameBuild::v1100, GameBuild::v1110,
 		             GameBuild::v1120, GameBuild::v12043}))
+		if (auto pattern = Pattern(image, "E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20"); pattern.size() > 0)
 		{
-
-			{
-				if (auto pattern = Pattern(image, "E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20"); pattern.size() > 0)
-				{
-					injector::MakeJMP(pattern.get(0).get<std::uint8_t>(8),
-						reinterpret_cast<void*>(&abi_benchmark_a), true); //jmp
-					if (pattern.size() > 1)
-						injector::MakeJMP(pattern.get(1).get<std::uint8_t>(8),
-							reinterpret_cast<void*>(&abi_benchmark_b), true); //jmp
-				}
-			}
+			injector::MakeJMP(pattern.get(0).get<std::uint8_t>(8),
+				reinterpret_cast<void*>(&abi_benchmark_a), true); //jmp
+			if (pattern.size() > 1)
+				injector::MakeJMP(pattern.get(1).get<std::uint8_t>(8),
+					reinterpret_cast<void*>(&abi_benchmark_b), true); //jmp
 		}
 	}
 }
