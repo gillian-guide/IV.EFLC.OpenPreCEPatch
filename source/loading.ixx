@@ -135,23 +135,6 @@ namespace
 constexpr opp::SaveScanPolicy kConverterScan{true, true};
 constexpr opp::SaveScanPolicy kOriginalScan{false, false};
 
-// The original allocates the payload with malloc; the deleter keeps that
-// allocator (and its fault) while making the ownership RAII.
-struct FreeDeleter final
-{
-    void operator()(void* pointer) const noexcept { std::free(pointer); }
-};
-
-// Owned std::FILE*: the converter's own save file closes on every return.
-struct FileCloser final
-{
-    void operator()(std::FILE* file) const noexcept
-    {
-        if (file != nullptr)
-            std::fclose(file);
-    }
-};
-
 // The save header is 0x110 bytes; the format magic "SAVE" sits at +0xC and each
 // of the 18 chunks starts with a 9-byte header whose dword at +5 is the chunk's
 // total size.
@@ -260,7 +243,7 @@ private:
         return true;  // a header-only chunk: malloc(0) == nullptr is not a failure
 
     void* const raw = std::malloc(element_count);
-    const std::unique_ptr<void, FreeDeleter> payload(raw);
+    const std::unique_ptr<void, opp::FreeDeleter> payload(raw);
     if (policy.validate && raw == nullptr)
         return false;
     if (raw == nullptr)
@@ -328,7 +311,7 @@ extern "C"
 // payload, record the new-format chunk sizes, then patch three game sites.
 extern "C" void abi_new_saves_convert(const char* path) noexcept
 {
-    const std::unique_ptr<std::FILE, FileCloser> file(std::fopen(path, "rb"));
+    const std::unique_ptr<std::FILE, opp::FileCloser> file(std::fopen(path, "rb"));
     if (!file)
         return;
     FileCursor cursor(file.get());

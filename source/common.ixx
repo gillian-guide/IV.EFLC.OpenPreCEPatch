@@ -106,6 +106,22 @@ export namespace opp
                       "GameFunction returns a function pointer type");
         return reinterpret_cast<Fn>(address);
     }
+
+    // Deleters for C-owned resources kept RAII: the allocation itself stays the
+    // original's (malloc/free), only the ownership is expressed in the type.
+    struct FreeDeleter final
+    {
+        void operator()(void* pointer) const noexcept { std::free(pointer); }
+    };
+
+    struct FileCloser final
+    {
+        void operator()(std::FILE* file) const noexcept
+        {
+            if (file != nullptr)
+                std::fclose(file);
+        }
+    };
 } // namespace opp
 
 #if defined(OPCEP_DUMP_TOOL)

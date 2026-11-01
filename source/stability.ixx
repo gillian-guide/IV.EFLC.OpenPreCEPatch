@@ -13,6 +13,9 @@ module;
 #include "rebased.h"
 #include "opcodes.hxx"
 
+#include <memory>
+#include <span>
+
 #include "data/ooc_payload.h"
 export module opp.stability;
 
@@ -893,6 +896,10 @@ static __declspec(naked) void abi_episode_switch_sum()
 // E8s the match to the wrapper and publishes dword_10159BF8 (the E8 at
 // match-0x33's target) / dword_10159C04 (the match E8's original target).
 // ---------------------------------------------------------------------------
+// The OOC decoder helpers are C++ (they return std::unique_ptr / take spans);
+// reset the linkage inside the file-wide extern "C" block.
+extern "C++"
+{
 namespace
 {
 // OutOfCommissionFix's real payload: the original embeds a compressed
@@ -924,7 +931,7 @@ struct OocPakEntry final
 };
 static_assert(sizeof(OocPakEntry) == 44);
 
-void zpatch_ooc_register_entry(unsigned char* table)
+void zpatch_ooc_register_entry(std::span<const std::byte> table)
 {
     auto* begin = reinterpret_cast<OocPakEntry*>(
         static_cast<uintptr_t>(zpatch_ooc_vector_begin));
@@ -956,7 +963,7 @@ void zpatch_ooc_register_entry(unsigned char* table)
     entry.name_size = 11u;
     entry.name_capacity = 15u;
     entry.file_size = static_cast<uint32_t>(kOocTableSize);
-    entry.data = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(table));
+    entry.data = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(table.data()));
     std::memcpy(end, &entry, sizeof(entry));
     ++end;
     if (reallocated)
@@ -1096,16 +1103,18 @@ struct OocStream final
 
 // The original's Adler-32 variant (a = 1, b = 0, 1872-byte partition, 32-bit
 // wrapping); reproduced because the blob's trailer was built with it.
-uint32_t zpatch_ooc_adler32(const unsigned char* data, size_t size) noexcept
+uint32_t zpatch_ooc_adler32(std::span<const std::byte> data) noexcept
 {
     uint32_t a = 1u;
     uint32_t b = 0u;
-    for (size_t block = 0; block < size; block += kOocAdlerBlock)
+    for (size_t block = 0; block < data.size(); block += kOocAdlerBlock)
     {
-        const size_t end = (block + kOocAdlerBlock < size) ? block + kOocAdlerBlock : size;
+        const size_t end = (block + kOocAdlerBlock < data.size())
+                               ? block + kOocAdlerBlock
+                               : data.size();
         for (size_t i = block; i < end; ++i)
         {
-            a += data[i];
+            a += static_cast<uint32_t>(static_cast<unsigned char>(data[i]));
             b += a;
         }
         a %= kOocAdlerModulus;
@@ -1114,11 +1123,11 @@ uint32_t zpatch_ooc_adler32(const unsigned char* data, size_t size) noexcept
     return (b << 16) | a;
 }
 
-bool zpatch_ooc_decode(unsigned char* table) noexcept
+bool zpatch_ooc_decode(std::span<std::byte> table) noexcept
 {
     // sub_1004B570: decode until the no-progress opcode, then require the
     // 05 FA terminator, the exact destination size and the Adler trailer.
-    const auto table_begin = reinterpret_cast<uintptr_t>(table);
+    const auto table_begin = reinterpret_cast<uintptr_t>(table.data());
     zpatch_ooc_store(&zpatch_ooc_input_bound,
                      static_cast<uint32_t>(
                          reinterpret_cast<uintptr_t>(kOocPakBlob) - 16u));
@@ -1128,7 +1137,7 @@ bool zpatch_ooc_decode(unsigned char* table) noexcept
                      static_cast<uint32_t>(table_begin));
     zpatch_ooc_store(&zpatch_ooc_output_end,
                      static_cast<uint32_t>(table_begin + kOocTableSize));
-    OocStream stream{0, table};
+    OocStream stream{0, reinterpret_cast<unsigned char*>(table.data())};
     size_t prior_cursor = stream.cursor;
     size_t pc = stream.step(0);
     if (stream.cursor != prior_cursor)
@@ -1157,7 +1166,7 @@ bool zpatch_ooc_decode(unsigned char* table) noexcept
                                   (static_cast<uint32_t>(kOocPakBlob[pc + 3]) << 16) |
                                   (static_cast<uint32_t>(kOocPakBlob[pc + 4]) << 8) |
                                   static_cast<uint32_t>(kOocPakBlob[pc + 5]);
-    return zpatch_ooc_adler32(table, kOocTableSize) == trailer;
+    return zpatch_ooc_adler32(table) == trailer;
 }
 
 // sub_1004ACE0 for the single registered entry ("finale2.sco", table, 179536).
@@ -1167,22 +1176,19 @@ bool zpatch_ooc_decode(unsigned char* table) noexcept
 // Archive page size (the 0x800 granularity of the payload/records).
 constexpr uint32_t kOocPageSize = 2048u;
 
-unsigned char* zpatch_ooc_build_archive(unsigned char* table,
-                                        uint32_t& final_offset) noexcept
+std::unique_ptr<unsigned char, opp::FreeDeleter> zpatch_ooc_build_archive(
+    std::span<const std::byte> table, uint32_t& final_offset) noexcept
 {
-    const uint32_t size = static_cast<uint32_t>(kOocTableSize);
+    const uint32_t size = static_cast<uint32_t>(table.size());
     const uint32_t remainder = size & (kOocPageSize - 1u);
     const uint32_t pages = size / kOocPageSize + (remainder != 0u ? 1u : 0u);
     const uint32_t total = pages * kOocPageSize + kOocPageSize;
-    // No null check by default, like the original's archive build: the memset
-    // below faults on a failed allocation. OutOfCommissionSafeInit returns 0
-    // instead and the caller skips the mount.
+    // The original does not check this allocation and faults while filling it;
+    // this tree returns a null archive so the caller skips the mount (the
+    // default-on failsafe policy; the unchecked fill stays 1:1 otherwise).
     auto* archive = static_cast<unsigned char*>(std::malloc(total));
     if (archive == nullptr)
-    {
-        std::free(table);
-        return nullptr;
-    }
+        return {};
     std::memset(archive, 0, total);
     uint32_t offset = 0;
     const auto append = [&](const void* source, uint32_t bytes) noexcept
@@ -1226,13 +1232,13 @@ unsigned char* zpatch_ooc_build_archive(unsigned char* table,
     append(name, name_bytes);
     offset = kOocPageSize;                         // the original resets dword_10159C78
     zpatch_ooc_store(&zpatch_ooc_archive_offset, offset);
-    append(table, size);
-    std::free(table);                              // j_j_free inside the payload loop
+    append(table.data(), size);
+    // The caller owns the table (the original frees it inside this loop).
     if (remainder != 0u)
         offset += kOocPageSize - remainder;        // zero padding (already memset)
     if (remainder != 0u) zpatch_ooc_store(&zpatch_ooc_archive_offset, offset);
     final_offset = offset;
-    return archive;
+    return std::unique_ptr<unsigned char, opp::FreeDeleter>(archive);
 }
 
 // sub_1004B750: the one-shot init the wrapper runs before mounting. Its guard
@@ -1241,9 +1247,10 @@ unsigned char* zpatch_ooc_build_archive(unsigned char* table,
 // original.
 uint32_t zpatch_ooc_lookup() noexcept
 {
-    // OutOfCommissionCache: the original's guard dword_10159C00 has no writer,
-    // so it re-decodes and leaks on every call. Run the init once and reuse the
-    // mounted archive; the original path stays selected when the key is off.
+    // The original's guard dword_10159C00 has no writer, so it re-decodes and
+    // leaks its archive on every call. This rebuild decodes once and reuses the
+    // mounted archive for the process lifetime (same resulting state, one
+    // allocation instead of one per call).
     static uint32_t cached_archive = 0;
     static uint32_t cached_state = 0;
     if (cached_archive != 0u)
@@ -1252,79 +1259,78 @@ uint32_t zpatch_ooc_lookup() noexcept
         return cached_archive;
     }
 
-    auto* table = static_cast<unsigned char*>(std::malloc(kOocTableSize));
-    if (table == nullptr) return 0;
-    const bool decoded = zpatch_ooc_decode(table);
-    if (!decoded)
-    {
-        std::free(table);
-        return 0;
-    }
+    const std::unique_ptr<unsigned char, opp::FreeDeleter> table(
+        static_cast<unsigned char*>(std::malloc(kOocTableSize)));
+    if (!table) return 0;
+    const std::span<std::byte> table_bytes(
+        reinterpret_cast<std::byte*>(table.get()), kOocTableSize);
+    const bool decoded = zpatch_ooc_decode(table_bytes);
+    if (!decoded) return 0;
     zpatch_ooc_store(&zpatch_ooc_table_size,
                      static_cast<uint32_t>(kOocTableSize));
-    zpatch_ooc_register_entry(table);
+    zpatch_ooc_register_entry(table_bytes);
     uint32_t final_offset = 0;
-    unsigned char* archive = zpatch_ooc_build_archive(table, final_offset);
-    if (archive == nullptr) return 0;
+    std::unique_ptr<unsigned char, opp::FreeDeleter> archive =
+        zpatch_ooc_build_archive(table_bytes, final_offset);
+    if (!archive) return 0;
     zpatch_ooc_store(&zpatch_ooc_vector_end,
                      zpatch_ooc_vector_begin);
     zpatch_ooc_store(&zpatch_ooc_state, final_offset);
     cached_archive = static_cast<uint32_t>(
-        reinterpret_cast<uintptr_t>(archive));
+        reinterpret_cast<uintptr_t>(archive.release()));
     cached_state = final_offset;
-    return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(archive));
+    return cached_archive;
 }
 
-uint32_t zpatch_ooc_fnv1a(const unsigned char* data, size_t size) noexcept
+uint32_t zpatch_ooc_fnv1a(std::span<const std::byte> data) noexcept
 {
     uint32_t hash = 2166136261u;
-    for (size_t i = 0; i < size; ++i)
+    for (const std::byte byte : data)
     {
-        hash ^= data[i];
+        hash ^= static_cast<uint32_t>(static_cast<unsigned char>(byte));
         hash *= 16777619u;
     }
     return hash;
 }
 }  // namespace
+}  // extern "C++"
 
 // Offline self-test for OutOfCommissionFix: the decode must reproduce the blob's
 // own Adler trailer and the archive must match the golden layout/hash.
 extern "C" bool zpatch_ooc_selftest() noexcept
 {
-    auto* table = static_cast<unsigned char*>(std::malloc(kOocTableSize));
-    if (table == nullptr) return false;
+    std::vector<std::byte> table(kOocTableSize);
     const bool decoded = zpatch_ooc_decode(table);
-    const uint32_t table_adler = zpatch_ooc_adler32(table, kOocTableSize);
+    const uint32_t table_adler = zpatch_ooc_adler32(table);
     uint32_t final_offset = 0;
-    unsigned char* archive = zpatch_ooc_build_archive(table, final_offset);
-    if (archive == nullptr)
-    {
-        std::free(table);
+    const std::unique_ptr<unsigned char, opp::FreeDeleter> archive =
+        zpatch_ooc_build_archive(table, final_offset);
+    if (!archive)
         return false;
-    }
+    const unsigned char* const bytes = archive.get();
+    const auto archive_bytes = std::span<const std::byte>(
+        reinterpret_cast<const std::byte*>(bytes), final_offset);
     const uint32_t header[4] = {0x86723DFFu, 3u, 1u, 28u};
     bool header_ok = true;
     for (int i = 0; i < 4; ++i)
-        header_ok = header_ok && std::memcmp(archive + 4 * i, &header[i], 4) == 0;
+        header_ok = header_ok && std::memcmp(bytes + 4 * i, &header[i], 4) == 0;
     // The fixture's expected bytes: header size 0x10, then the 0xE9 flag word.
-    header_ok = header_ok && archive[16] == 0x10u && archive[17] == 0u &&
-                archive[18] == 0xE9u && archive[19] == 0u;
+    header_ok = header_ok && bytes[16] == 0x10u && bytes[17] == 0u &&
+                bytes[18] == 0xE9u && bytes[19] == 0u;
     const uint32_t record_size = 0x2BD50u;
     const uint32_t record_index = 1u;
-    bool record_ok = std::memcmp(archive + 20, &record_size, 4) == 0;
+    bool record_ok = std::memcmp(bytes + 20, &record_size, 4) == 0;
     const uint32_t zero = 0u;
-    record_ok = record_ok && std::memcmp(archive + 24, &zero, 4) == 0 &&
-                std::memcmp(archive + 28, &record_index, 4) == 0;
+    record_ok = record_ok && std::memcmp(bytes + 24, &zero, 4) == 0 &&
+                std::memcmp(bytes + 28, &record_index, 4) == 0;
     // The fixture's packed page count (88 = 0x58) and the 0x02B0 tail word.
-    record_ok = record_ok && archive[32] == 88u && archive[33] == 0u &&
-                archive[34] == 0xB0u && archive[35] == 0x02u;
-    const bool name_ok = std::memcmp(archive + 36, "finale2.sco", 12) == 0;
-    const bool ok = decoded && final_offset == 182272u && table_adler == 0x41E794ABu &&
-                    header_ok && record_ok && name_ok &&
-                    // The fixture's archive FNV-1a and packed length.
-                    zpatch_ooc_fnv1a(archive, final_offset) == 0xB5AF7B10u;
-    std::free(archive);
-    return ok;
+    record_ok = record_ok && bytes[32] == 88u && bytes[33] == 0u &&
+                bytes[34] == 0xB0u && bytes[35] == 0x02u;
+    const bool name_ok = std::memcmp(bytes + 36, "finale2.sco", 12) == 0;
+    return decoded && final_offset == 182272u && table_adler == 0x41E794ABu &&
+           header_ok && record_ok && name_ok &&
+           // The fixture's archive FNV-1a and packed length.
+           zpatch_ooc_fnv1a(archive_bytes) == 0xB5AF7B10u;
 }
 
 // The fake SCO pak the fix registers: magic 0x86723DFF, version 3, one entry,
