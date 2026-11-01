@@ -208,8 +208,12 @@ def body_instructions(data, image_base, sections, start, limit, symbols):
 
 def exact_names(root: Path) -> set[str]:
     """The bodies opted into byte comparison: the function after each @exact
-    comment. Scans a source tree (source/*.ixx) or a single file."""
-    paths = [root] if root.is_file() else sorted(root.glob("*.ixx"))
+    comment. Scans a source tree (source/*.ixx and source/*.cpp) or a single
+    file; a marker in the module implementation unit counts too."""
+    if root.is_file():
+        paths = [root]
+    else:
+        paths = sorted(root.glob("*.ixx")) + sorted(root.glob("*.cpp"))
     names: set[str] = set()
     for path in paths:
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -312,9 +316,11 @@ def main() -> int:
 
     required = None
     not_emitted = []
+    required_compared = 0
     if args.exact_source:
         required = exact_names(Path(args.exact_source))
         compared = {item["name"] for item in results}
+        required_compared = len(required & compared)
         missing = sorted(required - compared)
         # A body with no installer in this tree is not referenced by any arm, so
         # the compiler drops it; its bytes are not part of the shipped contract.
@@ -344,7 +350,9 @@ def main() -> int:
             print(f"  baseline: {item['baseline']}")
             print(f"  current:  {item['current']}")
     if required is not None:
-        print(f"\n@exact bodies: {len(required)}; differing: {len(required_diffs)}")
+        print(f"\n@exact bodies: required {len(required)}; emitted and compared "
+              f"{required_compared}; uninstalled {len(not_emitted)}; differing "
+              f"{len(required_diffs)}")
         if not_emitted:
             print(f"@exact bodies with no installer (dropped from the build): "
                   f"{', '.join(not_emitted)}")

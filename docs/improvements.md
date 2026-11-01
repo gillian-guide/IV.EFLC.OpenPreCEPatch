@@ -146,6 +146,32 @@ value, and the refresh credits the one that now runs first (`MovingPlaneParts`);
 hash are unchanged; the dropped `delta_sha256` change is the arm label inside the
 delta file).
 
+## Hook-body fidelity after the TU split
+
+The hook bodies used to share one translation unit; they now live with the
+modules that install them. The transcribed machine-code bodies keep their
+`@exact` byte contract: `tools/opcep_bodycheck.py` compares a baseline and a
+current ASI after normalising module addresses, lambda tags and EH handlers, and
+requires every `@exact` body (`source/*.ixx` and `source/*.cpp`) to be
+instruction-identical. At the audit commit: **67 required, 64 emitted and
+compared, 3 uninstalled, 0 differing**. The three uninstalled bodies
+(`abi_garage_body_a`, `abi_local_settings_detour`,
+`abi_local_settings_fallback_detour`) have no installer in this tree, are
+referenced by no arm and drop out of the build.
+
+The old 134-row ABI table maps to: **103** rows with a recovered handler VA (all
+in `tests/dump_abi.inc`), **30** name-only helper rows, and `abi_garage_entry_a`,
+which has no recovered VA and gets the synthetic dump-only VA `0x0F000001`. All
+134 names still have a body definition or an `OPP_BODY` install site.
+
+Four plain C bodies are **not** claimed byte-identical because the TU split made
+the compiler re-decide helper inlining: `abi_bpm_check`,
+`abi_death_music_install`, `abi_gfwl_patch`, `abi_new_saves_convert`. They carry
+no `@exact` contract (ordinary `__cdecl` bodies, not mid-function shims); stack
+frame, register allocation or helper inlining differ, the calling convention and
+observable behaviour do not, and the write-set oracles prove the install path is
+unchanged.
+
 ## Backlog (documented, not gates)
 
 `tools/gen_version_matrix.py` renders `docs/version-matrix.md` from

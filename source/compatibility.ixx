@@ -12,10 +12,10 @@ module;
 #include "hooks.h"
 #include "rebased.h"
 #include "opcodes.hxx"
-import opp.steam;
 
 export module opp.compatibility;
 
+import opp.steam;
 import opp.pipeline;
 import opp.patch;
 import opp.game;
