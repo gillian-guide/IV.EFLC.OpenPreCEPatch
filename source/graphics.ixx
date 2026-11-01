@@ -1288,9 +1288,10 @@ namespace opp::features
                 Log("CutsceneFixes: no memory for the callee copy, keeping the 3 sites");
                 return nullptr;
             }
-            if (!zpatch_relocate_calls(copy, source, kCutsceneCalleeSize,
-                                       kCutsceneCalls,
-                                       sizeof(kCutsceneCalls) / sizeof(kCutsceneCalls[0])))
+            if (!zpatch_relocate_calls(
+                    copy,
+                    std::span<const uint8_t>(source, kCutsceneCalleeSize),
+                    kCutsceneCalls))
             {
                 VirtualFree(copy, 0, MEM_RELEASE);
                 Log("CutsceneFixes: callee calls do not relocate, keeping the 3 sites");

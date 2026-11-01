@@ -951,7 +951,7 @@ namespace
 
         const uint32_t offsets[2] = {offset_a, offset_b};
         uint8_t copy[16] = {};
-        CHECK(opp::zpatch_relocate_calls(copy, source, sizeof(source), offsets, 2));
+        CHECK(opp::zpatch_relocate_calls(copy, source, offsets));
         CHECK(std::memcmp(copy, source, sizeof(source)) != 0);
         int32_t new_a = 0;
         int32_t new_b = 0;
@@ -963,11 +963,13 @@ namespace
         // A listed offset that does not hold an E8 fails the whole copy.
         uint8_t bad[16] = {};
         const uint32_t not_e8 = 3;  // source[3] is 0, not a call opcode
-        CHECK(!opp::zpatch_relocate_calls(bad, source, sizeof(source), &not_e8, 1));
+        const std::array<uint32_t, 1> one_not_e8 = {not_e8};
+        CHECK(!opp::zpatch_relocate_calls(bad, source, one_not_e8));
 
         // An offset outside the range fails too. (`far` is a Windows macro.)
         const uint32_t out_of_range = 0x100;
-        CHECK(!opp::zpatch_relocate_calls(bad, source, sizeof(source), &out_of_range, 1));
+        const std::array<uint32_t, 1> one_out_of_range = {out_of_range};
+        CHECK(!opp::zpatch_relocate_calls(bad, source, one_out_of_range));
     }
 
     void TestMakeReturn()

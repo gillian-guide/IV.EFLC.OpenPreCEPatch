@@ -17,6 +17,7 @@ module;
 #include "driveby_seh.h"
 #endif
 #include <cstddef>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -339,9 +340,9 @@ export namespace opp
     // displacement that does not fit fails the whole copy, so a relocated body
     // is either exact or not installed. Lives in helpers.cpp (not hooks.cpp) so
     // the 64-bit dump, which stubs the body registry, still links it.
-    extern "C" bool zpatch_relocate_calls(void* destination, const void* source,
-                                          size_t size, const uint32_t* callOffsets,
-                                          size_t callCount) noexcept;
+    extern "C" bool zpatch_relocate_calls(
+        void* destination, std::span<const uint8_t> source,
+        std::span<const uint32_t> callOffsets) noexcept;
 } // namespace opp
 
 namespace opp
@@ -707,20 +708,20 @@ namespace opp
 // original absolute targets. The offsets are the E8 opcodes; a non-E8 byte, an
 // out-of-range offset or a displacement that does not fit fails the whole copy,
 // so a shape mismatch on another build is a clean skip, never a half-fixed copy.
-extern "C" bool zpatch_relocate_calls(void* destination, const void* source,
-                                      size_t size, const uint32_t* callOffsets,
-                                      size_t callCount) noexcept
+extern "C" bool zpatch_relocate_calls(
+    void* destination, std::span<const uint8_t> source,
+    std::span<const uint32_t> callOffsets) noexcept
 {
-    if (destination == nullptr || source == nullptr || callOffsets == nullptr ||
-        size < 5u)
+    if (destination == nullptr || source.empty() || callOffsets.empty() ||
+        source.size() < opp::kBranchLength)
         return false;
-    std::memcpy(destination, source, size);
+    std::memcpy(destination, source.data(), source.size());
     auto* dst = static_cast<uint8_t*>(destination);
-    const auto* src = static_cast<const uint8_t*>(source);
-    for (size_t i = 0; i < callCount; ++i)
+    const auto* src = source.data();
+    for (const uint32_t offset : callOffsets)
     {
-        const size_t offset = callOffsets[i];
-        if (offset + opp::kBranchLength > size || dst[offset] != opp::kCallOpcode)
+        if (offset + opp::kBranchLength > source.size() ||
+            dst[offset] != opp::kCallOpcode)
             return false;
         int32_t old_rel = 0;
         std::memcpy(&old_rel, src + offset + 1u, sizeof(old_rel));

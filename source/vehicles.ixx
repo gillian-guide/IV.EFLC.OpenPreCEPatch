@@ -193,13 +193,13 @@ extern "C" uint32_t abi_steer_body() noexcept
     using PartFn = void(__thiscall*)(void*, int, int, float, int, int, int);
     const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
         static_cast<uintptr_t>(zpatch_model_lookup));
-    const auto get_bone = reinterpret_cast<BoneFn>(
+    const auto get_bone = GameFunction<BoneFn>(
         static_cast<uintptr_t>(zpatch_pre_fn_59b88));
-    const auto set_a = reinterpret_cast<SetFn>(
+    const auto set_a = GameFunction<SetFn>(
         static_cast<uintptr_t>(zpatch_pre_fn_5d63c));
-    const auto set_b = reinterpret_cast<SetFn>(
+    const auto set_b = GameFunction<SetFn>(
         static_cast<uintptr_t>(zpatch_pre_fn_59cdc));
-    const auto part_call = reinterpret_cast<PartFn>(
+    const auto part_call = GameFunction<PartFn>(
         static_cast<uintptr_t>(zpatch_steer_vtable_fn));
 
     // The moving-parts body calls four game functions and the model lookup; a
@@ -536,7 +536,7 @@ extern "C" void abi_nolivery_copy_name()  // sub_1003D2F0
 extern "C" void abi_nolivery_count_loop()  // sub_1003D270
 {
     using LookupFn = int(__fastcall*)(void* self, int, uint32_t hash);
-    const auto fn = reinterpret_cast<LookupFn>(static_cast<uintptr_t>(zpatch_nolivery_fn));
+    const auto fn = GameFunction<LookupFn>(static_cast<uintptr_t>(zpatch_nolivery_fn));
     void* const self = reinterpret_cast<void*>(static_cast<uintptr_t>(zpatch_nolivery_arg));
     const char* const name =
         reinterpret_cast<const char*>(static_cast<uintptr_t>(zpatch_nolivery_bufptr));
