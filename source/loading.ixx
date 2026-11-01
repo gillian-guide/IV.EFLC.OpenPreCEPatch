@@ -618,6 +618,13 @@ void* dlc_discovery_post(void* object)
     if (zpatch_failsafe_skip("LoadDLCs module path",
                              module_length == 0 || module_length >= kDlcPathCapacity))
         return object;
+    // The discovery calls the two published helper RVAs. If the publish pattern
+    // missed (a relocated absolute or a different build), a zero RVA would add
+    // the image base and call the PE header; the failsafe leaves the episode
+    // list untouched instead of faulting.
+    if (zpatch_failsafe_skip("LoadDLCs helper RVAs",
+                             DlcRegisterRva() == 0u || DlcApplyRva() == 0u))
+        return object;
     PathRemoveFileSpecA(module_path);
     uint32_t last_apply_edx = 0;
     bool episode254_registered = false;
@@ -755,15 +762,18 @@ namespace opp::features
             constexpr DlcWindows kWindows[] = {
                 {GameBuild::v1060,
                  "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8",
-                 "81 EC 0C 02 00 00 A1 40 2F F4 00 33 C4 89 84 24 08 02 00 00 53 55 56 57",
+                 // The A1 stack-cookie operand is an absolute VA: the game is
+                 // relocated at load (ASLR / loader base), so it must stay a
+                 // wildcard or the scan misses on every non-preferred base.
+                 "81 EC 0C 02 00 00 A1 ?? ?? ?? ?? 33 C4 89 84 24 08 02 00 00 53 55 56 57",
                  "51 53 8B D9 0F B7 8B 50 01 00 00 55 56 33 ED 85"},
                 {GameBuild::v1070,
                  "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E 5B",
-                 "81 EC 0C 02 00 00 A1 40 3F F4 00 33 C4 89 84 24 08 02 00 00 53 55 56 57",
+                 "81 EC 0C 02 00 00 A1 ?? ?? ?? ?? 33 C4 89 84 24 08 02 00 00 53 55 56 57",
                  "51 53 8B D9 0F B7 8B 50 01 00 00 55 56 33 ED 85"},
                 {GameBuild::v1080,
                  "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6",
-                 "81 EC 0C 02 00 00 A1 40 2C F6 00 33 C4 89 84 24 08 02 00 00 53 55 56 8B",
+                 "81 EC 0C 02 00 00 A1 ?? ?? ?? ?? 33 C4 89 84 24 08 02 00 00 53 55 56 8B",
                  "51 53 8B D9 0F B7 8B 50 01 00 00 55 56 33 ED 85"},
             };
 
@@ -822,6 +832,13 @@ namespace opp::features
             if (ctx.build != GameBuild::v1060 && ctx.build != GameBuild::v1070 &&
                 ctx.build != GameBuild::v1080)
                 return;
+            // The struct-fixup body calls the callback slot before the discovery
+            // step. If the callback publish missed, installing the body would
+            // call a null slot; skip the arm instead.
+#if !defined(_WIN64)
+            if (zpatch_failsafe_skip("LoadDLCs callback", zpatch_dlc_load_callback == 0u))
+                return;
+#endif
             const GameImage& image = ctx.image;
             const bool is1080 = ctx.build == GameBuild::v1080;
 

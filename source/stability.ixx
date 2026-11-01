@@ -2319,7 +2319,7 @@ namespace opp::features
                     zpatch_super_lod_fail = AddressOf(site + kSuperLodFailDelta);
                     zpatch_super_lod_ok = AddressOf(site + kSuperLodOkDelta);
                 }
-                if (auto* lookup = findSite("8B 44 24 04 89 44 24 04 66 A1 44 C2 F2 00 66 85 C0 76 3E 8B"))
+                if (auto* lookup = findSite("8B 44 24 04 89 44 24 04 66 A1 ?? ?? ?? ?? 66 85 C0 76 3E 8B"))
                     zpatch_super_lod_lookup = AddressOf(lookup);
             }
 
@@ -2330,7 +2330,7 @@ namespace opp::features
                     zpatch_super_lod_fail = AddressOf(site + kSuperLodFailDelta);
                     zpatch_super_lod_ok = AddressOf(site + kSuperLodOkDelta);
                 }
-                if (auto* lookup = findSite("8B 44 24 04 89 44 24 04 66 A1 E0 E9 F3 00 66 85 C0 76 3E 8B"))
+                if (auto* lookup = findSite("8B 44 24 04 89 44 24 04 66 A1 ?? ?? ?? ?? 66 85 C0 76 3E 8B"))
                     zpatch_super_lod_lookup = AddressOf(lookup);
             }
         }
@@ -2353,6 +2353,17 @@ namespace opp::features
         if (ctx.Option("SuperLODFix", "1") &&
             BuildIs(ctx.build, {GameBuild::v1070, GameBuild::v1080}))
         {
+            // The shim tail-jumps through the three published slots. If any of
+            // them missed (relocated absolute in the lookup window, or a
+            // different build), installing the shim would call/jump through a
+            // null slot; skip the arm instead.
+#if !defined(_WIN64)
+            if (zpatch_failsafe_skip("SuperLODFix targets",
+                                     zpatch_super_lod_lookup == 0u ||
+                                         zpatch_super_lod_fail == 0u ||
+                                         zpatch_super_lod_ok == 0u))
+                return;
+#endif
             const GameImage& image = ctx.image;
 
             if (auto pattern = Pattern(image, "F6 40 ?? ?? 74 ?? 85 ED 0F 85 ?? ?? ?? ?? 55 6A ?? E8 ?? ?? ?? ?? 8B F8"); pattern.size() > 0)
