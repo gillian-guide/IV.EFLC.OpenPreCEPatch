@@ -200,9 +200,10 @@ static __declspec(naked) void abi_spawns_guard()
         __asm jmp dword ptr [resume]                \
     }
 
-// The macro's second argument is the selector value the case stores in
-// [zpatch_spawns_kind] (the body-name suffix is the jump-table index; cases 1
-// and 2 both write 3 in the original bytes, kept 1:1).
+// The macro's body-name suffix is the original dispatch offset (0x24..0xF6);
+// the second argument is the selector value the case stores in
+// [zpatch_spawns_kind]. Cases 1 and 2 both write 3 in the original bytes, kept
+// 1:1.
 SPAWNS_CASE(abi_spawns_case_0x24, 5, zpatch_spawns_case0_resume)
 SPAWNS_CASE(abi_spawns_case_0x3D, 3, zpatch_spawns_case1_resume)
 SPAWNS_CASE(abi_spawns_case_0x56, 3, zpatch_spawns_case2_resume)
@@ -217,6 +218,14 @@ SPAWNS_CASE(abi_spawns_case_0xF6, 8, zpatch_spawns_case9_resume)
 // sub_10037510, the spawn probe (P1/P4/P5/P6/P7 sites): byte-exact naked body,
 // 394 instructions, 0x10037510..0x10037ABC. ECX at the [vtable+0xC] call is the
 // selector, exactly like the original - do not "fix" it.
+//
+// Field map, for reading the transcription: EDI is the requested model index,
+// ESI walks the ped array (count 0x7918); the probe stores the selector in
+// [zpatch_spawns_kind] and the class byte in [zpatch_spawns_class]; the object's
+// class is the vtable[+0xC]() byte (5 = vehicle, 6 = ped), the object type is
+// [esi+0x6C] (0..5) and the "non-ped" diagnostic is the [esi+0x3C] model check.
+// The ten dispatch cases in the original share one body shape, so the repeated
+// blocks below are the transcription, not a missed helper.
 // @exact 0x10037510
 static __declspec(naked) void abi_spawns_probe()
 {
@@ -669,7 +678,10 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                CallTo(ctx, match + 6, OPP_BODY(abi_better_mp_sync));
+                // The five bytes at +6 (push ebp; mov ecx,esi; call edx) become
+                // the direct call to the no-op body.
+                constexpr ptrdiff_t kIndirectCallOffset = 6;
+                CallTo(ctx, match + kIndirectCallOffset, OPP_BODY(abi_better_mp_sync));
             }
         }
 
@@ -689,28 +701,49 @@ namespace opp::features
         {
             const GameImage& image = ctx.image;
 
+            // The two spawner calls' rel32 operands (the E8s at +7 and +11).
+            constexpr ptrdiff_t kSpawnProbeCallOperand = 8;
+            constexpr ptrdiff_t kSpawnGuardCallOperand = 12;
+
             if (auto pattern = Pattern(image, "32 DB 8B 54 24 24 52 E8 ? ? ? ? 8B F0"); pattern.size() > 0)
             {
-                zpatch_spawns_orig_a = MatchTarget(pattern, 8, 12);
+                zpatch_spawns_orig_a =
+                    BranchDestination(pattern.get(0).get<uint8_t>(),
+                                      kSpawnProbeCallOperand);
             }
 
             if (auto pattern = Pattern(image, "8B 4C 24 28 8B 54 24 24 50 51 52 E8 ? ? ? ? 5F 5E 5D 5B"); pattern.size() > 0)
             {
-                zpatch_spawns_orig_b = MatchTarget(pattern, 12, 16);
+                zpatch_spawns_orig_b =
+                    BranchDestination(pattern.get(0).get<uint8_t>(),
+                                      kSpawnGuardCallOperand);
             }
 
             if (auto pattern = Pattern(image, "E9 A1 02 00 00 83 FF 09 0F 87 F2 00 00 00"); pattern.size() > 0)
             {
-                zpatch_spawns_case9_resume = MatchTarget(pattern, 247, 251);
-                zpatch_spawns_case6_resume = MatchTarget(pattern, 181, 185);
-                zpatch_spawns_case1_resume = MatchTarget(pattern, 62, 66);
-                zpatch_spawns_case2_resume = MatchTarget(pattern, 87, 91);
-                zpatch_spawns_case4_resume = MatchTarget(pattern, 137, 141);
-                zpatch_spawns_case7_resume = MatchTarget(pattern, 203, 207);
-                zpatch_spawns_case3_resume = MatchTarget(pattern, 112, 116);
-                zpatch_spawns_case5_resume = MatchTarget(pattern, 159, 163);
-                zpatch_spawns_case8_resume = MatchTarget(pattern, 225, 229);
-                zpatch_spawns_case0_resume = MatchTarget(pattern, 37, 41);
+                // The dispatch jump table's rel32 entries: one row per case in
+                // the original's publish order, with the displacement offset and
+                // the next-instruction offset inside the match.
+                struct SpawnResumeSite final
+                {
+                    uint32_t* slot;
+                    ptrdiff_t displacement;
+                    ptrdiff_t next;
+                };
+                const SpawnResumeSite kSites[] = {
+                    {&zpatch_spawns_case9_resume, 247, 251},
+                    {&zpatch_spawns_case6_resume, 181, 185},
+                    {&zpatch_spawns_case1_resume, 62, 66},
+                    {&zpatch_spawns_case2_resume, 87, 91},
+                    {&zpatch_spawns_case4_resume, 137, 141},
+                    {&zpatch_spawns_case7_resume, 203, 207},
+                    {&zpatch_spawns_case3_resume, 112, 116},
+                    {&zpatch_spawns_case5_resume, 159, 163},
+                    {&zpatch_spawns_case8_resume, 225, 229},
+                    {&zpatch_spawns_case0_resume, 37, 41},
+                };
+                for (const SpawnResumeSite& site : kSites)
+                    *site.slot = MatchTarget(pattern, site.displacement, site.next);
             }
         }
 
@@ -730,30 +763,35 @@ namespace opp::features
         {
             const GameImage& image = ctx.image;
 
+            // The E8 opcodes the original placed at each spawner call; the
+            // body-name suffix of each case is the corresponding dispatch offset.
+            constexpr ptrdiff_t kProbeCallOffset = 7;
+            constexpr ptrdiff_t kGuardCallOffset = 11;
+
             if (auto pattern = Pattern(image, "32 DB 8B 54 24 24 52 E8 ? ? ? ? 8B F0"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                CallTo(ctx, match + 7, OPP_BODY(abi_spawns_probe));
+                CallTo(ctx, match + kProbeCallOffset, OPP_BODY(abi_spawns_probe));
             }
 
             if (auto pattern = Pattern(image, "8B 4C 24 28 8B 54 24 24 50 51 52 E8 ? ? ? ? 5F 5E 5D 5B"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                CallTo(ctx, match + 11, OPP_BODY(abi_spawns_guard));
+                CallTo(ctx, match + kGuardCallOffset, OPP_BODY(abi_spawns_guard));
             }
 
             if (auto pattern = Pattern(image, "E9 A1 02 00 00 83 FF 09 0F 87 F2 00 00 00"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                // Each offset is the call instruction of one jump-table case;
-                // the body name carries that case's value (0x24..0xF6 are the
-                // case ids the original's dispatch compares).
+                // Each offset is the E8 of one jump-table case; the body name
+                // carries that dispatch case's offset (0x24..0xF6). The publish's
+                // resume rows use the operands one byte later.
                 struct SpawnCase final
                 {
-                    uintptr_t call_offset;
+                    ptrdiff_t call_offset;
                     void* body;
                 };
                 const SpawnCase kSpawnCases[] = {
@@ -776,29 +814,36 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                CallTo(ctx, match + 6, OPP_BODY(abi_spawns_probe));
+                // The call after the six-byte `mov [edi+0x140], al`.
+                constexpr ptrdiff_t kSpawnedFlagCallOffset = 6;
+                CallTo(ctx, match + kSpawnedFlagCallOffset, OPP_BODY(abi_spawns_probe));
             }
 
             if (auto pattern = Pattern(image, "88 5C 24 1F 8B 54 24 28 52 E8"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                CallTo(ctx, match + 9, OPP_BODY(abi_spawns_probe));
-                CallTo(ctx, match + 254, OPP_BODY(abi_spawns_probe));
+                // The two spawn probes in the function (the first at +9, the
+                // second 245 bytes later).
+                constexpr ptrdiff_t kFirstProbeCallOffset = 9;
+                constexpr ptrdiff_t kSecondProbeCallOffset = 254;
+                CallTo(ctx, match + kFirstProbeCallOffset, OPP_BODY(abi_spawns_probe));
+                CallTo(ctx, match + kSecondProbeCallOffset, OPP_BODY(abi_spawns_probe));
             }
 
             if (auto pattern = Pattern(image, "38 98 8C 00 00 00 75 2D 57 E8"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                CallTo(ctx, match + 9, OPP_BODY(abi_spawns_probe));
+                constexpr ptrdiff_t kProbeCallAfterFlagTest = 9;
+                CallTo(ctx, match + kProbeCallAfterFlagTest, OPP_BODY(abi_spawns_probe));
             }
 
             if (auto pattern = Pattern(image, "32 DB 8B 54 24 24 52 E8"); pattern.size() > 0)
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                CallTo(ctx, match + 7, OPP_BODY(abi_spawns_probe));
+                CallTo(ctx, match + kProbeCallOffset, OPP_BODY(abi_spawns_probe));
             }
         }
 
@@ -819,7 +864,10 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "2B C2 D1 F8 39 3C C6 7D 0D 83 CA FF"); pattern.size() > 0)
             {
-                zpatch_freeze_gun_resume = MatchAddress(pattern, -12);
+                // The shim resumes at the instruction 12 bytes before the match
+                // (the body it replaces sits at match-21 and is 9 bytes long).
+                constexpr ptrdiff_t kFreezeGunResumeOffset = -12;
+                zpatch_freeze_gun_resume = MatchAddress(pattern, kFreezeGunResumeOffset);
             }
         }
 
@@ -842,7 +890,10 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                JumpTo(ctx, match - 21, OPP_BODY(abi_freeze_gun_shim));
+                // The shim replaces the nine bytes at match-21 that end where
+                // the resume starts.
+                constexpr ptrdiff_t kFreezeGunShimOffset = -21;
+                JumpTo(ctx, match + kFreezeGunShimOffset, OPP_BODY(abi_freeze_gun_shim));
             }
         }
 
@@ -865,7 +916,11 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                NopAt(ctx, match + 5, 12);
+                // The five-byte jump is followed by the twelve-byte call the
+                // original NOPs out.
+                constexpr ptrdiff_t kNopAfterJumpOffset = 5;
+                constexpr size_t kNopLength = 12;
+                NopAt(ctx, match + kNopAfterJumpOffset, kNopLength);
             }
         }
 
