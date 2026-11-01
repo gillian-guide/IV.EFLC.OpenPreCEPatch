@@ -1523,8 +1523,16 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "75 54 8B 48 28 8B 40 2C"); pattern.size() > 0)
             {
-                zpatch_blackscreen_resume = MatchTarget(pattern, 82, 86);
-                const auto address = static_cast<uintptr_t>(MatchTarget(pattern, 82, 87));
+                // The 82/86 pair is the rel32 target the shim jumps through; the
+                // dword one byte later (87) is the value pointer the body reads.
+                constexpr ptrdiff_t kBrancOperandOffset = 82;
+                constexpr ptrdiff_t kBranchNextOffset = 86;
+                constexpr ptrdiff_t kValueNextOffset = 87;
+                zpatch_blackscreen_resume =
+                    MatchTarget(pattern, kBrancOperandOffset, kBranchNextOffset);
+                const auto address =
+                    static_cast<uintptr_t>(MatchTarget(pattern, kBrancOperandOffset,
+                                                       kValueNextOffset));
                 if (InImage(image, address))
                     zpatch_blackscreen_value_ptr = *reinterpret_cast<const uint32_t*>(address);
             }
@@ -1570,7 +1578,12 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "55 8B EC 83 E4 F8 51 8B 45 0C 0F B7 48 66"); pattern.size() > 0)
             {
-                zpatch_collision_deadlock_should_walk = MatchTarget(pattern, 91, 95);
+                // The `call rel32` predicate site at +91 (its next instruction at
+                // +95) is the walk function the shim calls.
+                constexpr ptrdiff_t kWalkCallOperand = 91;
+                constexpr ptrdiff_t kWalkCallNext = 95;
+                zpatch_collision_deadlock_should_walk =
+                    MatchTarget(pattern, kWalkCallOperand, kWalkCallNext);
             }
         }
 
@@ -1915,8 +1928,15 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "E8 ? ? ? ? 8B 74 24 14 83 C4 08 6A 00 56"); pattern.size() > 0)
             {
-                zpatch_ooc_logger = MatchTarget(pattern, -50, -46);
-                zpatch_ooc_orig = MatchTarget(pattern, 1, 5);
+                // The match is the first E8; the logger is the call whose rel32
+                // operand sits 50 bytes before it (next at -46), and the original
+                // call target is the match's own operand (at +1, next at +5).
+                constexpr ptrdiff_t kLoggerOperand = -50;
+                constexpr ptrdiff_t kLoggerNext = -46;
+                constexpr ptrdiff_t kOrigOperand = 1;
+                constexpr ptrdiff_t kOrigNext = 5;
+                zpatch_ooc_logger = MatchTarget(pattern, kLoggerOperand, kLoggerNext);
+                zpatch_ooc_orig = MatchTarget(pattern, kOrigOperand, kOrigNext);
             }
         }
 
@@ -2215,14 +2235,26 @@ namespace opp::features
 
             if (auto pattern = Pattern(image, "50 64 89 25 00 00 00 00 83 EC 34"); pattern.size() > 0)
             {
-                zpatch_speedup_t50 = *pattern.get(0).get<uint32_t>(26);
-                zpatch_speedup_t64 = *pattern.get(0).get<uint32_t>(165);
-                zpatch_speedup_t60 = *pattern.get(0).get<uint32_t>(188);
-                zpatch_speedup_t5c = *pattern.get(0).get<uint32_t>(226);
-                zpatch_speedup_t68 = *pattern.get(0).get<uint32_t>(234);
-                zpatch_speedup_t4c = *pattern.get(0).get<uint32_t>(249);
-                zpatch_speedup_t54 = *pattern.get(0).get<uint32_t>(264);
-                zpatch_speedup_t58 = *pattern.get(0).get<uint32_t>(276);
+                // The eight absolute float-constant operands inside the timing
+                // function, one per published pointer; the operand offsets are
+                // the recovered instruction positions.
+                struct SpeedupSlot final
+                {
+                    uint32_t* slot;
+                    ptrdiff_t operand;
+                };
+                const SpeedupSlot kSlots[] = {
+                    {&zpatch_speedup_t50, 26},
+                    {&zpatch_speedup_t64, 165},
+                    {&zpatch_speedup_t60, 188},
+                    {&zpatch_speedup_t5c, 226},
+                    {&zpatch_speedup_t68, 234},
+                    {&zpatch_speedup_t4c, 249},
+                    {&zpatch_speedup_t54, 264},
+                    {&zpatch_speedup_t58, 276},
+                };
+                for (const SpeedupSlot& slot : kSlots)
+                    *slot.slot = *pattern.get(0).get<uint32_t>(slot.operand);
             }
         }
 
@@ -2245,7 +2277,9 @@ namespace opp::features
             {
                 auto* match = pattern.get(0).get<uint8_t>();
 
-                JumpTo(ctx, match - 21, OPP_BODY(abi_speedup_body));
+                // The body replaces the 21-byte prologue before the match.
+                constexpr ptrdiff_t kSpeedupShimOffset = -21;
+                JumpTo(ctx, match + kSpeedupShimOffset, OPP_BODY(abi_speedup_body));
             }
         }
 

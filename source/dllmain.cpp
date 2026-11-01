@@ -176,17 +176,9 @@ namespace
         const opp::FusionFixConflict* conflicts = opp::FusionFixConflicts(count);
         for (size_t i = 0; i < count; ++i)
         {
-            bool enabled = false;
-            try
-            {
-                enabled = config.RawOption(conflicts[i].option, "0");
-            }
-            catch (...)
-            {
-                continue;
-            }
-
-            if (!enabled)
+            // RawOption is noexcept (an unparseable value is logged and falls
+            // back to the default), so there is no exception boundary here.
+            if (!config.RawOption(conflicts[i].option, "0"))
                 continue;
 
             if (!names.empty())
@@ -273,7 +265,12 @@ namespace
 
         const opp::GameImage gameImage{moduleBase, nt->OptionalHeader.SizeOfImage};
 
-        (void)opp::FindGamePointers(gameImage);
+        const opp::PreambleReport preamble = opp::FindGamePointers(gameImage);
+        if (preamble.missing != 0)
+            opp::Log("preamble: %zu resolved, %zu missing", preamble.resolved,
+                     preamble.missing);
+        else
+            opp::Log("preamble: %zu pointers resolved", preamble.resolved);
 
         // CarDecalsFix's double-load guard: when its scan finds nothing, another
         // ASI loader already patched the site.
