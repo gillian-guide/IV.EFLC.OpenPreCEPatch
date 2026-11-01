@@ -29,11 +29,11 @@
 0064A53F 2E InstallNoLiveryLimit
 0064A540 5F InstallNoLiveryLimit
 0064A541 0F InstallNoLiveryLimit
-006538A0 E9 InstallMovingSteeringWheelSupport
-006538A1 0B InstallMovingSteeringWheelSupport
-006538A2 19 InstallMovingSteeringWheelSupport
-006538A3 5B InstallMovingSteeringWheelSupport
-006538A4 0F InstallMovingSteeringWheelSupport
+006538A0 E9 InstallMovingPlaneParts
+006538A1 0B InstallMovingPlaneParts
+006538A2 19 InstallMovingPlaneParts
+006538A3 5B InstallMovingPlaneParts
+006538A4 0F InstallMovingPlaneParts
 00653A64 E9 InstallPopupHeadlightsFlag
 00653A65 C7 InstallPopupHeadlightsFlag
 00653A66 0A InstallPopupHeadlightsFlag

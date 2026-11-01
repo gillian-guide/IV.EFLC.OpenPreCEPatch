@@ -210,8 +210,9 @@ namespace
         }
 
         // Several arms can touch the same site (e.g. RemoveUselessChecks then
-        // RestoreDeathMusic). The final image has one byte per RVA, so keep the
-        // last write for each and emit a unique, order-independent set.
+        // RestoreDeathMusic, or two options that patch the same flag). The final
+        // image has one byte per RVA, so keep the last write for each and emit a
+        // unique, order-independent set.
         std::unordered_map<size_t, WriteRecord> latest;
         latest.reserve(state.records.size());
         for (const WriteRecord& record : state.records)
@@ -271,19 +272,25 @@ int main(int argc, char** argv)
     if (argc == 4 && std::strcmp(argv[1], "--import-legacy") == 0)
         return ImportLegacy(argv[2], argv[3]);
 
-    // Print the effective install order, one name per line, tier by tier. The
-    // order golden in tests/order_golden.txt is captured with this mode; a pure
-    // refactor must produce the same list.
+    // Print the effective install order, one name per line, tier by tier, in the
+    // same name order PatchGame runs them. The order golden in
+    // tests/order_golden.txt is the per-tier arm set captured with this mode.
     if (argc == 2 && std::strcmp(argv[1], "--order") == 0)
     {
         for (const opp::Event* event : {&opp::PublishEvent(), &opp::InstallEvent(),
                                         &opp::PostEvent()})
         {
+            std::vector<const char*> names;
             for (size_t i = 0; i < event->size(); ++i)
             {
                 if (const char* name = event->name(i))
-                    std::printf("%s\n", name);
+                    names.push_back(name);
             }
+            std::sort(names.begin(), names.end(), [](const char* a, const char* b) {
+                return std::strcmp(a, b) < 0;
+            });
+            for (const char* name : names)
+                std::printf("%s\n", name);
         }
         return 0;
     }

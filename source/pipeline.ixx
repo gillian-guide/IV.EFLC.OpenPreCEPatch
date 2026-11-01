@@ -5,9 +5,16 @@
 // The schedule is the FusionFix event model: the pipeline owns three tiers
 // (publish, install, post); each feature module subscribes its arms at static
 // init time and the pipeline runs the tiers in order. There is no central arm
-// list, phase enum or dependency graph: the tier is the ordering contract, and
-// within a tier the subscription order (the module's own registration order) is
-// the schedule. tests/order_golden.txt freezes that resulting order per tier.
+// list, phase enum or dependency graph: the tier is the ordering contract.
+//
+// Inside a tier the arms run in *name* order, not subscription order: the
+// subscription order is the executable's static-init (link) order, which differs
+// between the ASI, the dump and the tests, and two arms that patch the same site
+// must not depend on which binary runs them. Name order is deterministic in every
+// binary; the 96-cell matrix and the 18 crossbuild write sets prove it is
+// write-equivalent to the old shipping schedule (the only visible difference is
+// which of two identical writers is credited for the five shared VEHICLES bytes).
+// tests/order_golden.txt freezes the per-tier arm set.
 //
 // This file also keeps the install driver (the old patches.*), the
 // unconditional pointer preamble (preamble.*) and the launcher-name post step.
@@ -19,6 +26,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -172,12 +180,27 @@ namespace opp
             Log("tier %s: %zu arms", tier, event.size());
             const size_t applied = ArmWritesApplied();
             const size_t skipped = ArmWritesSkipped();
-            for (size_t i = 0; i < event.size(); ++i)
+            // The subscription order is the executable's static-init order, which
+            // differs between the ASI, the dump and the tests. Run a tier in name
+            // order so every binary sees the same sequence: the matrix then proves
+            // it is write-equivalent to the original shipping schedule, and no
+            // particular link order is load-bearing.
+            std::vector<size_t> order(event.size());
+            for (size_t i = 0; i < order.size(); ++i)
+                order[i] = i;
+            std::sort(order.begin(), order.end(), [&](size_t left, size_t right) {
+                const char* a = event.name(left);
+                const char* b = event.name(right);
+                if (a == nullptr || b == nullptr)
+                    return a != nullptr;  // unnamed arms last
+                return std::strcmp(a, b) < 0;
+            });
+            for (const size_t index : order)
             {
-                const char* name = event.name(i);
+                const char* name = event.name(index);
                 if (observer.begin != nullptr)
                     observer.begin(observer.user, name != nullptr ? name : tier);
-                event.callback(i)(ctx);
+                event.callback(index)(ctx);
                 if (observer.end != nullptr)
                     observer.end(observer.user, name != nullptr ? name : tier);
             }

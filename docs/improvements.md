@@ -126,6 +126,26 @@ match of its literal (`for_each_result`) and patches each one, so the hit count 
 image data, not a recovered per-build constant. All guards are verified by the
 96-cell matrix and the 18 crossbuild write sets, which are unchanged.
 
+## The install tiers and their deterministic order
+
+`opp.pipeline` owns three FusionFix-style tiers (`PublishEvent`, `InstallEvent`,
+`PostEvent`). Each feature module subscribes its arms at static-init time and the
+pipeline runs the tiers in order; the publish tier is load-bearing (a site's
+original bytes and resume are read before any install overwrites them). There is
+no `Phase` enum, per-arm schedule table or dependency graph.
+
+Inside a tier the arms run in **name** order. Subscription order is the
+executable's static-init/link order, which differs between the ASI, the dump and
+the tests; name order is identical in every binary and keeps two arms that patch
+the same site independent of the link. The 96-cell matrix (96 cells / 4004
+writes) and the 18 crossbuild write sets are byte-identical to the old shipping
+schedule. The only visible difference is attribution: `MovingPlaneParts` and
+`MovingSteeringWheelSupport` both write the same five VEHICLES bytes with the same
+value, and the refresh credits the one that now runs first (`MovingPlaneParts`);
+`tests/parity/matrix.json` was regenerated for that cell only (the write count and
+hash are unchanged; the dropped `delta_sha256` change is the arm label inside the
+delta file).
+
 ## Backlog (documented, not gates)
 
 `tools/gen_version_matrix.py` renders `docs/version-matrix.md` from
