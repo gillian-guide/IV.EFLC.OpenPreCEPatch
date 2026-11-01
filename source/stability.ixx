@@ -412,7 +412,6 @@ void ApplyGroupHackFix(const PatchContext& ctx)
 		}
 	}
 }
-
 void ApplyHighFPSSpeedupFix(const PatchContext& ctx)
 {
 	Trace("HighFPSSpeedupFix");
@@ -421,22 +420,33 @@ void ApplyHighFPSSpeedupFix(const PatchContext& ctx)
 	{
 		const GameImage& image = ctx.image;
 
-		if (auto pattern = Pattern(image, "0F 2F C1 76 03 0F 28 C8 F3 0F 10 15"); pattern.size() > 0)
+		// The nine sites the original patches in the timing function: one byte
+		// becomes a short jump, the rest are two-byte NOPs.
+		struct SpeedupSite final
+		{
+			std::ptrdiff_t offset;
+			bool shortJump;
+		};
+		constexpr SpeedupSite kSites[] = {
+		    {-7, false},  {3, false},   {224, true}, {231, false}, {367, false},
+		    {377, false}, {607, false}, {614, false}, {764, false},
+		};
+		if (auto pattern = Pattern(image, "0F 2F C1 76 03 0F 28 C8 F3 0F 10 15");
+		    pattern.size() > 0)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeNOP(match - 7, 2, true); //nop
-			injector::MakeNOP(match + 3, 2, true); //nop
-			injector::WriteMemory<std::uint8_t>(match + 224, kShortJmpOpcode, true); //jmp
-			injector::MakeNOP(match + 231, 2, true); //nop
-			injector::MakeNOP(match + 367, 2, true); //nop
-			injector::MakeNOP(match + 377, 2, true); //nop
-			injector::MakeNOP(match + 607, 2, true); //nop
-			injector::MakeNOP(match + 614, 2, true); //nop
-			injector::MakeNOP(match + 764, 2, true); //nop
+			for (const SpeedupSite& site : kSites)
+			{
+				if (site.shortJump)
+					injector::WriteMemory<std::uint8_t>(match + site.offset, kShortJmpOpcode,
+					                                    true); //jmp
+				else
+					injector::MakeNOP(match + site.offset, 2, true); //nop
+			}
 		}
 	}
 }
+
 
 void ApplyMPNikoCrashFix(const PatchContext& ctx)
 {

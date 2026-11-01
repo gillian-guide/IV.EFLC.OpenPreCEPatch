@@ -303,8 +303,8 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 		if (ctx.build == GameBuild::v1060)
 		{
 			// The original wrote these packed-entry-stub bytes by RVA. Each
-			// signature below is the candidate research 08 verified as exactly one
-			// hit at its site on this build, re-validated by research 11.
+			// signature below is the recovered candidate with exactly one
+			// hit at its site on this build.
 			if (auto pattern = Pattern(image, "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74"); pattern.size() > 0)
 			{
 				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x0038AC
@@ -332,7 +332,7 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 			}
 			// The original NOPs the seven bytes at 0x42E7..0x42ED. One scan at the
 			// instruction plus match+0..+6 is equivalent and order-independent; the
-			// old per-byte windows relied on the ascending write order (research 11).
+			// old per-byte windows relied on the ascending write order.
 			if (auto pattern = Pattern(image, "C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8"); pattern.size() > 0)
 			{
 				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x0042E7..0x0042ED
@@ -343,8 +343,8 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 		if (ctx.build == GameBuild::v1070)
 		{
 			// The original wrote these packed-entry-stub bytes by RVA. Each
-			// signature below is the candidate research 08 verified as exactly one
-			// hit at its site on this build, re-validated by research 11.
+			// signature below is the recovered candidate with exactly one
+			// hit at its site on this build.
 			if (auto pattern = Pattern(image, "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74"); pattern.size() > 0)
 			{
 				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00388C
@@ -377,7 +377,7 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 			}
 			// The original NOPs the seven bytes at 0x42C7..0x42CD; one scan at the
 			// instruction plus match+0..+6 replaces the seven per-byte windows
-			// (research 11 §5).
+			// 
 			if (auto pattern = Pattern(image, "C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8"); pattern.size() > 0)
 			{
 				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x0042C7..0x0042CD
@@ -453,7 +453,7 @@ void ApplyPatch7RemoveModChecks(const PatchContext& ctx)
 		if (ctx.build == GameBuild::v1060)
 		{
 			// The original wrote these packed-entry-stub bytes by RVA. Each
-			// signature below is the candidate research 08 verified as exactly one
+			// signature below is the candidate the recovered rows verified as exactly one
 			// hit at its site on this build; the scans run in ascending address
 			// order so no candidate is read after an earlier site was overwritten.
 			if (auto pattern = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); pattern.size() > 0)
@@ -466,7 +466,7 @@ void ApplyPatch7RemoveModChecks(const PatchContext& ctx)
 		if (ctx.build == GameBuild::v1070)
 		{
 			// The original wrote these packed-entry-stub bytes by RVA. Each
-			// signature below is the candidate research 08 verified as exactly one
+			// signature below is the candidate the recovered rows verified as exactly one
 			// hit at its site on this build; the scans run in ascending address
 			// order so no candidate is read after an earlier site was overwritten.
 			if (auto pattern = Pattern(image, "75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D"); pattern.size() > 0)

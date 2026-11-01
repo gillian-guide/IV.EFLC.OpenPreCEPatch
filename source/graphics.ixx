@@ -367,8 +367,8 @@ void ApplySuperLODFix(const PatchContext& ctx)
 		const GameImage& image = ctx.image;
 
 		// The original jumped at 0x4A3CE9 (1.0.7.0) / 0x540E19 (1.0.8.0). The
-		// recovered signature is the same on both and unique per gated build
-		// (research 08), so scan inside the gate instead of naming the RVA.
+		// recovered signature is the same on both and unique per gated build,
+		// so scan inside the gate instead of naming the RVA.
 		if (BuildIs(ctx.build, {GameBuild::v1070, GameBuild::v1080}))
 		{
 			if (auto pattern = Pattern(image, "F6 40 ?? ?? 74 ?? 85 ED 0F 85 ?? ?? ?? ?? 55 6A ?? E8 ?? ?? ?? ?? 8B F8"); pattern.size() > 0)

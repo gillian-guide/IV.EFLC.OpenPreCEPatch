@@ -350,7 +350,6 @@ void ApplyBikePhoneAnimsFix(const PatchContext& ctx)
 		}
 	}
 }
-
 void ApplyEpisodicVehicleSupport(const PatchContext& ctx)
 {
 	Trace("EpisodicVehicleSupport");
@@ -361,7 +360,7 @@ void ApplyEpisodicVehicleSupport(const PatchContext& ctx)
 
 		// The original wrote these four slots by RVA (0x021500/0x7D91AE on 1.0.7.0,
 		// 0x095040/0x684ABE on 1.0.8.0). The recovered signatures are unique on
-		// every gated build (research 08), so scan instead: same site, same bytes.
+		// every gated build, so scan instead: same site, same bytes.
 		if (ctx.build == GameBuild::v1070)
 		{
 			if (auto pattern = Pattern(image, "44 80 0F ?? 02 75 ?? E8 ?? ?? ?? ?? 3B C3 74 ?? 8D"); pattern.size() > 0)
@@ -395,178 +394,64 @@ void ApplyEpisodicVehicleSupport(const PatchContext& ctx)
 		             GameBuild::v1061, GameBuild::v1100, GameBuild::v1110, GameBuild::v1120,
 		             GameBuild::v1130, GameBuild::v12043}))
 		{
-
-			// The recovered check sites: the original writes one NOP run per site, in
-			// its row order (the first two blocks keep both hits of a multi-hit scan).
+			// The recovered check sites: one NOP run per site, in the original's
+			// row order. The first two rows write every hit of a multi-hit scan.
+			struct EpisodicVehicleSite final
 			{
-				if (auto pattern = Pattern(image, "7C 18 0F BF 4E 2E"); pattern.size() > 0)
+				std::string_view signature;
+				std::ptrdiff_t offset;
+				std::size_t length;
+				bool allHits;
+				bool hasSecond;
+				std::ptrdiff_t secondOffset;
+				std::size_t secondLength;
+			};
+			constexpr EpisodicVehicleSite kSites[] = {
+			    {"7C 18 0F BF 4E 2E", -6, 8, true, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 75 17 F3 0F 10 44 24 08", 0, 9, true, false, 0, 0},
+			    {"39 35 ? ? ? ? 75 0E 80 3D", 6, 2, false, false, 0, 0},
+			    {"74 17 83 3D ? ? ? ? 02 75 0E F3 0F 10 05", 2, 9, false, false, 0, 0},
+			    {"7C 22 83 F8 28 75 1D", 0, 2, false, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 0F 8C 0E 05 00 00", 0, 13, false, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 75 08 3B 05", 0, 9, false, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 75 17 F3 0F 10 44 24 0C", 0, 9, false, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 75 1F 8B 44 24 04", 0, 9, false, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 75 21 8B 96 20 08 00 00", 0, 9, false, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 75 24 F6 87 6C 02 00 00 04", 0, 9, false, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 75 35 0F BF 46 2E", 0, 9, false, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 75 38 8B 16", 0, 9, false, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 7C 11 8B 4E", 7, 2, false, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 7C 1F 8B", 7, 2, false, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 7C 26 8B 85 40 0B 00 00", 0, 9, false, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 7C 35 0F BF 43 2E", 0, 9, false, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 7C 43", 7, 2, false, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 7C 4A 0F BF 46 2E", 0, 13, false, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 89 44 24 38", 11, 6, false, false, 0, 0},
+			    {"83 3D ? ? ? ? 02 8A 0D", 0, 7, false, true, 17, 2},
+			    {"83 3D ? ? ? ? 02 F3 0F 10 05 ? ? ? ? F3 0F 11 44 24 20 75 4C", 21, 2, false,
+			     false, 0, 0},
+			    {"8B 56 04 8B 4A 0C 89 4C 24 1C 7C 18", -15, 7, false, true, 10, 2},
+			};
+			for (const EpisodicVehicleSite& site : kSites)
+			{
+				if (auto pattern = Pattern(image, site.signature); pattern.size() > 0)
 				{
-					injector::MakeNOP(pattern.get(0).get<std::uint8_t>() - 6, 8, true); //nop
-					if (pattern.size() > 1)
-						injector::MakeNOP(pattern.get(1).get<std::uint8_t>() - 6, 8, true); //nop
+					const std::size_t hits =
+					    site.allHits ? std::min<std::size_t>(pattern.size(), 2u) : 1u;
+					for (std::size_t hit = 0; hit < hits; ++hit)
+					{
+						auto* match = pattern.get(hit).get<std::uint8_t>();
+						injector::MakeNOP(match + site.offset, site.length, true); //nop
+						if (site.hasSecond)
+							injector::MakeNOP(match + site.secondOffset, site.secondLength,
+							                  true); //nop
+					}
 				}
-			}
-
-			{
-				if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 17 F3 0F 10 44 24 08"); pattern.size() > 0)
-				{
-					injector::MakeNOP(pattern.get(0).get<std::uint8_t>(), 9, true); //nop
-					if (pattern.size() > 1)
-						injector::MakeNOP(pattern.get(1).get<std::uint8_t>(), 9, true); //nop
-				}
-			}
-
-			if (auto pattern = Pattern(image, "39 35 ? ? ? ? 75 0E 80 3D"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match + 6, 2, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "74 17 83 3D ? ? ? ? 02 75 0E F3 0F 10 05"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match + 2, 9, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "7C 22 83 F8 28 75 1D"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match, 2, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 0F 8C 0E 05 00 00"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match, 13, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 08 3B 05"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match, 9, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 17 F3 0F 10 44 24 0C"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match, 9, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 1F 8B 44 24 04"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match, 9, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 21 8B 96 20 08 00 00"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match, 9, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 24 F6 87 6C 02 00 00 04"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match, 9, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 35 0F BF 46 2E"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match, 9, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 75 38 8B 16"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match, 9, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 11 8B 4E"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match + 7, 2, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 1F 8B"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match + 7, 2, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 26 8B 85 40 0B 00 00"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match, 9, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 35 0F BF 43 2E"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match, 9, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 43"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match + 7, 2, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 4A 0F BF 46 2E"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match, 13, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 89 44 24 38"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match + 11, 6, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 8A 0D"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match, 7, true); //nop
-				injector::MakeNOP(match + 17, 2, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 F3 0F 10 05 ? ? ? ? F3 0F 11 44 24 20 75 4C"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match + 21, 2, true); //nop
-			}
-
-			if (auto pattern = Pattern(image, "8B 56 04 8B 4A 0C 89 4C 24 1C 7C 18"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeNOP(match - 15, 7, true); //nop
-				injector::MakeNOP(match + 10, 2, true); //nop
 			}
 		}
 	}
 }
+
 
 void ApplyHighFPSBikePhysicsFix(const PatchContext& ctx)
 {

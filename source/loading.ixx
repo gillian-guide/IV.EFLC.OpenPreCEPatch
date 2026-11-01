@@ -259,6 +259,89 @@ void PublishRemoveGFWLUpdatePopup(const PatchContext& ctx)
 
 }
 
+// ApplyLoadDLCs' per-build site rows (original handler sub_100234E0). The kind
+// says which write a row performs (call_body is abi_load_dlcs_dummy, jump_body
+// is abi_load_dlcs_struct_fixup), `rva` is the game target for the rva kinds,
+// and `twice` keeps the original's duplicated write where its handler issued
+// two. The rows are in the handler's scan order (ascending addresses on each
+// build).
+enum class DlcSiteKind : std::uint8_t
+{
+	call_body,
+	jump_body,
+	jump_rva,
+	call_rva,
+	nop_tail,
+};
+
+struct DlcSite final
+{
+	std::string_view signature;
+	DlcSiteKind kind;
+	GameRva rva;
+	bool twice;
+};
+
+// The 12-byte tail fill the handler writes at the end of each build's list.
+constexpr std::size_t kDlcTailNopLength = 12;
+
+constexpr DlcSite kLoadDlcs1060[] = {
+    {"E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52",
+     DlcSiteKind::call_body, {}, true},  // 0x4137CD, twice
+    {"E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24", DlcSiteKind::jump_rva,
+     kLoadDlcsJmpA_1060, false},  // 0x41445C
+    {"B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8",
+     DlcSiteKind::jump_body, {}, true},  // 0x4144D4, twice
+    {"80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E",
+     DlcSiteKind::jump_rva, kLoadDlcsJmpB_1060, false},  // 0x41450E
+    {"E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E", DlcSiteKind::call_rva,
+     kLoadDlcsCall_1060, false},  // 0x41453A
+    {"8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC",
+     DlcSiteKind::nop_tail, {}, false},  // 0x41453F
+};
+
+constexpr DlcSite kLoadDlcs1070[] = {
+    {"E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52",
+     DlcSiteKind::call_body, {}, true},  // 0x41356D, twice
+    {"E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24", DlcSiteKind::jump_rva,
+     kLoadDlcsJmpA_1070, false},  // 0x4141FC
+    {"B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E",
+     DlcSiteKind::jump_body, {}, true},  // 0x414274, twice
+    {"80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E",
+     DlcSiteKind::jump_rva, kLoadDlcsJmpB_1070, false},  // 0x4142AE
+    {"E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E", DlcSiteKind::call_rva,
+     kLoadDlcsCall_1070, false},  // 0x4142DA
+    {"8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC",
+     DlcSiteKind::nop_tail, {}, false},  // 0x4142DF
+};
+
+constexpr DlcSite kLoadDlcs1080[] = {
+    {"E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 4C 24 ?? 51 8D 94 24 ?? ?? ?? ?? 52",
+     DlcSiteKind::call_body, {}, true},  // 0x48F558, twice
+    {"E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24", DlcSiteKind::jump_rva,
+     kLoadDlcsJmpA_1080, false},  // 0x49035C
+    {"B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6", DlcSiteKind::jump_body,
+     {}, true},  // 0x4903D4, twice
+    {"80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E",
+     DlcSiteKind::jump_rva, kLoadDlcsJmpB_1080, false},  // 0x49040E
+    {"E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E", DlcSiteKind::call_rva,
+     kLoadDlcsCall_1080, false},  // 0x49043A
+    {"8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC",
+     DlcSiteKind::nop_tail, {}, false},  // 0x49043F
+};
+
+struct DlcBuildSites final
+{
+	GameBuild build;
+	std::span<const DlcSite> sites;
+};
+
+constexpr DlcBuildSites kLoadDlcsSites[] = {
+    {GameBuild::v1060, kLoadDlcs1060},
+    {GameBuild::v1070, kLoadDlcs1070},
+    {GameBuild::v1080, kLoadDlcs1080},
+};
+
 void ApplyLoadDLCs(const PatchContext& ctx)
 {
 	Trace("LoadDLCs");
@@ -267,133 +350,45 @@ void ApplyLoadDLCs(const PatchContext& ctx)
 	{
 		const GameImage& image = ctx.image;
 
-		if (ctx.build == GameBuild::v1060)
+		for (const DlcBuildSites& build : kLoadDlcsSites)
 		{
-			// The original patched these LoadDLCs call/jump sites by RVA. Each
-			// signature below is the research-08 candidate that verifies as exactly
-			// one hit at its site on this build; the gate is unchanged. Sites are
-			// scanned in ascending order, before any of them is written.
-			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52"); pattern.size() > 0)
+			if (ctx.build != build.build)
+				continue;
+			for (const DlcSite& row : build.sites)
 			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x4137CD
-				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
-				// the original patches this site twice; keep the duplicate write
-				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
+				if (auto pattern = Pattern(image, row.signature); pattern.size() > 0)
+				{
+					auto* site = pattern.get(0).get<std::uint8_t>();
+					std::uintptr_t target = row.rva.site(ctx.gameBase);
+					if (row.kind == DlcSiteKind::call_body)
+						target = reinterpret_cast<std::uintptr_t>(&abi_load_dlcs_dummy);
+					else if (row.kind == DlcSiteKind::jump_body)
+						target = reinterpret_cast<std::uintptr_t>(&abi_load_dlcs_struct_fixup);
+					switch (row.kind)
+					{
+					case DlcSiteKind::call_body:
+					case DlcSiteKind::call_rva:
+						injector::MakeCALL(site, reinterpret_cast<void*>(target), true); //call
+						if (row.twice)
+							injector::MakeCALL(site, reinterpret_cast<void*>(target), true); //call
+						break;
+					case DlcSiteKind::jump_body:
+					case DlcSiteKind::jump_rva:
+						injector::MakeJMP(site, reinterpret_cast<void*>(target), true); //jmp
+						if (row.twice)
+							injector::MakeJMP(site, reinterpret_cast<void*>(target), true); //jmp
+						break;
+					case DlcSiteKind::nop_tail:
+						injector::MakeNOP(site, kDlcTailNopLength, true); //nop
+						break;
+					}
+				}
 			}
-			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x41445C
-				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpA_1060.site(ctx.gameBase)), true); //jmp
-			}
-			if (auto pattern = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x4144D4
-				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
-				// duplicate write kept
-				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
-			}
-			if (auto pattern = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x41450E
-				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpB_1060.site(ctx.gameBase)), true); //jmp
-			}
-			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x41453A
-				injector::MakeCALL(site, reinterpret_cast<void*>(kLoadDlcsCall_1060.site(ctx.gameBase)), true); //call
-			}
-			if (auto pattern = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x41453F
-				injector::MakeNOP(site, 12, true); //nop
-			}
-		}
-
-		if (ctx.build == GameBuild::v1070)
-		{
-			// The original patched these LoadDLCs call/jump sites by RVA. Each
-			// signature below is the research-08 candidate that verifies as exactly
-			// one hit at its site on this build; the gate is unchanged. Sites are
-			// scanned in ascending order, before any of them is written.
-			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x41356D
-				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
-				// the original patches this site twice; keep the duplicate write
-				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
-			}
-			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x4141FC
-				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpA_1070.site(ctx.gameBase)), true); //jmp
-			}
-			if (auto pattern = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x414274
-				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
-				// duplicate write kept
-				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
-			}
-			if (auto pattern = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x4142AE
-				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpB_1070.site(ctx.gameBase)), true); //jmp
-			}
-			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x4142DA
-				injector::MakeCALL(site, reinterpret_cast<void*>(kLoadDlcsCall_1070.site(ctx.gameBase)), true); //call
-			}
-			if (auto pattern = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x4142DF
-				injector::MakeNOP(site, 12, true); //nop
-			}
-		}
-
-		if (ctx.build == GameBuild::v1080)
-		{
-			// The original patched these LoadDLCs call/jump sites by RVA. Each
-			// signature below is the research-08 candidate that verifies as exactly
-			// one hit at its site on this build; the gate is unchanged. Sites are
-			// scanned in ascending order, before any of them is written.
-			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 4C 24 ?? 51 8D 94 24 ?? ?? ?? ?? 52"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x48F558
-				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
-				// the original patches this site twice; keep the duplicate write
-				injector::MakeCALL(site, reinterpret_cast<void*>(&abi_load_dlcs_dummy), true); //call
-			}
-			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x49035C
-				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpA_1080.site(ctx.gameBase)), true); //jmp
-			}
-			if (auto pattern = Pattern(image, "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x4903D4
-				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
-				// duplicate write kept
-				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_load_dlcs_struct_fixup), true); //jmp
-			}
-			if (auto pattern = Pattern(image, "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x49040E
-				injector::MakeJMP(site, reinterpret_cast<void*>(kLoadDlcsJmpB_1080.site(ctx.gameBase)), true); //jmp
-			}
-			if (auto pattern = Pattern(image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x49043A
-				injector::MakeCALL(site, reinterpret_cast<void*>(kLoadDlcsCall_1080.site(ctx.gameBase)), true); //call
-			}
-			if (auto pattern = Pattern(image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x49043F
-				injector::MakeNOP(site, 12, true); //nop
-			}
+			break;
 		}
 	}
 }
+
 
 void ApplyLocalSettingsPath(const PatchContext& ctx)
 {
@@ -512,7 +507,7 @@ void ApplyRemoveRGSCLoginRequirement(const PatchContext& ctx)
 		{
 			// The original derives the site from 0x498460 and writes the same jump
 			// twice (the duplicate write is kept). The recovered signature is unique
-			// at that RVA on 1.0.8.0, so the scan replaces the address (research 11).
+			// at that RVA on 1.0.8.0, so the scan replaces the address with the same site.
 			if (auto pattern = Pattern(image, "8B 44 24 ?? 85 C0 74 ?? F3 0F 7E 05 ?? ?? ?? ?? 66 0F D6 00"); pattern.size() > 0)
 			{
 				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x498460

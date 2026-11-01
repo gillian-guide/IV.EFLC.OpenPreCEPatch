@@ -7,8 +7,8 @@
 // PlayGTAIV.exe present, so the exact bytes are pinned by a native test here).
 //
 // The scan is one wildcard-free 16-byte signature; on the five builds the
-// original's table covered it hits exactly the two table RVAs (research 11
-// §3.4), and on 1.0.0.4/1.0.1.0/EFLC it hits slots the original never wrote,
+// original's table covered it hits exactly the two table RVAs, and on
+// 1.0.0.4/1.0.1.0/EFLC it hits slots the original never wrote,
 // which is why the five-build gate is load-bearing.
 
 module;
