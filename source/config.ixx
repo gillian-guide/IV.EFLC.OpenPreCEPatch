@@ -95,6 +95,14 @@ export namespace opp
         // exactly 1; an absent key uses `defaultValue`. A present but
         // unparseable value (empty, "abc") is logged once and also uses the
         // default, so it can never escape the install pass as an exception.
+        //
+        // The option catalogue is the generated tests/parity/option_defaults.tsv:
+        // one row per (key, absent-key default, shipped-INI value), regenerated
+        // from these call sites by tools/gen_option_defaults.py, and checked by
+        // the opcep_option_defaults CTest. The shipped INI is the user-facing
+        // surface. There is deliberately no second typed table in this module:
+        // it would duplicate the defaults and drift from the call sites that
+        // actually read them (the OA-3 decision).
         [[nodiscard]] bool Option(const char* key, const char* defaultValue) const noexcept;
 
         // The same read without the FusionFix gate. Used only for the one-time

@@ -37,9 +37,18 @@ Two defaults are legitimate and are not made equal:
   the original fallback. No behaviour changed to produce this split; it is the
   original's own shape made explicit.
 
+**The TSV is the option catalogue (the OA-3 decision).** There is no second
+typed `OptionSpec` table in `opp.config`: the defaults live at the arm's own
+`Config::Option("Key", "default")` call site, and
+`tests/parity/option_defaults.tsv` is generated from those call sites and
+checked by CTest. A typed table would duplicate the defaults and could drift from
+the code that actually reads them; the generated TSV cannot. The shipped INI is
+the user-facing surface, and `loader_defaults.tsv` is the recovered-loader
+answer. `opp.config` carries this decision in the `Config::Option` comment.
+
 ## Install-time failsafes (default on)
 
-`source/helpers.hxx` funnels every arm write through `SiteWritable`,
+`opp.patch` funnels every arm write through `SiteWritable`,
 `ModuleSiteWritable`, `JumpTo`, `CallTo`, `NopAt`, `WriteValue` and `WriteRaw`.
 A site outside the game image, a write that would leave it, or a branch whose
 body did not resolve is a logged skip instead of a fault. On a healthy image
@@ -47,7 +56,7 @@ every check passes, so the write set is byte-identical to the unchecked form.
 
 ## Config: the bundled IniReader, one parse, no exception, no allocation per read
 
-`source/config.cpp` reads the file with the bundled IniReader
+`opp.config` reads the file with the bundled IniReader
 (`external/inireader`, the mINI reader the original loader used) exactly once,
 then copies the parsed document into a NUL-terminated arena plus an open
 addressed section/key index. `Config::Option` resolves in O(1) with no
@@ -95,6 +104,28 @@ never wrote. The native test covers the two-hit case plus the 0/1/3-hit skips
 (`TestLauncherNamePatch`); the 96-cell matrix is unchanged (26 launcher writes
 in its launcher cell).
 
+## Multi-hit arms: expected site counts (P13)
+
+The same guard now covers every multi-match arm whose original read or patched a
+**fixed** set of sites: `PatternAll` result counts are compared with the
+recovered count through `opp::ExpectMatchCount`, and a different count logs
+`arm <name>: <what>: N match(es), expected M: skipped` and installs nothing (a
+partial multi-site install is worse than no install). Guarded arms:
+
+| arm | expected sites | evidence |
+| --- | --- | --- |
+| `PublishBuildingDynamicShadows` hash pair | 2 | recovered `dword_10159C1C` index 0 / `dword_10159C24` index 1 |
+| `InstallNoImpostorHeightCutoff` | 2 | the two recovered literal sites |
+| `InstallBenchmarkFix` | 2 | the two benchmark entries (bodies `abi_benchmark_a/b`) |
+| `InstallEpisodicVehicleSupport` (component window) | 2 | the two recovered NOP sites |
+| `InstallEpisodicVehicleSupport` (episode test) | 2 | the two recovered NOP sites |
+| `ApplyLaunchWithPlayGTAIV` | 2 | the two launcher name slots (see above) |
+
+`InstallStartupTimeFix` is deliberately **not** guarded: the original walks every
+match of its literal (`for_each_result`) and patches each one, so the hit count is
+image data, not a recovered per-build constant. All guards are verified by the
+96-cell matrix and the 18 crossbuild write sets, which are unchanged.
+
 ## Backlog (documented, not gates)
 
 `tools/gen_version_matrix.py` renders `docs/version-matrix.md` from
@@ -102,5 +133,3 @@ in its launcher cell).
 not checked in, so the tool prints a clear missing-input message and exits
 without writing anything; it is deliberately not a CTest. Regenerating the
 matrix needs the dump, which is a separate evidence-collection step.
-
-Revert: `git revert <this commit>` (tag before it: `good-steam-init-20261030`).

@@ -1027,20 +1027,24 @@ namespace opp::features
             {
 
                 {
-                    if (auto pattern = PatternAll(image, "7C 18 0F BF 4E 2E"); pattern.size() > 0)
+                    // The original NOPs the two recovered sites; a different count
+                    // is a view mismatch, so the arm installs nothing.
+                    if (auto pattern = PatternAll(image, "7C 18 0F BF 4E 2E"); pattern.size() > 0 &&
+                        ExpectMatchCount(pattern, 2, "EpisodicVehicleSupport component window"))
                     {
                         NopAt(ctx, pattern.get(0).get<uint8_t>() - 6, 8);
-                        if (pattern.size() > 1)
-                            NopAt(ctx, pattern.get(1).get<uint8_t>() - 6, 8);
+                        NopAt(ctx, pattern.get(1).get<uint8_t>() - 6, 8);
                     }
                 }
 
                 {
-                    if (auto pattern = PatternAll(image, "83 3D ? ? ? ? 02 75 17 F3 0F 10 44 24 08"); pattern.size() > 0)
+                    // The original NOPs the two recovered sites; a different count
+                    // is a view mismatch, so the arm installs nothing.
+                    if (auto pattern = PatternAll(image, "83 3D ? ? ? ? 02 75 17 F3 0F 10 44 24 08"); pattern.size() > 0 &&
+                        ExpectMatchCount(pattern, 2, "EpisodicVehicleSupport episode test"))
                     {
                         NopAt(ctx, pattern.get(0).get<uint8_t>(), 9);
-                        if (pattern.size() > 1)
-                            NopAt(ctx, pattern.get(1).get<uint8_t>(), 9);
+                        NopAt(ctx, pattern.get(1).get<uint8_t>(), 9);
                     }
                 }
 

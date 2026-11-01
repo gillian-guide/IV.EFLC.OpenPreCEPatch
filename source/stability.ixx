@@ -1493,11 +1493,14 @@ namespace opp::features
             {
 
                 {
-                    if (auto pattern = PatternAll(image, "E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20"); pattern.size() > 0)
+                    // The original patches exactly the two benchmark entries
+                    // (bodies a and b); a different count is a view mismatch, so the
+                    // arm installs nothing.
+                    if (auto pattern = PatternAll(image, "E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20"); pattern.size() > 0 &&
+                        ExpectMatchCount(pattern, 2, "BenchmarkFix entries"))
                     {
                         JumpTo(ctx, pattern.get(0).get<uint8_t>(8), OPP_BODY(abi_benchmark_a));
-                        if (pattern.size() > 1)
-                            JumpTo(ctx, pattern.get(1).get<uint8_t>(8), OPP_BODY(abi_benchmark_b));
+                        JumpTo(ctx, pattern.get(1).get<uint8_t>(8), OPP_BODY(abi_benchmark_b));
                     }
                 }
             }

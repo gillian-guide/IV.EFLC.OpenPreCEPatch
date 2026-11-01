@@ -760,6 +760,11 @@ namespace opp::features
             const GameImage& image = ctx.image;
 
             {
+                // The original walks every match of this literal
+                // (`for_each_result`) and patches each one, so the hit count is
+                // image data rather than a recovered per-build constant: there is
+                // no expected count to assert here. P13 guards cover the arms
+                // whose original read a fixed site set instead.
                 if (auto pattern = PatternAll(image, "68 00 C2 EC 80 68"); pattern.size() > 0)
                 {
                     for (size_t i = 0; i < pattern.size(); ++i)

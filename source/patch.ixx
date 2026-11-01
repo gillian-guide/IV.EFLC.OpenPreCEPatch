@@ -124,6 +124,13 @@ export namespace opp
         return pattern;
     }
 
+    // A multi-match arm whose original read or patched a fixed number of sites
+    // (FusionFix's P13): a different count is a view mismatch, so the arm logs it
+    // and installs nothing rather than patching a partial set. Call it only after
+    // the zero-hit case is handled (`pattern.size() > 0 && ExpectMatchCount(...)`),
+    // so a build the arm does not fit stays a silent skip.
+    bool ExpectMatchCount(hook::pattern& pattern, size_t expected, const char* what) noexcept;
+
     // The address of a site inside the current match.
     inline uint32_t MatchAddress(hook::pattern& pattern, ptrdiff_t offset = 0)
     {
@@ -565,6 +572,15 @@ namespace opp
         // view points at a literal in the arm, so nothing is built at runtime.
         Log("arm %s: no match for signature [%.*s]", g_currentArm,
             static_cast<int>(signature.size()), signature.data());
+    }
+
+    bool ExpectMatchCount(hook::pattern& pattern, size_t expected, const char* what) noexcept
+    {
+        if (pattern.size() == expected)
+            return true;
+        Log("arm %s: %s: %zu match(es), expected %zu: skipped", g_currentArm,
+            what != nullptr ? what : "multi-match scans", pattern.size(), expected);
+        return false;
     }
 
     const char* CurrentArm() noexcept
