@@ -14,88 +14,21 @@ default and the game versions each option applies to.
 
 ## Features
 
-- Skip the launcher and DRM checks, launching the game directly from its own executable or from
-  any launcher renamed to `PlayGTAIV.exe`.
-- Launch patch 7 or 8 through Steam with a non-SecuROM launcher renamed to `PlayGTAIV.exe`.
-- Remove the extra file dependencies the original loader needs, so 1.0.8.0 and below start without DFA, `gta4Browser` or `binkw32`.
-- Fix the crash after the benchmark ends.
-- Fix the freeze after Concrete Jungle with the three EFLC-exclusive radio stations installed.
-- Fix the crash when switching episodes mid-game.
-- Fix the crash when firing the ROCKET weapon.
-- Fix the rare crash when getting a wanted level.
-- Fix SMPA60 when the game is abused with car mods and when another player does it in multiplayer.
-- Fix the climbing quick-time event in Out of Commission at high FPS.
-- Fix the crash when SuperLOD is spawned.
-- Fix the crash when starting cutscenes as a ped.
-- Fix random crashes while using actual planes.
-- Fix the crashes caused by another player switching to an invalid model, changing to Niko and back, or spawning a car with the wrong vehicle type.
-- Fix the blackscreen, crash-message and group-hack crash methods used by malicious trainers.
-- Fix the aim-projectile, path-node and collision-deadlock crashes and freezes that usually happen in GTAC.
-- Fix keygen users kicking each other on join in GFWL.
-- Replace IV's error dialogs with real crash dumps, or keep the game running after a non-fatal error.
-- Fix the 15+ second wait before the game window even pops up.
-- Cut loading times in half or more.
-- Get to the main menu faster.
-- Improve a badly coded shader-streaming function, reducing stutter somewhat.
-- Increase the PtrNode limit, fixing random crashes in big Cunning Stunts maps.
-- Increase the number of possible `vehicles.ide` entries to 1024.
-- Increase the number of vehicles with different models that can be loaded at one time.
-- Remove the 4-livery limit, allowing up to 255 unique livery textures for any car.
-- Reimplement memory allocation, reducing memory usage and loading times and eliminating SMPA* errors.
-- Remove leftover nonfunctional debug code for a small performance boost (highly incompatible with other mods).
-- Fix bikes sliding out easily above 60 FPS.
-- Fix the game speeding up above 300 FPS.
-- Fix the game being permanently sped up slightly in some cases.
-- Fix VSync locking below 60 FPS on patch 7.
-- Fix zoomed-in cutscenes and jittery cutscene camera motion at high framerates.
-- Fix driveby shots not landing in the centre of the crosshair when high above ground level.
-- Fix the mouse deadzone and remove mouse acceleration from snipers.
-- Fix the foot position on chopper bikes and the standing-still animation during a phone call
-  (patch 5 and up).
-- Increase the sync interval when players are far away (GFWL and GTAC).
-- Stop other players teleporting you or removing all your weapons with malicious trainers.
-- Allow `script.img` and `radiohud` from newer versions to work (`script.img` is still 1060+ only).
-- Make newer savefiles load properly without downgrading them first (1060+ only).
-- Remove the GFWL savegame CRC check, allowing other people's savegames to load.
-- Allow loading any `.sco` file regardless of which episode or platform it came from.
-- Load TBoGT and TLAD, and further add-on episodes, in base IV.
-- Remove the Social Club login requirement for multiplayer.
-- Remove the "update or sign out of LIVE" popup on patch 5 and below.
-- Remove the modded-file checks from 1.0.4.0, 1.0.6.0 and 1.0.7.0 so multiplayer works across patches.
-- Cast dynamic shadows for cars and detached car parts from the Booth Tunnel, lampposts and helicopter spotlights.
-- Make all objects cast shadows (e.g. bollards, Hove Beach train tracks).
-- Fix the missing fade-in for LODs on patch 6+.
-- Fix emissive lights such as lampposts slowly fading in and out with the time of day.
-- Fix reverse lights being cast in the middle of the car's hood.
-- Enable night shadows cast from buildings.
-- Cast two separate lights for car headlights, each with its own shadows.
-- Make all light sources cast dynamic shadows.
-- Make everything reflect the entire world except vehicles and peds.
-- Remove the static shadow textures under cars, in the world and in cutscenes.
-- Remove the draw distance from static vehicle shadows.
-- Remove the arbitrary height cutoff from distant lights.
-- Fix bullet holes not appearing on some modded cars outside TBoGT.
-- Remove the arbitrary height cutoff from vehicle imposters, making them behave more like V.
-- Remove bounding-box culling (unstable).
-- Add APC and Buzzard support to all episodes.
-- Add explosive shotgun, sticky bomb and DSR1 sniper support to all episodes.
-- Make cops use P90s and assault shotguns.
-- Use `droppipebomb_icon` for the pipe bomb in base IV.
-- Add the `+popuplights` `vehicles.ide` flag for the Hakumai's popup headlights.
-- Add the `+siren` `vehicles.ide` flag for police sirens.
-- Make propellers, ailerons, elevators and rudders move on planes that support them.
-- Make the engine block part of cars shake like V.
-- Make the `steeringwheel` car bone rotate properly, with a configurable `+wheelangle` flag.
-- Unlock the aircraft height limit to TBoGT's level for all episodes.
-- Allow raw hashes in `.ide` entries by prefixing the unsigned decimal hash with `hash:`.
-- Load `gta.dat` from another path.
-- Restore the unused music on death.
-- Skip the intro screens and, optionally, the main menu (launching straight into the last savegame, or IV if there is none).
-- Move savegames and settings to a saves folder inside the game folder.
-- Add borderless windowed mode and keep the game running while it is unfocused.
-- Add extra menu options when IVMenuAPI is present.
-- Reduce the threshold velocity below which physics objects go to sleep, so vehicles stop more realistically.
-- Log entities as they sync into the GTAC console.
+- Skip the launcher/DRM checks (recovered DFA and ROM stages).
+- Use a (non-SecuROM) launcher renamed to `PlayGTAIV.exe`.
+- Fix the 15+ second startup times before the game window even pops up, cut loading times in half or more, and get to the main menu faster.
+- Fix the benchmark, Concrete Jungle, episode-switch, ROCKET, wanted-level, SuperLOD and SMPA60 crashes.
+- Fix the multiplayer crashes and freezes, including the modmenu crash methods.
+- Fix the high-FPS problems: cutscenes, bike physics, the 300 FPS speedup, VSync, driveby aim and the mouse deadzone.
+- Raise the PtrNode and vehicle limits, remove the livery limit and reimplement memory allocation.
+- Fix the emissive-light, reversing-light and LOD fade-in bugs, and add car, object and building shadows.
+- Add dual headlights, full-quality reflections and high-quality night shadows.
+- Add compatibility for newer `script.img`/`radiohud` files, newer savefiles, any `.sco` file and the Complete Edition folder structure and files.
+- Remove the GFWL savegame CRC check, Social Club login, GFWL update popup and modded-file checks.
+- Add the APC/Buzzard, explosive weapons, police weapons and TBoGT aircraft height limit.
+- Add the popup headlights, sirens, plane parts, engine block and steering wheel support.
+- Add the pipe-bomb icon, raw `.ide` hashes, `gta.dat` override, death music, IVMenuAPI options, Niko ped clothes and the GTAC spawn log.
+- Shorten the intro screens, skip the main menu, move savegames and settings into the game folder, add borderless windowed mode, keep rendering while unfocused, and fix the VRAM detection.
 
 ## Installation
 
@@ -103,6 +36,27 @@ default and the game versions each option applies to.
    (it can be installed as `xlive.dll` for xliveless).
 2. Extract the archive next to `GTAIV.exe` and `EFLC.exe`.
 3. Start the game and edit `ZolikaPatch.ini`; `ZolikaPatch.log` records what was applied.
+
+The launcher bypass is optional. Use it only with a legitimate copy of the game.
+
+## Supported game versions
+
+The id is the compact game version (`1080` = 1.0.8.0). The status reflects what has been verified
+on this reconstruction.
+
+| id | version | status |
+| ---: | --- | --- |
+| 1000 | 1.0.0.0 | supported |
+| 1004 | 1.0.0.4 | supported |
+| 1040 | 1.0.4.0 | supported |
+| 1060 | 1.0.6.0 | supported |
+| 1061 | 1.0.6.1 | recognised, unverified |
+| 1070 | 1.0.7.0 | supported |
+| 1080 | 1.0.8.0 | supported |
+| 1100 | 1.1.0.0 (EFLC) | recognised, unverified |
+| 1110 | 1.1.1.0 (TLAD) | supported |
+| 1120 | 1.1.2.0 (TBoGT) | supported |
+| 1130 | 1.1.3.0 (EFLC) | supported |
 
 ## Building
 
