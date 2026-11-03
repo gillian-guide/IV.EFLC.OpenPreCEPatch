@@ -26,6 +26,14 @@ std::uint32_t& StartupTimeGlobal() noexcept;
 // 0 = not rebased, and the publish is skipped.
 std::uintptr_t FindGlobalSlot(std::string_view slot_name) noexcept;
 
+// A captured game-image operand is a 32-bit VA. The scan matches in the same
+// mapped image, so the VA is the pointer, whatever its pointee type.
+template <typename T>
+T* RebasedPointer(std::uint32_t game_va) noexcept
+{
+	return reinterpret_cast<T*>(static_cast<std::uintptr_t>(game_va));
+}
+
 // LoadDLCs: the published loader callback and the two RVAs the handler stores
 // (dword_101580D0 / dword_1015804C, the register/apply functions).
 extern "C" std::uint32_t zpatch_dlc_load_callback;
@@ -75,7 +83,7 @@ extern "C" std::uint32_t zpatch_episode_switch_resume_c;  // dword_10159BB8
 // handler stores over two `cmp [episode_global],2` operand slots on 1070/1080.
 extern "C" std::uint32_t zpatch_episode_flag;  // unk_10158128
 // HighFPSBikePhysicsFix: the detour's value/save slots and resume.
-extern "C" std::uint32_t zpatch_bike_value;   // dword_1015AD7C
+extern "C" float zpatch_bike_value;         // dword_1015AD7C (float bits)
 extern "C" std::uint32_t zpatch_bike_saved;   // dword_1015AD80
 extern "C" std::uint32_t zpatch_bike_resume;  // dword_1015AD84
 // CollisionDeadlockFix: the handler publishes the walk predicate function;
@@ -91,7 +99,7 @@ extern "C" std::uint8_t zpatch_vram_flag;     // byte_1015D638
 // the handler resume, and the helper's float/cache/done.
 extern "C" std::uint32_t zpatch_driveby_resolver;  // dword_1015BDE0
 extern "C" std::uint32_t zpatch_driveby_resume;    // dword_1015BDF4
-extern "C" std::uint32_t zpatch_driveby_fov;       // dword_101580C4
+extern "C" float zpatch_driveby_fov;               // dword_101580C4 (45.0f default)
 extern "C" std::uint32_t zpatch_driveby_cached;    // dword_1015BDF8
 extern "C" std::uint8_t zpatch_driveby_done;       // byte_1015AD4A
 // NoLiveryLimit: the published jumps/function pointer plus the helper's state.
@@ -135,22 +143,24 @@ extern "C" std::uint32_t zpatch_wheelangle_angles[512];   // dword_10159D38
 // BorderlessWindowed: the two one-shot style-fixup flags.
 extern "C" std::uint8_t zpatch_borderless_w_done;  // byte_101A8445
 extern "C" std::uint8_t zpatch_borderless_a_done;  // byte_101A8444
-// SpeedupBugFix: eight pointers to the game's timing float constants.
-extern "C" std::uint32_t zpatch_speedup_t4c;  // dword_1015934C
-extern "C" std::uint32_t zpatch_speedup_t50;  // dword_10159350
-extern "C" std::uint32_t zpatch_speedup_t54;  // dword_10159354
-extern "C" std::uint32_t zpatch_speedup_t58;  // dword_10159358
-extern "C" std::uint32_t zpatch_speedup_t5c;  // dword_1015935C
-extern "C" std::uint32_t zpatch_speedup_t60;  // dword_10159360
-extern "C" std::uint32_t zpatch_speedup_t64;  // dword_10159364
-extern "C" std::uint32_t zpatch_speedup_t68;  // dword_10159368
+// SpeedupBugFix: eight pointers to the game's timing float constants, either
+// read or written as `float` by the original (sub_10050540 dereferences each
+// slot as `*(float*)dword_1015934C..68`).
+extern "C" float* zpatch_speedup_t4c;  // dword_1015934C
+extern "C" float* zpatch_speedup_t50;  // dword_10159350
+extern "C" float* zpatch_speedup_t54;  // dword_10159354
+extern "C" float* zpatch_speedup_t58;  // dword_10159358
+extern "C" float* zpatch_speedup_t5c;  // dword_1015935C
+extern "C" float* zpatch_speedup_t60;  // dword_10159360
+extern "C" float* zpatch_speedup_t64;  // dword_10159364
+extern "C" float* zpatch_speedup_t68;  // dword_10159368
 // PopupHeadlightsFlag: the shim's model/flag/index scratch, the per-model angle
 // the game's fld operand is retargeted to (dword_101580CC), the two resumes and
 // the two INI-filled 512-slot tables (dword_1015C628 / dword_1015BE28).
 extern "C" std::uint32_t zpatch_popup_model;   // dword_1015BE20
 extern "C" std::uint32_t zpatch_popup_flag;    // dword_1015BE24
 extern "C" std::uint32_t zpatch_popup_index;   // dword_1015BE1C
-extern "C" std::uint32_t zpatch_popup_angle;   // dword_101580CC (float bits)
+extern "C" float zpatch_popup_angle;   // dword_101580CC (pi/2 default)
 extern "C" std::uint32_t zpatch_popup_resume_a;  // dword_1015D628 (match+12)
 extern "C" std::uint32_t zpatch_popup_resume_b;  // dword_1015D62C (match+10)
 extern "C" std::uint32_t zpatch_popup_hashes[512];  // dword_1015C628
@@ -159,7 +169,7 @@ extern "C" float zpatch_popup_angles[512];          // dword_1015BE28 (radians)
 // (dword_101580C0), the resume and the two INI-filled 512-slot tables.
 extern "C" std::uint32_t zpatch_fchs_param;    // dword_1015BDD0
 extern "C" std::uint32_t zpatch_fchs_resume;   // dword_1015B5BC (match+12)
-extern "C" std::uint32_t zpatch_fchs_offset;   // dword_101580C0 (float bits)
+extern "C" float zpatch_fchs_offset;   // dword_101580C0 (2.0f default)
 extern "C" std::uint32_t zpatch_fchs_hashes[512];  // dword_1015ADB8
 extern "C" float zpatch_fchs_offsets[512];         // dword_1015B5C0
 // BadPlayerModelCrashFix: the tramp's saved object/model index and resume (match+10).
@@ -226,11 +236,10 @@ extern "C" std::uint32_t zpatch_new_saves_p3_original;    // dword_1015AD8C (P3 
 // Patch4RemoveModChecks / RemoveGFWLUpdatePopup: the shared resume (match+12)
 // for the stub's tail jump.
 extern "C" std::uint32_t zpatch_gfwl_resume;              // dword_10159C18
-// CarPartsShadowFix's second shim (0x100068A0) and the two slots the shared
+// CarPartsShadowFix's second shim (0x100068A0) and the resume the shared
 // installer / the CarDynamicShadowFix handler publish.
 extern "C" std::uint32_t zpatch_carparts_shadow_fn;       // dword_1015B5B8
 extern "C" std::uint32_t zpatch_carparts_resume_2;        // dword_1015BDCC
-extern "C" std::uint32_t zpatch_car_dynamic_d;          // dword_1015BDC4 (write-only publish)
 // DualVehicleHeadlights (handler 0x10006770): the five published game pointers,
 // the two light-slot constants the init helper sets (dword_1015802C=1,
 // dword_10158030=2), and the eight GPR save slots (dword_10159BC4..BF4).
@@ -252,15 +261,20 @@ extern "C" std::uint32_t zpatch_dual_r_esp;             // dword_10159BF4
 // LocalSettingsPath: the captured CWD, the "\GTA IV" suffix the path helper is
 // retargeted to push, the call slot the game calls through (off_10158064 =
 // sub_10051320) and the five rewritten path pointers (dword_10159D08..1C).
+// Widths from the original itself (sub_100513A0): dword_10159D1C/D10 are
+// `*(wchar_t**)(v6-178/-190)`, dword_10159D18/D08 `*(char**)(v6-444/-432)`, and
+// dword_10159D14 is the `mov eax, __dwCurrentEpisode` operand.
 extern "C" char zpatch_local_ansi_cwd[260];
-extern "C" wchar_t zpatch_local_wide_cwd[260];
 extern "C" char zpatch_local_iv_suffix[8];
-extern "C" std::uint32_t zpatch_local_saves_slot;    // off_10158064
-extern "C" std::uint32_t zpatch_local_path_08;       // dword_10159D08
-extern "C" std::uint32_t zpatch_local_path_10;       // dword_10159D10
-extern "C" std::uint32_t zpatch_local_episode_ptr;   // dword_10159D14
-extern "C" std::uint32_t zpatch_local_path_18;       // dword_10159D18
-extern "C" std::uint32_t zpatch_local_path_1c;       // dword_10159D1C
+// off_10158064: the game calls through this slot; the original's value is
+// sub_10051320 (int __stdcall(int, int, int, int, char*)).
+extern "C" int(__stdcall* zpatch_local_saves_slot)(std::uint32_t, std::uint32_t,
+                                                   std::uint32_t, std::uint32_t, char*);
+extern "C" char* zpatch_local_path_08;            // szPathLocalAppdata (0x11CCEA8)
+extern "C" wchar_t* zpatch_local_path_10;         // wszPathLocalAppdataW_EP
+extern "C" const int* zpatch_local_episode_ptr;   // __dwCurrentEpisode (0x112D788)
+extern "C" char* zpatch_local_path_18;            // szPathLocalAppdata_EP
+extern "C" wchar_t* zpatch_local_path_1c;         // wszPathLocalAppdataW
 // FreezeCarFix / DebugPrintSpawns: the spawn-probe selector (on-disk init -1),
 // the captured class, the suppress flag and the twelve published resumes.
 extern "C" std::uint32_t zpatch_spawns_kind;   // dword_10158058 (init 0xFFFFFFFF)
@@ -317,12 +331,12 @@ extern "C" std::uint8_t zpatch_flag_plane;         // byte_10159C17
 // MouseFix: the four published game pointers/function, the two resumes of its
 // naked bodies, body 0x10024560's xmm saves, and the exact constant pool the
 // helpers read (original .rdata bits).
-extern "C" std::uint32_t zpatch_mf_x;          // dword_10159C50 (int*)
-extern "C" std::uint32_t zpatch_mf_y;          // dword_10159C3C (int*)
-extern "C" std::uint32_t zpatch_mf_flag;       // dword_10159C5C (char*)
-extern "C" std::uint32_t zpatch_mf_time;       // dword_10159C34 (fn)
-extern "C" std::uint32_t zpatch_mf_resume_a;   // dword_10159C60 (match)
-extern "C" std::uint32_t zpatch_mf_resume_b;   // dword_10159C40 (match+0x756)
+extern "C" int* zpatch_mf_x;            // dword_10159C50 (int*)
+extern "C" int* zpatch_mf_y;            // dword_10159C3C (int*)
+extern "C" std::uint8_t* zpatch_mf_flag;  // dword_10159C5C (char*)
+extern "C" int (*zpatch_mf_time)();     // dword_10159C34 (clock callback)
+extern "C" std::uint8_t* zpatch_mf_resume_a;  // dword_10159C60 (match)
+extern "C" std::uint8_t* zpatch_mf_resume_b;  // dword_10159C40 (match+0x756)
 extern "C" float zpatch_mf_xmm_save[8];
 extern "C" double zpatch_mf_scale;       // 0.0078125
 extern "C" double zpatch_mf_scale_255;   // 255.0
@@ -338,19 +352,18 @@ extern "C" double zpatch_mf_neg_pi;      // -pi
 extern "C" unsigned char zpatch_mf_neg_mask[16];     // 4x 0x80000000
 extern "C" unsigned char zpatch_mf_double_sign[16];  // 2x 0x8000000000000000
 // OutOfCommissionFix: the resume (dword_10158034 = match+0x11), the logger
-// (dword_10159BF8), the original call target captured before the E8 is
-// overwritten (dword_10159C04), and the wrapper's dword_10159BFC argument.
-extern "C" std::uint32_t zpatch_ooc_resume;   // dword_10158034
-extern "C" std::uint32_t zpatch_ooc_logger;   // dword_10159BF8
-extern "C" std::uint32_t zpatch_ooc_orig;     // dword_10159C04
+// (dword_10159BF8, called with (buffer, 1, -1)), the original call target
+// captured before the E8 is overwritten (dword_10159C04) and the wrapper's
+// dword_10159BFC argument.
+extern "C" std::uint8_t* zpatch_ooc_resume;   // dword_10158034 (code)
+extern "C" void (*zpatch_ooc_logger)(char*, int, int);  // dword_10159BF8
+extern "C" std::uint32_t (*zpatch_ooc_orig)(std::uint32_t, std::uint32_t);  // dword_10159C04
 extern "C" std::uint32_t zpatch_ooc_state;    // dword_10159BFC
 // The original OOC decoder/archive working state (sub_1004B570/sub_1004B150 and
 // the fake-pak vector builder): same destinations keep the ordered writes.
-extern "C" std::uint32_t zpatch_ooc_input_bound;      // dword_101887D4
 extern "C" std::uint32_t zpatch_ooc_output_begin;    // dword_101A842C
 extern "C" std::uint32_t zpatch_ooc_output_cursor;   // dword_101A8430
 extern "C" std::uint32_t zpatch_ooc_output_end;      // dword_10196374
-extern "C" std::uint32_t zpatch_ooc_table_size;      // dword_10159C2C
 extern "C" std::uint32_t zpatch_ooc_archive_offset;  // dword_10159C78
 extern "C" std::uint32_t zpatch_ooc_vector_begin;    // Block (dword_1016E43C)
 extern "C" std::uint32_t zpatch_ooc_vector_end;      // dword_1016E440
@@ -368,16 +381,18 @@ extern "C" std::uint32_t zpatch_hqr_builder;  // dword_10159D04
 extern "C" std::uint32_t zpatch_hqr_dump[8];  // dword_10159CE8..10159CF0
 extern "C" std::uint32_t zpatch_hqr_flags;    // dword_10158060 = 0x11D
 extern "C" std::uint32_t zpatch_hqr_mode;     // dword_10159CE0 (stays 0)
-// CutsceneFixes chain B: the worker's two publishes, the body's accumulator and
-// the read-only constants it compares against (original .rdata/.data bits).
-extern "C" std::uint32_t zpatch_cutscene_target;   // dword_1015BDE4
-extern "C" std::uint32_t zpatch_cutscene_poke;     // dword_1015BDF0
-extern "C" std::uint64_t zpatch_cutscene_accum;    // dword_1015BDE8 (double)
-extern "C" std::uint64_t zpatch_cutscene_zero;     // 0x101522F0 = 0.0
-extern "C" std::uint64_t zpatch_cutscene_limit;    // 0x10152340 = 0.333333...
-extern "C" std::uint32_t zpatch_cutscene_abs_mask; // 0x101523D0 = 0x7FFFFFFF
-extern "C" std::uint32_t zpatch_cutscene_eps_a;    // 0x101522F8 = 0.05f
-extern "C" std::uint32_t zpatch_cutscene_eps_b;    // 0x101522FC = 0.5f
+// CutsceneFixes chain B: the worker's two publishes (dword_1015BDE4 is a game
+// function returning double, dword_1015BDF0 a byte the body pokes at [ptr-1]),
+// the body's double accumulator and the read-only constants it compares against
+// (original .rdata/.data bits). 0x101523D0 is a sign mask, not a number.
+extern "C" double (*zpatch_cutscene_target)(void*, int);  // dword_1015BDE4
+extern "C" std::uint8_t* zpatch_cutscene_poke;            // dword_1015BDF0
+extern "C" double zpatch_cutscene_accum;                  // qword_1015BDE8
+extern "C" double zpatch_cutscene_zero;                   // 0x101522F0 = 0.0
+extern "C" double zpatch_cutscene_limit;                  // 0x10152340 = 0.3333
+extern "C" std::uint32_t zpatch_cutscene_abs_mask;        // 0x101523D0 = 0x7FFFFFFF
+extern "C" float zpatch_cutscene_eps_a;                   // 0x101522F8 = 0.05f
+extern "C" float zpatch_cutscene_eps_b;                   // 0x101522FC = 0.5f
 // NewMemorySystem: the allocator singleton the handler's second scan publishes
 // (dword_10159CD8); the E8 body writes our CRageAllocator vtable at it.
 extern "C" std::uint32_t zpatch_nms_object;        // dword_10159CD8

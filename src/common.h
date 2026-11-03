@@ -6,11 +6,24 @@
 #include <span>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "INI.h"
+
+// The original allocators are std::malloc/std::free. This deleter lets a buffer
+// be owned without changing the allocator, and without adding a guard the
+// original does not have.
+struct FreeDeleter final
+{
+	void operator()(void* pointer) const noexcept { std::free(pointer); }
+};
+
+// The 64-byte name scratch the spawn/print formatters write into (the
+// original's own buffer bound, sub_10001280).
+inline constexpr std::size_t kSpawnsNameCapacity = 0x40u;
 
 // Result code of a patch pass; PatchResult::detail is always a fixed literal,
 // never an allocated message (the original reports through the log).

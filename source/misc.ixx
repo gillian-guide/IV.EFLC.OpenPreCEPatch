@@ -48,7 +48,6 @@ constexpr std::uint8_t kMiscJmpDisp0D = 0x0Du;          // jmp +0x0D
 void PublishCopSirensFlag(const PatchContext& ctx)
 {
 	Trace("publish CopSirensFlag");
-	// CopSirensFlag: 3 slots
 	if (ctx.Option("CopSirensFlag", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -73,7 +72,6 @@ void PublishCopSirensFlag(const PatchContext& ctx)
 void PublishPopupHeadlightsFlag(const PatchContext& ctx)
 {
 	Trace("publish PopupHeadlightsFlag");
-	// PopupHeadlightsFlag: 5 slots
 	if (ctx.Option("PopupHeadlightsFlag", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -100,21 +98,20 @@ void PublishPopupHeadlightsFlag(const PatchContext& ctx)
 void PublishSpeedupBugFix(const PatchContext& ctx)
 {
 	Trace("publish SpeedupBugFix");
-	// SpeedupBugFix: 8 slots
 	if (ctx.Option("SpeedupBugFix", "1"))
 	{
 		const GameImage& image = ctx.image;
 
 		if (auto pattern = Pattern(image, "50 64 89 25 00 00 00 00 83 EC 34"); pattern.size() > 0)
 		{
-			zpatch_speedup_t50 = *pattern.get(0).get<std::uint32_t>(26);
-			zpatch_speedup_t64 = *pattern.get(0).get<std::uint32_t>(165);
-			zpatch_speedup_t60 = *pattern.get(0).get<std::uint32_t>(188);
-			zpatch_speedup_t5c = *pattern.get(0).get<std::uint32_t>(226);
-			zpatch_speedup_t68 = *pattern.get(0).get<std::uint32_t>(234);
-			zpatch_speedup_t4c = *pattern.get(0).get<std::uint32_t>(249);
-			zpatch_speedup_t54 = *pattern.get(0).get<std::uint32_t>(264);
-			zpatch_speedup_t58 = *pattern.get(0).get<std::uint32_t>(276);
+			zpatch_speedup_t50 = RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(26));
+			zpatch_speedup_t64 = RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(165));
+			zpatch_speedup_t60 = RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(188));
+			zpatch_speedup_t5c = RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(226));
+			zpatch_speedup_t68 = RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(234));
+			zpatch_speedup_t4c = RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(249));
+			zpatch_speedup_t54 = RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(264));
+			zpatch_speedup_t58 = RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(276));
 		}
 	}
 }
@@ -122,7 +119,6 @@ void PublishSpeedupBugFix(const PatchContext& ctx)
 void PublishDrivebyFOVFix(const PatchContext& ctx)
 {
 	Trace("publish DrivebyFOVFix");
-	// DrivebyFOVFix: 2 slots
 	if (ctx.Option("DrivebyFOVFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -142,7 +138,6 @@ void PublishDrivebyFOVFix(const PatchContext& ctx)
 void PublishPatch4RemoveModChecks(const PatchContext& ctx)
 {
 	Trace("publish Patch4RemoveModChecks");
-	// Patch4RemoveModChecks: 1 slot
 	if (ctx.Option("Patch4RemoveModChecks", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -164,7 +159,6 @@ void ApplyRemoveUselessChecks(const PatchContext& ctx)
 void ApplyCopSirensFlag(const PatchContext& ctx)
 {
 	Trace("CopSirensFlag");
-	// CopSirensFlag: 3 siginstalls, 2 sigjumps
 	if (ctx.Option("CopSirensFlag", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -195,7 +189,6 @@ void ApplyCopSirensFlag(const PatchContext& ctx)
 void ApplyMiscFixes(const PatchContext& ctx)
 {
 	Trace("MiscFixes");
-	// MiscFixes: 12 literals
 	if (!zpatch_xliveless_present && ctx.Option("MiscFixes", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -270,7 +263,6 @@ void ApplyMiscFixes(const PatchContext& ctx)
 void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 {
 	Trace("Patch6and7RemoveModChecks");
-	// Patch6and7RemoveModChecks: 22 literals, 3 rvas
 	if (ctx.Option("Patch6and7RemoveModChecks", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -361,7 +353,6 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 void ApplyPopupHeadlightsFlag(const PatchContext& ctx)
 {
 	Trace("PopupHeadlightsFlag");
-	// PopupHeadlightsFlag: 3 siginstalls, 1 sigjump
 	if (ctx.Option("PopupHeadlightsFlag", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -398,7 +389,6 @@ void ApplyPopupHeadlightsFlag(const PatchContext& ctx)
 void ApplySpeedupBugFix(const PatchContext& ctx)
 {
 	Trace("SpeedupBugFix");
-	// SpeedupBugFix: 1 siginstall
 	if (ctx.Option("SpeedupBugFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -415,7 +405,6 @@ void ApplySpeedupBugFix(const PatchContext& ctx)
 void ApplyPatch7RemoveModChecks(const PatchContext& ctx)
 {
 	Trace("Patch7RemoveModChecks");
-	// Patch7RemoveModChecks: 3 rvas
 	if (ctx.Option("Patch7RemoveModChecks", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -452,7 +441,6 @@ void ApplyPatch7RemoveModChecks(const PatchContext& ctx)
 void ApplyDrivebyFOVFix(const PatchContext& ctx)
 {
 	Trace("DrivebyFOVFix");
-	// DrivebyFOVFix: 1 sigjump
 	if (ctx.Option("DrivebyFOVFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -469,7 +457,6 @@ void ApplyDrivebyFOVFix(const PatchContext& ctx)
 void ApplyPatch4RemoveModChecks(const PatchContext& ctx)
 {
 	Trace("Patch4RemoveModChecks");
-	// Patch4RemoveModChecks: 1 siginstall
 	if (ctx.Option("Patch4RemoveModChecks", "0"))
 	{
 		const GameImage& image = ctx.image;

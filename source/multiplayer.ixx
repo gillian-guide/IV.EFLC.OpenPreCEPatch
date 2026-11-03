@@ -24,7 +24,6 @@ void ApplyBetterMPSync(const PatchContext& ctx);
 void ApplyAllowHashesForIDE(const PatchContext& ctx)
 {
 	Trace("AllowHashesForIDE");
-	// AllowHashesForIDE: 1 sigjump
 	if (ctx.Option("AllowHashesForIDE", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -41,7 +40,6 @@ void ApplyAllowHashesForIDE(const PatchContext& ctx)
 void ApplyBetterMPSync(const PatchContext& ctx)
 {
 	Trace("BetterMPSync");
-	// BetterMPSync: 1 siginstall
 	if (ctx.Option("BetterMPSync", "0"))
 	{
 		const GameImage& image = ctx.image;

@@ -106,6 +106,15 @@ set_target_properties(zp_modules PROPERTIES CXX_SCAN_FOR_MODULES ON CXX_EXTENSIO
 target_sources(zp_modules PUBLIC FILE_SET CXX_MODULES FILES ${ZP_MODULE_UNITS}
                                                         ${ZP_ASI_MODULE_UNITS})
 target_sources(zp_modules PRIVATE source/hook_bodies.cpp source/xliveless.cpp)
+# The compiled helpers the bodies call: ordinary C++, split out of the assembly
+# unit so it holds only `__declspec(naked)` bodies, their published data and the
+# resolver table. ASI/test-side only - the dump never runs a body.
+target_sources(zp_modules PRIVATE
+  source/new_saves.cpp
+  source/nms_allocator.cpp
+  source/ooc.cpp
+  source/script_calls.cpp
+  source/vehicle_steer.cpp)
 target_include_directories(zp_modules PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/source
                                              ${CMAKE_CURRENT_SOURCE_DIR}/src
                                              ${ZP_EXT_INJECTOR}

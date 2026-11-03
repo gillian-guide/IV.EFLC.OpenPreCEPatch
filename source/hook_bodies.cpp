@@ -1,10 +1,17 @@
-// zp.hook_bodies - the implementation: the rebased globals the bodies publish,
-// the bodies themselves and the resolver's table.
+// zp.hook_bodies - the assembly unit: the rebased globals the bodies address by
+// name, the bodies themselves and the resolver's table.
 //
 // An implementation unit, not part of the interface: the bodies are `__declspec(naked)`
 // 32-bit assembly with inline `__asm`, which MSVC refuses to write into a module
 // interface (C2488). `@exact` marks a byte-exact transcription; tools/verify_bodies.py
 // proves those instruction-for-instruction against the shipped ASI.
+//
+// Everything that is ordinary C++ lives outside this unit: the OOC payload
+// (source/ooc.cpp), the NMS allocator (source/nms_allocator.cpp), the NewSaves
+// converter (source/new_saves.cpp), the native-script call layer
+// (source/script_calls.cpp) and the steer/engine/plane consumer
+// (source/vehicle_steer.cpp). Only the bodies, their published data and the
+// helpers the inline assembly calls remain here.
 //
 // The x64 write-set dump never runs the bodies - it needs only their addresses, which
 // tests/stub_bodies.cpp provides - so the assembly region is compiled out under
@@ -17,10 +24,7 @@ module;
 #include "rebased.h"
 #include "hooks.h"
 #include "driveby_seh.h"
-
-// The original ASI's compressed "finale2.sco" resource (OutOfCommissionFix's
-// payload); extracted from the shipped mod.
-#include "ooc_payload.h"
+#include "body_helpers.h"
 
 #include "hook_bodies.h"
 
@@ -43,26 +47,18 @@ extern "C"
 // Recovered values the bodies and their published globals were built from.
 // ---------------------------------------------------------------------------
 
-// Recovered float values. The value is the source of truth: a float target
-// takes it directly, and a uint32_t global/table (the bodies read/write those
-// dwords) takes std::bit_cast. The static_asserts pin the recovered bit
-// patterns, so a changed constant is a compile error.
-constexpr float kFloatOne = 1.0f;
+// Recovered float values. The value is the source of truth; the static_asserts
+// pin the recovered bit patterns, so a changed constant is a compile error.
 constexpr float kFloatQuarter = 0.25f;
-constexpr float kFloatHalf = 0.5f;
 constexpr float kDrivebyFov = 45.0f;
 constexpr float kPiOver2 = 1.5707964f;  // the original's rounded pi/2
-// The steering tilt uses a double pi (the original's 3.141592653589793).
-constexpr double kPi = 3.141592653589793;
 constexpr float kFchsOffset = 2.0f;
 constexpr float kBikeSpeedThreshold = 0.0066666668f;
 constexpr float kCutsceneEps = 0.05f;
 constexpr float kCutsceneSpeedLimit = 0.5f;
 constexpr double kCutsceneLimit = 0.3333;  // the original's stored double
 constexpr double kCutsceneZero = 0.0;
-static_assert(std::bit_cast<std::uint32_t>(kFloatOne) == 0x3F800000u);
 static_assert(std::bit_cast<std::uint32_t>(kFloatQuarter) == 0x3E800000u);
-static_assert(std::bit_cast<std::uint32_t>(kFloatHalf) == 0x3F000000u);
 static_assert(std::bit_cast<std::uint32_t>(kDrivebyFov) == 0x42340000u);
 static_assert(std::bit_cast<std::uint32_t>(kPiOver2) == 0x3FC90FDBu);
 static_assert(std::bit_cast<std::uint32_t>(kFchsOffset) == 0x40000000u);
@@ -72,28 +68,14 @@ static_assert(std::bit_cast<std::uint32_t>(kCutsceneSpeedLimit) == 0x3F000000u);
 static_assert(std::bit_cast<std::uint64_t>(kCutsceneLimit) == 0x3FD554C985F06F69ull);
 static_assert(std::bit_cast<std::uint64_t>(kCutsceneZero) == 0x0ull);
 constexpr std::uint32_t kFloatAbsMask = 0x7FFFFFFFu;  // clears a float's sign bit
-constexpr std::uint32_t kFloatSignBit = 0x80000000u;  // 1u << 31
-static_assert(kFloatSignBit == (1u << 31));
 
-// Opaque recovered layouts: the model registry's entry stride and the OOC
-// record's 5-bit padding field (the numbers are the original's).
-constexpr std::size_t kModelRegistryStride = 0xE0;
-static_assert(kModelRegistryStride == 224u);
-constexpr std::uint16_t kOocPadMask = 0x1Fu << 11;
+// Recovered layout constants the compiled helpers still use: the garage's
+// cleared flag word and the NewFiles/NoLivery/Episode name scratch.
 constexpr std::uint16_t kClearedLowBit = 0xFFFEu;          // clears flag bit 0
-constexpr std::size_t kSpawnsNameCapacity = 0x40u;  // name scratch (spawn/nolivery/ped)
-constexpr std::uint32_t kFlagBit4 = 1u << 4;               // object flag bit 4
-constexpr std::uint32_t kModelRegistryCountOffset = 0x14u; // +0: count
-constexpr std::uint32_t kModelEntryBoneOffset = 0x14u;     // name +0, bone +0x14
-constexpr std::uint32_t kPedModelHashOffset = 0x3Cu;       // CPed model hash
-constexpr std::uint32_t kVehicleComponentP1 = 0xB4u;        // ped+8 -> +0xB4
-constexpr std::uint32_t kVehicleComponentRegistry = 0xCu;   // -> +0xC
 constexpr std::uint32_t kNewFilesNameA = 0x10u;             // name, update A
 constexpr std::uint32_t kNewFilesNameB = 0x10Fu;            // name, update B
 constexpr std::size_t kNoLiveryNameCapacity = 0x10u;        // strcpy_s extent
 constexpr std::size_t kEpisodeSuffixCapacity = 0x40u;       // "\\Episode%d\\"
-constexpr std::uint8_t kUninitialisedHeapPoison = 0xCDu;    // MSVC debug CRT
-constexpr std::uint8_t kJeRel8Opcode = 0x74u;               // je rel8
 constexpr std::uint8_t kMovssStorePrefix = 0xF3u;           // movss dword ptr
 constexpr std::uint8_t kMovssTwoByteOpcode = 0x0Fu;
 constexpr std::uint8_t kMovssStoreOpcode = 0x11u;
@@ -107,87 +89,19 @@ constexpr std::uint32_t kBorderlessStyleMask =
     ~static_cast<std::uint32_t>(WS_CAPTION | WS_SYSMENU | WS_THICKFRAME |
                                 WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
 static_assert(kBorderlessStyleMask == 0xFF30FFFFu);
-// The short-jump and je opcodes the NewSaves flag toggle chooses between.
-constexpr std::size_t kOocPathCapacity = 0x44u;  // ooc name buffer
-// opaque: the OOC archive's build tag (the first dword of the original's
-// embedded resource). provenance: ZolikaPatch_original.asi resource at
-// 0x100B6798, IDA 2026-10-31; the self-test compares it byte-for-byte.
-// why: it is a build-time tag of the original's resource, not a derivable value.
-constexpr std::uint32_t kOocArchiveMagic = 0x86723DFFu;
-constexpr std::uint16_t kOocHeaderPage = 0x10u;  // header words[0]
-constexpr std::uint16_t kOocHeaderOp = 0xE9u;    // header words[1]
-constexpr std::uint8_t kOocPakMarker = 0xFAu;    // second byte of the pak blob
-constexpr std::uint8_t kOocRecordTag = 0xB0u;    // record[14]
-constexpr std::uint8_t kOocRecordTag2 = 0x02u;   // record[15]
-constexpr std::uint32_t kOocDecodedLength = 182272u;  // decoded stream length
-// grade B: recomputed from the decoded blob; the literals are the proof values.
-constexpr std::uint32_t kOocTableAdler = 0x41E794ABu;
-constexpr std::uint32_t kOocArchiveFnv = 0xB5AF7B10u;
 // opaque: model hashes the original handlers look up by hash (the game's
 // name->hash result); provenance: ZolikaPatch_original.asi sub_100469A0 /
 // sub_10044XXX, IDA 2026-10-31; why: the input strings are not in this repo.
 constexpr std::uint32_t kSuperLodLookupHash = 0xAE4B15D6u;
 constexpr std::uint32_t kSuperLodFallbackHash = 0xC703DB5Fu;
-constexpr std::uint32_t kScriptCallHash = 0x79023CFCu;  // zpatch_script_call
 constexpr std::uint32_t kPopupLightsHash = 0xEB9F21D3u;  // popuplights script
 constexpr std::uint32_t kNewFilesRegistrarKey = 0x2C89A1F9u;
-// NewSaves: header layout and the "SAVE" magic the reader checks.
-constexpr std::size_t kSaveHeaderSize = 0x110u;
-constexpr std::size_t kSaveMagicOffset = 0x0C;
-// The save-name buffers sub_10051FD0/1FE0 use: the game directory buffer and the
-// "<dir>\\<save name>" path built before converting.
-constexpr std::size_t kSaveDirectoryCapacity = 312;
-constexpr std::size_t kSaveFilePathCapacity = 560;
-
-// The original allocators are std::malloc/std::free. This deleter lets the
-// buffers be owned without changing the allocator, and without adding a guard
-// the original does not have.
-struct FreeDeleter final
-{
-	void operator()(void* pointer) const noexcept { std::free(pointer); }
-};
 
 // The DLC discovery scratch is the original's `::operator new` block.
 struct OperatorDeleteDeleter final
 {
 	void operator()(void* pointer) const noexcept { ::operator delete(pointer); }
 };
-// NewSaves' flag16 restore branch: 75 26 = jne +0x26 (the two bytes the original
-// writes back over the forced short jump).
-constexpr std::uint16_t kJneRel8Plus38 = 0x2675u;
-constexpr std::uint32_t kSaveMagic = static_cast<std::uint32_t>('S') |
-                                     (static_cast<std::uint32_t>('A') << 8) |
-                                     (static_cast<std::uint32_t>('V') << 16) |
-                                     (static_cast<std::uint32_t>('E') << 24);
-static_assert(kSaveMagic == 0x45564153u);
-
-// NewSavesCompatibility's save-image layout (original converter sub_10051B30
-// and the tramp bodies): an 0x110-byte header, then kSaveChunkCount chunks of a
-// 9-byte header whose dword at +5 is the chunk's total size, followed by that
-// payload. The three chunk sizes identify the newer save format; P2 writes one
-// of the two read sizes into the game's read call for it.
-constexpr std::size_t kSaveChunkCount = 18;
-constexpr std::uint32_t kSaveChunkHeaderSize = 9;
-constexpr std::size_t kSaveChunkSizeOffset = 5;
-constexpr std::uint32_t kSaveChunk9SizeNew = 19525u;
-constexpr std::uint32_t kSaveChunk13SizeNew = 5953u;
-constexpr std::uint32_t kSaveChunk16SizeNew = 3703u;
-constexpr std::uint32_t kSaveReadSizeNew = 3694u;  // overwrites the 0x0CBE push
-constexpr std::uint32_t kSaveReadSizeOld = 3262u;
-// The read hook reads into its own scratch, not the caller's buffer (the
-// original body does the same); 12 is the extra block P3 probes.
-constexpr std::uint32_t kNewSaveScratchSize = 3704u;
-constexpr std::uint32_t kNewSaveProbeSize = 12u;
-// Where the converter's hook sites sit inside their signature match: the E8 at
-// +6 (operand +7), the later LoadData call P3 repoints (+30), and the jne that
-// selects the read path (-5).
-constexpr std::ptrdiff_t kNewSaveCallSite = 6;
-constexpr std::ptrdiff_t kNewSaveCallOperand = 7;
-constexpr std::ptrdiff_t kNewSaveLoadOperand = 30;
-constexpr std::ptrdiff_t kNewSaveBranchSite = -5;
-// The read size is the immediate of the `68 BE 0C 00 00` push at P2 (+1).
-constexpr std::ptrdiff_t kNewSaveReadSizeOperand = 1;
-
 // ---------------------------------------------------------------------------
 // Rebased globals: the live globals the hook bodies address by name.
 // ---------------------------------------------------------------------------
@@ -228,7 +142,7 @@ extern "C"
 	std::uint32_t zpatch_episode_switch_resume_b = 0;        // dword_10159BB4
 	std::uint32_t zpatch_episode_switch_resume_c = 0;        // dword_10159BB8
 	std::uint32_t zpatch_episode_flag = 2;                   // unk_10158128 (int 2)
-	std::uint32_t zpatch_bike_value = 0;                     // dword_1015AD7C
+	float zpatch_bike_value = 0.0f;                          // dword_1015AD7C
 	std::uint32_t zpatch_bike_saved = 0;                     // dword_1015AD80
 	std::uint32_t zpatch_bike_resume = 0;                    // dword_1015AD84
 	std::uint32_t zpatch_collision_deadlock_should_walk = 0; // dword_1015BDD4
@@ -239,7 +153,7 @@ extern "C"
 	std::uint32_t zpatch_driveby_resolver = 0;               // dword_1015BDE0
 	std::uint32_t zpatch_driveby_resume = 0;                 // dword_1015BDF4
 	// dword_101580C4 (45.0f, original on-disk)
-	std::uint32_t zpatch_driveby_fov = std::bit_cast<std::uint32_t>(kDrivebyFov);
+	float zpatch_driveby_fov = kDrivebyFov;
 	std::uint32_t zpatch_driveby_cached = 0;           // dword_1015BDF8
 	std::uint8_t zpatch_driveby_done = 0;              // byte_1015AD4A
 	std::uint32_t zpatch_nolivery_name = 0;            // dword_10159BA8 (char*)
@@ -275,14 +189,14 @@ extern "C"
 	std::uint32_t zpatch_wheelangle_angles[512] = {};  // dword_10159D38
 	std::uint8_t zpatch_borderless_w_done = 0;         // byte_101A8445
 	std::uint8_t zpatch_borderless_a_done = 0;         // byte_101A8444
-	std::uint32_t zpatch_speedup_t4c = 0;              // dword_1015934C
-	std::uint32_t zpatch_speedup_t50 = 0;              // dword_10159350
-	std::uint32_t zpatch_speedup_t54 = 0;              // dword_10159354
-	std::uint32_t zpatch_speedup_t58 = 0;              // dword_10159358
-	std::uint32_t zpatch_speedup_t5c = 0;              // dword_1015935C
-	std::uint32_t zpatch_speedup_t60 = 0;              // dword_10159360
-	std::uint32_t zpatch_speedup_t64 = 0;              // dword_10159364
-	std::uint32_t zpatch_speedup_t68 = 0;              // dword_10159368
+	float* zpatch_speedup_t4c = nullptr;              // dword_1015934C
+	float* zpatch_speedup_t50 = nullptr;              // dword_10159350
+	float* zpatch_speedup_t54 = nullptr;              // dword_10159354
+	float* zpatch_speedup_t58 = nullptr;              // dword_10159358
+	float* zpatch_speedup_t5c = nullptr;              // dword_1015935C
+	float* zpatch_speedup_t60 = nullptr;              // dword_10159360
+	float* zpatch_speedup_t64 = nullptr;              // dword_10159364
+	float* zpatch_speedup_t68 = nullptr;              // dword_10159368
 	// OverrideGTADatPath: the original pushed its own "common:/data/gta.dat" global;
 	// we push this buffer instead (filled from OverrideGTADatPathTo at load).
 	char zpatch_override_gta_dat_path[260] = "common:/data/gta.dat";
@@ -291,7 +205,7 @@ extern "C"
 	std::uint32_t zpatch_popup_model = 0;
 	std::uint32_t zpatch_popup_flag = 0;
 	std::uint32_t zpatch_popup_index = 0;
-	std::uint32_t zpatch_popup_angle = std::bit_cast<std::uint32_t>(kPiOver2);
+	float zpatch_popup_angle = kPiOver2;
 	std::uint32_t zpatch_popup_resume_a = 0;
 	std::uint32_t zpatch_popup_resume_b = 0;
 	std::uint32_t zpatch_popup_hashes[512] = {};
@@ -299,7 +213,7 @@ extern "C"
 	// ForceCarHeadlightShadows: dword_101580C0 is pre-set to 2.0f on disk.
 	std::uint32_t zpatch_fchs_param = 0;
 	std::uint32_t zpatch_fchs_resume = 0;
-	std::uint32_t zpatch_fchs_offset = std::bit_cast<std::uint32_t>(kFchsOffset);
+	float zpatch_fchs_offset = kFchsOffset;
 	std::uint32_t zpatch_fchs_hashes[512] = {};
 	float zpatch_fchs_offsets[512] = {};
 	// BadPlayerModelCrashFix scratch.
@@ -358,7 +272,6 @@ extern "C"
 	std::uint32_t zpatch_gfwl_resume = 0;
 	std::uint32_t zpatch_carparts_shadow_fn = 0; // dword_1015B5B8
 	std::uint32_t zpatch_carparts_resume_2 = 0;  // dword_1015BDCC
-	std::uint32_t zpatch_car_dynamic_d = 0;      // dword_1015BDC4
 	// DualVehicleHeadlights.
 	std::uint32_t zpatch_dual_bcc = 0;      // dword_10159BCC
 	std::uint32_t zpatch_dual_bd0 = 0;      // dword_10159BD0
@@ -377,14 +290,15 @@ extern "C"
 	std::uint32_t zpatch_dual_r_esp = 0;    // dword_10159BF4
 	// LocalSettingsPath.
 	char zpatch_local_ansi_cwd[260] = {};
-	wchar_t zpatch_local_wide_cwd[260] = {};
 	char zpatch_local_iv_suffix[8] = "\\GTA IV";
-	std::uint32_t zpatch_local_saves_slot = 0;
-	std::uint32_t zpatch_local_path_08 = 0;
-	std::uint32_t zpatch_local_path_10 = 0;
-	std::uint32_t zpatch_local_episode_ptr = 0;
-	std::uint32_t zpatch_local_path_18 = 0;
-	std::uint32_t zpatch_local_path_1c = 0;
+	int(__stdcall* zpatch_local_saves_slot)(std::uint32_t, std::uint32_t,
+	                                         std::uint32_t, std::uint32_t,
+	                                         char*) = nullptr;
+	char* zpatch_local_path_08 = nullptr;
+	wchar_t* zpatch_local_path_10 = nullptr;
+	const int* zpatch_local_episode_ptr = nullptr;
+	char* zpatch_local_path_18 = nullptr;
+	wchar_t* zpatch_local_path_1c = nullptr;
 	// FreezeCarFix / DebugPrintSpawns.
 	std::uint32_t zpatch_spawns_kind = std::numeric_limits<std::uint32_t>::max();
 	std::uint32_t zpatch_spawns_class = 0;
@@ -437,12 +351,12 @@ extern "C"
 	// MouseFix (see the hook bodies). The constants are not const so the
 	// inline assembler can address them as plain external symbols; nothing writes
 	// them. Values are the original .rdata bits (hex floats keep them exact).
-	std::uint32_t zpatch_mf_x = 0;
-	std::uint32_t zpatch_mf_y = 0;
-	std::uint32_t zpatch_mf_flag = 0;
-	std::uint32_t zpatch_mf_time = 0;
-	std::uint32_t zpatch_mf_resume_a = 0;
-	std::uint32_t zpatch_mf_resume_b = 0;
+	int* zpatch_mf_x = nullptr;
+	int* zpatch_mf_y = nullptr;
+	std::uint8_t* zpatch_mf_flag = nullptr;
+	int (*zpatch_mf_time)() = nullptr;
+	std::uint8_t* zpatch_mf_resume_a = nullptr;
+	std::uint8_t* zpatch_mf_resume_b = nullptr;
 	float zpatch_mf_xmm_save[8] = {};
 	double zpatch_mf_scale = 0.0078125;
 	double zpatch_mf_scale_255 = 255.0;
@@ -463,15 +377,13 @@ extern "C"
 	alignas(16) unsigned char zpatch_mf_double_sign[16] = {0, 0, 0, 0, 0, 0, 0, 0x80,
 	                                                       0, 0, 0, 0, 0, 0, 0, 0x80};
 	// OutOfCommissionFix (see the hook bodies).
-	std::uint32_t zpatch_ooc_resume = 0;
-	std::uint32_t zpatch_ooc_logger = 0;
-	std::uint32_t zpatch_ooc_orig = 0;
+	std::uint8_t* zpatch_ooc_resume = nullptr;
+	void (*zpatch_ooc_logger)(char*, int, int) = nullptr;
+	std::uint32_t (*zpatch_ooc_orig)(std::uint32_t, std::uint32_t) = nullptr;
 	std::uint32_t zpatch_ooc_state = 0;
-	std::uint32_t zpatch_ooc_input_bound = 0;
 	std::uint32_t zpatch_ooc_output_begin = 0;
 	std::uint32_t zpatch_ooc_output_cursor = 0;
 	std::uint32_t zpatch_ooc_output_end = 0;
-	std::uint32_t zpatch_ooc_table_size = 0;
 	std::uint32_t zpatch_ooc_archive_offset = 0;
 	std::uint32_t zpatch_ooc_vector_begin = 0;
 	std::uint32_t zpatch_ooc_vector_end = 0;
@@ -487,14 +399,14 @@ extern "C"
 	// CutsceneFixes chain B (see the hook bodies): the worker's two publishes, the body's
 	// frame-time accumulator (the original's .data BSS, past the raw data, so 0) and
 	// the read-only constants it compares against (original .rdata/.data bits).
-	std::uint32_t zpatch_cutscene_target = 0;                    // dword_1015BDE4
-	std::uint32_t zpatch_cutscene_poke = 0;                      // dword_1015BDF0
-	std::uint64_t zpatch_cutscene_accum = 0;                     // qword_1015BDE8 (BSS: starts 0)
-	std::uint64_t zpatch_cutscene_zero = std::bit_cast<std::uint64_t>(kCutsceneZero);
-	std::uint64_t zpatch_cutscene_limit = std::bit_cast<std::uint64_t>(kCutsceneLimit);
-	std::uint32_t zpatch_cutscene_abs_mask = kFloatAbsMask;           // 0x101523D0
-	std::uint32_t zpatch_cutscene_eps_a = std::bit_cast<std::uint32_t>(kCutsceneEps);
-	std::uint32_t zpatch_cutscene_eps_b = std::bit_cast<std::uint32_t>(kCutsceneSpeedLimit);
+	double (*zpatch_cutscene_target)(void*, int) = nullptr;  // dword_1015BDE4
+	std::uint8_t* zpatch_cutscene_poke = nullptr;            // dword_1015BDF0
+	double zpatch_cutscene_accum = 0.0;                      // qword_1015BDE8 (BSS: starts 0)
+	double zpatch_cutscene_zero = kCutsceneZero;
+	double zpatch_cutscene_limit = kCutsceneLimit;
+	std::uint32_t zpatch_cutscene_abs_mask = kFloatAbsMask;  // 0x101523D0
+	float zpatch_cutscene_eps_a = kCutsceneEps;
+	float zpatch_cutscene_eps_b = kCutsceneSpeedLimit;
 	// NewMemorySystem: the allocator singleton the handler's second scan publishes
 	// (the immediate of `mov esi, 0x19cf9f0`); the E8 body writes our vtable there.
 	std::uint32_t zpatch_nms_object = 0; // dword_10159CD8
@@ -663,7 +575,6 @@ constexpr GlobalSlot kGlobalSlots[] = {
 	{"dword_1015AD88", &zpatch_new_saves_resume},
 	{"dword_10159C18", &zpatch_gfwl_resume},
 	{"dword_1015B5B8", &zpatch_carparts_shadow_fn},
-	{"dword_1015BDC4", &zpatch_car_dynamic_d},
 	{"dword_1015BDCC", &zpatch_carparts_resume_2},
 	// DualVehicleHeadlights's five published game pointers.
 	{"dword_10159BCC", &zpatch_dual_bcc},
@@ -733,86 +644,13 @@ std::uintptr_t FindGlobalSlot(std::string_view slot_name) noexcept
 constexpr std::size_t kModelIndexOffset = 0x2E;
 // CPed's class id: the original compares the vtable result against 6.
 constexpr char kPedModelClassId = 6;
-constexpr std::size_t kVehicleSteeringOffset = 0x10D8;
-constexpr std::size_t kVehicleBoneOffset = 0xE18;
-constexpr std::size_t kVehicleLockOwnerOffset = 0x84;
-constexpr std::size_t kVehicleRpmOffset = 0x10C8;
-constexpr std::size_t kVehicleFlagsOffset = 0xF64;
-constexpr std::size_t kVehicleEngineStateOffset = 0x1354;
-constexpr std::size_t kVehicleSuspensionTravelOffset = 0x1F3C;
-constexpr std::size_t kVehiclePitchOffset = 0x1F08;
-constexpr std::size_t kVehicleRollOffset = 0x1F04;
-constexpr std::size_t kVehicleHeaveOffset = 0x1F00;
+// CPed's model hash (BadPlayerModelCrashFix's fallback name lookup).
+constexpr std::uint32_t kPedModelHashOffset = 0x3Cu;
 // The bodies below are 32-bit assembly. The x64 write-set dump never runs
 // them - it only needs their addresses, which tests/stub_bodies.cpp provides -
 // so the whole assembly region is compiled out for it.
 #if !defined(ZP_DUMP_TOOL)
 
-// The one VA-to-function conversion the bodies use: a handler stores its
-// destination as a plain module VA (dword), so this is the only place that
-// turns it back into a callable.
-template <typename Fn>
-Fn GameFunction(std::uintptr_t va) noexcept
-{
-	return reinterpret_cast<Fn>(va);
-}
-
-// The save file is this code's own file: an owned stream in the original's
-// binary read-only mode. A short read leaves the rest of the buffer untouched
-// and is ignored, exactly like the original's unchecked std::fread calls.
-class SaveFile final
-{
-public:
-	explicit SaveFile(const char* path) : stream_(path, std::ios::binary) {}
-
-	bool IsOpen() const noexcept { return stream_.is_open(); }
-
-	void Read(std::span<std::byte> out) noexcept
-	{
-		ReadRaw(out.data(), static_cast<std::uint32_t>(out.size()));
-	}
-
-	// The unchecked-payload path: the original hands std::malloc's pointer
-	// straight to fread, so a null block faults inside the read. Keep that.
-	void ReadRaw(std::byte* out, std::uint32_t bytes) noexcept
-	{
-		stream_.read(reinterpret_cast<char*>(out), static_cast<std::streamsize>(bytes));
-	}
-
-private:
-	std::ifstream stream_;
-};
-
-std::array<std::byte, kSaveHeaderSize> ReadSaveHeader(SaveFile& file) noexcept
-{
-	std::array<std::byte, kSaveHeaderSize> header;
-	file.Read(header);
-	return header;
-}
-
-// One chunk header: the dword at +5 is the chunk's total size (payload follows).
-struct SaveChunk final
-{
-	std::uint32_t size;
-	std::uint32_t payload;
-};
-
-SaveChunk ReadChunkHeader(SaveFile& file, std::span<std::byte> chunk) noexcept
-{
-	file.Read(chunk);
-	std::uint32_t size = 0;
-	std::memcpy(&size, chunk.data() + kSaveChunkSizeOffset, sizeof(size));
-	return {size, size - kSaveChunkHeaderSize};
-}
-
-// The original mallocs the payload unchecked and passes it to fread. The
-// unique_ptr adds ownership only (same malloc/free, no null guard), so the
-// fault on a failed allocation is unchanged.
-void ReadPayload(SaveFile& file, std::uint32_t bytes) noexcept
-{
-	const std::unique_ptr<void, FreeDeleter> payload(std::malloc(bytes));
-	file.ReadRaw(static_cast<std::byte*>(payload.get()), bytes);
-}
 
 extern "C"
 {
@@ -862,10 +700,9 @@ bool abi_super_lod_helper(const void* object) noexcept
 // below 0.006666666665 to 0x3BDA740E. SSE in the original.
 void abi_bike_physics_helper() noexcept
 {
-	float value = 0.0f;
-	std::memcpy(&value, &zpatch_bike_value, sizeof(value));
+	const float value = zpatch_bike_value;
 	if (0.006666666665 > static_cast<double>(value))
-		zpatch_bike_value = std::bit_cast<std::uint32_t>(kBikeSpeedThreshold);
+		zpatch_bike_value = kBikeSpeedThreshold;
 }
 
 // PopupHeadlightsFlag checker (original sub_10044310), called between
@@ -876,7 +713,7 @@ void abi_popup_check() noexcept
 {
 	const auto lookup = reinterpret_cast<int(__cdecl*)(std::uint32_t, std::int32_t*)>(
 	    static_cast<std::uintptr_t>(zpatch_model_lookup));
-	zpatch_popup_angle = std::bit_cast<std::uint32_t>(kPiOver2);  // dword_101580CC: pi/2
+	zpatch_popup_angle = kPiOver2;  // dword_101580CC: pi/2
 	zpatch_popup_flag = 0;             // dword_1015BE24
 	std::int32_t out = -1;
 	lookup(kPopupLightsHash, &out);  // sub_10044310's call is unguarded
@@ -899,9 +736,7 @@ void abi_popup_check() noexcept
 			if (zpatch_popup_hashes[k] != 0 &&
 			    zpatch_popup_hashes[k] == hash)
 			{
-				std::uint32_t bits = 0;
-				std::memcpy(&bits, &zpatch_popup_angles[k], sizeof(bits));
-				zpatch_popup_angle = bits;
+				zpatch_popup_angle = zpatch_popup_angles[k];
 			}
 		}
 		return;
@@ -916,7 +751,7 @@ void abi_fchs_check() noexcept
 {
 	const std::uint32_t* const hashes = zpatch_fchs_hashes;
 	std::uint32_t hash = hashes[0];
-	zpatch_fchs_offset = std::bit_cast<std::uint32_t>(kFchsOffset);  // 2.0f
+	zpatch_fchs_offset = kFchsOffset;  // 2.0f
 	if (hash == 0u) return;
 	const auto lookup = reinterpret_cast<int(__cdecl*)(std::uint32_t, std::int32_t*)>(
 	    static_cast<std::uintptr_t>(zpatch_model_lookup));
@@ -931,9 +766,7 @@ void abi_fchs_check() noexcept
 		if (static_cast<std::int32_t>(
 		        *reinterpret_cast<const std::int16_t*>(base + kModelIndexOffset)) == index)
 		{
-			float value = 0.0f;
-			std::memcpy(&value, &zpatch_fchs_offsets[i], sizeof(value));
-			std::memcpy(&zpatch_fchs_offset, &value, sizeof(value));
+			zpatch_fchs_offset = zpatch_fchs_offsets[i];
 			return;
 		}
 		++i;
@@ -945,17 +778,9 @@ void abi_fchs_check() noexcept
 	}
 }
 
-// Native-script "call by hash" layer (sub_100038E0 and the sub_1005Bxxx
-// wrappers): the resolver (dword_1015BDE0, game 0x626AF0 on 1.0.8.0) takes the
-// hash in ECX/ESI and the 0xA4-byte call block in EDX; the handler is cdecl with
-// one argument. The original always returns (char)1 and skips a null handler.
-extern "C" std::uint32_t zpatch_script_resolve(std::uint32_t hash);
-extern "C" std::uint32_t zpatch_script_resolve_with_block(std::uint32_t hash,
-                                                           void* block);
-extern "C" std::uint32_t __cdecl zpatch_script_resolve_seh(std::uint32_t hash,
-                                                            std::uint32_t edx_arg);
-// Unmangled so the inline asm can call it (the declaration is in namespace
-// zpatch).
+// The native-script call layer's resolver entry points: unmangled so the
+// inline asm and the call layer can name them (src/body_helpers.h declares
+// them). The layer itself is source/script_calls.cpp.
 __declspec(naked) std::uint32_t zpatch_script_resolve(std::uint32_t)
 {
 	// Naked: EDX carries the caller's block, so push it explicitly and keep the
@@ -984,85 +809,6 @@ __declspec(naked) std::uint32_t zpatch_script_resolve_with_block(std::uint32_t,
 	}
 }
 
-static std::uint32_t __cdecl zpatch_resolver_call(std::uint32_t hash,
-                                                  std::uint32_t edx_arg)
-{
-	return zpatch_script_resolve_with_block(
-	    hash, reinterpret_cast<void*>(static_cast<std::uintptr_t>(edx_arg)));
-}
-
-extern "C" __declspec(noinline) std::uint32_t __cdecl
-zpatch_script_resolve_seh(std::uint32_t hash, std::uint32_t edx_arg)
-{
-	return detail::driveby_resolve_seh(&zpatch_resolver_call, hash, edx_arg);
-}
-
-extern "C" __declspec(noinline) std::uint32_t __cdecl
-zpatch_driveby_resolve_seh(std::uint32_t hash, std::uint32_t edx_arg)
-{
-	return zpatch_script_resolve_seh(hash, edx_arg);
-}
-
-struct zpatch_native_block final
-{
-	std::uint32_t m_p_return;   // +0x00 = &args
-	std::uint32_t m_arg_count;  // +0x04
-	std::uint32_t m_p_args;     // +0x08 = &args
-	std::uint32_t m_out_count;  // +0x0C
-	std::uint32_t m_out_ptrs[4];  // +0x10
-	struct record final { std::uint32_t v[3]; std::uint32_t padding; };
-	record m_records[4];        // +0x20 (sub_100038C0 zeroes v[0..2] of each)
-	std::uint32_t args[17];     // +0x60 (arg 0 is the return slot)
-};
-
-extern "C" char zpatch_script_call_by_hash(std::uint32_t hash, void* block) noexcept
-{
-	const auto handler = reinterpret_cast<void(__cdecl*)(void*)>(
-	    static_cast<std::uintptr_t>(zpatch_script_resolve_with_block(hash, block)));
-	if (handler) handler(block);
-	return 1;
-}
-
-// One builder covers every wrapper: the sub_1005DE40/DE80 cleanup loops are
-// identical (copy out each pending record, then return args[0]; DE80 returns
-// only its low byte).
-extern "C" std::uint32_t zpatch_script_call(std::uint32_t hash, std::uint32_t nargs,
-                                            const std::uint32_t* args) noexcept
-{
-	zpatch_native_block block;
-	// The original clears 0xA0 bytes (args[16] stays dirty; preserved).
-	std::memset(&block, 0, offsetof(zpatch_native_block, args[16]));
-	for (auto& record : block.m_records)
-	{
-		record.v[0] = 0;
-		record.v[1] = 0;
-		record.v[2] = 0;
-	}
-	const auto base = static_cast<std::uint32_t>(
-	    reinterpret_cast<std::uintptr_t>(block.args));
-	block.m_p_return = base;
-	block.m_p_args = base;
-	block.m_arg_count = nargs;
-	for (std::uint32_t i = 0; i < nargs && i < 17u; ++i) block.args[i] = args[i];
-	zpatch_script_call_by_hash(hash, &block);
-	while (block.m_out_count != 0u)
-	{
-		--block.m_out_count;
-		auto* destination = reinterpret_cast<std::uint32_t*>(
-		    static_cast<std::uintptr_t>(block.m_out_ptrs[block.m_out_count]));
-		const auto& source = block.m_records[block.m_out_count];
-		destination[0] = source.v[0];
-		destination[1] = source.v[1];
-		destination[2] = source.v[2];
-	}
-	return block.args[0];
-}
-
-extern "C" std::uint8_t zpatch_script_call_bool(std::uint32_t hash, std::uint32_t nargs,
-                                                const std::uint32_t* args) noexcept
-{
-	return static_cast<std::uint8_t>(zpatch_script_call(hash, nargs, args));
-}
 
 // The MP-only diagnostic name lookup of sub_10003F00 walks the original ASI's
 // own 38455-entry model-name table (0x100DE770); single-player never reaches
@@ -1087,16 +833,6 @@ __declspec(naked) const char* zpatch_spawns_name_ecx()
 }
 
 extern "C" const char* zpatch_spawns_who_edx();  // sub_1005B290 twin, arg in EDX
-namespace
-{
-const char* zpatch_spawns_who_c(std::uint32_t id) noexcept
-{
-	// The original reads the native hash from [0x101580C8] (zpatch_salt_c8); the
-	// loader's probe-miss fallback rewrites that slot on 1000/1010/1040.
-	return reinterpret_cast<const char*>(static_cast<std::uintptr_t>(
-	    zpatch_script_call(zpatch_salt_c8, 1, &id)));
-}
-}  // namespace
 __declspec(naked) const char* zpatch_spawns_who_edx()
 {
 	__asm {
@@ -1108,15 +844,6 @@ __declspec(naked) const char* zpatch_spawns_who_edx()
 }
 
 extern "C" void zpatch_spawns_print_edx();  // sub_1005B530 twin, arg in EDX
-namespace
-{
-void zpatch_spawns_print_c(const char* text) noexcept
-{
-	const std::uint32_t arg = static_cast<std::uint32_t>(
-	    reinterpret_cast<std::uintptr_t>(text));
-	zpatch_script_call(kScriptCallHash, 1, &arg);
-}
-}  // namespace
 __declspec(naked) void zpatch_spawns_print_edx()
 {
 	__asm {
@@ -1127,16 +854,6 @@ __declspec(naked) void zpatch_spawns_print_edx()
 	}
 }
 
-// sub_10001280: the original's bounded formatter (buf, size, fmt, ...).
-extern "C" int zpatch_spawns_sprintf(char* buffer, std::size_t size,
-                                     const char* format, ...)
-{
-	va_list args;
-	va_start(args, format);
-	const int result = _vsnprintf_s(buffer, size, _TRUNCATE, format, args);
-	va_end(args);
-	return result;
-}
 
 // sub_1005FE7B: the /GS cookie check (cookie in ECX). It is the last call on
 // the probe's return path, so it must preserve EAX (the model index); the
@@ -1264,25 +981,9 @@ extern "C" char abi_death_music_install() noexcept
 	return 1;
 }
 
-// The NewSavesCompatibility converter (original sub_10051B30): parse the save's
-// 0x110-byte header (magic "SAVE" at +0xC), walk 18 chunks of 9-byte header +
-// payload, record the new-format chunk sizes, then patch three game sites.
-namespace
-{
-// Byte/word/dword stores through VirtualProtect. As in every original handler,
-// the result is ignored and the write happens anyway (an unmapped target faults).
-void wp_byte(void* address, std::uint8_t value) noexcept
-{
-	injector::WriteMemory<std::uint8_t>(address, value, true);  // byte store
-}
-void wp_dword(void* address, std::uint32_t value) noexcept
-{
-	injector::WriteMemory<std::uint32_t>(address, value, true);  // dword store
-}
-void wp_word(void* address, std::uint16_t value) noexcept
-{
-	injector::WriteMemory<std::uint16_t>(address, value, true);  // word store
-}
+// The running image's first match; null when the module header or the pattern
+// is missing. The bodies share this one scanner (src/body_helpers.h declares
+// it).
 const std::uint8_t* scan_game(std::string_view signature) noexcept
 {
 	const auto* module = reinterpret_cast<const std::uint8_t*>(GetModuleHandleA(nullptr));
@@ -1296,7 +997,6 @@ const std::uint8_t* scan_game(std::string_view signature) noexcept
 	if (!FindPattern(view, signature, match)) return nullptr;
 	return match.address;
 }
-}  // namespace
 
 // The original's path/name helpers call the secure CRT (`strcpy_s`/`wcscpy_s`)
 // through its IAT; the volatile pointer keeps a distinct secure-copy call.
@@ -1372,9 +1072,7 @@ extern "C" int __stdcall zpatch_local_copy_saves(std::uint32_t, std::uint32_t,
 extern "C" void zpatch_local_settings_capture_cwd() noexcept
 {
 	GetCurrentDirectoryA(kLocalPathCapacity, zpatch_local_ansi_cwd);
-	GetCurrentDirectoryW(kLocalPathCapacity, zpatch_local_wide_cwd);
-	zpatch_local_saves_slot = static_cast<std::uint32_t>(
-	    reinterpret_cast<std::uintptr_t>(&zpatch_local_copy_saves));
+	zpatch_local_saves_slot = &zpatch_local_copy_saves;
 }
 
 // The detours' helper (original sub_10050D10): rewrites the game's four
@@ -1434,11 +1132,7 @@ constexpr std::size_t kSettingsPathCapacity = 0x200u;
 
 extern "C" void zpatch_local_settings_step() noexcept
 {
-	const int episode = zpatch_local_episode_ptr
-	                        ? *reinterpret_cast<const int*>(
-	                              static_cast<std::uintptr_t>(
-	                                  zpatch_local_episode_ptr))
-	                        : 0;
+	const int episode = zpatch_local_episode_ptr ? *zpatch_local_episode_ptr : 0;
 	const char* ansi_name = "GTA IV";
 	const wchar_t* wide_name = L"GTA IV";
 	if (episode == 1)
@@ -1460,25 +1154,13 @@ extern "C" void zpatch_local_settings_step() noexcept
 	zpatch_build_ansi_path(ansi_episode, ansi_name);
 	zpatch_build_wide_path(wide_episode, wide_name);
 	if (zpatch_local_path_18)
-		zpatch_copy_path({reinterpret_cast<char*>(static_cast<std::uintptr_t>(
-		                      zpatch_local_path_18)),
-		                  kSettingsPathCapacity},
-		                 ansi_iv.data());
+		zpatch_copy_path({zpatch_local_path_18, kSettingsPathCapacity}, ansi_iv.data());
 	if (zpatch_local_path_08)
-		zpatch_copy_path({reinterpret_cast<char*>(static_cast<std::uintptr_t>(
-		                      zpatch_local_path_08)),
-		                  kSettingsPathCapacity},
-		                 ansi_episode.data());
+		zpatch_copy_path({zpatch_local_path_08, kSettingsPathCapacity}, ansi_episode.data());
 	if (zpatch_local_path_1c)
-		zpatch_copy_wpath({reinterpret_cast<wchar_t*>(static_cast<std::uintptr_t>(
-		                       zpatch_local_path_1c)),
-		                   kSettingsPathCapacity},
-		                  wide_episode.data());
+		zpatch_copy_wpath({zpatch_local_path_1c, kSettingsPathCapacity}, wide_episode.data());
 	if (zpatch_local_path_10)
-		zpatch_copy_wpath({reinterpret_cast<wchar_t*>(static_cast<std::uintptr_t>(
-		                       zpatch_local_path_10)),
-		                   kSettingsPathCapacity},
-		                  wide_episode.data());
+		zpatch_copy_wpath({zpatch_local_path_10, kSettingsPathCapacity}, wide_episode.data());
 	zpatch_cookie_tail();
 }
 
@@ -1586,205 +1268,9 @@ __declspec(naked) std::int32_t zpatch_garage_lookup_model()
 	}
 }
 
-// MovingSteeringWheelSupport / ShakingEngineBlock / MovingPlaneParts.
-// abi_vehicle_component is the original sub_10003F40: a name lookup in the
-// model registry (entries at [registry], stride 0xE0, count +0x14, name +0,
-// bone id +0x14). abi_steer_body is the shared consumer (original
-// sub_10004C70), called between pushad/popad by the two detours.
-extern "C" const void* abi_vehicle_component(const void* registry,
-                                             const char* name) noexcept
-{
-	// sub_10003F40 dereferences the registry and each candidate name unguarded.
-	const auto* entries = *reinterpret_cast<const std::uint8_t* const*>(registry);
-	const auto count = *reinterpret_cast<const std::uint16_t*>(
-	    static_cast<const std::uint8_t*>(registry) + kModelRegistryCountOffset);
-	for (std::uint16_t i = 0; i < count; ++i)
-	{
-		const auto* entry = entries + static_cast<std::size_t>(i) * kModelRegistryStride;
-		const char* candidate = *reinterpret_cast<const char* const*>(entry);
-		if (_stricmp(candidate, name) == 0) return entry;
-	}
-	return nullptr;
-}
-
-// sub_10003980's script-float layout: ctx+0x0E holds the slot offset, the slot
-// is at ctx+offset+0x18 and the float at slot+8.
-constexpr std::size_t kScriptOffsetField = 0x0E;
-constexpr std::size_t kScriptSlotBase = 0x18;
-constexpr std::size_t kScriptFloatOffset = 8;
-
-extern "C" std::uint32_t abi_steer_body() noexcept
-{
-	auto* const vehicle = reinterpret_cast<std::uint8_t*>(
-	    static_cast<std::uintptr_t>(zpatch_steer_vehicle));
-
-	using BoneFn = std::uint32_t*(__thiscall*)(void*, std::uint32_t);
-	using SetFn = void(__thiscall*)(std::uint32_t*, float);
-	using PartFn = void(__thiscall*)(void*, int, int, float, int, int, int);
-	const auto lookup = reinterpret_cast<int(__cdecl*)(std::uint32_t, std::int32_t*)>(
-	    static_cast<std::uintptr_t>(zpatch_model_lookup));
-	const auto get_bone = reinterpret_cast<BoneFn>(
-	    static_cast<std::uintptr_t>(zpatch_pre_fn_59b88));
-	const auto set_a = reinterpret_cast<SetFn>(
-	    static_cast<std::uintptr_t>(zpatch_pre_fn_5d63c));
-	const auto set_b = reinterpret_cast<SetFn>(
-	    static_cast<std::uintptr_t>(zpatch_pre_fn_59cdc));
-	const auto part_call = reinterpret_cast<PartFn>(
-	    static_cast<std::uintptr_t>(zpatch_steer_vtable_fn));
-
-	// sub_10003980: read the current script float (resolver hash salt_3c).
-	const auto script_float = [&]() -> float
-	{
-		const std::uint32_t ctx = zpatch_script_resolve(zpatch_salt_3c);
-		const std::uint32_t offset =
-		    *reinterpret_cast<const std::uint32_t*>(
-		        static_cast<std::uintptr_t>(ctx) + kScriptOffsetField);
-		const std::uint32_t value = *reinterpret_cast<const std::uint32_t*>(
-		    static_cast<std::uintptr_t>(ctx) + offset + kScriptSlotBase);
-		return *reinterpret_cast<const float*>(
-		    static_cast<std::uintptr_t>(value) + kScriptFloatOffset);
-	};
-	const auto model_of = [vehicle]()
-	{
-		return *reinterpret_cast<const std::int16_t*>(vehicle + kModelIndexOffset);
-	};
-	const auto identity = [](std::uint32_t* m)
-	{
-		m[0] = std::bit_cast<std::uint32_t>(kFloatOne);
-		m[1] = 0;
-		m[2] = 0;
-		m[4] = 0;
-		m[5] = std::bit_cast<std::uint32_t>(kFloatOne);
-		m[6] = 0;
-		m[8] = 0;
-		m[9] = 0;
-		m[10] = std::bit_cast<std::uint32_t>(kFloatOne);
-	};
-	const auto bone_matrix = [&](std::int16_t model, const char* name) -> std::uint32_t*
-	{
-		const auto base = static_cast<std::uintptr_t>(zpatch_pre_ped_array);
-		const std::uint32_t ped = *reinterpret_cast<const std::uint32_t*>(
-		    base + 4u * static_cast<std::uint32_t>(model));
-		const std::uint32_t p1 = *reinterpret_cast<const std::uint32_t*>(
-		    static_cast<std::uintptr_t>(ped) + 8);
-		const std::uint32_t p2 = *reinterpret_cast<const std::uint32_t*>(
-		    static_cast<std::uintptr_t>(p1) + kVehicleComponentP1);
-		const std::uint32_t registry = *reinterpret_cast<const std::uint32_t*>(
-		    static_cast<std::uintptr_t>(p2) + kVehicleComponentRegistry);
-		const auto* entry = static_cast<const std::uint8_t*>(abi_vehicle_component(
-		    reinterpret_cast<const void*>(static_cast<std::uintptr_t>(registry)), name));
-		if (entry == nullptr) return nullptr;  // the original's own `if (v6)` check
-		// sub_10004C70 0x10004D4A calls get_bone unguarded (it is null only when
-		// the loader's preamble missed).
-		const std::uint32_t bone =
-		    *reinterpret_cast<const std::uint16_t*>(entry + kModelEntryBoneOffset);
-		return get_bone(vehicle, bone);
-	};
-
-	if (zpatch_flag_steering)
-	{
-		const std::int16_t model = model_of();
-		const float steering = *reinterpret_cast<const float*>(vehicle + kVehicleSteeringOffset);
-		const std::uint32_t lock_owner = *reinterpret_cast<const std::uint32_t*>(
-		    vehicle + kVehicleBoneOffset);
-		const float lock = *reinterpret_cast<const float*>(
-		    static_cast<std::uintptr_t>(lock_owner) + kVehicleLockOwnerOffset);
-		const float turn =
-		    static_cast<float>(static_cast<double>(steering / lock) * -kPi);
-		float tilt = 0.0f;
-		for (int i = 0; i < static_cast<int>(kVehicleLightSlotCount); ++i)
-		{
-			const std::uint32_t hash = zpatch_wheelangle_models[i];
-			if (hash == 0u) break;
-			std::int32_t resolved = -1;
-			lookup(hash, &resolved);  // sub_10004C70 0x10004CE7: unconditional
-			if (resolved == model)
-			{
-				tilt = static_cast<float>(
-				    static_cast<double>(zpatch_wheelangle_angles[i]) *
-				    3.141592653589793 / 180.0);
-				break;
-			}
-		}
-		if (model != -1)
-		{
-			std::uint32_t* matrix = bone_matrix(model, "steeringwheel");
-			if (matrix != nullptr)
-			{
-				identity(matrix);
-				if (set_a) set_a(matrix, tilt);
-				if (set_b) set_b(matrix, turn);
-			}
-		}
-	}
-	if (zpatch_flag_engine)
-	{
-		if (zpatch_engine_last_timestep != script_float())
-		{
-			const double step = zpatch_engine_descending ? -0.5 : 0.5;
-			const float phase = static_cast<float>(
-			    static_cast<double>(script_float()) * step +
-			    static_cast<double>(zpatch_engine_phase));
-			zpatch_engine_phase = phase;
-			std::uint8_t direction = zpatch_engine_descending;
-			if (static_cast<double>(phase) > 0.01) direction = 1;
-			if (static_cast<double>(phase) < -0.01) direction = 0;
-			zpatch_engine_descending = direction;
-		}
-		const std::int16_t model = model_of();
-		if (model != -1)
-		{
-			std::uint32_t* matrix = bone_matrix(model, "engineblock");
-			if (matrix != nullptr)
-			{
-				identity(matrix);
-				const std::uint32_t flags =
-				    *reinterpret_cast<const std::uint32_t*>(vehicle + kVehicleEngineStateOffset);
-				float scale = 0.0f;
-				if ((flags & 8u) != 0u)
-				{
-					const float rpm = *reinterpret_cast<const float*>(vehicle + kVehicleRpmOffset);
-					scale = static_cast<float>(static_cast<double>(rpm) * 0.75 + 0.25);
-				}
-				if ((flags & kFlagBit4) != 0u) scale = 1.0f;
-				if (set_b) set_b(matrix, scale * zpatch_engine_phase);
-			}
-		}
-	}
-	if (zpatch_flag_plane &&
-	    *reinterpret_cast<const std::uint32_t*>(vehicle + kVehicleFlagsOffset) == 5u &&
-	    part_call != nullptr)
-	{
-		const float travel = *reinterpret_cast<const float*>(vehicle + kVehicleSuspensionTravelOffset);
-		part_call(vehicle, 89, 4, script_float() * travel * 100.0f, 0, 0, 0);
-		part_call(vehicle, 91, 4, script_float() * travel * 100.0f, 0, 0, 0);
-		part_call(vehicle, 90, 4, script_float() * travel * 100.0f, 0, 0, 0);
-		part_call(vehicle, 92, 4, script_float() * travel * 100.0f, 0, 0, 0);
-		const float pitch = *reinterpret_cast<const float*>(vehicle + kVehiclePitchOffset);
-		const float roll = *reinterpret_cast<const float*>(vehicle + kVehicleRollOffset);
-		const float heave = *reinterpret_cast<const float*>(vehicle + kVehicleHeaveOffset);
-		part_call(vehicle, 96, 3,
-		          static_cast<float>(static_cast<double>(pitch) * 0.5), 1, 0, 0);
-		part_call(vehicle, 97, 3,
-		          static_cast<float>(static_cast<double>(pitch) * -0.5), 1, 0, 0);
-		part_call(vehicle, 94, 3,
-		          static_cast<float>(static_cast<double>(roll) * -0.5), 1, 0, 0);
-		part_call(vehicle, 95, 3,
-		          static_cast<float>(static_cast<double>(roll) * -0.5), 1, 0, 0);
-		part_call(vehicle, 93, 5,
-		          static_cast<float>(static_cast<double>(heave) * 0.5), 1, 0, 0);
-	}
-	// Unconditional tail: snapshot the last script timestep and return its slot.
-	const std::uint32_t ctx = zpatch_script_resolve(zpatch_salt_3c);
-	const std::uint32_t offset = *reinterpret_cast<const std::uint32_t*>(
-	    static_cast<std::uintptr_t>(ctx) + kScriptOffsetField);
-	const std::uint32_t value_ptr = *reinterpret_cast<const std::uint32_t*>(
-	    static_cast<std::uintptr_t>(ctx) + offset + kScriptSlotBase);
-	const float last = *reinterpret_cast<const float*>(
-	    static_cast<std::uintptr_t>(value_ptr) + kScriptFloatOffset);
-	zpatch_engine_last_timestep = last;
-	return value_ptr;
-}
+// MovingSteeringWheelSupport / ShakingEngineBlock / MovingPlaneParts' shared
+// consumer (original sub_10004C70) and its model-registry lookup live in
+// source/vehicle_steer.cpp; the two detours below call it by name.
 
 // The shared flag-gated helper of the Patch4RemoveModChecks /
 // RemoveGFWLUpdatePopup handler (original sub_10005340): with Patch4 on, zero
@@ -1870,133 +1356,6 @@ extern "C" void abi_gfwl_patch() noexcept
 	}
 }
 
-using NewSaveLoadByteFn = std::uint8_t(__cdecl*)(void*, std::uint32_t);
-using NewSaveLoadIntFn = std::int32_t(__cdecl*)(void*, std::uint32_t);
-using NewSaveOriginalFn = std::int32_t(__cdecl*)();
-
-// The existing read call, routed through the plugin: the caller's buffer is
-// intentionally ignored - the original body reads into its own
-// kNewSaveScratchSize scratch and only the return value is observed.
-extern "C" std::uint8_t abi_new_saves_read_hook(void* /*caller_buffer*/,
-                                                std::uint32_t size) noexcept
-{
-	std::array<std::uint8_t, kNewSaveScratchSize> scratch;
-	if (zpatch_new_saves_loaddata == 0) return 0;
-	return GameFunction<NewSaveLoadByteFn>(zpatch_new_saves_loaddata)(scratch.data(), size);
-}
-
-// P3's replacement: with the newer format on, probe the 12-byte block before
-// and after the original call. The original issues both loads - the first
-// result is discarded and the second returned - so the duplicate is kept.
-extern "C" std::int32_t abi_new_saves_p3_hook() noexcept
-{
-	std::array<std::uint8_t, kNewSaveProbeSize> probe;
-	const auto load = GameFunction<NewSaveLoadIntFn>(zpatch_new_saves_loaddata);
-	const bool extra_block = zpatch_new_saves_extra_block != 0;
-	if (extra_block && load)
-		static_cast<void>(load(probe.data(), kNewSaveProbeSize));
-	const std::int32_t result = GameFunction<NewSaveOriginalFn>(
-	    zpatch_new_saves_p3_original)();
-	if (extra_block && load) return load(probe.data(), kNewSaveProbeSize);
-	return result;
-}
-
-extern "C" void abi_new_saves_convert(const char* path) noexcept
-{
-	SaveFile file(path);
-	if (!file.IsOpen()) return;
-	const std::array<std::byte, kSaveHeaderSize> header = ReadSaveHeader(file);
-	std::uint32_t magic = 0;
-	std::memcpy(&magic, header.data() + kSaveMagicOffset, sizeof(magic));
-	if (magic != kSaveMagic) return;  // "SAVE"
-	for (std::size_t i = 0; i < kSaveChunkCount; ++i)
-	{
-		std::array<std::byte, kSaveChunkHeaderSize> chunk;
-		const SaveChunk info = ReadChunkHeader(file, chunk);
-		zpatch_new_saves_chunk_len = info.size;           // dword_1015AD90
-		zpatch_new_saves_element_count = info.payload;    // dword_1015ADA0
-		ReadPayload(file, info.payload);
-		if (i == 9)
-			zpatch_new_saves_force_new_read = info.size == kSaveChunk9SizeNew ? 1u : 0u;
-		if (i == 16)
-			zpatch_new_saves_new_chunk16 = info.size == kSaveChunk16SizeNew ? 1u : 0u;
-		if (i == 13)
-			zpatch_new_saves_extra_block = info.size == kSaveChunk13SizeNew ? 1u : 0u;
-	}
-
-	// P1 (game 0x872185): force the 0x3C-byte read path for new saves.
-	static const std::uint8_t* p1 = nullptr;
-	if (p1 == nullptr) p1 = scan_game("74 37 80 3D ? ? ? ? 00 75 2E 8D 84 ? ? ? ? 00 6A 1E");
-	if (p1 != nullptr)
-		wp_byte(const_cast<std::uint8_t*>(p1),
-		        zpatch_new_saves_force_new_read != 0 ? kShortJmpOpcode : kJeRel8Opcode);
-
-	// P2 (game 0x7D8C50): route the oversized read through the plugin's scratch
-	// buffer, resize the read, and force/NOP the branch per the save format.
-	static const std::uint8_t* p2 = nullptr;
-	if (p2 == nullptr) p2 = scan_game("68 BE 0C 00 00 50 E8");
-	if (p2 != nullptr)
-	{
-		auto* site = const_cast<std::uint8_t*>(p2);
-		const auto original_target = static_cast<std::uint32_t>(
-		    injector::ReadRelativeOffset(injector::raw_ptr(site + kNewSaveCallOperand), 4, true)
-		        .as_int());
-		injector::MakeCALL(injector::raw_ptr(site + kNewSaveCallSite),
-		                   injector::raw_ptr(reinterpret_cast<void*>(&abi_new_saves_read_hook)),
-		                   true); //call
-		if (zpatch_new_saves_loaddata == 0)
-			zpatch_new_saves_loaddata = original_target;
-		wp_dword(site + kNewSaveReadSizeOperand,
-		         zpatch_new_saves_new_chunk16 != 0 ? kSaveReadSizeNew : kSaveReadSizeOld);
-		if (zpatch_new_saves_new_chunk16 != 0)
-			injector::MakeNOP(injector::raw_ptr(site + kNewSaveBranchSite), 2, true); //nop
-		else
-			wp_word(site + kNewSaveBranchSite, kJneRel8Plus38);  // 75 26 = jne +0x26
-	}
-
-	// P3 (game 0x8DA090): route the second LoadData call through the plugin body
-	// that consumes the extra 12-byte block for new saves, and repoint the
-	// shared LoadData slot at the function's own later call target.
-	static const std::uint8_t* p3 = nullptr;
-	if (p3 == nullptr) p3 = scan_game("56 E8 ? ? ? ? E8 ? ? ? ? A1 ? ? ? ? 8D 0C 85 00 00 00 00");
-	if (p3 != nullptr)
-	{
-		auto* site = const_cast<std::uint8_t*>(p3);
-		const auto original_target = static_cast<std::uint32_t>(
-		    injector::ReadRelativeOffset(injector::raw_ptr(site + kNewSaveCallOperand), 4, true)
-		        .as_int());
-		injector::MakeCALL(injector::raw_ptr(site + kNewSaveCallSite),
-		                   injector::raw_ptr(reinterpret_cast<void*>(&abi_new_saves_p3_hook)),
-		                   true); //call
-		if (zpatch_new_saves_p3_original == 0)
-			zpatch_new_saves_p3_original = original_target;
-		zpatch_new_saves_loaddata = static_cast<std::uint32_t>(
-		    injector::ReadRelativeOffset(injector::raw_ptr(site + kNewSaveLoadOperand), 4, true)
-		        .as_int());
-	}
-}
-
-// The prepare step of the tramp (original sub_10051FD0): if the handler
-// captured the game's save-name buffer, make sure the savegame directory
-// exists (game function found by signature) and convert "<dir>\\<save name>".
-extern "C" void abi_new_saves_prepare() noexcept
-{
-	const auto* name = reinterpret_cast<const char*>(
-	    static_cast<std::uintptr_t>(zpatch_new_saves_src));
-	if (name == nullptr) return;
-	static const std::uint8_t* get_dir = nullptr;
-	if (get_dir == nullptr)
-		get_dir = scan_game("55 8B EC 83 E4 F8 83 EC 4C 56 33 C0 8D 4C 24 28");
-	if (get_dir == nullptr) return;
-	std::array<char, kSaveDirectoryCapacity> directory{};
-	char suffix = 0;
-	if (reinterpret_cast<std::uint8_t(__cdecl*)(int, char*, char*)>(
-	        const_cast<std::uint8_t*>(get_dir))(0, directory.data(), &suffix) == 0)
-		return;
-	std::array<char, kSaveFilePathCapacity> path;
-	std::snprintf(path.data(), path.size(), "%s\\%s", directory.data(), name);
-	abi_new_saves_convert(path.data());
-}
 }  // extern "C"
 
 // The spawn probe's GetModuleHandleW call goes through our own slot (MSVC's
@@ -2862,32 +2221,49 @@ __declspec(naked) void abi_spawns_guard()
 // The ten factory-dispatch thunks (P3 sites). NOTE: case 1 (+0x3D) and case 2
 // (+0x56) both set selector 3 in the original bytes; kept 1:1.
 
+// The selector each spawn thunk writes to zpatch_spawns_kind. The probe
+// dispatches on it (0 car, 1 heli, 2 boat, 3 ped, 4 vehicle object, 5 object,
+// 6 bike, 7 train, 8 plane); unscoped because the naked macro's inline asm
+// takes the enumerator as an immediate.
+enum SpawnSelector : std::uint32_t
+{
+	spawn_car = 0,
+	spawn_heli = 1,
+	spawn_boat = 2,
+	spawn_ped = 3,
+	spawn_vehicle_object = 4,
+	spawn_object = 5,
+	spawn_bike = 6,
+	spawn_train = 7,
+	spawn_plane = 8,
+};
+
 // @exact 0x10037330
 // Spawn probes: the game's 10 class cases all do the same thing. The macro
-// keeps the shim body in one place; only the kind and resume differ.
-#define SPAWNS_CASE(name, kind, resume)        \
-	__declspec(naked) void name() {               \
-		__asm push ebp                              \
-		__asm mov ebp, esp                          \
-		__asm mov ecx, dword ptr [ebp + 0Ch]        \
-		__asm movsx eax, cl                         \
-		__asm mov dword ptr [zpatch_spawns_kind], kind \
-		__asm mov dword ptr [zpatch_spawns_class], eax \
-		__asm mov dword ptr [ebp + 0Ch], ecx        \
-		__asm pop ebp                               \
-		__asm jmp dword ptr [resume]                \
+// keeps the shim body in one place; only the selector and resume differ.
+#define SPAWNS_CASE(name, selector, resume)            \
+	__declspec(naked) void name() {                       \
+		__asm push ebp                                       \
+		__asm mov ebp, esp                                   \
+		__asm mov ecx, dword ptr [ebp + 0Ch]                 \
+		__asm movsx eax, cl                                  \
+		__asm mov dword ptr [zpatch_spawns_kind], selector   \
+		__asm mov dword ptr [zpatch_spawns_class], eax       \
+		__asm mov dword ptr [ebp + 0Ch], ecx                 \
+		__asm pop ebp                                        \
+		__asm jmp dword ptr [resume]                         \
 	}
 
-SPAWNS_CASE(abi_spawns_case_0x24, 5, zpatch_spawns_case0_resume)
-SPAWNS_CASE(abi_spawns_case_0x3D, 3, zpatch_spawns_case1_resume)
-SPAWNS_CASE(abi_spawns_case_0x56, 3, zpatch_spawns_case2_resume)
-SPAWNS_CASE(abi_spawns_case_0x6F, 0, zpatch_spawns_case3_resume)
-SPAWNS_CASE(abi_spawns_case_0x88, 4, zpatch_spawns_case4_resume)
-SPAWNS_CASE(abi_spawns_case_0x9E, 6, zpatch_spawns_case5_resume)
-SPAWNS_CASE(abi_spawns_case_0xB4, 7, zpatch_spawns_case6_resume)
-SPAWNS_CASE(abi_spawns_case_0xCA, 1, zpatch_spawns_case7_resume)
-SPAWNS_CASE(abi_spawns_case_0xE0, 2, zpatch_spawns_case8_resume)
-SPAWNS_CASE(abi_spawns_case_0xF6, 8, zpatch_spawns_case9_resume)
+SPAWNS_CASE(abi_spawns_case_0x24, spawn_object, zpatch_spawns_case0_resume)
+SPAWNS_CASE(abi_spawns_case_0x3D, spawn_ped, zpatch_spawns_case1_resume)
+SPAWNS_CASE(abi_spawns_case_0x56, spawn_ped, zpatch_spawns_case2_resume)
+SPAWNS_CASE(abi_spawns_case_0x6F, spawn_car, zpatch_spawns_case3_resume)
+SPAWNS_CASE(abi_spawns_case_0x88, spawn_vehicle_object, zpatch_spawns_case4_resume)
+SPAWNS_CASE(abi_spawns_case_0x9E, spawn_bike, zpatch_spawns_case5_resume)
+SPAWNS_CASE(abi_spawns_case_0xB4, spawn_train, zpatch_spawns_case6_resume)
+SPAWNS_CASE(abi_spawns_case_0xCA, spawn_heli, zpatch_spawns_case7_resume)
+SPAWNS_CASE(abi_spawns_case_0xE0, spawn_boat, zpatch_spawns_case8_resume)
+SPAWNS_CASE(abi_spawns_case_0xF6, spawn_plane, zpatch_spawns_case9_resume)
 
 // sub_10037510, the spawn probe (P1/P4/P5/P6/P7 sites): byte-exact naked body,
 // 394 instructions, 0x10037510..0x10037ABC. ECX at the [vtable+0xC] call is the
@@ -4124,8 +3500,7 @@ extern "C" void* __fastcall abi_speedup_body(void* self, int)
 	}
 	// The original dereferences the timing pointers unconditionally (its one-time
 	// test is on the float, not on the pointers).
-	float* const t50 = reinterpret_cast<float*>(static_cast<std::uintptr_t>(zpatch_speedup_t50));
-	if (*t50 == 0.0f)
+	if (*zpatch_speedup_t50 == 0.0f)
 	{
 		LARGE_INTEGER frequency{};
 		QueryPerformanceFrequency(&frequency);
@@ -4134,14 +3509,14 @@ extern "C" void* __fastcall abi_speedup_body(void* self, int)
 		const float v6 = static_cast<float>(scale * 1000.0);
 		const float v7 = static_cast<float>(scale * 0.001000000047497451);
 		const float v8 = static_cast<float>(0.001000000047497451 / scale);
-		*reinterpret_cast<float*>(static_cast<std::uintptr_t>(zpatch_speedup_t64)) = v5;
-		*reinterpret_cast<float*>(static_cast<std::uintptr_t>(zpatch_speedup_t60)) = v6;
-		*reinterpret_cast<float*>(static_cast<std::uintptr_t>(zpatch_speedup_t50)) = v7;
-		*reinterpret_cast<float*>(static_cast<std::uintptr_t>(zpatch_speedup_t5c)) = v8;
-		*reinterpret_cast<float*>(static_cast<std::uintptr_t>(zpatch_speedup_t68)) = v5;
-		*reinterpret_cast<float*>(static_cast<std::uintptr_t>(zpatch_speedup_t4c)) = v6;
-		*reinterpret_cast<float*>(static_cast<std::uintptr_t>(zpatch_speedup_t54)) = v7;
-		*reinterpret_cast<float*>(static_cast<std::uintptr_t>(zpatch_speedup_t58)) = v8;
+		*zpatch_speedup_t64 = v5;
+		*zpatch_speedup_t60 = v6;
+		*zpatch_speedup_t50 = v7;
+		*zpatch_speedup_t5c = v8;
+		*zpatch_speedup_t68 = v5;
+		*zpatch_speedup_t4c = v6;
+		*zpatch_speedup_t54 = v7;
+		*zpatch_speedup_t58 = v8;
 	}
 	using ClockFn = __int64(__cdecl*)(void);
 	// The original calls its resolved clock function unconditionally; a failed
@@ -4656,21 +4031,17 @@ void zpatch_mf_advance_c() noexcept
 	// stores; otherwise write their disabled forms. VirtualProtect failures are
 	// ignored like the original (a null resume would fault; unreachable once
 	// installed).
-	const auto base = static_cast<std::uintptr_t>(zpatch_mf_resume_b);
 	// sub_100241E0 dereferences the resume slot unconditionally.
-	const auto* x = reinterpret_cast<const std::int32_t*>(
-	    static_cast<std::uintptr_t>(zpatch_mf_x));
-	const auto* y = reinterpret_cast<const std::int32_t*>(
-	    static_cast<std::uintptr_t>(zpatch_mf_y));
 	// sub_100241E0 evaluates Y first, then X, and dereferences both unguarded.
-	const bool zero = (static_cast<double>(*y) * kAxisScale == 0.0) &&
-	                  (static_cast<double>(*x) * kAxisScale == 0.0);
+	const bool zero = (static_cast<double>(*zpatch_mf_y) * kAxisScale == 0.0) &&
+	                  (static_cast<double>(*zpatch_mf_x) * kAxisScale == 0.0);
 	for (const ResumeWindow& window : kResumeWindows)
 	{
 		const auto& bytes = zero ? window.bothAxesZero : window.otherwise;
 		// One 8-byte store keeps the window from being half-written.
-		injector::WriteMemoryRaw(injector::raw_ptr(base + window.offset),
-		                         const_cast<std::uint8_t*>(bytes.data()), bytes.size(), true); //write
+		injector::WriteMemoryRaw(
+		    injector::raw_ptr(reinterpret_cast<std::uintptr_t>(zpatch_mf_resume_b) + window.offset),
+		    const_cast<std::uint8_t*>(bytes.data()), bytes.size(), true); //write
 	}
 	zpatch_cookie_tail();
 }
@@ -4965,441 +4336,8 @@ __declspec(naked) void abi_mouse_advance()
 	}
 }
 
-// OutOfCommissionFix (callback 0x1004C3F0). Scan 1 (A9 39 44 24 18 at game
-// 0xA22E90) E9s match+7 to the branch-widening body and publishes match+0x11 as
-// its resume. Scan 2 (E8 ? ? ? ? 8B 74 24 14 83 C4 08 6A 00 56 at game 0xB70733)
-// E8s the match to the wrapper and publishes dword_10159BF8 (the E8 at
-// match-0x33's target) / dword_10159C04 (the match E8's original target).
-// ---------------------------------------------------------------------------
-namespace
-{
-// OutOfCommissionFix's real payload: the original embeds a compressed
-// "finale2.sco" (163796 bytes at 0x100B6798); its init (sub_1004B750 ->
-// sub_1004B570/sub_1004B150) decodes it into a 179536-byte table, registers it,
-// then sub_1004ACE0 builds an in-memory RPF archive around it. The wrapper mounts
-// that archive with the game's own mount function ("memory:$<ptr>,<size>,0:") and
-// the E9 body widens the game's script-id check to accept its resource magic.
-// The decode below mirrors sub_1004B150's opcode loop.
-constexpr std::size_t kOocTableSize = 0x2BD50u;  // 179536
-constexpr const unsigned char* kOocPakBlob = zpatch_ooc_blob;
-
-inline void zpatch_ooc_store(std::uint32_t* destination,
-                             std::uint32_t value) noexcept
-{
-	*reinterpret_cast<volatile std::uint32_t*>(destination) = value;
-}
-
-struct OocPakEntry final
-{
-	char name_buffer[16];
-	std::uint32_t name_size;
-	std::uint32_t name_capacity;
-	std::uint32_t file_size;
-	std::uint32_t stored_offset;
-	std::uint32_t stored_size;
-	std::uint32_t padding;
-	std::uint32_t data;
-};
-static_assert(sizeof(OocPakEntry) == 44);
-
-// The single registered entry's name (used by the entry, the archive header and
-// the self-test) and the archive's fixed offsets.
-constexpr char kOocName[] = "finale2.sco";
-constexpr std::size_t kOocNameLength = sizeof(kOocName) - 1;
-constexpr std::size_t kOocHeaderSize = 20;
-constexpr std::size_t kOocRecordSize = 16;
-constexpr std::size_t kOocRecordSizeOffset = 0;    // physical size dword
-constexpr std::size_t kOocRecordIndexOffset = 8;   // entry index dword
-constexpr std::size_t kOocRecordPagesOffset = 12;  // page count word
-constexpr std::size_t kOocRecordPadOffset = 14;    // padding word
-constexpr std::size_t kOocArchiveRecordOffset = kOocHeaderSize;
-constexpr std::size_t kOocArchiveRecordTagOffset = kOocArchiveRecordOffset + 12;
-constexpr std::size_t kOocArchiveNameOffset = kOocArchiveRecordOffset + kOocRecordSize;
-
-// The fake-pak vector is the original's own global storage: begin/end/
-// capacity are the handler's dwords, so its growth keeps ::operator new and
-// ::operator delete and the raw pointers. That is recovered ABI state, not a
-// local allocation.
-void zpatch_ooc_register_entry(unsigned char* table)
-{
-	auto* begin = reinterpret_cast<OocPakEntry*>(
-	    static_cast<std::uintptr_t>(zpatch_ooc_vector_begin));
-	auto* end = reinterpret_cast<OocPakEntry*>(
-	    static_cast<std::uintptr_t>(zpatch_ooc_vector_end));
-	auto* capacity = reinterpret_cast<OocPakEntry*>(
-	    static_cast<std::uintptr_t>(zpatch_ooc_vector_capacity));
-	const std::size_t size = begin == nullptr ? 0u
-	                                           : static_cast<std::size_t>(end - begin);
-	const std::size_t cap = begin == nullptr ? 0u
-	                                          : static_cast<std::size_t>(capacity - begin);
-	bool reallocated = false;
-	if (size == cap)
-	{
-		const std::size_t new_capacity =
-		    (cap + cap / 2u > size) ? cap + cap / 2u : size + 1u;
-		auto* replacement = static_cast<OocPakEntry*>(
-		    ::operator new(new_capacity * sizeof(OocPakEntry)));
-		if (size != 0u) std::memcpy(replacement, begin, size * sizeof(OocPakEntry));
-		if (begin != nullptr) ::operator delete(begin);
-		begin = replacement;
-		end = begin + size;
-		capacity = begin + new_capacity;
-		reallocated = true;
-	}
-
-	OocPakEntry entry{};
-	std::memcpy(entry.name_buffer, kOocName, sizeof(kOocName));
-	entry.name_size = static_cast<std::uint32_t>(kOocNameLength);
-	entry.name_capacity = static_cast<std::uint32_t>(sizeof(entry.name_buffer) - 1);
-	entry.file_size = static_cast<std::uint32_t>(kOocTableSize);
-	entry.data = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(table));
-	std::memcpy(end, &entry, sizeof(entry));
-	++end;
-	if (reallocated)
-	{
-		zpatch_ooc_store(&zpatch_ooc_vector_begin,
-		                 static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(begin)));
-		zpatch_ooc_store(&zpatch_ooc_vector_end,
-		                 static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(end)));
-		zpatch_ooc_store(&zpatch_ooc_vector_capacity,
-		                 static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(capacity)));
-	}
-	else
-	{
-		zpatch_ooc_store(&zpatch_ooc_vector_end,
-		                 static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(end)));
-	}
-}
-
-// The finale2 stream's opcode format. The names mirror the decoder branches;
-// the code values are part of the resource format, not arbitrary numbers.
-constexpr std::uint8_t kOocOpLiteral = 0x20;
-constexpr std::uint8_t kOocOpLongBackref = 0x18;
-constexpr std::uint8_t kOocOpWideBackref = 0x10;
-constexpr std::uint8_t kOocOpMediumLiteral = 0x08;
-constexpr std::uint8_t kOocOpLongLiteral = 0x07;
-constexpr std::uint8_t kOocOpShortBackref = 0x06;
-constexpr std::uint8_t kOocOpWideLiteralBackref = 0x04;
-constexpr std::uint8_t kOocOpShortDistance = 0x40;
-constexpr std::uint8_t kOocOpShortestDistance = 0x80;
-constexpr std::uint8_t kOocOpEnd = 0x05;
-constexpr std::uint32_t kOocByteBase = 256u;
-constexpr std::uint32_t kOocWordBase = 65536u;
-constexpr std::uint32_t kOocLongDistanceBias = 1572863u;
-constexpr std::uint32_t kOocWideDistanceBias = 0xFFFFFu;
-constexpr std::uint32_t kOocShortDistanceBias = 0x3FFFu;
-constexpr std::uint8_t kOocLiteralBias = 31u;
-constexpr std::uint8_t kOocLiteralAdvance = 30u;
-constexpr std::uint8_t kOocShortestBias = 127u;
-constexpr std::uint32_t kOocMediumLiteralBias = 2047u;
-constexpr std::uint32_t kOocAdlerModulus = 0xFFF1u;
-constexpr std::size_t kOocAdlerBlock = 1872u;
-
-struct OocStream final
-{
-	std::size_t cursor = 0;  // the original's dword_101A8430
-	unsigned char* dest = nullptr;
-
-	void literal(std::size_t count, std::size_t from) noexcept
-	{
-		if (cursor + count <= kOocTableSize)
-		{
-			// The original's source bound (a1 + n >= dword_101887D4 = blob base - 16)
-			// is constant-true: the stream starts past the base pointer.
-			std::memcpy(dest + cursor, kOocPakBlob + from, count);
-			cursor += count;
-		}
-		else
-		{
-			cursor = kOocTableSize + 1;
-		}
-	}
-	void backref(std::size_t distance, std::size_t count) noexcept
-	{
-		if (cursor + count > kOocTableSize || distance > cursor)
-		{
-			cursor = kOocTableSize + 1;
-			return;
-		}
-		unsigned char* out = dest + cursor;
-		const unsigned char* in = out - distance;
-		for (std::size_t i = 0; i < count; ++i) out[i] = in[i];  // overlap propagates
-		cursor += count;
-	}
-	std::size_t step(std::size_t pc) noexcept
-	{
-		const unsigned char op = kOocPakBlob[pc];
-		if (op < kOocOpLiteral)
-		{
-			if (op >= kOocOpLongBackref)
-			{
-				backref(kOocPakBlob[pc + 2] + kOocByteBase * kOocPakBlob[pc + 1] +
-				            kOocWordBase * op - kOocLongDistanceBias,
-				        kOocPakBlob[pc + 3] + 1u);
-				return pc + 4;
-			}
-			if (op >= kOocOpWideBackref)
-			{
-				backref(kOocPakBlob[pc + 2] + kOocByteBase * kOocPakBlob[pc + 1] +
-				            kOocWordBase * op - kOocWideDistanceBias,
-				        (kOocPakBlob[pc + 3] << 8) + kOocPakBlob[pc + 4] + 1u);
-				return pc + 5;
-			}
-			if (op >= kOocOpMediumLiteral)
-			{
-				const std::size_t count = kOocByteBase * op + kOocPakBlob[pc + 1] - kOocMediumLiteralBias;
-				literal(count, pc + 2);
-				return pc + 2 + count;
-			}
-			if (op == kOocOpLongLiteral)
-			{
-				const std::size_t count = kOocByteBase * kOocPakBlob[pc + 1] + kOocPakBlob[pc + 2] + 1u;
-				literal(count, pc + 3);
-				return pc + 3 + count;
-			}
-			if (op == kOocOpShortBackref)
-			{
-				backref(kOocPakBlob[pc + 3] + kOocByteBase * kOocPakBlob[pc + 2] +
-				            kOocWordBase * kOocPakBlob[pc + 1] + 1u,
-				        kOocPakBlob[pc + 4] + 1u);
-				return pc + 5;
-			}
-			if (op == kOocOpWideLiteralBackref)
-			{
-				backref(kOocPakBlob[pc + 3] + kOocByteBase * kOocPakBlob[pc + 2] +
-				            kOocWordBase * kOocPakBlob[pc + 1] + 1u,
-				        (kOocPakBlob[pc + 4] << 8) + kOocPakBlob[pc + 5] + 1u);
-				return pc + 6;
-			}
-			return pc;  // no-progress opcode terminates the stream
-		}
-		if (op < kOocOpShortestDistance)
-		{
-			if (op >= kOocOpShortDistance)
-			{
-				backref(kOocPakBlob[pc + 1] + kOocByteBase * op -
-				            kOocShortDistanceBias,
-				        kOocPakBlob[pc + 2] + 1u);
-				return pc + 3;
-			}
-			literal(op - kOocLiteralBias, pc + 1);
-			return pc + (op - kOocLiteralAdvance);
-		}
-		backref(kOocPakBlob[pc + 1] + 1u, op - kOocShortestBias);
-		return pc + 2;
-	}
-};
-
-// The original's Adler-32 variant (a = 1, b = 0, 1872-byte partition, 32-bit
-// wrapping); reproduced because the blob's trailer was built with it.
-std::uint32_t zpatch_ooc_adler32(std::span<const unsigned char> data) noexcept
-{
-	std::uint32_t a = 1u;
-	std::uint32_t b = 0u;
-	for (std::size_t block = 0; block < data.size(); block += kOocAdlerBlock)
-	{
-		const std::size_t end =
-		    (block + kOocAdlerBlock < data.size()) ? block + kOocAdlerBlock : data.size();
-		for (std::size_t i = block; i < end; ++i)
-		{
-			a += data[i];
-			b += a;
-		}
-		a %= kOocAdlerModulus;
-		b %= kOocAdlerModulus;
-	}
-	return (b << 16) | a;
-}
-
-bool zpatch_ooc_decode(unsigned char* table) noexcept
-{
-	// sub_1004B570: decode until the no-progress opcode, then require the
-	// 05 FA terminator, the exact destination size and the Adler trailer.
-	const auto table_begin = reinterpret_cast<std::uintptr_t>(table);
-	zpatch_ooc_store(&zpatch_ooc_input_bound,
-	                 static_cast<std::uint32_t>(
-	                     reinterpret_cast<std::uintptr_t>(kOocPakBlob) - 16u));
-	zpatch_ooc_store(&zpatch_ooc_output_begin,
-	                 static_cast<std::uint32_t>(table_begin));
-	zpatch_ooc_store(&zpatch_ooc_output_cursor,
-	                 static_cast<std::uint32_t>(table_begin));
-	zpatch_ooc_store(&zpatch_ooc_output_end,
-	                 static_cast<std::uint32_t>(table_begin + kOocTableSize));
-	OocStream stream{0, table};
-	std::size_t prior_cursor = stream.cursor;
-	std::size_t pc = stream.step(0);
-	if (stream.cursor != prior_cursor)
-	{
-		zpatch_ooc_store(&zpatch_ooc_output_cursor,
-		                 static_cast<std::uint32_t>(table_begin + stream.cursor));
-	}
-	bool terminated = pc == 0;
-	while (!terminated && stream.cursor <= kOocTableSize)
-	{
-		const std::size_t previous = pc;
-		prior_cursor = stream.cursor;
-		pc = stream.step(pc);
-		if (stream.cursor != prior_cursor)
-		{
-			zpatch_ooc_store(&zpatch_ooc_output_cursor,
-			                 static_cast<std::uint32_t>(table_begin + stream.cursor));
-		}
-		if (pc == previous) terminated = true;
-	}
-	if (!terminated || stream.cursor != kOocTableSize) return false;
-	if (kOocPakBlob[pc] != 5u || kOocPakBlob[pc + 1] != kOocPakMarker) return false;
-	const std::uint32_t trailer = (static_cast<std::uint32_t>(kOocPakBlob[pc + 2]) << 24) |
-	                              (static_cast<std::uint32_t>(kOocPakBlob[pc + 3]) << 16) |
-	                              (static_cast<std::uint32_t>(kOocPakBlob[pc + 4]) << 8) |
-	                              static_cast<std::uint32_t>(kOocPakBlob[pc + 5]);
-	return zpatch_ooc_adler32({table, kOocTableSize}) == trailer;
-}
-
-// sub_1004ACE0 for the single registered entry ("finale2.sco", table, 179536).
-// 20-byte header, one 16-byte record, the name, then the payload at offset 2048
-// followed by the zero padding to the next 2048 boundary. Ownership is explicit:
-// the builder consumes the malloc'd table (the original frees it inside the
-// payload loop) and returns the malloc'd archive, which the caller owns.
-// `final_offset` is the original's dword_10159C78.
-// Archive page size (the 0x800 granularity of the payload/records).
-constexpr std::uint32_t kOocPageSize = 2048u;
-
-[[nodiscard]] std::unique_ptr<unsigned char, FreeDeleter> zpatch_ooc_build_archive(
-    std::unique_ptr<unsigned char, FreeDeleter> table, std::uint32_t& final_offset) noexcept
-{
-	const std::uint32_t size = static_cast<std::uint32_t>(kOocTableSize);
-	const std::uint32_t remainder = size & (kOocPageSize - 1u);
-	const std::uint32_t pages = size / kOocPageSize + (remainder != 0u ? 1u : 0u);
-	const std::uint32_t total = pages * kOocPageSize + kOocPageSize;
-	// No null check, like the original's archive build: the memset below faults
-	// on a failed allocation.
-	std::unique_ptr<unsigned char, FreeDeleter> archive(
-	    static_cast<unsigned char*>(std::malloc(total)));
-	std::memset(archive.get(), 0, total);
-	std::uint32_t offset = 0;
-	const auto append = [&](const void* source, std::uint32_t bytes) noexcept
-	{
-		std::memcpy(archive.get() + offset, source, bytes);
-		offset += bytes;
-		zpatch_ooc_store(&zpatch_ooc_archive_offset, offset);
-	};
-	zpatch_ooc_store(&zpatch_ooc_archive_offset, 0);
-	const std::uint32_t name_bytes = sizeof(kOocName);  // includes the NUL
-	struct OocHeader final
-	{
-		std::uint32_t fields[4];
-		std::uint16_t words[2];
-	};
-	static_assert(sizeof(OocHeader) == kOocHeaderSize);
-	const OocHeader header{{kOocArchiveMagic, 3u, 1u, name_bytes + 16u},
-	                       {kOocHeaderPage, kOocHeaderOp}};
-	append(&header, sizeof(header));
-	std::array<unsigned char, kOocRecordSize> record{};
-	std::memcpy(record.data() + kOocRecordSizeOffset, &size,
-	            sizeof(size));  // physical size (entry[0x20])
-	const std::uint32_t index = 1u;  // v9 + 1
-	std::memcpy(record.data() + kOocRecordIndexOffset, &index, sizeof(index));
-	const std::uint16_t record_pages = static_cast<std::uint16_t>(pages);
-	std::memcpy(record.data() + kOocRecordPagesOffset, &record_pages,
-	            sizeof(record_pages));  // sub_1004ABB0
-	if (remainder != 0u)
-	{
-		const std::uint16_t padding =
-		    static_cast<std::uint16_t>(kOocPageSize - remainder);
-		const std::uint16_t packed =
-		    static_cast<std::uint16_t>((static_cast<std::uint16_t>(0u) & kOocPadMask) | padding);
-		std::memcpy(record.data() + kOocRecordPadOffset, &packed,
-		            sizeof(packed));  // sub_1004AB90
-	}
-	append(record.data(), kOocRecordSize);
-	append(kOocName, name_bytes);
-	offset = kOocPageSize;                         // the original resets dword_10159C78
-	zpatch_ooc_store(&zpatch_ooc_archive_offset, offset);
-	append(table.get(), size);
-	table.reset();                                 // j_j_free inside the payload loop
-	if (remainder != 0u)
-		offset += kOocPageSize - remainder;        // zero padding (already memset)
-	if (remainder != 0u) zpatch_ooc_store(&zpatch_ooc_archive_offset, offset);
-	final_offset = offset;
-	return archive;
-}
-
-// sub_1004B750: the one-shot init the wrapper runs before mounting. Its guard
-// dword_10159C00 has no writer in the original, so it re-runs (and leaks the
-// archive) on every call - kept 1:1. Both mallocs are unchecked like the
-// original: the table block is written through even when malloc failed, and the
-// archive is handed to the game and intentionally not freed.
-std::uint32_t zpatch_ooc_lookup() noexcept
-{
-	std::unique_ptr<unsigned char, FreeDeleter> table(
-	    static_cast<unsigned char*>(std::malloc(kOocTableSize)));
-	static_cast<void>(zpatch_ooc_decode(table.get()));  // the original discards the result
-	zpatch_ooc_store(&zpatch_ooc_table_size,
-	                 static_cast<std::uint32_t>(kOocTableSize));
-	zpatch_ooc_register_entry(table.get());
-	std::uint32_t final_offset = 0;
-	std::unique_ptr<unsigned char, FreeDeleter> archive =
-	    zpatch_ooc_build_archive(std::move(table), final_offset);
-	zpatch_ooc_store(&zpatch_ooc_vector_end,
-	                 zpatch_ooc_vector_begin);
-	zpatch_ooc_store(&zpatch_ooc_state, final_offset);
-	// The mounted archive stays alive for the game; the original leaks it on
-	// every re-run of sub_1004B750 (its guard dword has no writer).
-	return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(archive.release()));
-}
-
-std::uint32_t zpatch_ooc_fnv1a(std::span<const unsigned char> data) noexcept
-{
-	std::uint32_t hash = 2166136261u;
-	for (std::size_t i = 0; i < data.size(); ++i)
-	{
-		hash ^= data[i];
-		hash *= 16777619u;
-	}
-	return hash;
-}
-}  // namespace
-
-// Offline self-test for OutOfCommissionFix: the decode must reproduce the blob's
-// own Adler trailer and the archive must match the golden layout/hash.
-extern "C" bool zpatch_ooc_selftest() noexcept
-{
-	std::unique_ptr<unsigned char, FreeDeleter> table(
-	    static_cast<unsigned char*>(std::malloc(kOocTableSize)));
-	if (!table) return false;
-	const bool decoded = zpatch_ooc_decode(table.get());
-	const std::uint32_t table_adler =
-	    zpatch_ooc_adler32({table.get(), kOocTableSize});
-	std::uint32_t final_offset = 0;
-	std::unique_ptr<unsigned char, FreeDeleter> archive =
-	    zpatch_ooc_build_archive(std::move(table), final_offset);
-	if (!archive) return false;
-	constexpr std::array<std::uint32_t, 4> header{kOocArchiveMagic, 3u, 1u, 28u};
-	bool header_ok = true;
-	for (int i = 0; i < 4; ++i)
-		header_ok = header_ok && std::memcmp(archive.get() + 4 * i, &header[i], 4) == 0;
-	header_ok = header_ok && archive.get()[16] == kOocHeaderPage && archive.get()[17] == 0u &&
-	            archive.get()[18] == kOocHeaderOp && archive.get()[19] == 0u;
-	const std::uint32_t record_size = static_cast<std::uint32_t>(kOocTableSize);
-	const std::uint32_t record_index = 1u;
-	bool record_ok =
-	    std::memcmp(archive.get() + kOocArchiveRecordOffset, &record_size, 4) == 0;
-	const std::uint32_t zero = 0u;
-	record_ok =
-	    record_ok &&
-	    std::memcmp(archive.get() + kOocArchiveRecordOffset + 4, &zero, 4) == 0 &&
-	    std::memcmp(archive.get() + kOocArchiveRecordOffset + kOocRecordIndexOffset,
-	                &record_index, 4) == 0;
-	record_ok = record_ok && archive.get()[kOocArchiveRecordTagOffset] == 88u &&
-	            archive.get()[kOocArchiveRecordTagOffset + 1] == 0u &&
-	            archive.get()[kOocArchiveRecordTagOffset + 2] == kOocRecordTag &&
-	            archive.get()[kOocArchiveRecordTagOffset + 3] == kOocRecordTag2;
-	const bool name_ok =
-	    std::memcmp(archive.get() + kOocArchiveNameOffset, kOocName, sizeof(kOocName)) == 0;
-	return decoded && final_offset == kOocDecodedLength && table_adler == kOocTableAdler &&
-	       header_ok && record_ok && name_ok &&
-	       zpatch_ooc_fnv1a({archive.get(), final_offset}) == kOocArchiveFnv;
-}
+// The branch body stays here; the decoder, fake-pak registration and
+// archive builder it belongs to are in source/ooc.cpp.
 
 // @exact 0x1004C3C0 OutOfCommissionFix branch body (E9 target of game
 // 0xA22E97): replay `cmp [esp+0x30], eax` + `movq xmm0, [esp+0x30]`; when the
@@ -5420,28 +4358,6 @@ __declspec(naked) void abi_ooc_branch()
 	}
 }
 
-// 0x1004C350 OutOfCommissionFix wrapper (E8 target of game 0xB70733): run the
-// one-shot fake-pak registration, print the fixed model name through the
-// published logger, then call the game function the E8 replaced with the
-// original arguments. Its register use is cdecl-clean, so it is ordinary C++.
-extern "C" std::uint32_t abi_ooc_wrap(std::uint32_t arg0, std::uint32_t arg1) noexcept
-{
-	const std::uint32_t lookup = zpatch_ooc_lookup();
-	if (lookup != 0u)
-	{
-		char buffer[kOocPathCapacity];
-		zpatch_spawns_sprintf(buffer, kSpawnsNameCapacity, zpatch_ooc_fmt_b, zpatch_ooc_fmt_a,
-		                      ':', '$', static_cast<int>(lookup),
-		                      static_cast<int>(zpatch_ooc_state), '0', ':', 0);
-		const auto logger = reinterpret_cast<void(__cdecl*)(char*, int, int)>(
-		    static_cast<std::uintptr_t>(zpatch_ooc_logger));
-		// sub_1004C350 calls the logger and the original target unguarded.
-		logger(buffer, 1, -1);
-	}
-	const auto original = reinterpret_cast<std::uint32_t(__cdecl*)(std::uint32_t, std::uint32_t)>(
-	    static_cast<std::uintptr_t>(zpatch_ooc_orig));
-	return original(arg0, arg1);
-}
 
 // HighQualityReflections (callback 0x1001F390): scans for
 // `8B 87 38 09 00 00 6A 08 68 1D 13 00 00 50 E8` (unique on every classic build
@@ -5817,17 +4733,10 @@ __declspec(naked) void abi_cutscene_chain_b()
 	}
 }
 
-// NewMemorySystem: the reimplemented CRageAllocator whose vtable (original
-// 0x100B5038) the E8 body writes into the game's allocator singleton. The
-// original swaps the arena allocator for a HeapAlloc-backed one: allocate() uses
-// unit = max(0x10, align), want = max(size, unit), HeapAllocs want + 2*unit,
-// rounds up to ((base-1)/unit + 2)*unit, stores the base offset at [p-4], fills
-// want bytes with 0xCD and registers the pointer under the critical section at
-// 0x101A0808; free() recovers the base from [p-4], HeapFrees and unregisters.
-// Only vtable[18] observes the registry, so a plain set suffices.
-// The allocator vtable's small methods. The original's calling conventions
-// are preserved; only the constructor and thunk still need their exact
-// prologue/tail-jump.
+// NewMemorySystem's allocator vtable, small methods: the original's
+// calling conventions are preserved; only the constructor and the thunk
+// need their exact prologue/tail-jump. The allocator, its registry and the
+// vtable are in source/nms_allocator.cpp.
 extern "C" void __cdecl abi_nms_noop_ret0() {}
 
 // 0x10038640: constructor (thiscall; one stack argument, callee pops it).
@@ -5894,104 +4803,6 @@ extern "C" __declspec(naked) void abi_nms_thunk18()
 // 0x10038630
 extern "C" void __stdcall abi_nms_noop_arg(void*) {}
 
-// 0x10038670: install the vtable in the game's allocator singleton.
-extern "C" void __cdecl abi_nms_apply()
-{
-	auto* object = reinterpret_cast<void**>(zpatch_nms_object);
-	if (object) *object = zpatch_nms_vtable;
-}
-
-namespace
-{
-// NewMemorySystem's allocation registry: the original keeps the pointers it
-// handed out in its own hash map (FNV-1a over the pointer's four bytes) under
-// the recursive critical section at 0x101A0808. Only membership is observable,
-// so the keys go in a plain set behind an equivalent lock.
-CRITICAL_SECTION g_nms_lock;
-std::unordered_set<std::uint32_t> g_nms_allocations;
-struct NmsRegistryInit final
-{
-	NmsRegistryInit() noexcept { InitializeCriticalSection(&g_nms_lock); }
-};
-NmsRegistryInit g_nms_registry_init;
-}  // namespace
-
-// vtable[2] (0x10038360): HeapAlloc-backed allocate with the original's
-// alignment scheme. ECX is the object (unused by the original's body too).
-extern "C" void* __stdcall zpatch_nms_alloc(std::uint32_t size, std::uint32_t align,
-                                            std::uint32_t flags) noexcept
-{
-	(void)flags;
-	const std::uint32_t unit = align < 0x10u ? 0x10u : align;
-	const std::uint32_t want = size < unit ? unit : size;
-	void* base = HeapAlloc(GetProcessHeap(), 0, want + unit * 2u);
-	if (!base) return nullptr;
-	const auto raw = reinterpret_cast<std::uintptr_t>(base);
-	const std::uintptr_t aligned = ((raw - 1u) / unit + 2u) * unit;
-	*reinterpret_cast<std::uint32_t*>(aligned - 4u) =
-	    static_cast<std::uint32_t>(aligned - raw);
-	auto* result = reinterpret_cast<void*>(aligned);
-	std::memset(result, kUninitialisedHeapPoison, want);
-	EnterCriticalSection(&g_nms_lock);
-	g_nms_allocations.insert(static_cast<std::uint32_t>(aligned));
-	LeaveCriticalSection(&g_nms_lock);
-	return result;
-}
-
-// vtable[3] (0x10038430): recover the HeapAlloc base from [ptr-4], free it and
-// drop the pointer from the registry.
-extern "C" void __stdcall zpatch_nms_free(void* ptr) noexcept
-{
-	if (!ptr) return;
-	const auto raw = reinterpret_cast<std::uintptr_t>(ptr);
-	const std::uintptr_t base = raw - *reinterpret_cast<const std::uint32_t*>(raw - 4u);
-	HeapFree(GetProcessHeap(), 0, reinterpret_cast<void*>(base));
-	EnterCriticalSection(&g_nms_lock);
-	g_nms_allocations.erase(static_cast<std::uint32_t>(raw));
-	LeaveCriticalSection(&g_nms_lock);
-}
-
-// vtable[18] (0x100385A0): the game's "is this pointer mine" query.
-extern "C" std::uint8_t __stdcall zpatch_nms_contains(std::uint32_t key) noexcept
-{
-	EnterCriticalSection(&g_nms_lock);
-	const bool found = g_nms_allocations.find(key) != g_nms_allocations.end();
-	LeaveCriticalSection(&g_nms_lock);
-	return found ? std::uint8_t{1} : std::uint8_t{0};
-}
-
-// The CRageAllocator vtable, entry order and per-entry conventions as the
-// original's 0x100B5038 (see the individual methods above).
-extern "C"
-{
-std::uintptr_t zpatch_nms_vtable[24] =
-{
-		reinterpret_cast<std::uintptr_t>(&abi_nms_ctor),         // [0] 0x10038640
-		reinterpret_cast<std::uintptr_t>(&abi_nms_reject_ptr),   // [1] 0x10038350
-		reinterpret_cast<std::uintptr_t>(&zpatch_nms_alloc),     // [2] 0x10038360
-		reinterpret_cast<std::uintptr_t>(&zpatch_nms_free),      // [3] 0x10038430
-		reinterpret_cast<std::uintptr_t>(&abi_nms_self),         // [4] 0x10038540
-		reinterpret_cast<std::uintptr_t>(&abi_nms_self),         // [5] 0x10038540
-		reinterpret_cast<std::uintptr_t>(&abi_nms_zero_ptr),     // [6] 0x10001950
-		reinterpret_cast<std::uintptr_t>(&abi_nms_zero_ptr),     // [7] 0x10001950
-		reinterpret_cast<std::uintptr_t>(&abi_better_mp_sync),   // [8] 0x100057F0
-		reinterpret_cast<std::uintptr_t>(&abi_better_mp_sync),   // [9] 0x100057F0
-		reinterpret_cast<std::uintptr_t>(&abi_rgsc_login_removed),  // [10] 0x10038550
-		reinterpret_cast<std::uintptr_t>(&abi_nms_noop_ret0),    // [11] 0x10038560
-		reinterpret_cast<std::uintptr_t>(&abi_savegame_fix_null),   // [12] 0x10038570
-		reinterpret_cast<std::uintptr_t>(&abi_nms_noop_pair),    // [13] 0x10038580
-		reinterpret_cast<std::uintptr_t>(&abi_nms_noop_ret0),    // [14] 0x10038560
-		reinterpret_cast<std::uintptr_t>(&abi_nms_reject),       // [15] 0x10038590
-		reinterpret_cast<std::uintptr_t>(&abi_nms_reject),       // [16] 0x10038590
-		reinterpret_cast<std::uintptr_t>(&abi_nms_noop_ret0),    // [17] 0x10038560
-		reinterpret_cast<std::uintptr_t>(&zpatch_nms_contains),  // [18] 0x100385A0
-		reinterpret_cast<std::uintptr_t>(&abi_nms_thunk18),      // [19] 0x10038620
-		reinterpret_cast<std::uintptr_t>(&abi_better_mp_sync),   // [20] 0x100057F0
-		reinterpret_cast<std::uintptr_t>(&abi_better_mp_sync),   // [21] 0x100057F0
-		reinterpret_cast<std::uintptr_t>(&abi_nms_noop_arg),     // [22] 0x10038630
-		reinterpret_cast<std::uintptr_t>(&abi_nms_reject),       // [23] 0x10038590
-};
-}  // extern "C"
 
 #endif  // !ZP_DUMP_TOOL — assembly bodies are ASI-only; the dump uses stubs
 

@@ -57,16 +57,11 @@ void ApplyIncreaseVehicleStructLimit(const PatchContext& ctx);
 
 constexpr std::uint16_t kShadowPushA = 0x0504u;
 constexpr std::uint16_t kShadowPushB = 0x0104u;
-constexpr std::uint16_t kRet8Imm = 0x08C2u;     // C2 08 = ret 8
-constexpr std::uint8_t kRet8High = 0x00u;       // high byte of the imm16
-constexpr std::uint16_t kCutsceneBranchDisp = 0x009Eu;  // je +0x9E
-constexpr std::uint8_t kCutsceneJmpDisp = 0x2Au;        // jmp +0x2A
-constexpr std::uint32_t kVehicleStructLimit = 100u;     // 0x64: struct count
-constexpr std::uint32_t kVehicleModelLimit = 0x400u;    // 1024 models (raised cap)
-constexpr std::uint32_t kShadowSizeForced = 0x100u;    // push 0x504 -> 0x100
+// One spawn-probe call site: the jump-table displacement inside the probe match
+// (the offset from the match to the `call` the arm writes) and the case body.
 struct SpawnCase final
 {
-	std::uint32_t offset;
+	std::uint32_t dispatchOffset;
 	void (*body)();
 };
 constexpr SpawnCase kSpawnCases[] = {
@@ -85,11 +80,18 @@ constexpr SpawnCase kSpawnCases[] = {
 void PublishDualVehicleHeadlights(const PatchContext& ctx)
 {
 	Trace("publish DualVehicleHeadlights");
-	// DualVehicleHeadlights: 5 slots
 	if (ctx.Option("DualVehicleHeadlights", "1"))
 	{
 		const GameImage& image = ctx.image;
 
+		// The match is the CVehicle light-update call site (1.0.8.0 0x8F7CE5 in
+		// sub_8F7590: `mov edx,[edi]; mov eax,[edx+0x64]; call eax`). Each
+		// displacement lands on one instruction of that function:
+		//   +207 `push offset unk_1252D90` operand (the light-state global)
+		//   +140 `call CPlayer::getPlayerPed` operand, +144 its next instruction
+		//   +151 `call CVehicle::isDriver` operand,    +155 its next instruction
+		//   +331 `call sub_8F7080` operand,            +335 its next instruction
+		//   +338 the `pop edi` the body resumes at
 		if (auto pattern = Pattern(image, "8B 17 8B 42 64 8B CF FF D0 8B 54"); pattern.size() > 0)
 		{
 			zpatch_dual_bcc = *pattern.get(0).get<std::uint32_t>(207);
@@ -104,7 +106,6 @@ void PublishDualVehicleHeadlights(const PatchContext& ctx)
 void PublishHighFPSBikePhysicsFix(const PatchContext& ctx)
 {
 	Trace("publish HighFPSBikePhysicsFix");
-	// HighFPSBikePhysicsFix: 1 slot
 	if (ctx.Option("HighFPSBikePhysicsFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -119,7 +120,6 @@ void PublishHighFPSBikePhysicsFix(const PatchContext& ctx)
 void PublishNoLiveryLimit(const PatchContext& ctx)
 {
 	Trace("publish NoLiveryLimit");
-	// NoLiveryLimit: 5 slots
 	if (ctx.Option("NoLiveryLimit", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -146,7 +146,6 @@ void PublishNoLiveryLimit(const PatchContext& ctx)
 void PublishCarPartsShadowFix(const PatchContext& ctx)
 {
 	Trace("publish CarPartsShadowFix");
-	// CarPartsShadowFix: 2 slots
 	if (ctx.Option("CarPartsShadowFix", "1") || ctx.Option("CarDynamicShadowFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -162,7 +161,6 @@ void PublishCarPartsShadowFix(const PatchContext& ctx)
 void PublishForceCarHeadlightShadows(const PatchContext& ctx)
 {
 	Trace("publish ForceCarHeadlightShadows");
-	// ForceCarHeadlightShadows: 1 slot
 	if (ctx.Option("ForceCarHeadlightShadows", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -177,7 +175,7 @@ void PublishForceCarHeadlightShadows(const PatchContext& ctx)
 void PublishFreezeCarFix(const PatchContext& ctx)
 {
 	Trace("publish FreezeCarFix");
-	// FreezeCarFix: 12 slots. The recovered gate is keyed on the first pattern, so
+	// The recovered gate is keyed on the first pattern, so
 	// one scan both gates and supplies its match.
 	if (ctx.Option("FreezeCarFix", "1"))
 	{
@@ -188,24 +186,26 @@ void PublishFreezeCarFix(const PatchContext& ctx)
 		{
 			zpatch_spawns_orig_a = MatchTarget(primary, 8, 12);
 
-		if (auto pattern = Pattern(image, "8B 4C 24 28 8B 54 24 24 50 51 52 E8 ? ? ? ? 5F 5E 5D 5B"); pattern.size() > 0)
-		{
-			zpatch_spawns_orig_b = MatchTarget(pattern, 12, 16);
-		}
+			if (auto pattern = Pattern(image, "8B 4C 24 28 8B 54 24 24 50 51 52 E8 ? ? ? ? 5F 5E 5D 5B"); pattern.size() > 0)
+			{
+				zpatch_spawns_orig_b = MatchTarget(pattern, 12, 16);
+			}
 
 			if (auto pattern = Pattern(image, "E9 A1 02 00 00 83 FF 09 0F 87 F2 00 00 00");
 			    pattern.size() > 0)
 			{
-				zpatch_spawns_case9_resume = MatchTarget(pattern, 247, 251);
-				zpatch_spawns_case6_resume = MatchTarget(pattern, 181, 185);
+				// The probe's ten jump-table arms, in case order 0..9; each value is
+				// the arm's resume address in the probe's dispatch table.
+				zpatch_spawns_case0_resume = MatchTarget(pattern, 37, 41);
 				zpatch_spawns_case1_resume = MatchTarget(pattern, 62, 66);
 				zpatch_spawns_case2_resume = MatchTarget(pattern, 87, 91);
-				zpatch_spawns_case4_resume = MatchTarget(pattern, 137, 141);
-				zpatch_spawns_case7_resume = MatchTarget(pattern, 203, 207);
 				zpatch_spawns_case3_resume = MatchTarget(pattern, 112, 116);
+				zpatch_spawns_case4_resume = MatchTarget(pattern, 137, 141);
 				zpatch_spawns_case5_resume = MatchTarget(pattern, 159, 163);
+				zpatch_spawns_case6_resume = MatchTarget(pattern, 181, 185);
+				zpatch_spawns_case7_resume = MatchTarget(pattern, 203, 207);
 				zpatch_spawns_case8_resume = MatchTarget(pattern, 225, 229);
-				zpatch_spawns_case0_resume = MatchTarget(pattern, 37, 41);
+				zpatch_spawns_case9_resume = MatchTarget(pattern, 247, 251);
 			}
 		}
 	}
@@ -214,7 +214,6 @@ void PublishFreezeCarFix(const PatchContext& ctx)
 void PublishCarDynamicShadowFix(const PatchContext& ctx)
 {
 	Trace("publish CarDynamicShadowFix");
-	// CarDynamicShadowFix: 5 slots
 	if (ctx.Option("CarDynamicShadowFix", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -230,18 +229,12 @@ void PublishCarDynamicShadowFix(const PatchContext& ctx)
 			zpatch_carparts_resume_2 = MatchAddress(pattern, 13);
 			zpatch_carparts_shadow_fn = MatchTarget(pattern, 9, 13);
 		}
-
-		if (auto pattern = Pattern(image, "8B 45 10 8B 16 8B 92 8C 00 00 00"); pattern.size() > 0)
-		{
-			zpatch_car_dynamic_d = MatchAddress(pattern);
-		}
 	}
 }
 
 void PublishGarageModelFix(const PatchContext& ctx)
 {
 	Trace("publish GarageModelFix");
-	// GarageModelFix: 2 slots
 	if (ctx.Option("GarageModelFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -289,7 +282,6 @@ void PublishSteerSlots(const PatchContext& ctx)
 void PublishMovingSteeringWheelSupport(const PatchContext& ctx)
 {
 	Trace("publish MovingSteeringWheelSupport");
-	// MovingSteeringWheelSupport: 5 slots
 	if (ctx.Option("MovingSteeringWheelSupport", "1"))
 		PublishSteerSlots(ctx);
 }
@@ -297,7 +289,6 @@ void PublishMovingSteeringWheelSupport(const PatchContext& ctx)
 void PublishShakingEngineBlock(const PatchContext& ctx)
 {
 	Trace("publish ShakingEngineBlock");
-	// ShakingEngineBlock: 5 slots
 	if (ctx.Option("ShakingEngineBlock", "1"))
 		PublishSteerSlots(ctx);
 }
@@ -305,7 +296,6 @@ void PublishShakingEngineBlock(const PatchContext& ctx)
 void PublishMovingPlaneParts(const PatchContext& ctx)
 {
 	Trace("publish MovingPlaneParts");
-	// MovingPlaneParts: 5 slots
 	if (ctx.Option("MovingPlaneParts", "1"))
 		PublishSteerSlots(ctx);
 }
@@ -313,7 +303,6 @@ void PublishMovingPlaneParts(const PatchContext& ctx)
 void ApplyBikeFeetFix(const PatchContext& ctx)
 {
 	Trace("BikeFeetFix");
-	// BikeFeetFix: 1 literal
 	if (ctx.Option("BikeFeetFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -330,7 +319,6 @@ void ApplyBikeFeetFix(const PatchContext& ctx)
 void ApplyBikePhoneAnimsFix(const PatchContext& ctx)
 {
 	Trace("BikePhoneAnimsFix");
-	// BikePhoneAnimsFix: 1 literal
 	if (ctx.Option("BikePhoneAnimsFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -346,7 +334,6 @@ void ApplyBikePhoneAnimsFix(const PatchContext& ctx)
 void ApplyEpisodicVehicleSupport(const PatchContext& ctx)
 {
 	Trace("EpisodicVehicleSupport");
-	// EpisodicVehicleSupport: 23 literals, 4 rvas, 4 sigwrites
 	if (ctx.Option("EpisodicVehicleSupport", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -449,7 +436,6 @@ void ApplyEpisodicVehicleSupport(const PatchContext& ctx)
 void ApplyHighFPSBikePhysicsFix(const PatchContext& ctx)
 {
 	Trace("HighFPSBikePhysicsFix");
-	// HighFPSBikePhysicsFix: 1 sigjump
 	if (ctx.Option("HighFPSBikePhysicsFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -466,19 +452,17 @@ void ApplyHighFPSBikePhysicsFix(const PatchContext& ctx)
 void ApplyInfiniteCarBottomDistance(const PatchContext& ctx)
 {
 	Trace("InfiniteCarBottomDistance");
-	// InfiniteCarBottomDistance: 1 sigwrite
 	if (ctx.Option("InfiniteCarBottomDistance", "1"))
 	{
 		const GameImage& image = ctx.image;
 
+		if (auto pattern = Pattern(image, "0F 2F D0 76 25 0F 28 C2"); pattern.size() > 0)
 		{
-			if (auto pattern = Pattern(image, "0F 2F D0 76 25 0F 28 C2"); pattern.size() > 0)
-			{
-				// `jmp +0x2A` written as its two bytes (there is no short-jump API).
-				auto* site = pattern.get(0).get<std::uint8_t>(3);
-				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true);     //jmp
-				injector::WriteMemory<std::uint8_t>(site + 1, kCutsceneJmpDisp, true); // +0x2A
-			}
+			// `jmp +0x2A` written as its two bytes (there is no short-jump API).
+			constexpr std::uint8_t kJumpDisplacement = 0x2Au;  // jmp +0x2A
+			auto* site = pattern.get(0).get<std::uint8_t>(3);
+			injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true);     //jmp
+			injector::WriteMemory<std::uint8_t>(site + 1, kJumpDisplacement, true); // +0x2A
 		}
 	}
 }
@@ -486,7 +470,6 @@ void ApplyInfiniteCarBottomDistance(const PatchContext& ctx)
 void ApplyNoLiveryLimit(const PatchContext& ctx)
 {
 	Trace("NoLiveryLimit");
-	// NoLiveryLimit: 1 siginstall, 3 sigjumps
 	if (ctx.Option("NoLiveryLimit", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -519,7 +502,6 @@ void ApplyNoLiveryLimit(const PatchContext& ctx)
 void ApplyPipeBombDropIconSupport(const PatchContext& ctx)
 {
 	Trace("PipeBombDropIconSupport");
-	// PipeBombDropIconSupport: 1 literal
 	if (ctx.Option("PipeBombDropIconSupport", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -543,7 +525,6 @@ void ApplyPipeBombDropIconSupport(const PatchContext& ctx)
 void ApplyReversingLightFix(const PatchContext& ctx)
 {
 	Trace("ReversingLightFix");
-	// ReversingLightFix: 1 literal
 	if (ctx.Option("ReversingLightFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -560,7 +541,6 @@ void ApplyReversingLightFix(const PatchContext& ctx)
 void ApplyTeleportProtection(const PatchContext& ctx)
 {
 	Trace("TeleportProtection");
-	// TeleportProtection: 1 literal
 	if (ctx.Option("TeleportProtection", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -573,6 +553,8 @@ void ApplyTeleportProtection(const PatchContext& ctx)
 			// the byte after the immediate. injector::MakeRET is NOT equivalent - its header
 			// stores the opcode through a 4-byte int store, so it also zeroes match+3 (0x83 on
 			// 1.0.8.0, the first byte of the next instruction). Keep the three-byte form.
+			constexpr std::uint16_t kRet8Imm = 0x08C2u;  // C2 08 = ret 8
+			constexpr std::uint8_t kRet8High = 0x00u;    // high byte of the imm16
 			injector::WriteMemory<std::uint16_t>(injector::raw_ptr(match), kRet8Imm, true); //ret 8
 			injector::WriteMemory<std::uint8_t>(injector::raw_ptr(match + 2), kRet8High, true); //ret 8
 		}
@@ -582,19 +564,11 @@ void ApplyTeleportProtection(const PatchContext& ctx)
 void ApplyCarPartsShadowFix(const PatchContext& ctx)
 {
 	Trace("CarPartsShadowFix");
-	// CarPartsShadowFix: 1 siginstall, 1 sigjump
 	if (ctx.Option("CarPartsShadowFix", "1") || ctx.Option("CarDynamicShadowFix", "1"))
 	{
 		const GameImage& image = ctx.image;
 
 		if (auto pattern = Pattern(image, "85 DB 7E 41 55 EB 0A"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match - 6, reinterpret_cast<void*>(&abi_carparts_shadow), true); //jmp
-		}
-
-		if (auto pattern = Pattern(image, "485 DB 7E 41 55 EB 0A"); pattern.size() > 0)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
@@ -606,7 +580,6 @@ void ApplyCarPartsShadowFix(const PatchContext& ctx)
 void ApplyForceCarHeadlightShadows(const PatchContext& ctx)
 {
 	Trace("ForceCarHeadlightShadows");
-	// ForceCarHeadlightShadows: 2 siginstalls, 5 sigwrites
 	if (ctx.Option("ForceCarHeadlightShadows", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -629,37 +602,32 @@ void ApplyForceCarHeadlightShadows(const PatchContext& ctx)
 			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_fchs_shim), true); //jmp
 		}
 
+		if (auto pattern = Pattern(image, "8D 4C 24 50 51 68 04 05 00 00"); pattern.size() > 0)
 		{
-			if (auto pattern = Pattern(image, "8D 4C 24 50 51 68 04 05 00 00"); pattern.size() > 0)
-			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6),
-				                                    kShadowPushA & kByteMask, true); // force 0x504, low byte
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(7),
-				                                    (kShadowPushA >> 8) & kByteMask, true); // force 0x504, high byte
-			}
+			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6),
+			                                    kShadowPushA & kByteMask, true); // force 0x504, low byte
+			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(7),
+			                                    (kShadowPushA >> 8) & kByteMask, true); // force 0x504, high byte
 		}
 
+		if (auto pattern = Pattern(image, "8D 44 24 50 50 68 04 01 00 00"); pattern.size() > 0)
 		{
-			if (auto pattern = Pattern(image, "8D 44 24 50 50 68 04 01 00 00"); pattern.size() > 0)
-			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6),
-				                                    kShadowPushB & kByteMask, true); // force 0x104, low byte
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(7),
-				                                    (kShadowPushB >> 8) & kByteMask, true); // force 0x104, high byte
-			}
+			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6),
+			                                    kShadowPushB & kByteMask, true); // force 0x104, low byte
+			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(7),
+			                                    (kShadowPushB >> 8) & kByteMask, true); // force 0x104, high byte
 		}
 
+		if (auto pattern = Pattern(image, "F3 0F 11 44 24 1C 0F 84 9E 00 00 00"); pattern.size() > 0)
 		{
-			if (auto pattern = Pattern(image, "F3 0F 11 44 24 1C 0F 84 9E 00 00 00"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(6);
-				// `0F 84 9E 00 00 00` = je +0x9E; the arm rewrites the first four
-				// bytes (the sixth was already 0).
-				injector::WriteMemory<std::uint8_t>(site, kJeRel32First, true);      // 0F
-				injector::WriteMemory<std::uint8_t>(site + 1, kJeRel32Second, true); // 84
-				injector::WriteMemory<std::uint16_t>(site + 2, kCutsceneBranchDisp, true); // +0x9E
-				injector::WriteMemory<std::uint8_t>(site + 4, kZeroByte, true); //jz rel32
-			}
+			constexpr std::uint16_t kBranchDisplacement = 0x009Eu;  // je +0x9E
+			auto* site = pattern.get(0).get<std::uint8_t>(6);
+			// `0F 84 9E 00 00 00` = je +0x9E; the arm rewrites the first four
+			// bytes (the sixth was already 0).
+			injector::WriteMemory<std::uint8_t>(site, kJeRel32First, true);      // 0F
+			injector::WriteMemory<std::uint8_t>(site + 1, kJeRel32Second, true); // 84
+			injector::WriteMemory<std::uint16_t>(site + 2, kBranchDisplacement, true); // +0x9E
+			injector::WriteMemory<std::uint8_t>(site + 4, kZeroByte, true); //jz rel32
 		}
 	}
 }
@@ -667,63 +635,66 @@ void ApplyForceCarHeadlightShadows(const PatchContext& ctx)
 void ApplyFreezeCarFix(const PatchContext& ctx)
 {
 	Trace("FreezeCarFix");
-	// FreezeCarFix: 7 siginstalls
-	if (ctx.Option("FreezeCarFix", "1") &&
-	    Pattern(ctx.image, "32 DB 8B 54 24 24 52 E8 ? ? ? ? 8B F0").size() > 0)
+	if (ctx.Option("FreezeCarFix", "1"))
 	{
 		const GameImage& image = ctx.image;
 
-		if (auto pattern = Pattern(image, "32 DB 8B 54 24 24 52 E8 ? ? ? ? 8B F0"); pattern.size() > 0)
+		// The recovered gate is the first scan: when it misses, none of the other
+		// probe sites are installed. Its match is reused for the first site.
+		if (auto primary = Pattern(image, "32 DB 8B 54 24 24 52 E8 ? ? ? ? 8B F0");
+		    primary.size() > 0)
 		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+			auto* primaryMatch = primary.get(0).get<std::uint8_t>();
 
-			injector::MakeCALL(match + 7, reinterpret_cast<void*>(&abi_spawns_probe), true); //call
-		}
+			injector::MakeCALL(primaryMatch + 7, reinterpret_cast<void*>(&abi_spawns_probe),
+			                   true); //call
 
-		if (auto pattern = Pattern(image, "8B 4C 24 28 8B 54 24 24 50 51 52 E8 ? ? ? ? 5F 5E 5D 5B"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+			if (auto pattern = Pattern(image, "8B 4C 24 28 8B 54 24 24 50 51 52 E8 ? ? ? ? 5F 5E 5D 5B"); pattern.size() > 0)
+			{
+				auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::MakeCALL(match + 11, reinterpret_cast<void*>(&abi_spawns_guard), true); //call
-		}
+				injector::MakeCALL(match + 11, reinterpret_cast<void*>(&abi_spawns_guard), true); //call
+			}
 
-		if (auto pattern = Pattern(image, "E9 A1 02 00 00 83 FF 09 0F 87 F2 00 00 00"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+			if (auto pattern = Pattern(image, "E9 A1 02 00 00 83 FF 09 0F 87 F2 00 00 00"); pattern.size() > 0)
+			{
+				auto* match = pattern.get(0).get<std::uint8_t>();
 
-			// The ten case bodies inside the probe: the original's jump-table
-			// selectors are the byte offsets from the probe match.
-			for (const SpawnCase& spawn : kSpawnCases)
-				injector::MakeCALL(match + spawn.offset, reinterpret_cast<void*>(spawn.body), true); //call
-		}
+				// The ten case bodies inside the probe: the original's jump-table
+				// selectors are the byte offsets from the probe match.
+				for (const SpawnCase& spawn : kSpawnCases)
+					injector::MakeCALL(match + spawn.dispatchOffset,
+					                   reinterpret_cast<void*>(spawn.body), true); //call
+			}
 
-		if (auto pattern = Pattern(image, "88 87 40 01 00 00 E8"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+			if (auto pattern = Pattern(image, "88 87 40 01 00 00 E8"); pattern.size() > 0)
+			{
+				auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::MakeCALL(match + 6, reinterpret_cast<void*>(&abi_spawns_probe), true); //call
-		}
+				injector::MakeCALL(match + 6, reinterpret_cast<void*>(&abi_spawns_probe), true); //call
+			}
 
-		if (auto pattern = Pattern(image, "88 5C 24 1F 8B 54 24 28 52 E8"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+			if (auto pattern = Pattern(image, "88 5C 24 1F 8B 54 24 28 52 E8"); pattern.size() > 0)
+			{
+				auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::MakeCALL(match + 9, reinterpret_cast<void*>(&abi_spawns_probe), true); //call
-			injector::MakeCALL(match + 254, reinterpret_cast<void*>(&abi_spawns_probe), true); //call
-		}
+				injector::MakeCALL(match + 9, reinterpret_cast<void*>(&abi_spawns_probe), true); //call
+				injector::MakeCALL(match + 254, reinterpret_cast<void*>(&abi_spawns_probe), true); //call
+			}
 
-		if (auto pattern = Pattern(image, "38 98 8C 00 00 00 75 2D 57 E8"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+			if (auto pattern = Pattern(image, "38 98 8C 00 00 00 75 2D 57 E8"); pattern.size() > 0)
+			{
+				auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::MakeCALL(match + 9, reinterpret_cast<void*>(&abi_spawns_probe), true); //call
-		}
+				injector::MakeCALL(match + 9, reinterpret_cast<void*>(&abi_spawns_probe), true); //call
+			}
 
-		if (auto pattern = Pattern(image, "32 DB 8B 54 24 24 52 E8"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+			if (auto pattern = Pattern(image, "32 DB 8B 54 24 24 52 E8"); pattern.size() > 0)
+			{
+				auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::MakeCALL(match + 7, reinterpret_cast<void*>(&abi_spawns_probe), true); //call
+				injector::MakeCALL(match + 7, reinterpret_cast<void*>(&abi_spawns_probe), true); //call
+			}
 		}
 	}
 }
@@ -731,7 +702,6 @@ void ApplyFreezeCarFix(const PatchContext& ctx)
 void ApplyCarDynamicShadowFix(const PatchContext& ctx)
 {
 	Trace("CarDynamicShadowFix");
-	// CarDynamicShadowFix: 3 siginstalls, 2 sigwrites
 	if (ctx.Option("CarDynamicShadowFix", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -757,19 +727,15 @@ void ApplyCarDynamicShadowFix(const PatchContext& ctx)
 			injector::MakeJMP(match + 3, reinterpret_cast<void*>(match + 30), true); //jmp
 		}
 
+		if (auto pattern = Pattern(image, "83 E0 0F 83 F8 03 75 17 F6 86 6C 02 00 00 04"); pattern.size() > 0)
 		{
-			if (auto pattern = Pattern(image, "83 E0 0F 83 F8 03 75 17 F6 86 6C 02 00 00 04"); pattern.size() > 0)
-			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6), kShortJmpOpcode, true); //jmp
-			}
+			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6), kShortJmpOpcode, true); //jmp
 		}
 
+		if (auto pattern = Pattern(image, "50 68 04 01 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
 		{
-			if (auto pattern = Pattern(image, "50 68 04 01 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
-			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(2), kZeroByte,
-				                                    true); // shadow size 0x104 -> 0x100
-			}
+			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(2), kZeroByte,
+			                                    true); // shadow size 0x104 -> 0x100
 		}
 
 		// The @noFCHS variant: with ForceCarHeadlightShadows on, the original takes the
@@ -794,6 +760,7 @@ void ApplyCarDynamicShadowFix(const PatchContext& ctx)
 
 			if (auto pattern = Pattern(image, "51 68 04 05 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
 			{
+				constexpr std::uint32_t kShadowSizeForced = 0x100u;  // push 0x504 -> 0x100
 				auto* match = pattern.get(0).get<std::uint8_t>();
 
 				injector::WriteMemory<std::uint32_t>(match + 2, kShadowSizeForced, true); // push 0x504 -> 0x100
@@ -805,7 +772,6 @@ void ApplyCarDynamicShadowFix(const PatchContext& ctx)
 void ApplyGarageModelFix(const PatchContext& ctx)
 {
 	Trace("GarageModelFix");
-	// GarageModelFix: 2 siginstalls
 	if (ctx.Option("GarageModelFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -858,7 +824,6 @@ void ApplySteerSites(const PatchContext& ctx)
 void ApplyMovingSteeringWheelSupport(const PatchContext& ctx)
 {
 	Trace("MovingSteeringWheelSupport");
-	// MovingSteeringWheelSupport: 3 siginstalls
 	if (ctx.Option("MovingSteeringWheelSupport", "1"))
 		ApplySteerSites(ctx);
 }
@@ -866,7 +831,6 @@ void ApplyMovingSteeringWheelSupport(const PatchContext& ctx)
 void ApplyShakingEngineBlock(const PatchContext& ctx)
 {
 	Trace("ShakingEngineBlock");
-	// ShakingEngineBlock: 3 siginstalls
 	if (ctx.Option("ShakingEngineBlock", "1"))
 		ApplySteerSites(ctx);
 }
@@ -874,14 +838,12 @@ void ApplyShakingEngineBlock(const PatchContext& ctx)
 void ApplyMovingPlaneParts(const PatchContext& ctx)
 {
 	Trace("MovingPlaneParts");
-	// MovingPlaneParts: 3 siginstalls
 	if (ctx.Option("MovingPlaneParts", "1"))
 		ApplySteerSites(ctx);
 }
 void ApplyCarDecalsFix(const PatchContext& ctx)
 {
 	Trace("CarDecalsFix");
-	// CarDecalsFix: 1 siginstall
 	if (ctx.Option("CarDecalsFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -898,7 +860,6 @@ void ApplyCarDecalsFix(const PatchContext& ctx)
 void ApplyCarDynamicShadowFixNoE(const PatchContext& ctx)
 {
 	Trace("CarDynamicShadowFixNoE");
-	// CarDynamicShadowFix@noE: 1 siginstall
 	if (ctx.Option("CarDynamicShadowFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -915,7 +876,6 @@ void ApplyCarDynamicShadowFixNoE(const PatchContext& ctx)
 void ApplyDualVehicleHeadlightsOld(const PatchContext& ctx)
 {
 	Trace("DualVehicleHeadlightsOld");
-	// DualVehicleHeadlights@old: 1 siginstall
 	if (ctx.Option("DualVehicleHeadlights", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -932,7 +892,6 @@ void ApplyDualVehicleHeadlightsOld(const PatchContext& ctx)
 void ApplyDualVehicleHeadlightsNew(const PatchContext& ctx)
 {
 	Trace("DualVehicleHeadlightsNew");
-	// DualVehicleHeadlights@new: 1 siginstall
 	if (ctx.Option("DualVehicleHeadlights", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -949,23 +908,18 @@ void ApplyDualVehicleHeadlightsNew(const PatchContext& ctx)
 void ApplyCarPartsShadowFixStandalone(const PatchContext& ctx)
 {
 	Trace("CarPartsShadowFixStandalone");
-	// CarPartsShadowFix@standalone: 2 sigwrites
 	if (ctx.Option("CarPartsShadowFix", "1"))
 	{
 		const GameImage& image = ctx.image;
 
+		if (auto pattern = Pattern(image, "83 F8 04 C6 44 24 0E 00 75 0F"); pattern.size() > 0)
 		{
-			if (auto pattern = Pattern(image, "83 F8 04 C6 44 24 0E 00 75 0F"); pattern.size() > 0)
-			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(8), kShortJmpOpcode, true); //jmp
-			}
+			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(8), kShortJmpOpcode, true); //jmp
 		}
 
+		if (auto pattern = Pattern(image, "83 FA 04 75 0C"); pattern.size() > 0)
 		{
-			if (auto pattern = Pattern(image, "83 FA 04 75 0C"); pattern.size() > 0)
-			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(3), kShortJmpOpcode, true); //jmp
-			}
+			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(3), kShortJmpOpcode, true); //jmp
 		}
 	}
 }
@@ -973,13 +927,13 @@ void ApplyCarPartsShadowFixStandalone(const PatchContext& ctx)
 void ApplyIncreaseVehicleModelLimit(const PatchContext& ctx)
 {
 	Trace("IncreaseVehicleModelLimit");
-	// IncreaseVehicleModelLimit: 1 indirect
 	if (ctx.Option("IncreaseVehicleModelLimit", "1"))
 	{
 		const GameImage& image = ctx.image;
 
 		if (auto pattern = Pattern(image, "83 C7 01 81 FF 18 79 00 00 7C D2"); pattern.size() > 0)
 		{
+			constexpr std::uint32_t kVehicleModelLimit = 0x400u;  // 1024 models (raised cap)
 			auto* target = MatchPointer(pattern, 77);
 			if (target != nullptr)
 				injector::WriteMemory<std::uint32_t>(target, kVehicleModelLimit, true); // model limit = 1024
@@ -990,13 +944,13 @@ void ApplyIncreaseVehicleModelLimit(const PatchContext& ctx)
 void ApplyIncreaseVehicleStructLimit(const PatchContext& ctx)
 {
 	Trace("IncreaseVehicleStructLimit");
-	// IncreaseVehicleStructLimit: 1 literalstore
 	if (ctx.Option("IncreaseVehicleStructLimit", "1"))
 	{
 		const GameImage& image = ctx.image;
 
 		if (auto pattern = Pattern(image, "68 ? ? ? ? 6A 32 8B C8"); pattern.size() > 0)
 		{
+			constexpr std::uint8_t kVehicleStructLimit = 100u;  // 0x64: struct count
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
 			injector::WriteMemory<std::uint8_t>(match + 6,

@@ -20,20 +20,40 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 PAT = re.compile(
-    r'extern\s+"C"\s+(?P<type>[A-Za-z_][\w:]*(?:\s+[A-Za-z_][\w:]*)*|unsigned\s+char)\s+'
-    r"(?P<sym>zpatch_\w+)\s*(?P<arr>\[[^\]]*\])?\s*;(?:\s*//\s*(?P<note>.*))?$",
+    r'extern\s+"C"\s+(?P<type>(?:const\s+)?[A-Za-z_][\w:]*(?:\s+[A-Za-z_][\w:]*)*'
+    r'(?:\s*\*+)?)\s+(?P<sym>zpatch_\w+)\s*(?P<arr>\[[^\]]*\])?\s*;(?:\s*//\s*(?P<note>.*))?$',
+    re.M,
+)
+# `extern "C" <ret> (__cdecl* zpatch_x)(<args>);` — function-pointer globals.
+FN_PAT = re.compile(
+    r'extern\s+"C"\s+(?P<ret>(?:const\s+)?[A-Za-z_][\w:]*(?:\s+[A-Za-z_][\w:]*)*)\s*'
+    r'\(\s*(?:__\w+\s*)?\*\s*(?P<sym>zpatch_\w+)\s*\)\s*\([^)]*\)\s*;?\s*(?P<note>//\s*.*)?$',
     re.M,
 )
 
 
+def _note(match) -> str:
+    note = (match.group("note") or "").strip()
+    return note[2:].strip() if note.startswith("//") else note
+
+
 def parse(header: Path):
     rows, skipped = [], []
-    for m in PAT.finditer(header.read_text(encoding="utf-8")):
-        sym, arr = m.group("sym"), m.group("arr")
-        if arr == "[]":
-            skipped.append(sym)
+    text = header.read_text(encoding="utf-8")
+    matches = []
+    for m in PAT.finditer(text):
+        if m.group("arr") == "[]":
+            skipped.append(m.group("sym"))
             continue
-        rows.append((sym, m.group("note") or ""))
+        matches.append((m.start(), m.group("sym"), _note(m)))
+    for m in FN_PAT.finditer(text):
+        matches.append((m.start(), m.group("sym"), _note(m)))
+    seen = set(skipped)
+    for _start, sym, note in sorted(matches):
+        if sym in seen:
+            continue
+        seen.add(sym)
+        rows.append((sym, note))
     return rows, skipped
 
 

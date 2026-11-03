@@ -27,31 +27,32 @@ constexpr std::uint8_t kMinimizePauseTick = 0x06u;  // DoNotPauseOnMinimize
 void PublishMouseFix(const PatchContext& ctx)
 {
 	Trace("publish MouseFix");
-	// MouseFix: 6 slots
 	if (ctx.Option("MouseFix", "1"))
 	{
 		const GameImage& image = ctx.image;
 
 		if (auto pattern = Pattern(image, "51 8B 44 24 0C 85 C0 0F 57 D2 56 8B 35 ? ? ? ? 57 8B 3D ? ? ? ? F3 0F 11 54 24 08 75 0C"); pattern.size() > 0)
 		{
-			zpatch_mf_x = *pattern.get(0).get<std::uint32_t>(13);
-			zpatch_mf_y = *pattern.get(0).get<std::uint32_t>(20);
+			zpatch_mf_x = RebasedPointer<int>(*pattern.get(0).get<std::uint32_t>(13));
+			zpatch_mf_y = RebasedPointer<int>(*pattern.get(0).get<std::uint32_t>(20));
 		}
 
 		if (auto pattern = Pattern(image, "8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? 83 C4 08 83 3D"); pattern.size() > 0)
 		{
-			zpatch_mf_flag = *pattern.get(0).get<std::uint32_t>(20);
+			zpatch_mf_flag = RebasedPointer<std::uint8_t>(*pattern.get(0).get<std::uint32_t>(20));
 		}
 
 		if (auto pattern = Pattern(image, "83 EC 08 DB 05 ? ? ? ? 68"); pattern.size() > 0)
 		{
-			zpatch_mf_time = MatchAddress(pattern);
+			zpatch_mf_time = RebasedPointer<int()>(MatchAddress(pattern));
 		}
 
 		if (auto pattern = Pattern(image, "53 56 8B F1 57 8B BE 40 01 00 00 85 FF F3 0F 11 46"); pattern.size() > 0)
 		{
-			zpatch_mf_resume_a = MatchAddress(pattern);
-			zpatch_mf_resume_b = MatchAddress(pattern, 1878);
+			zpatch_mf_resume_a = RebasedPointer<std::uint8_t>(MatchAddress(pattern));
+			// 1878 (0x756) into the match: the resume the mouse-advance body
+			// tail-jumps to (game 0xA82275).
+			zpatch_mf_resume_b = RebasedPointer<std::uint8_t>(MatchAddress(pattern, 1878));
 		}
 	}
 }
@@ -59,7 +60,6 @@ void PublishMouseFix(const PatchContext& ctx)
 void ApplyMouseFix(const PatchContext& ctx)
 {
 	Trace("MouseFix");
-	// MouseFix: 8 siginstalls
 	if (ctx.Option("MouseFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -140,7 +140,6 @@ void ApplyMouseFix(const PatchContext& ctx)
 void ApplyDoNotPauseOnMinimize(const PatchContext& ctx)
 {
 	Trace("DoNotPauseOnMinimize");
-	// DoNotPauseOnMinimize: 2 sigwrites
 	if (ctx.Option("DoNotPauseOnMinimize", "0"))
 	{
 		const GameImage& image = ctx.image;

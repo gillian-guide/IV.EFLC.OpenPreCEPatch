@@ -68,7 +68,6 @@ constexpr SuperLodTargets kSuperLodTargets[] = {
 void PublishBuildingDynamicShadows(const PatchContext& ctx)
 {
 	Trace("publish BuildingDynamicShadows");
-	// BuildingDynamicShadows: 4 slots
 	if (ctx.Option("BuildingDynamicShadows", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -95,7 +94,6 @@ void PublishBuildingDynamicShadows(const PatchContext& ctx)
 void PublishEmissiveLerpFix(const PatchContext& ctx)
 {
 	Trace("publish EmissiveLerpFix");
-	// EmissiveLerpFix: 2 slots
 	if (ctx.Option("EmissiveLerpFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -111,7 +109,6 @@ void PublishEmissiveLerpFix(const PatchContext& ctx)
 void PublishSuperLODFix(const PatchContext& ctx)
 {
 	Trace("publish SuperLODFix");
-	// SuperLODFix: 6 slots
 	if (ctx.Option("SuperLODFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -130,7 +127,6 @@ void PublishSuperLODFix(const PatchContext& ctx)
 void PublishHighQualityReflections(const PatchContext& ctx)
 {
 	Trace("publish HighQualityReflections");
-	// HighQualityReflections: 2 slots
 	if (ctx.Option("HighQualityReflections", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -146,15 +142,17 @@ void PublishHighQualityReflections(const PatchContext& ctx)
 void PublishCutsceneFixes(const PatchContext& ctx)
 {
 	Trace("publish CutsceneFixes");
-	// CutsceneFixes: 2 slots
 	if (ctx.Option("CutsceneFixes", "1"))
 	{
 		const GameImage& image = ctx.image;
 
 		if (auto pattern = Pattern(image, "8B 4C 24 2C 5F 5E 5B 33 CC B0 01 E8"); pattern.size() > 0)
 		{
-			zpatch_cutscene_target = MatchAddress(pattern) + *pattern.get(0).get<std::uint32_t>(-4);
-			zpatch_cutscene_poke = MatchTarget(pattern, -4, 79);
+			// -4 is the call operand just before the match; the target is match +
+			// that rel32.
+			zpatch_cutscene_target = RebasedPointer<double(void*, int)>(
+			    MatchTarget(pattern, -4, 0));
+			zpatch_cutscene_poke = RebasedPointer<std::uint8_t>(MatchTarget(pattern, -4, 79));
 		}
 	}
 }
@@ -162,7 +160,6 @@ void PublishCutsceneFixes(const PatchContext& ctx)
 void ApplyBuildingAlphaFix(const PatchContext& ctx)
 {
 	Trace("BuildingAlphaFix");
-	// BuildingAlphaFix: 1 literal, 1 siginstall
 	if (ctx.Option("BuildingAlphaFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -187,17 +184,14 @@ void ApplyBuildingAlphaFix(const PatchContext& ctx)
 void ApplyBuildingDynamicShadows(const PatchContext& ctx)
 {
 	Trace("BuildingDynamicShadows");
-	// BuildingDynamicShadows: 1 sigjump, 1 sigwrite
 	if (ctx.Option("BuildingDynamicShadows", "1"))
 	{
 		const GameImage& image = ctx.image;
 
+		if (auto pattern = Pattern(image, "50 68 04 01 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
 		{
-			if (auto pattern = Pattern(image, "50 68 04 01 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
-			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(2), kZeroByte,
-				                                    true); // shadow size 0x104 -> 0x100
-			}
+			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(2), kZeroByte,
+			                                    true); // shadow size 0x104 -> 0x100
 		}
 
 		if (auto pattern = Pattern(image, "8B 47 28 C1 E8 06 83 E0 0F 83 C0"); pattern.size() > 0)
@@ -212,7 +206,6 @@ void ApplyBuildingDynamicShadows(const PatchContext& ctx)
 void ApplyEmissiveLerpFix(const PatchContext& ctx)
 {
 	Trace("EmissiveLerpFix");
-	// EmissiveLerpFix: 1 siginstall
 	if (ctx.Option("EmissiveLerpFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -229,7 +222,6 @@ void ApplyEmissiveLerpFix(const PatchContext& ctx)
 void ApplyForceDynamicShadowsEverywhere(const PatchContext& ctx)
 {
 	Trace("ForceDynamicShadowsEverywhere");
-	// ForceDynamicShadowsEverywhere: 1 literal
 	if (ctx.Option("ForceDynamicShadowsEverywhere", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -246,7 +238,6 @@ void ApplyForceDynamicShadowsEverywhere(const PatchContext& ctx)
 void ApplyForceShadowsOnObjects(const PatchContext& ctx)
 {
 	Trace("ForceShadowsOnObjects");
-	// ForceShadowsOnObjects: 1 literal
 	if (ctx.Option("ForceShadowsOnObjects", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -263,7 +254,6 @@ void ApplyForceShadowsOnObjects(const PatchContext& ctx)
 void ApplyImprovedShaderStreaming(const PatchContext& ctx)
 {
 	Trace("ImprovedShaderStreaming");
-	// ImprovedShaderStreaming: 1 siginstall
 	if (ctx.Option("ImprovedShaderStreaming", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -285,7 +275,6 @@ void ApplyImprovedShaderStreaming(const PatchContext& ctx)
 void ApplyRemoveBoundingBoxCulling(const PatchContext& ctx)
 {
 	Trace("RemoveBoundingBoxCulling");
-	// RemoveBoundingBoxCulling: 1 siginstall
 	if (ctx.Option("RemoveBoundingBoxCulling", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -303,7 +292,6 @@ void ApplyRemoveBoundingBoxCulling(const PatchContext& ctx)
 void ApplyRemoveStaticCarShadows(const PatchContext& ctx)
 {
 	Trace("RemoveStaticCarShadows");
-	// RemoveStaticCarShadows: 1 literal
 	if (ctx.Option("RemoveStaticCarShadows", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -320,7 +308,6 @@ void ApplyRemoveStaticCarShadows(const PatchContext& ctx)
 void ApplyRemoveStaticCutsceneCarShadows(const PatchContext& ctx)
 {
 	Trace("RemoveStaticCutsceneCarShadows");
-	// RemoveStaticCutsceneCarShadows: 1 literal
 	if (ctx.Option("RemoveStaticCutsceneCarShadows", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -337,7 +324,6 @@ void ApplyRemoveStaticCutsceneCarShadows(const PatchContext& ctx)
 void ApplyVRAMFix(const PatchContext& ctx)
 {
 	Trace("VRAMFix");
-	// VRAMFix: 1 sigjump
 	if (ctx.Option("VRAMFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -354,7 +340,6 @@ void ApplyVRAMFix(const PatchContext& ctx)
 void ApplySuperLODFix(const PatchContext& ctx)
 {
 	Trace("SuperLODFix");
-	// SuperLODFix: 2 rvajumps
 	if (ctx.Option("SuperLODFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -375,7 +360,6 @@ void ApplySuperLODFix(const PatchContext& ctx)
 void ApplyHighQualityReflections(const PatchContext& ctx)
 {
 	Trace("HighQualityReflections");
-	// HighQualityReflections: 1 siginstall
 	if (ctx.Option("HighQualityReflections", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -392,7 +376,6 @@ void ApplyHighQualityReflections(const PatchContext& ctx)
 void ApplyCutsceneFixes(const PatchContext& ctx)
 {
 	Trace("CutsceneFixes");
-	// CutsceneFixes: 2 siginstalls, 1 sigwrite
 	if (ctx.Option("CutsceneFixes", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -427,7 +410,6 @@ void ApplyCutsceneFixes(const PatchContext& ctx)
 void ApplyBorderlessWindowed(const PatchContext& ctx)
 {
 	Trace("BorderlessWindowed");
-	// BorderlessWindowed: 2 matchjumps, 2 sigwrites
 	if (ctx.Option("BorderlessWindowed", "1") && !FusionFixGateClosed())
 	{
 		const GameImage& image = ctx.image;
@@ -453,7 +435,6 @@ void ApplyBorderlessWindowed(const PatchContext& ctx)
 void ApplyNoImpostorHeightCutoff(const PatchContext& ctx)
 {
 	Trace("NoImpostorHeightCutoff");
-	// NoImpostorHeightCutoff: 2 matchliterals
 	if (ctx.Option("NoImpostorHeightCutoff", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -472,7 +453,6 @@ void ApplyNoImpostorHeightCutoff(const PatchContext& ctx)
 void ApplyNoLODLightHeightCutoff(const PatchContext& ctx)
 {
 	Trace("NoLODLightHeightCutoff");
-	// NoLODLightHeightCutoff: 1 literalstore
 	if (ctx.Option("NoLODLightHeightCutoff", "0"))
 	{
 		const GameImage& image = ctx.image;

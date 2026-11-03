@@ -10,6 +10,7 @@
 #include <initializer_list>
 
 #include "Hooking.Patterns.h"
+#include "instruction_bytes.h"
 
 struct PatchContext
 {
@@ -76,19 +77,6 @@ void WriteCallNoRead(std::uint8_t* site, void* destination);
 bool FusionFixGateClosed();
 
 bool NewFilesConflictModulesPresent();
-
-inline constexpr std::size_t kWordLength = 2;
-inline constexpr std::size_t kBranchLength = 5;
-inline constexpr std::uint8_t kCallOpcode = 0xE8;
-inline constexpr std::uint8_t kRetOpcode = 0xC3;
-inline constexpr std::uint8_t kMovEaxOpcode = 0xB8;
-inline constexpr std::uint8_t kPushadOpcode = 0x60;
-inline constexpr std::uint8_t kXorEaxOpcode = 0x33;
-inline constexpr std::uint8_t kXorEaxEaxModrm = 0xC0;
-inline constexpr std::uint8_t kJeRel32First = 0x0F;
-inline constexpr std::uint8_t kJeRel32Second = 0x84;
-inline constexpr std::uint8_t kMovdXmm0Eax[] = {0x66, 0x0F, 0x6E, 0xC0};
-inline constexpr std::uint8_t kMovdXmm1Eax[] = {0x66, 0x0F, 0x6E, 0xC8};
 
 // AddOptionsInMenu's decision, read by the RestoreDeathMusic arm: with the menu
 // integration on, the mod installs that feature's hooks even with its INI key off.

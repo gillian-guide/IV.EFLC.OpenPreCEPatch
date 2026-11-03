@@ -4,7 +4,7 @@ The tree follows the original mod's own source layout: the loader and the shared
 
 ## Entry point
 
-`src/dllmain.cpp` is the **only plain translation unit** and exports `DllMain`. Everything happens synchronously on `DLL_PROCESS_ATTACH`; the DRM has already modified the game's code by the time a deferred thread would run, so signatures must be matched now. It also holds the loader pipeline (`SetStuff`, whose phases are named below) and its helpers; the install arms themselves live in the feature modules, and `PatchGame` is the straight call sequence over them.
+`src/dllmain.cpp` is the **only plain translation unit** and exports `DllMain`. Everything happens synchronously on `DLL_PROCESS_ATTACH`; the DRM has already modified the game's code by the time a deferred thread would run, so signatures must be matched now. It also holds the loader pipeline (`SetStuff`, whose phases are named below) and its helpers; the install arms themselves live in the feature modules, and `PatchGame` walks the two arm tables over them.
 
 ```
 DllMain
@@ -23,14 +23,15 @@ SetStuff
   phase 7  LaunchWithPlayGTAIV
 ```
 
-The support code is split into modules under `source/`: `common`, `game`, `patch`, `log`, `config`, `catalogue`, `vehicle_lights`, `menu`, `launcher`, `useless_checks`, `hook_bodies` (the rebased globals, the 107 hook bodies and the resolver), `xliveless` (SkipLauncher/DFA/ROM) and one module per feature group (`vehicles`, `graphics`, `stability`, `audio`, `input`, `loading`, `mission`, `world`, `multiplayer`, `misc`). Types the plain TU and the headers name stay in `src/*.h`; the modules move implementations and export the declarations.
+The support code is split into modules under `source/`: `common`, `game`, `patch`, `log`, `config`, `catalogue`, `vehicle_lights`, `menu`, `launcher`, `useless_checks`, `hook_bodies` (the rebased globals, the 107 hook bodies and the resolver, plus the plain-TU helpers the bodies call), `xliveless` (SkipLauncher/DFA/ROM) and one module per feature group (`vehicles`, `graphics`, `stability`, `audio`, `input`, `loading`, `mission`, `world`, `multiplayer`, `misc`). Types the plain TU and the headers name stay in `src/*.h`; the modules move implementations and export the declarations.
 
 ## Files
 
 | file | responsibility |
 | --- | --- |
-| `src/dllmain.cpp` | the plain TU: `DllMain`, the loader pipeline (`SetStuff` and its phases), `PatchGame`'s straight call sequence, `FindGamePointers`, the INI/config helpers, the SkipLauncher/DFA/launcher stages |
+| `src/dllmain.cpp` | the plain TU: `DllMain`, the loader pipeline (`SetStuff` and its phases), `PatchGame`'s two arm tables, `FindGamePointers`, the INI/config helpers, the SkipLauncher/DFA/launcher stages |
 | `source/hook_bodies.ixx`, `source/hook_bodies.cpp` | the rebased globals, the hook bodies (interface declares, implementation unit defines: MSVC rejects naked bodies in an imported interface) and the resolver (`BodyId`/`kAbiBodies`) |
+| `source/ooc.cpp`, `source/nms_allocator.cpp`, `source/new_saves.cpp`, `source/script_calls.cpp`, `source/vehicle_steer.cpp` | the compiled helpers the bodies call: the OutOfCommission decoder/archive, the NewMemorySystem allocator, the NewSaves converter, the native-script call layer and the steer/engine/plane consumer (plain TUs, ASI/test-side only) |
 | `source/xliveless.ixx`, `source/xliveless.cpp` | SkipLauncher/DFA/ROM stages, file-API hooks and the ROM window |
 | `source/<feature>.ixx` | one module per feature group: that group's `Publish*`/`Apply*` arms, patterns, constants and config reads, in this tree's arm order |
 | `source/patch.ixx` | signature normalisation and scans, all-hit collection, the mapped-image write and the arms' scan/write helpers |
@@ -68,7 +69,7 @@ The original compares the build id at `dword_1015BE04` before it reads the INI f
 
 ## Option blocks
 
-`PatchGame` is the reconstruction's own arm schedule. Each INI option's arm is a function in its feature module (`source/<feature>.ixx`: `Publish*` for the slot phase, `Apply*` for the install), and `PatchGame` is the ordered list of calls. The arms run in the order this tree has always used: derived from the recovered loader but **not** the original loader's order (measured first-reference rank displacements reach 89: `NoLODLightHeightCutoff` original 3 → here 90, `CarDecalsFix` 0 → 79, `NoPhysicsSleep` 1 → 85, `LocalSettingsPath` 93 → 12). Each arm gates on its key (and its build), scans the site and calls `injector::` directly; the slot publishes all run before the first install, because a site write destroys the signature a later publish scans for, and because the original reads a site's original bytes before overwriting them.
+`PatchGame` is the reconstruction's own arm schedule. Each INI option's arm is a function in its feature module (`source/<feature>.ixx`: `Publish*` for the slot phase, `Apply*` for the install), and `PatchGame` walks two `constexpr` tables of arm pointers (`kPublishArms`, `kInstallArms`) in the order this tree has always used: derived from the recovered loader but **not** the original loader's order (measured first-reference rank displacements reach 89: `NoLODLightHeightCutoff` original 3 → here 90, `CarDecalsFix` 0 → 79, `NoPhysicsSleep` 1 → 85, `LocalSettingsPath` 93 → 12). Each arm gates on its key (and its build), scans the site and calls `injector::` directly; the slot publishes all run before the first install, because a site write destroys the signature a later publish scans for, and because the original reads a site's original bytes before overwriting them.
 
 Two ordering relations are load-bearing and pinned by `zp_dump --ordering`: every publish runs before any install, and `RemoveUselessChecks` runs before `MiscFixes` and `RestoreDeathMusic`. Re-ordering the rest of the arms to the recovered loader order is a separate change that would need a per-build dump proof (the 1.0.8.0 hash alone is not sufficient) and is not part of this tree yet.
 

@@ -12,28 +12,59 @@
 #include <cstdint>
 #include <string_view>
 
-// One store relative to a signature match: `bytes`, or `fill` repeated, and a
-// rel32 to another entry's match when `jumpToEntry` is set (the 33 C0 E9 rel32).
+// One in-place edit of a matched launcher window: the recovered handler
+// overwrites the launcher check at the match (a NOP run, an xor, a one-byte
+// branch or a short jump), so nothing here is callable and there is no ABI.
 struct SkipLauncherWrite final
 {
-	std::int32_t offset;
-	std::uint16_t length;
-	const std::uint8_t* bytes;  // null when fill is used
-	std::uint8_t fill;          // e.g. 0x90 for NOP fills
-	std::uint32_t jumpToEntry;
+	enum class Kind : std::uint8_t
+	{
+		write,  // store `bytes` at match + offset
+		fill,   // store `count` copies of `fill` (the recovered rows are NOPs)
+		jump,   // rewrite the rel32 at match + offset to `jumpToEntry`'s match
+	};
+
+	Kind kind{};
+	std::int32_t offset{};
+	std::span<const std::uint8_t> bytes{};  // write: the exact bytes (its length)
+	std::uint16_t count{};                  // fill: the byte count
+	std::uint8_t fill{};                    // fill: the repeated byte (NOP in the data)
+	std::uint32_t jumpToEntry{};            // jump: the target entry index
 };
 
-inline constexpr std::uint32_t kNoJumpTarget = 0xFFFFFFFFu;
+// The row builders: a byte row's length is its own data's size, and a fill row
+// says how many bytes it wipes, so no row repeats a length.
+inline constexpr std::uint8_t kLauncherNopByte = 0x90;
+
+[[nodiscard]] constexpr SkipLauncherWrite WriteBytes(
+    std::int32_t offset, std::span<const std::uint8_t> bytes) noexcept
+{
+	return {.kind = SkipLauncherWrite::Kind::write, .offset = offset, .bytes = bytes};
+}
+
+[[nodiscard]] constexpr SkipLauncherWrite NopFill(std::int32_t offset,
+                                                  std::uint16_t count) noexcept
+{
+	return {
+	    .kind = SkipLauncherWrite::Kind::fill, .offset = offset, .count = count,
+	    .fill = kLauncherNopByte};
+}
+
+[[nodiscard]] constexpr SkipLauncherWrite Jump(std::int32_t offset,
+                                               std::uint32_t entry) noexcept
+{
+	return {.kind = SkipLauncherWrite::Kind::jump, .offset = offset, .jumpToEntry = entry};
+}
 
 struct SkipLauncherEntry final
 {
 	std::string_view signature;
-	const SkipLauncherWrite* writes;
-	std::size_t writeCount;
+	std::span<const SkipLauncherWrite> writes;  // empty for the jump-target row
 };
 
 // Multi-hit collector: the original patches the first two matches of one
-// pattern and the last two of another with "mov al,1; ret; nop".
+// pattern and the last two of another with "mov al,1; ret; nop". `stub` is the
+// exact window it stores; its size is the store length.
 struct SkipLauncherCollector final
 {
 	enum class Target : std::uint8_t
@@ -43,8 +74,7 @@ struct SkipLauncherCollector final
 	};
 	std::string_view pattern;
 	Target target;
-	const std::uint8_t* bytes;
-	std::uint16_t length;
+	std::span<const std::uint8_t> stub;
 };
 
 // Reimplemented hook bodies the installers jump to; the original installs E8/E9

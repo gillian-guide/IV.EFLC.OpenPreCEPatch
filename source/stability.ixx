@@ -52,7 +52,6 @@ void ApplyCrashMsgFix(const PatchContext& ctx);
 void PublishBadPlayerModelCrashFix(const PatchContext& ctx)
 {
 	Trace("publish BadPlayerModelCrashFix");
-	// BadPlayerModelCrashFix: 1 slot
 	if (ctx.Option("BadPlayerModelCrashFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -67,7 +66,6 @@ void PublishBadPlayerModelCrashFix(const PatchContext& ctx)
 void PublishBlackscreenFix(const PatchContext& ctx)
 {
 	Trace("publish BlackscreenFix");
-	// BlackscreenFix: 2 slots
 	if (ctx.Option("BlackscreenFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -85,7 +83,6 @@ void PublishBlackscreenFix(const PatchContext& ctx)
 void PublishCollisionDeadlockFix(const PatchContext& ctx)
 {
 	Trace("publish CollisionDeadlockFix");
-	// CollisionDeadlockFix: 1 slot
 	if (ctx.Option("CollisionDeadlockFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -100,7 +97,6 @@ void PublishCollisionDeadlockFix(const PatchContext& ctx)
 void PublishEpisodeSwitchFreezeFix(const PatchContext& ctx)
 {
 	Trace("publish EpisodeSwitchFreezeFix");
-	// EpisodeSwitchFreezeFix: 3 slots
 	if (ctx.Option("EpisodeSwitchFreezeFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -125,7 +121,6 @@ void PublishEpisodeSwitchFreezeFix(const PatchContext& ctx)
 void PublishFreezeGunFix(const PatchContext& ctx)
 {
 	Trace("publish FreezeGunFix");
-	// FreezeGunFix: 1 slot
 	if (ctx.Option("FreezeGunFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -140,7 +135,6 @@ void PublishFreezeGunFix(const PatchContext& ctx)
 void PublishGroupHackFix(const PatchContext& ctx)
 {
 	Trace("publish GroupHackFix");
-	// GroupHackFix: 1 slot
 	if (ctx.Option("GroupHackFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -155,7 +149,6 @@ void PublishGroupHackFix(const PatchContext& ctx)
 void PublishPathNodeCrashFix(const PatchContext& ctx)
 {
 	Trace("publish PathNodeCrashFix");
-	// PathNodeCrashFix: 2 slots
 	if (ctx.Option("PathNodeCrashFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -171,7 +164,6 @@ void PublishPathNodeCrashFix(const PatchContext& ctx)
 void PublishPlaneCrashFix(const PatchContext& ctx)
 {
 	Trace("publish PlaneCrashFix");
-	// PlaneCrashFix: 2 slots
 	if (ctx.Option("PlaneCrashFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -187,7 +179,6 @@ void PublishPlaneCrashFix(const PatchContext& ctx)
 void PublishPlayerAsPedComponentsFix(const PatchContext& ctx)
 {
 	Trace("publish PlayerAsPedComponentsFix");
-	// PlayerAsPedComponentsFix: 2 slots
 	if (ctx.Option("PlayerAsPedComponentsFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -207,7 +198,7 @@ void PublishPlayerAsPedComponentsFix(const PatchContext& ctx)
 void PublishSMPA60Fix(const PatchContext& ctx)
 {
 	Trace("publish SMPA60Fix");
-	// SMPA60Fix: 3 slots. The recovered gate is keyed on the primary pattern, so
+	// The recovered gate is keyed on the primary pattern, so
 	// one scan both gates and supplies the match+136 resume.
 	if (ctx.Option("SMPA60Fix", "1"))
 	{
@@ -229,7 +220,6 @@ void PublishSMPA60Fix(const PatchContext& ctx)
 void PublishWantedLevelCrashFix(const PatchContext& ctx)
 {
 	Trace("publish WantedLevelCrashFix");
-	// WantedLevelCrashFix: 1 slot
 	if (ctx.Option("WantedLevelCrashFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -244,7 +234,6 @@ void PublishWantedLevelCrashFix(const PatchContext& ctx)
 void PublishCrashMsgFix(const PatchContext& ctx)
 {
 	Trace("publish CrashMsgFix");
-	// CrashMsgFix: 1 slot
 	if (ctx.Option("CrashMsgFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -262,7 +251,6 @@ void PublishCrashMsgFix(const PatchContext& ctx)
 void ApplyAimProjectileCrashFix(const PatchContext& ctx)
 {
 	Trace("AimProjectileCrashFix");
-	// AimProjectileCrashFix: 1 sigjump
 	if (ctx.Option("AimProjectileCrashFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -279,7 +267,6 @@ void ApplyAimProjectileCrashFix(const PatchContext& ctx)
 void ApplyBadPlayerModelCrashFix(const PatchContext& ctx)
 {
 	Trace("BadPlayerModelCrashFix");
-	// BadPlayerModelCrashFix: 1 siginstall, 1 sigjump
 	if (ctx.Option("BadPlayerModelCrashFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -296,7 +283,6 @@ void ApplyBadPlayerModelCrashFix(const PatchContext& ctx)
 void ApplyBlackscreenFix(const PatchContext& ctx)
 {
 	Trace("BlackscreenFix");
-	// BlackscreenFix: 1 sigjump
 	if (ctx.Option("BlackscreenFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -313,7 +299,6 @@ void ApplyBlackscreenFix(const PatchContext& ctx)
 void ApplyCollisionDeadlockFix(const PatchContext& ctx)
 {
 	Trace("CollisionDeadlockFix");
-	// CollisionDeadlockFix: 1 sigjump
 	if (ctx.Option("CollisionDeadlockFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -330,7 +315,6 @@ void ApplyCollisionDeadlockFix(const PatchContext& ctx)
 void ApplyEpisodeSwitchFreezeFix(const PatchContext& ctx)
 {
 	Trace("EpisodeSwitchFreezeFix");
-	// EpisodeSwitchFreezeFix: 5 sigjumps
 	if (ctx.Option("EpisodeSwitchFreezeFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -375,7 +359,6 @@ void ApplyEpisodeSwitchFreezeFix(const PatchContext& ctx)
 void ApplyFreezeGunFix(const PatchContext& ctx)
 {
 	Trace("FreezeGunFix");
-	// FreezeGunFix: 1 siginstall
 	if (ctx.Option("FreezeGunFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -392,7 +375,6 @@ void ApplyFreezeGunFix(const PatchContext& ctx)
 void ApplyGroupHackFix(const PatchContext& ctx)
 {
 	Trace("GroupHackFix");
-	// GroupHackFix: 1 sigjump
 	if (ctx.Option("GroupHackFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -408,7 +390,6 @@ void ApplyGroupHackFix(const PatchContext& ctx)
 void ApplyHighFPSSpeedupFix(const PatchContext& ctx)
 {
 	Trace("HighFPSSpeedupFix");
-	// HighFPSSpeedupFix: 9 literals
 	if (ctx.Option("HighFPSSpeedupFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -444,7 +425,6 @@ void ApplyHighFPSSpeedupFix(const PatchContext& ctx)
 void ApplyMPNikoCrashFix(const PatchContext& ctx)
 {
 	Trace("MPNikoCrashFix");
-	// MPNikoCrashFix: 1 literal
 	if (ctx.Option("MPNikoCrashFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -461,7 +441,6 @@ void ApplyMPNikoCrashFix(const PatchContext& ctx)
 void ApplyPathNodeCrashFix(const PatchContext& ctx)
 {
 	Trace("PathNodeCrashFix");
-	// PathNodeCrashFix: 1 sigjump
 	if (ctx.Option("PathNodeCrashFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -478,7 +457,6 @@ void ApplyPathNodeCrashFix(const PatchContext& ctx)
 void ApplyPlaneCrashFix(const PatchContext& ctx)
 {
 	Trace("PlaneCrashFix");
-	// PlaneCrashFix: 1 sigjump
 	if (ctx.Option("PlaneCrashFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -495,7 +473,6 @@ void ApplyPlaneCrashFix(const PatchContext& ctx)
 void ApplyPlayerAsPedComponentsFix(const PatchContext& ctx)
 {
 	Trace("PlayerAsPedComponentsFix");
-	// PlayerAsPedComponentsFix: 1 sigjump
 	if (ctx.Option("PlayerAsPedComponentsFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -512,7 +489,6 @@ void ApplyPlayerAsPedComponentsFix(const PatchContext& ctx)
 void ApplyRemoveAllWeaponsProtection(const PatchContext& ctx)
 {
 	Trace("RemoveAllWeaponsProtection");
-	// RemoveAllWeaponsProtection: 1 literal
 	if (ctx.Option("RemoveAllWeaponsProtection", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -529,7 +505,6 @@ void ApplyRemoveAllWeaponsProtection(const PatchContext& ctx)
 void ApplySCOSignatureFix(const PatchContext& ctx)
 {
 	Trace("SCOSignatureFix");
-	// SCOSignatureFix: 1 literal
 	if (ctx.Option("SCOSignatureFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -546,7 +521,6 @@ void ApplySCOSignatureFix(const PatchContext& ctx)
 void ApplySMPA60Fix(const PatchContext& ctx)
 {
 	Trace("SMPA60Fix");
-	// SMPA60Fix: 1 literal, 1 siginstall, 1 sigjump
 	if (ctx.Option("SMPA60Fix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -572,7 +546,6 @@ void ApplySMPA60Fix(const PatchContext& ctx)
 void ApplyTryToSkipAllErrors(const PatchContext& ctx)
 {
 	Trace("TryToSkipAllErrors");
-	// TryToSkipAllErrors: 1 literal
 	if (ctx.Option("TryToSkipAllErrors", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -589,7 +562,6 @@ void ApplyTryToSkipAllErrors(const PatchContext& ctx)
 void ApplyWantedLevelCrashFix(const PatchContext& ctx)
 {
 	Trace("WantedLevelCrashFix");
-	// WantedLevelCrashFix: 1 sigjump
 	if (ctx.Option("WantedLevelCrashFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -606,7 +578,6 @@ void ApplyWantedLevelCrashFix(const PatchContext& ctx)
 void ApplyCrashMsgFix(const PatchContext& ctx)
 {
 	Trace("CrashMsgFix");
-	// CrashMsgFix: 1 siginstall
 	if (ctx.Option("CrashMsgFix", "1"))
 	{
 		const GameImage& image = ctx.image;

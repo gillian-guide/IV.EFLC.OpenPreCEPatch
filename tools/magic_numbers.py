@@ -9,7 +9,10 @@ Classes (one per literal occurrence in code; comments and strings are excluded):
   named       the literal is a named declaration's initialiser: a constexpr /
               const / enum member / macro / static_assert expectation, or an
               element of a named brace-initialised array or struct table. The
-              declaration's name is the intuitive name.
+              declaration's name is the intuitive name. A view struct's
+              `std::byte pad_NNNN[...]` extent counts too: the pad's name and
+              the next field's comment state the recovered layout at the
+              declaration.
   documented  the literal carries an adjacent exact reason: its own trailing
               comment or the comment line directly above starts with
               `why:`, `opaque:`, `orig:` or `provenance:`.
@@ -52,6 +55,10 @@ NAMED_DECL = re.compile(
     r"[\w:<>,]+(?:[\s*&]+[\w:<>,]+)*[\s*&]+(?P<name>\w+)\s*"
     r"(?:\[[^\]]*\])?\s*(?:=|\{)\s*")
 ASSERT = re.compile(r"^\s*static_assert\s*\(")
+# A view struct's pad: `std::byte pad_0030[0xE18 - 0x30];` states the recovered
+# offset extent at the declaration itself (the `pad_` name says where it ends),
+# which is the rule's goal; the field comment names what starts there.
+PAD_DECL = re.compile(r"\bpad_[0-9A-Fa-f]+\s*\[")
 ENUM_START = re.compile(r"^\s*enum\s+(?:class\s+|struct\s+)?\w+")
 ENUM_OPEN = re.compile(r"^\s*\{")
 MACRO = re.compile(r"^\s*#define\s+\w+\s+")
@@ -211,6 +218,8 @@ def scan(path: pathlib.Path, rel: str):
             if NAMED_DECL.match(code):
                 named = True
             if ASSERT.match(code) or assert_inside:
+                named = True
+            if PAD_DECL.search(code):
                 named = True
             if MACRO.match(code):
                 named = True

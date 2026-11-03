@@ -431,8 +431,10 @@ int main(int argc, char** argv)
 	// publishes its own (off_10158064 holds our zpatch_local_copy_saves where the
 	// original holds sub_10051320), so the state differential must compare the
 	// two by reference VA instead of calling the port side "unmapped".
-	if (zpatch_local_saves_slot != 0)
-		header << "A " << std::showbase << std::hex << zpatch_local_saves_slot
+	const auto local_saves_slot =
+	    reinterpret_cast<std::uintptr_t>(zpatch_local_saves_slot);
+	if (local_saves_slot != 0)
+		header << "A " << std::showbase << std::hex << local_saves_slot
 		       << " 0x10051320" << std::dec << "\n";  // original sub_10051320
 
 	for (std::size_t i = 0; i < kParityGlobalCount; ++i)

@@ -24,7 +24,6 @@ void ApplyRestoreDeathMusic(const PatchContext& ctx);
 void ApplyCombinedRadioFreezeFix(const PatchContext& ctx)
 {
 	Trace("CombinedRadioFreezeFix");
-	// CombinedRadioFreezeFix: 1 siginstall
 	if (ctx.Option("CombinedRadioFreezeFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -41,7 +40,6 @@ void ApplyCombinedRadioFreezeFix(const PatchContext& ctx)
 void ApplyRestoreDeathMusic(const PatchContext& ctx)
 {
 	Trace("RestoreDeathMusic");
-	// RestoreDeathMusic: 3 siginstalls
 	if (bMenuIntegration || ctx.Option("RestoreDeathMusic", "0"))
 	{
 		const GameImage& image = ctx.image;

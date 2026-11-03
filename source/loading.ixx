@@ -88,7 +88,6 @@ constexpr DlcPublish kDlcPublish[] = {
 void PublishLoadDLCs(const PatchContext& ctx)
 {
 	Trace("publish LoadDLCs");
-	// LoadDLCs: 9 rvas
 	if (ctx.Option("LoadDLCs", "1"))
 	{
 		for (const DlcPublish& row : kDlcPublish)
@@ -104,27 +103,42 @@ void PublishLoadDLCs(const PatchContext& ctx)
 	}
 }
 
+namespace
+{
+// The captured operand is the game VA (32-bit) of a path buffer or the episode
+// counter.
+template <typename T>
+T* CaptureGamePointer(hook::pattern& pattern, std::ptrdiff_t offset) noexcept
+{
+	return RebasedPointer<T>(*pattern.get(0).get<std::uint32_t>(offset));
+}
+}  // namespace
+
 void PublishLocalSettingsPath(const PatchContext& ctx)
 {
 	Trace("publish LocalSettingsPath");
-	// LocalSettingsPath: 7 slots
 	if (ctx.Option("LocalSettingsPath", "0"))
 	{
 		const GameImage& image = ctx.image;
 
 		if (auto pattern = Pattern(image, "7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D6 5F 5E 5B C3"); pattern.size() > 0)
 		{
-			zpatch_local_path_1c = *pattern.get(0).get<std::uint32_t>(-178);
-			zpatch_local_path_10 = *pattern.get(0).get<std::uint32_t>(-190);
-			zpatch_local_episode_ptr = *pattern.get(0).get<std::uint32_t>(-151);
-			zpatch_local_path_18 = *pattern.get(0).get<std::uint32_t>(-444);
-			zpatch_local_path_08 = *pattern.get(0).get<std::uint32_t>(-432);
+			// The path-initializer epilogue (1.0.8.0 match 0x856ED8 in
+			// _initalizePaths 0x856BF0): each operand pushes one game path buffer,
+			// or loads the episode counter.
+			zpatch_local_path_1c = CaptureGamePointer<wchar_t>(pattern, -178);  // wszPathLocalAppdataW
+			zpatch_local_path_10 = CaptureGamePointer<wchar_t>(pattern, -190);  // wszPathLocalAppdataW_EP
+			zpatch_local_episode_ptr = CaptureGamePointer<const int>(pattern, -151);  // __dwCurrentEpisode
+			zpatch_local_path_18 = CaptureGamePointer<char>(pattern, -444);  // szPathLocalAppdata_EP
+			zpatch_local_path_08 = CaptureGamePointer<char>(pattern, -432);  // szPathLocalAppdata
 		}
 
 		if (auto pattern = Pattern(image, "7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D7 5F C3"); pattern.size() > 0)
 		{
-			zpatch_local_path_18 = *pattern.get(0).get<std::uint32_t>(-160);
-			zpatch_local_path_1c = *pattern.get(0).get<std::uint32_t>(-55);
+			// The alternate epilogue (not present on 1.0.8.0) stores the same two
+			// LocalAppdata buffers the wide pattern captures.
+			zpatch_local_path_18 = CaptureGamePointer<char>(pattern, -160);  // path_18
+			zpatch_local_path_1c = CaptureGamePointer<wchar_t>(pattern, -55);  // path_1c
 		}
 	}
 }
@@ -132,7 +146,6 @@ void PublishLocalSettingsPath(const PatchContext& ctx)
 void PublishNewFilesCompatibility(const PatchContext& ctx)
 {
 	Trace("publish NewFilesCompatibility");
-	// NewFilesCompatibility: 1 slot
 	if (ctx.Option("NewFilesCompatibility", "1") && !NewFilesConflictModulesPresent())
 	{
 		const GameImage& image = ctx.image;
@@ -147,7 +160,6 @@ void PublishNewFilesCompatibility(const PatchContext& ctx)
 void PublishNewMemorySystem(const PatchContext& ctx)
 {
 	Trace("publish NewMemorySystem");
-	// NewMemorySystem: 1 slot
 	if (ctx.Option("NewMemorySystem", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -162,7 +174,7 @@ void PublishNewMemorySystem(const PatchContext& ctx)
 void PublishNewSavesCompatibility(const PatchContext& ctx)
 {
 	Trace("publish NewSavesCompatibility");
-	// NewSavesCompatibility: 3 slots. The recovered gate is keyed on the first
+	// The recovered gate is keyed on the first
 	// pattern, so one scan both gates and captures the pushed name pointer.
 	if (ctx.Option("NewSavesCompatibility", "1"))
 	{
@@ -185,7 +197,6 @@ void PublishNewSavesCompatibility(const PatchContext& ctx)
 void PublishSkipIntro(const PatchContext& ctx)
 {
 	Trace("publish SkipIntro");
-	// SkipIntro: 1 slot
 	if (ctx.Option("SkipIntro", "1") && !FusionFixGateClosed())
 	{
 		const GameImage& image = ctx.image;
@@ -200,7 +211,6 @@ void PublishSkipIntro(const PatchContext& ctx)
 void PublishSkipMenu(const PatchContext& ctx)
 {
 	Trace("publish SkipMenu");
-	// SkipMenu: 3 slots
 	if (ctx.Option("SkipMenu", "0") && !FusionFixGateClosed())
 	{
 		const GameImage& image = ctx.image;
@@ -225,7 +235,7 @@ void PublishSkipMenu(const PatchContext& ctx)
 void PublishBenchmarkFix(const PatchContext& ctx)
 {
 	Trace("publish BenchmarkFix");
-	// BenchmarkFix: 2 slots. The handler compares the build id before it reads
+	// The handler compares the build id before it reads
 	// the INI (cmp 9 / cmp 0Dh), so 1.0.8.0 and 1.1.3.0 publish nothing either.
 	if (ctx.Option("BenchmarkFix", "1") &&
 	    !BuildIs(ctx.build, {GameBuild::v1080, GameBuild::v1130}))
@@ -234,8 +244,11 @@ void PublishBenchmarkFix(const PatchContext& ctx)
 
 		if (auto pattern = Pattern(image, "E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20"); pattern.size() > 0)
 		{
-			zpatch_benchmark_resume_a = MatchAddress(pattern, 13);
-			zpatch_benchmark_resume_b = MatchAddress(pattern, 13);
+			// Both resumes are read (the two tail jumps in abi_benchmark_a/_b), so
+			// the same value is published twice from one read.
+			const std::uint32_t resume = MatchAddress(pattern, 13);
+			zpatch_benchmark_resume_a = resume;
+			zpatch_benchmark_resume_b = resume;
 		}
 	}
 }
@@ -243,7 +256,6 @@ void PublishBenchmarkFix(const PatchContext& ctx)
 void PublishRemoveGFWLUpdatePopup(const PatchContext& ctx)
 {
 	Trace("publish RemoveGFWLUpdatePopup");
-	// RemoveGFWLUpdatePopup: 1 slot
 	if (ctx.Option("RemoveGFWLUpdatePopup", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -253,7 +265,6 @@ void PublishRemoveGFWLUpdatePopup(const PatchContext& ctx)
 			zpatch_gfwl_resume = MatchAddress(pattern, 12);
 		}
 	}
-
 }
 
 // ApplyLoadDLCs' per-build site rows (original handler sub_100234E0). `kind` says
@@ -341,7 +352,6 @@ constexpr DlcBuildSites kLoadDlcsSites[] = {
 void ApplyLoadDLCs(const PatchContext& ctx)
 {
 	Trace("LoadDLCs");
-	// LoadDLCs: 18 rvas, 6 rvajumps
 	if (ctx.Option("LoadDLCs", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -385,11 +395,9 @@ void ApplyLoadDLCs(const PatchContext& ctx)
 	}
 }
 
-
 void ApplyLocalSettingsPath(const PatchContext& ctx)
 {
 	Trace("LocalSettingsPath");
-	// LocalSettingsPath: 3 siginstalls
 	if (ctx.Option("LocalSettingsPath", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -423,7 +431,6 @@ void ApplyLocalSettingsPath(const PatchContext& ctx)
 void ApplyNewFilesCompatibility(const PatchContext& ctx)
 {
 	Trace("NewFilesCompatibility");
-	// NewFilesCompatibility: 2 siginstalls, 1 sigjump
 	if (ctx.Option("NewFilesCompatibility", "1") && !NewFilesConflictModulesPresent())
 	{
 		const GameImage& image = ctx.image;
@@ -454,7 +461,6 @@ void ApplyNewFilesCompatibility(const PatchContext& ctx)
 void ApplyNewMemorySystem(const PatchContext& ctx)
 {
 	Trace("NewMemorySystem");
-	// NewMemorySystem: 1 siginstall
 	if (ctx.Option("NewMemorySystem", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -472,7 +478,6 @@ void ApplyNewMemorySystem(const PatchContext& ctx)
 void ApplyNewSavesCompatibility(const PatchContext& ctx)
 {
 	Trace("NewSavesCompatibility");
-	// NewSavesCompatibility: 1 siginstall, 1 sigjump
 	if (ctx.Option("NewSavesCompatibility", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -494,7 +499,6 @@ void ApplyNewSavesCompatibility(const PatchContext& ctx)
 void ApplyRemoveRGSCLoginRequirement(const PatchContext& ctx)
 {
 	Trace("RemoveRGSCLoginRequirement");
-	// RemoveRGSCLoginRequirement: 1 rva, 1 rvajump, 1 sigjump
 	if (ctx.Option("RemoveRGSCLoginRequirement", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -525,22 +529,19 @@ void ApplyRemoveRGSCLoginRequirement(const PatchContext& ctx)
 void ApplySavegameFix(const PatchContext& ctx)
 {
 	Trace("SavegameFix");
-	// SavegameFix: 2 siginstalls, 1 sigwrite
 	if (ctx.Option("SavegameFix", "1"))
 	{
 		const GameImage& image = ctx.image;
 
+		if (auto pattern = Pattern(image, "75 ? 83 C1 01 83 C0 01 83 F9 04"); pattern.size() > 0)
 		{
-			if (auto pattern = Pattern(image, "75 ? 83 C1 01 83 C0 01 83 F9 04"); pattern.size() > 0)
-			{
-				std::uint8_t* match = pattern.get(0).get<std::uint8_t>();
-				injector::MakeCALL(match - 73, reinterpret_cast<void*>(&abi_savegame_fix_close), true); //call
-				injector::MakeCALL(match - 143, reinterpret_cast<void*>(&abi_savegame_fix_copy), true); //call
-				injector::MakeCALL(match - 176, reinterpret_cast<void*>(&abi_savegame_fix_copy), true); //call
-				injector::MakeCALL(match - 280, reinterpret_cast<void*>(&abi_savegame_fix_mutex), true); //call
-				injector::MakeCALL(match - 240, reinterpret_cast<void*>(&abi_savegame_fix_null), true); //call
-				injector::MakeNOP(pattern.get(0).get<std::uint8_t>(), 2, true); //nop
-			}
+			std::uint8_t* match = pattern.get(0).get<std::uint8_t>();
+			injector::MakeCALL(match - 73, reinterpret_cast<void*>(&abi_savegame_fix_close), true); //call
+			injector::MakeCALL(match - 143, reinterpret_cast<void*>(&abi_savegame_fix_copy), true); //call
+			injector::MakeCALL(match - 176, reinterpret_cast<void*>(&abi_savegame_fix_copy), true); //call
+			injector::MakeCALL(match - 280, reinterpret_cast<void*>(&abi_savegame_fix_mutex), true); //call
+			injector::MakeCALL(match - 240, reinterpret_cast<void*>(&abi_savegame_fix_null), true); //call
+			injector::MakeNOP(pattern.get(0).get<std::uint8_t>(), 2, true); //nop
 		}
 
 		if (auto pattern = Pattern(image, "8D 4C 24 18 51 6A 00 6A 0C 57"); pattern.size() > 0)
@@ -559,7 +560,6 @@ void ApplySavegameFix(const PatchContext& ctx)
 void ApplySkipIntro(const PatchContext& ctx)
 {
 	Trace("SkipIntro");
-	// SkipIntro: 1 siginstall
 	if (ctx.Option("SkipIntro", "1") && !FusionFixGateClosed())
 	{
 		const GameImage& image = ctx.image;
@@ -576,7 +576,6 @@ void ApplySkipIntro(const PatchContext& ctx)
 void ApplySkipLauncherOption(const PatchContext& ctx)
 {
 	Trace("SkipLauncher");
-	// SkipLauncher: 7 literals
 	if (ctx.Option("SkipLauncher", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -636,7 +635,6 @@ void ApplySkipLauncherOption(const PatchContext& ctx)
 void ApplySkipMenu(const PatchContext& ctx)
 {
 	Trace("SkipMenu");
-	// SkipMenu: 3 siginstalls
 	if (ctx.Option("SkipMenu", "0") && !FusionFixGateClosed())
 	{
 		const GameImage& image = ctx.image;
@@ -667,7 +665,6 @@ void ApplySkipMenu(const PatchContext& ctx)
 void ApplyBenchmarkFix(const PatchContext& ctx)
 {
 	Trace("BenchmarkFix");
-	// BenchmarkFix: 2 matchjumps
 	if (ctx.Option("BenchmarkFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -676,13 +673,16 @@ void ApplyBenchmarkFix(const PatchContext& ctx)
 		            {GameBuild::v1000, GameBuild::v1040, GameBuild::v1004, GameBuild::v1060,
 		             GameBuild::v1070, GameBuild::v1061, GameBuild::v1100, GameBuild::v1110,
 		             GameBuild::v1120, GameBuild::v12043}))
-		if (auto pattern = Pattern(image, "E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20"); pattern.size() > 0)
 		{
-			injector::MakeJMP(pattern.get(0).get<std::uint8_t>(8),
-				reinterpret_cast<void*>(&abi_benchmark_a), true); //jmp
-			if (pattern.size() > 1)
-				injector::MakeJMP(pattern.get(1).get<std::uint8_t>(8),
-					reinterpret_cast<void*>(&abi_benchmark_b), true); //jmp
+			if (auto pattern = Pattern(image, "E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20");
+			    pattern.size() > 0)
+			{
+				injector::MakeJMP(pattern.get(0).get<std::uint8_t>(8),
+					reinterpret_cast<void*>(&abi_benchmark_a), true); //jmp
+				if (pattern.size() > 1)
+					injector::MakeJMP(pattern.get(1).get<std::uint8_t>(8),
+						reinterpret_cast<void*>(&abi_benchmark_b), true); //jmp
+			}
 		}
 	}
 }
@@ -690,7 +690,6 @@ void ApplyBenchmarkFix(const PatchContext& ctx)
 void ApplyRemoveGFWLUpdatePopup(const PatchContext& ctx)
 {
 	Trace("RemoveGFWLUpdatePopup");
-	// RemoveGFWLUpdatePopup: 1 siginstall
 	if (ctx.Option("RemoveGFWLUpdatePopup", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -707,17 +706,14 @@ void ApplyRemoveGFWLUpdatePopup(const PatchContext& ctx)
 void ApplyFastLoading(const PatchContext& ctx)
 {
 	Trace("FastLoading");
-	// FastLoading: 1 sigwrite
 	if (ctx.Option("FastLoading", "1"))
 	{
 		const GameImage& image = ctx.image;
 
+		if (auto pattern = Pattern(image, "6A 0A E8 ? ? ? ? 83 C7 0A 83 C4 04 81 FF E8 03 00 00 75 02 33 FF"); pattern.size() > 0)
 		{
-			if (auto pattern = Pattern(image, "6A 0A E8 ? ? ? ? 83 C7 0A 83 C4 04 81 FF E8 03 00 00 75 02 33 FF"); pattern.size() > 0)
-			{
-				injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(1), kZeroByte,
-				                                    true); // sleep 10 -> 0
-			}
+			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(1), kZeroByte,
+			                                    true); // sleep 10 -> 0
 		}
 	}
 }
@@ -725,19 +721,16 @@ void ApplyFastLoading(const PatchContext& ctx)
 void ApplyStartupTimeFix(const PatchContext& ctx)
 {
 	Trace("StartupTimeFix");
-	// StartupTimeFix: 1 matchliteral
 	if (ctx.Option("StartupTimeFix", "1"))
 	{
 		const GameImage& image = ctx.image;
 
+		if (auto pattern = Pattern(image, "68 00 C2 EC 80 68"); pattern.size() > 0)
 		{
-			if (auto pattern = Pattern(image, "68 00 C2 EC 80 68"); pattern.size() > 0)
-			{
-				for (std::size_t i = 0; i < pattern.size(); ++i)
-					injector::WriteMemory<std::uint32_t>(
-					    pattern.get(i).get<std::uint8_t>() + 6,
-					    static_cast<std::uint32_t>(FindGlobalValue("StartupTimeFix")), true); // push our startup-time dword
-			}
+			for (std::size_t i = 0; i < pattern.size(); ++i)
+				injector::WriteMemory<std::uint32_t>(
+				    pattern.get(i).get<std::uint8_t>() + 6,
+				    static_cast<std::uint32_t>(FindGlobalValue("StartupTimeFix")), true); // push our startup-time dword
 		}
 	}
 }
@@ -745,7 +738,6 @@ void ApplyStartupTimeFix(const PatchContext& ctx)
 void ApplyNoLoadingSleep(const PatchContext& ctx)
 {
 	Trace("NoLoadingSleep");
-	// NoLoadingSleep: 1 literalstore
 	if (ctx.Option("NoLoadingSleep", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -759,16 +751,9 @@ void ApplyNoLoadingSleep(const PatchContext& ctx)
 	}
 }
 
-// The operand each arm retargets: the `push <imm32>` path pointer, and the two
-// operands that load the vsync flag in the two VSyncFix call shapes.
-constexpr std::ptrdiff_t kOverridePathOperand = 1;
-constexpr std::ptrdiff_t kVsyncFlagOperandA = 30;
-constexpr std::ptrdiff_t kVsyncFlagOperandB = 13;
-
 void ApplyOverrideGTADatPath(const PatchContext& ctx)
 {
 	Trace("OverrideGTADatPath");
-	// OverrideGTADatPath: 1 literalstore
 	if (ctx.Option("OverrideGTADatPath", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -777,8 +762,9 @@ void ApplyOverrideGTADatPath(const PatchContext& ctx)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
+			// +1: the `68` push's imm32 path pointer.
 			injector::WriteMemory<std::uint32_t>(
-			    match + kOverridePathOperand,
+			    match + 1,
 			    static_cast<std::uint32_t>(FindGlobalValue("OverrideGTADatPath")), true); // push
 		}
 	}
@@ -787,7 +773,6 @@ void ApplyOverrideGTADatPath(const PatchContext& ctx)
 void ApplyVSyncFix(const PatchContext& ctx)
 {
 	Trace("VSyncFix");
-	// VSyncFix: 2 literalstores
 	if (ctx.Option("VSyncFix", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -796,13 +781,13 @@ void ApplyVSyncFix(const PatchContext& ctx)
 		            {GameBuild::v1004, GameBuild::v1060, GameBuild::v1070, GameBuild::v1061,
 		             GameBuild::v1100, GameBuild::v1110, GameBuild::v1120, GameBuild::v12043}))
 		{
-
 			if (auto pattern = Pattern(image, "8B 08 8B 51 0C 6A 01 6A 00 6A 00 6A 00 6A 00 50 FF D2 8B F0 81 FE ? ? ? ? 74"); pattern.size() > 0)
 			{
 				auto* match = pattern.get(0).get<std::uint8_t>();
 
+				// +30: the operand the second call shape loads the vsync flag from.
 				injector::WriteMemory<std::uint32_t>(
-				    match + kVsyncFlagOperandA,
+				    match + 30,
 				    static_cast<std::uint32_t>(FindGlobalValue("VSyncFix")), true); // pointer
 			}
 
@@ -810,8 +795,9 @@ void ApplyVSyncFix(const PatchContext& ctx)
 			{
 				auto* match = pattern.get(0).get<std::uint8_t>();
 
+				// +13: the operand the first call shape loads the vsync flag from.
 				injector::WriteMemory<std::uint32_t>(
-				    match + kVsyncFlagOperandB,
+				    match + 13,
 				    static_cast<std::uint32_t>(FindGlobalValue("VSyncFix")), true); // pointer
 			}
 		}

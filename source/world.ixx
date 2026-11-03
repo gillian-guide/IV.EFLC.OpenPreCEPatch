@@ -29,7 +29,6 @@ constexpr std::uint32_t kPtrNodeCountAlt = 64'000u;     // 0xFA00
 void ApplyNoPhysicsSleep(const PatchContext& ctx)
 {
 	Trace("NoPhysicsSleep");
-	// NoPhysicsSleep: 1 indirect
 	if (ctx.Option("NoPhysicsSleep", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -46,7 +45,6 @@ void ApplyNoPhysicsSleep(const PatchContext& ctx)
 void ApplyIncreasePtrNodes(const PatchContext& ctx)
 {
 	Trace("IncreasePtrNodes");
-	// IncreasePtrNodes: 3 literalstores
 	if (ctx.Option("IncreasePtrNodes", "1"))
 	{
 		const GameImage& image = ctx.image;

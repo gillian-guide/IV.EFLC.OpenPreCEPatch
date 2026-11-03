@@ -20,229 +20,225 @@ import zp.patch;
 
 namespace
 {
-constexpr std::uint8_t kNopByte = 0x90;
-constexpr std::uint8_t kJumpOpcode = 0xE9;
-constexpr std::uint16_t kCollectorStubLength = 4;
+constexpr std::uint8_t kJumpOpcode = 0xE9;  // E9 <rel32> (the DFA/ROM install rows)
 
-// The main table's patches: stores relative to a signature match, in the order
-// the original handler (0x10045CE0) applies them. Byte arrays stay literal hex
-// so they compare directly against the original handler's data;
-// kSkipEntryBytes_<entry>_<write> is the run kSkipEntryWrites_<entry> stores.
-constexpr std::uint8_t kSkipEntryBytes_0_0[] = {0xeb};  //jmp rel8
+// ---- the byte runs the launcher rows write --------------------------------
+// Named by the instruction they form; the recovered table repeats the same
+// wipes, so the rows share these runs and a write row's length is its run's
+// own size.
+constexpr std::uint8_t kJmpRel8[] = {0xEB};  // jmp rel8
+constexpr std::uint8_t kNop2[] = {0x90, 0x90};
+constexpr std::uint8_t kNop3[] = {0x90, 0x90, 0x90};
+constexpr std::uint8_t kNop4[] = {0x90, 0x90, 0x90, 0x90};
+constexpr std::uint8_t kNop6[] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90};
+constexpr std::uint8_t kNop8[] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90};
+constexpr std::uint8_t kNop11[] = {
+    0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+};
+constexpr std::uint8_t kNop14[] = {
+    0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+    0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+};
+constexpr std::uint8_t kXorEax[] = {0x33, 0xC0};            // xor eax,eax
+constexpr std::uint8_t kNopMovMoffsEax[] = {0x90, 0xA3};    // nop; mov [imm32],eax
+constexpr std::uint8_t kJmpRel32[] = {kJumpOpcode};         // jmp rel32 (the rel32 follows)
+constexpr std::uint8_t kRet[] = {0xC3};                     // ret
+constexpr std::uint8_t kXorEaxRetNop[] = {0x33, 0xC0, 0xC3, 0x90};  // xor; ret; nop
 
-constexpr std::uint8_t kSkipEntryBytes_0_1[] = {0xeb};  //jmp rel8
+// ---- the main table's inline patches (0x10045CE0) -------------------------
+//
+// In-place instruction-window patches, not hook bodies: the recovered handler
+// overwrites the launcher check at the signature match (NOPs, an xor, a
+// one-byte branch or a short jump), so nothing here is callable. The rows,
+// their order and the bytes are 1:1 with the handler; a byte row's length is
+// its run's size and a fill row states its count, so no length is duplicated.
+// The offsets are match-relative and land on the instruction named in the row.
 
-constexpr std::uint8_t kSkipEntryBytes_2_0[] = {0x90, 0x90};  //nop 2
-
-constexpr std::uint8_t kSkipEntryBytes_2_1[] = {0x90, 0x90};  //nop 2
-
-constexpr std::uint8_t kSkipEntryBytes_3_0[] = {0x90, 0x90};  //nop 2
-
-constexpr std::uint8_t kSkipEntryBytes_4_0[] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90};  //nop 6
-
-constexpr std::uint8_t kSkipEntryBytes_5_0[] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90};  //nop 6
-
-constexpr std::uint8_t kSkipEntryBytes_6_0[] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90};  //nop 6
-
-constexpr std::uint8_t kSkipEntryBytes_7_0[] = {0x33, 0xc0};  //xor eax,eax
-
-constexpr std::uint8_t kSkipEntryBytes_7_1[] = {0x90, 0xa3};  //nop; mov [imm32],eax
-
-constexpr std::uint8_t kSkipEntryBytes_9_0[] = {0x33, 0xc0};  //xor eax,eax
-
-constexpr std::uint8_t kSkipEntryBytes_9_1[] = {0xe9};  //jmp rel32 (the rel32 follows)
-
-constexpr std::uint8_t kSkipEntryBytes_10_0[] = {0x90, 0xa3};  //nop; mov [imm32],eax
-
-constexpr std::uint8_t kSkipEntryBytes_11_0[] = {0x33, 0xc0};  //xor eax,eax
-
-constexpr std::uint8_t kSkipEntryBytes_11_1[] = {0x90, 0x90, 0x90, 0x90};  //nop 4
-
-constexpr std::uint8_t kSkipEntryBytes_12_0[] = {0x90, 0x90, 0x90};  //nop 3
-
-constexpr std::uint8_t kSkipEntryBytes_13_0[] = {0x90, 0x90, 0x90};  //nop 3
-
-constexpr std::uint8_t kSkipEntryBytes_14_0[] = {
-	0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-};  //nop 11
-
-constexpr std::uint8_t kSkipEntryBytes_17_0[] = {
-	0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-};  //nop 8
-
-constexpr std::uint8_t kSkipEntryBytes_18_0[] = {
-	0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-};  //nop 8
-
-constexpr std::uint8_t kSkipEntryBytes_19_0[] = {
-	0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-	0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-};  //nop 14
-
-constexpr std::uint8_t kSkipEntryBytes_20_0[] = {0xc3};  //ret
-
-constexpr std::uint8_t kSkipEntryBytes_22_0[] = {
-	0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-	0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-};  //nop 14
-
-constexpr std::uint8_t kSkipEntryBytes_23_0[] = {0x33, 0xc0, 0xc3, 0x90};  //xor; ret; nop
-
-constexpr std::uint8_t kSkipEntryBytes_24_0[] = {0x33, 0xc0, 0xc3, 0x90};  //xor; ret; nop
-
-// The collectors' stub: "mov al,1; ret; nop" over each collected match.
-constexpr std::uint8_t kSkipCollectorBytes_0[] = {0xb0, 0x01, 0xc3, 0x90};
-
-constexpr std::uint8_t kSkipCollectorBytes_1[] = {0xb0, 0x01, 0xc3, 0x90};
-
-// Entry i's stores: {match-relative offset, length, bytes (null = fill), fill
-// byte, jump-target entry (kNoJumpTarget = not a jump)}.
-constexpr SkipLauncherWrite kSkipEntryWrites_0[] = {
-	{34, 1, kSkipEntryBytes_0_0, 0, kNoJumpTarget},
-	{223, 1, kSkipEntryBytes_0_1, 0, kNoJumpTarget},
+// 0: `test bl,bl; jne +0x143; lea ecx,[esp+28]; mov eax,ecx`; both rows force
+// the single EB of a short branch in the same function (the condition byte is
+// outside the matched window).
+constexpr SkipLauncherWrite kEntry0Writes[] = {
+    WriteBytes(0x22, kJmpRel8),  // +34: jz/jnz -> jmp
+    WriteBytes(0xDF, kJmpRel8),  // +223
+};
+// 2: `74 EC` (jz), `cmp [esi+6],bl`, `74 E7` (jz), `push imm32`.
+constexpr SkipLauncherWrite kEntry2Writes[] = {
+    WriteBytes(0, kNop2),
+    WriteBytes(5, kNop2),
+};
+// 3: `74 C4` (jz), `mov eax,[edi]`, `cmp eax,[esi+18]`, `75 BD`.
+constexpr SkipLauncherWrite kEntry3Writes[] = {
+    WriteBytes(0, kNop2),
+};
+// 4: `cmp edx,[esi+18]; jne rel32` - the 6 bytes are the whole jcc.
+constexpr SkipLauncherWrite kEntry4Writes[] = {
+    WriteBytes(3, kNop6),
+};
+// 5: `cmp ecx,[esi+18]; jne rel32`.
+constexpr SkipLauncherWrite kEntry5Writes[] = {
+    WriteBytes(3, kNop6),
+};
+// 6: `jne rel32; mov ecx,[esp+..]; pop edi/esi/ebx; xor ecx,esp`.
+constexpr SkipLauncherWrite kEntry6Writes[] = {
+    WriteBytes(0, kNop6),
+};
+// 7: `cmp eax,[esi+18]; jne -0x43`; +3 replaces the `75 BD` with `33 C0`
+// (xor eax,eax); +10 is 5 bytes past the window: `90 A3`.
+constexpr SkipLauncherWrite kEntry7Writes[] = {
+    WriteBytes(3, kXorEax),
+    WriteBytes(10, kNopMovMoffsEax),
+};
+// 8: `push edi; push ecx` then three `C7 44 24` immediate stores; the
+// recovered handler memsets 0x1BF (447) bytes starting at +1.
+constexpr SkipLauncherWrite kEntry8Writes[] = {
+    NopFill(1, 447),
+};
+// 9: `mov edx,[esi+1C]; cmp edx,[esi+20]` becomes `33 C0 E9 rel32`: xor
+// eax,eax, then a jump to entry 1's match (the launcher entry the original
+// keeps for this row).
+constexpr SkipLauncherWrite kEntry9Writes[] = {
+    WriteBytes(0, kXorEax),
+    WriteBytes(2, kJmpRel32),
+    Jump(3, kSkipLauncherJumpTargetEntry),
+};
+// 10: `mov [imm32],esi; call; add esp,4; test al,al`; `90 A3` keeps the store
+// but takes EAX instead of ESI (the `89` becomes `90`).
+constexpr SkipLauncherWrite kEntry10Writes[] = {
+    WriteBytes(0, kNopMovMoffsEax),
+};
+// 11: `mov edx,[eax+2C]; cmp edx,[eax+30]` -> `33 C0` + NOP4, so the caller
+// receives eax = 0.
+constexpr SkipLauncherWrite kEntry11Writes[] = {
+    WriteBytes(0, kXorEax),
+    WriteBytes(2, kNop4),
+};
+// 12: `mov ecx,[eax+2C]; sub esp,0x78`; NOP3 removes the load and the 11 bytes
+// after the 6-byte window are wiped.
+constexpr SkipLauncherWrite kEntry12Writes[] = {
+    WriteBytes(0, kNop3),
+    NopFill(6, 11),
+};
+// 13: the same with `sub esp,0x74`.
+constexpr SkipLauncherWrite kEntry13Writes[] = {
+    WriteBytes(0, kNop3),
+    NopFill(6, 11),
+};
+// 14: `mov ecx,[eax+2C]; cmp ecx,[eax+30]; jz +3`.
+constexpr SkipLauncherWrite kEntry14Writes[] = {
+    WriteBytes(0, kNop11),
+};
+// 15: the same compare followed by `push ebx`.
+constexpr SkipLauncherWrite kEntry15Writes[] = {
+    NopFill(0, 32),
+};
+// 16: the same compare followed by `jz +0x11`.
+constexpr SkipLauncherWrite kEntry16Writes[] = {
+    NopFill(0, 25),
+};
+// 17/18: `mov ecx,[eax+2C]; cmp ecx,[eax+30]; jne -0x24; lea edx,[esp+18/1C]`;
+// the 8-byte compare-and-branch window is wiped.
+constexpr SkipLauncherWrite kEntry17Writes[] = {
+    WriteBytes(0, kNop8),
+};
+constexpr SkipLauncherWrite kEntry18Writes[] = {
+    WriteBytes(0, kNop8),
+};
+// 19: `mov ecx,[imm32]; mov edx,[ecx+2C]`.
+constexpr SkipLauncherWrite kEntry19Writes[] = {
+    WriteBytes(0, kNop14),
+};
+// 20: prologue pushes, `mov edi,[imm32]; mov eax,[edi+2C]`; the whole function
+// becomes `ret`.
+constexpr SkipLauncherWrite kEntry20Writes[] = {
+    WriteBytes(0, kRet),
+};
+// 21: `cmp eax,edi; jne rel32; test eax,eax`.
+constexpr SkipLauncherWrite kEntry21Writes[] = {
+    NopFill(0, 16),
+};
+// 22: `jne rel32; test eax,eax; je rel32; call rel32; test edx,edx`.
+constexpr SkipLauncherWrite kEntry22Writes[] = {
+    WriteBytes(0, kNop14),
+};
+// 23: `sub esp,0x24; mov eax,[imm32]; mov ecx,[eax+14]; push ...`; the function
+// becomes `xor eax,eax; ret; nop`.
+constexpr SkipLauncherWrite kEntry23Writes[] = {
+    WriteBytes(0, kXorEaxRetNop),
+};
+// 24: `sub esp,8; mov ecx,[imm32]; mov edx,[ecx+14]; lea eax,[esp]`.
+constexpr SkipLauncherWrite kEntry24Writes[] = {
+    WriteBytes(0, kXorEaxRetNop),
 };
 
-constexpr SkipLauncherWrite kSkipEntryWrites_2[] = {
-	{0, 2, kSkipEntryBytes_2_0, 0, kNoJumpTarget},
-	{5, 2, kSkipEntryBytes_2_1, 0, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_3[] = {
-	{0, 2, kSkipEntryBytes_3_0, 0, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_4[] = {
-	{3, 6, kSkipEntryBytes_4_0, 0, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_5[] = {
-	{3, 6, kSkipEntryBytes_5_0, 0, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_6[] = {
-	{0, 6, kSkipEntryBytes_6_0, 0, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_7[] = {
-	{3, 2, kSkipEntryBytes_7_0, 0, kNoJumpTarget},
-	{10, 2, kSkipEntryBytes_7_1, 0, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_8[] = {
-	{1, 447, nullptr, kNopByte, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_9[] = {
-	{0, 2, kSkipEntryBytes_9_0, 0, kNoJumpTarget},
-	{2, 1, kSkipEntryBytes_9_1, 0, kNoJumpTarget},
-	{3, 4, nullptr, 0, kSkipLauncherJumpTargetEntry},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_10[] = {
-	{0, 2, kSkipEntryBytes_10_0, 0, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_11[] = {
-	{0, 2, kSkipEntryBytes_11_0, 0, kNoJumpTarget},
-	{2, 4, kSkipEntryBytes_11_1, 0, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_12[] = {
-	{0, 3, kSkipEntryBytes_12_0, 0, kNoJumpTarget},
-	{6, 11, nullptr, kNopByte, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_13[] = {
-	{0, 3, kSkipEntryBytes_13_0, 0, kNoJumpTarget},
-	{6, 11, nullptr, kNopByte, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_14[] = {
-	{0, 11, kSkipEntryBytes_14_0, 0, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_15[] = {
-	{0, 32, nullptr, kNopByte, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_16[] = {
-	{0, 25, nullptr, kNopByte, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_17[] = {
-	{0, 8, kSkipEntryBytes_17_0, 0, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_18[] = {
-	{0, 8, kSkipEntryBytes_18_0, 0, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_19[] = {
-	{0, 14, kSkipEntryBytes_19_0, 0, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_20[] = {
-	{0, 1, kSkipEntryBytes_20_0, 0, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_21[] = {
-	{0, 16, nullptr, kNopByte, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_22[] = {
-	{0, 14, kSkipEntryBytes_22_0, 0, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_23[] = {
-	{0, 4, kSkipEntryBytes_23_0, 0, kNoJumpTarget},
-};
-
-constexpr SkipLauncherWrite kSkipEntryWrites_24[] = {
-	{0, 4, kSkipEntryBytes_24_0, 0, kNoJumpTarget},
-};
-
+// In the original's order. Entry 1 is the only row with no edits: entry 9's E9
+// jumps to its match, so the handler keeps its address and writes nothing.
 constexpr SkipLauncherEntry kSkipLauncherEntries[] = {
-	{"84 DB 0F 85 43 01 00 00 8D 4C 24 28 8B C1", kSkipEntryWrites_0, std::size(kSkipEntryWrites_0)},
-	{"68 ? ? ? ? 89 35 ? ? ? ? E8 ? ? ? ? 83 C4 04 84 C0 0F 84", nullptr, 0},
-	{"74 EC 38 5E 06 74 E7 68", kSkipEntryWrites_2, std::size(kSkipEntryWrites_2)},
-	{"74 C4 8B 07 3B 46 18 75 BD 68", kSkipEntryWrites_3, std::size(kSkipEntryWrites_3)},
-	{"3B 56 18 0F 85", kSkipEntryWrites_4, std::size(kSkipEntryWrites_4)},
-	{"3B 4E 18 0F 85", kSkipEntryWrites_5, std::size(kSkipEntryWrites_5)},
-	{"0F 85 ? ? ? ? 8B 8C 24 ? ? ? ? 5F 5E 5B 33 CC C6", kSkipEntryWrites_6,
-		std::size(kSkipEntryWrites_6)},
-	{"3B 46 18 75 BD", kSkipEntryWrites_7, std::size(kSkipEntryWrites_7)},
-	{"57 51 C7 44 24 ? ? ? ? ? C7 44 24 ? ? ? ? ? C7 44 24", kSkipEntryWrites_8,
-		std::size(kSkipEntryWrites_8)},
-	{"8B 56 1C 3B 56 20 ? ? 6A 00 6A 00", kSkipEntryWrites_9, std::size(kSkipEntryWrites_9)},
-	{"89 35 ? ? ? ? E8 ? ? ? ? 83 C4 04 84 C0", kSkipEntryWrites_10, std::size(kSkipEntryWrites_10)},
-	{"8B 50 2C 3B 50 30", kSkipEntryWrites_11, std::size(kSkipEntryWrites_11)},
-	{"8B 48 2C 83 EC 78", kSkipEntryWrites_12, std::size(kSkipEntryWrites_12)},
-	{"8B 48 2C 83 EC 74", kSkipEntryWrites_13, std::size(kSkipEntryWrites_13)},
-	{"8B 48 2C 3B 48 30 74 03", kSkipEntryWrites_14, std::size(kSkipEntryWrites_14)},
-	{"8B 48 2C 3B 48 30 53", kSkipEntryWrites_15, std::size(kSkipEntryWrites_15)},
-	{"8B 48 2C 3B 48 30 74 11", kSkipEntryWrites_16, std::size(kSkipEntryWrites_16)},
-	{"8B 48 2C 3B 48 30 75 DC 8D 54 24 18", kSkipEntryWrites_17, std::size(kSkipEntryWrites_17)},
-	{"8B 48 2C 3B 48 30 75 DC 8D 54 24 1C", kSkipEntryWrites_18, std::size(kSkipEntryWrites_18)},
-	{"8B 0D ? ? ? ? 8B 51 2C", kSkipEntryWrites_19, std::size(kSkipEntryWrites_19)},
-	{"51 53 55 56 57 8B 3D ? ? ? ? 8B 47 2C", kSkipEntryWrites_20, std::size(kSkipEntryWrites_20)},
-	{"3B C7 0F 85 ? ? ? ? 85 C0", kSkipEntryWrites_21, std::size(kSkipEntryWrites_21)},
-	{"0F 85 ? ? ? ? 85 C0 0F 84 ? ? ? ? E8 ? ? ? ? 85 D2", kSkipEntryWrites_22,
-		std::size(kSkipEntryWrites_22)},
-	{"83 EC 24 A1 ? ? ? ? 8B 48 14 53 55 56 57", kSkipEntryWrites_23, std::size(kSkipEntryWrites_23)},
-	{"83 EC 08 8B 0D ? ? ? ? 8B 51 14 8D 04 24 50 6A 00 52", kSkipEntryWrites_24,
-		std::size(kSkipEntryWrites_24)},
+    // 0: `test bl,bl; jne` launcher check; two EB hook sites
+    {"84 DB 0F 85 43 01 00 00 8D 4C 24 28 8B C1", kEntry0Writes},
+    // 1: target of entry 9's jump; no edits of its own
+    {"68 ? ? ? ? 89 35 ? ? ? ? E8 ? ? ? ? 83 C4 04 84 C0 0F 84", {}},
+    // 2: `74 EC` / `74 E7` conditional launcher jumps
+    {"74 EC 38 5E 06 74 E7 68", kEntry2Writes},
+    // 3: `74 C4` leading conditional jump
+    {"74 C4 8B 07 3B 46 18 75 BD 68", kEntry3Writes},
+    // 4: `cmp edx,[esi+18]; jne rel32`
+    {"3B 56 18 0F 85", kEntry4Writes},
+    // 5: `cmp ecx,[esi+18]; jne rel32`
+    {"3B 4E 18 0F 85", kEntry5Writes},
+    // 6: leading `jne rel32` of an epilogue sequence
+    {"0F 85 ? ? ? ? 8B 8C 24 ? ? ? ? 5F 5E 5B 33 CC C6", kEntry6Writes},
+    // 7: `cmp eax,[esi+18]; jne -0x43` and a following store
+    {"3B 46 18 75 BD", kEntry7Writes},
+    // 8: `push edi; push ecx` + three `C7 44 24` immediate stores
+    {"57 51 C7 44 24 ? ? ? ? ? C7 44 24 ? ? ? ? ? C7 44 24", kEntry8Writes},
+    // 9: `mov edx,[esi+1C]; cmp edx,[esi+20]` -> xor eax,eax; jmp entry 1
+    {"8B 56 1C 3B 56 20 ? ? 6A 00 6A 00", kEntry9Writes},
+    // 10: `mov [imm32],esi; call; add esp,4; test al,al`
+    {"89 35 ? ? ? ? E8 ? ? ? ? 83 C4 04 84 C0", kEntry10Writes},
+    // 11: `mov edx,[eax+2C]; cmp edx,[eax+30]` -> eax = 0
+    {"8B 50 2C 3B 50 30", kEntry11Writes},
+    // 12: `mov ecx,[eax+2C]; sub esp,0x78` + body tail
+    {"8B 48 2C 83 EC 78", kEntry12Writes},
+    // 13: the same with `sub esp,0x74`
+    {"8B 48 2C 83 EC 74", kEntry13Writes},
+    // 14: `mov ecx,[eax+2C]; cmp ecx,[eax+30]; jz +3`
+    {"8B 48 2C 3B 48 30 74 03", kEntry14Writes},
+    // 15: the same compare followed by `push ebx`
+    {"8B 48 2C 3B 48 30 53", kEntry15Writes},
+    // 16: the same compare followed by `jz +0x11`
+    {"8B 48 2C 3B 48 30 74 11", kEntry16Writes},
+    // 17: `... jne -0x24; lea edx,[esp+18]`
+    {"8B 48 2C 3B 48 30 75 DC 8D 54 24 18", kEntry17Writes},
+    // 18: `... jne -0x24; lea edx,[esp+1C]`
+    {"8B 48 2C 3B 48 30 75 DC 8D 54 24 1C", kEntry18Writes},
+    // 19: `mov ecx,[imm32]; mov edx,[ecx+2C]`
+    {"8B 0D ? ? ? ? 8B 51 2C", kEntry19Writes},
+    // 20: prologue pushes + `mov edi,[imm32]; mov eax,[edi+2C]`
+    {"51 53 55 56 57 8B 3D ? ? ? ? 8B 47 2C", kEntry20Writes},
+    // 21: `cmp eax,edi; jne rel32; test eax,eax`
+    {"3B C7 0F 85 ? ? ? ? 85 C0", kEntry21Writes},
+    // 22: `jne rel32; test eax,eax; je rel32; call rel32; test edx,edx`
+    {"0F 85 ? ? ? ? 85 C0 0F 84 ? ? ? ? E8 ? ? ? ? 85 D2", kEntry22Writes},
+    // 23: `sub esp,0x24; mov eax,[imm32]; mov ecx,[eax+14]; push ...`
+    {"83 EC 24 A1 ? ? ? ? 8B 48 14 53 55 56 57", kEntry23Writes},
+    // 24: `sub esp,8; mov ecx,[imm32]; mov edx,[ecx+14]; lea eax,[esp]`
+    {"83 EC 08 8B 0D ? ? ? ? 8B 51 14 8D 04 24 50 6A 00 52", kEntry24Writes},
 };
+static_assert(std::size(kSkipLauncherEntries) == 25);
+
+// The two collector rules: the first two matches of one pattern and the last
+// two of the other, each widened by the same "mov al,1; ret; nop" stub.
+constexpr std::uint8_t kCollectorStub[] = {0xB0, 0x01, 0xC3, 0x90};
 
 constexpr SkipLauncherCollector kSkipLauncherCollectors[] = {
-	{"A1 ? ? ? ? 85 C0 8B 0D ? ? ? ? 75", SkipLauncherCollector::Target::first_two,
-		kSkipCollectorBytes_0, kCollectorStubLength},
-	{"33 C0 83 3D ? ? ? ? 01 0F 94 C0 C3", SkipLauncherCollector::Target::last_two,
-		kSkipCollectorBytes_1, kCollectorStubLength},
+    {"A1 ? ? ? ? 85 C0 8B 0D ? ? ? ? 75", SkipLauncherCollector::Target::first_two,
+     kCollectorStub},
+    {"33 C0 83 3D ? ? ? ? 01 0F 94 C0 C3", SkipLauncherCollector::Target::last_two,
+     kCollectorStub},
 };
 
 // `FF 15` is a call through an IAT slot; the slot VA is the operand at +2.
 constexpr std::string_view kDfaCapturePattern = "FF 15 ? ? ? ? 8B F0 83 FE FF 74 24";
-constexpr std::int32_t kDfaCaptureSlotOffset = 2;
 
 // DFA file-API hooks: the original installs these E8/E9 jumps from 0x10004850.
 constexpr SkipLauncherInstall kSkipLauncherDfaInstalls[] = {
@@ -348,11 +344,12 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 			// 0x10045CE0 scan); when it is absent the whole block is skipped, not
 			// just the jump - 33 C0 + E9 + rel32 share one [ebp-0x1c] guard.
 			bool targetAbsent = false;
-			for (std::size_t w = 0; w < entry.writeCount; ++w)
+			for (const SkipLauncherWrite& write : entry.writes)
 			{
-				const std::uint32_t targetEntry = entry.writes[w].jumpToEntry;
-				if (targetEntry != kNoJumpTarget &&
-				    (targetEntry >= matches.size() || matches[targetEntry] == nullptr))
+				if (write.kind != SkipLauncherWrite::Kind::jump)
+					continue;
+				const std::uint32_t targetEntry = write.jumpToEntry;
+				if (targetEntry >= matches.size() || matches[targetEntry] == nullptr)
 				{
 					targetAbsent = true;
 					break;
@@ -360,11 +357,10 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 			}
 			if (targetAbsent)
 				continue;
-			for (std::size_t w = 0; w < entry.writeCount; ++w)
+			for (const SkipLauncherWrite& write : entry.writes)
 			{
-				const SkipLauncherWrite& write = entry.writes[w];
 				auto* site = match + write.offset;
-				if (write.jumpToEntry != kNoJumpTarget)
+				if (write.kind == SkipLauncherWrite::Kind::jump)
 				{
 					const std::uint8_t* target =
 					    write.jumpToEntry < matches.size() ? matches[write.jumpToEntry] : nullptr;
@@ -383,22 +379,21 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 					    true);
 					report.jumpInstalled = true;
 				}
+				else if (write.kind == SkipLauncherWrite::Kind::fill)
+				{
+					if (!InBounds(image, site, write.count))
+						return {PatchResultCode::out_of_bounds, "site out of bounds"};
+					// Every fill row in the tables is kLauncherNopByte.
+					injector::MakeNOP(site, write.count, true);  //nop
+				}
 				else
 				{
-					if (!InBounds(image, site, write.length))
+					if (!InBounds(image, site, write.bytes.size()))
 						return {PatchResultCode::out_of_bounds, "site out of bounds"};
-					if (write.bytes)
-					{
-						injector::WriteMemoryRaw(site,
-						                         const_cast<std::uint8_t*>(write.bytes),
-						                         write.length,
-						                         true);  //the entry's bytes
-					}
-					else
-					{
-						// Every fill row in the tables is kNopByte.
-						injector::MakeNOP(site, write.length, true);  //nop
-					}
+					injector::WriteMemoryRaw(site,
+					                         const_cast<std::uint8_t*>(write.bytes.data()),
+					                         write.bytes.size(),
+					                         true);  //the entry's bytes
 				}
 				++report.writes;
 			}
@@ -426,10 +421,10 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 					continue;
 				}
 				auto* site = pattern.get(hit).get<std::uint8_t>();
-				if (!InBounds(image, site, collector.length))
+				if (!InBounds(image, site, collector.stub.size()))
 					return {PatchResultCode::out_of_bounds, "site out of bounds"};
-				injector::WriteMemoryRaw(site, const_cast<std::uint8_t*>(collector.bytes),
-				                         collector.length, true);  //mov al,1; ret; nop
+				injector::WriteMemoryRaw(site, const_cast<std::uint8_t*>(collector.stub.data()),
+				                         collector.stub.size(), true);  //mov al,1; ret; nop
 				++report.collectorWrites;
 			}
 		}
@@ -442,7 +437,7 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 		hook::pattern capture = ScanPattern(image, kDfaCapturePattern);
 		if (!capture.empty())
 			report.createFileSlot = injector::ReadMemory<std::uint32_t>(
-			    capture.get(0).get<std::uint8_t>() + kDfaCaptureSlotOffset);
+			    capture.get(0).get<std::uint8_t>() + 2);
 	}
 
 	if (resolve)
@@ -554,9 +549,13 @@ constexpr std::size_t kRomPayloadAction = 4;
 constexpr std::size_t kRomPayloadArg0 = 5;
 constexpr std::size_t kRomPayloadArg1 = 6;
 
-constexpr std::uint32_t kRomActionCopyTable = 18;
-constexpr std::uint32_t kRomActionAdd = 51;
-constexpr std::uint32_t kRomActionSet = 100;
+// The WM_ROM actions the service implements; the values are the original's.
+enum class RomAction : std::uint32_t
+{
+	copyTable = 18,
+	add = 51,
+	set = 100,
+};
 
 // SkipRomReset's object layout: [1] is the window handle, [4] the WM_ROM id;
 // [0], [2], [3] and [5..18] are cleared first.
@@ -592,16 +591,16 @@ LRESULT CALLBACK RomWindowProc(HWND window, UINT message, WPARAM wparam, LPARAM 
 	else if (message == kRomMessage)
 	{
 		auto* payload = reinterpret_cast<std::uint32_t*>(lparam);
-		switch (payload[kRomPayloadAction])
+		switch (static_cast<RomAction>(payload[kRomPayloadAction]))
 		{
-		case kRomActionCopyTable:
+		case RomAction::copyTable:
 			std::memcpy(reinterpret_cast<void*>(
 			                static_cast<std::uintptr_t>(payload[kRomPayloadArg1])),
 			            kRomTable, sizeof(kRomTable));
 			return 0;
-		case kRomActionAdd:
+		case RomAction::add:
 			return static_cast<LRESULT>(payload[kRomPayloadArg0] + payload[kRomPayloadArg1]);
-		case kRomActionSet:
+		case RomAction::set:
 			*reinterpret_cast<std::uint32_t*>(
 			    static_cast<std::uintptr_t>(payload[kRomPayloadArg0])) = 1;
 			return 0;

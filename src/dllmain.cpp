@@ -13,6 +13,8 @@
 
 #include "common.hxx"
 
+#include <filesystem>
+
 #include "common.h"
 #include "hook_bodies.h"
 #include "hooks.h"
@@ -41,7 +43,8 @@ import zp.world;
 import zp.multiplayer;
 import zp.misc;
 
-char iniPath[MAX_PATH];
+// Resolved in ResolvePaths; empty when the module path is unavailable.
+std::filesystem::path g_iniPath;
 
 // The menu-integration decision the RestoreDeathMusic arm reads
 // (declared in src/patches.h so the feature modules link it).
@@ -73,25 +76,11 @@ bool bDFAInstalled = false;
 
 void ResolvePaths(HMODULE module)
 {
-	char path[MAX_PATH]{};
-	const DWORD length = GetModuleFileNameA(module, path, MAX_PATH);
+	wchar_t path[MAX_PATH]{};
+	const DWORD length = GetModuleFileNameW(module, path, MAX_PATH);
 	if (!length || length >= MAX_PATH)
 		return;
-
-	char* slash = path + length;
-	while (slash != path && slash[-1] != '\\' && slash[-1] != '/')
-		--slash;
-
-	const std::size_t prefix = static_cast<std::size_t>(slash - path);
-	const auto copyName = [&](const char* name, char* destination) {
-		const std::size_t nameLength = std::strlen(name) + 1;
-		if (prefix + nameLength > MAX_PATH)
-			return;
-		std::memcpy(destination, path, prefix);
-		std::memcpy(destination + prefix, name, nameLength);
-	};
-
-	copyName("ZolikaPatch.ini", iniPath);
+	g_iniPath = std::filesystem::path(path).parent_path() / L"ZolikaPatch.ini";
 }
 
 // The checks DllMain runs first: a specific old dsound.dll ASI loader gets a
@@ -405,12 +394,13 @@ void ReportDoubleLoad(INI<>& ini, GameImage image)
 
 void SetStuff()
 {
-	if (!iniPath[0])
+	if (g_iniPath.empty())
 		return;
 
 	// Phase 1: the INI and the config-derived globals.
 	TraceBoot("ini");
-	INI<> ini(iniPath, true);
+	const std::string ini_path = g_iniPath.string();  // the reader's const char* boundary
+	INI<> ini(ini_path.c_str(), true);
 	ini.select(kOptionsSection);
 	ConfigDocument& config = ini.document();
 	// Deferred on purpose: the load keeps its loader position, and the guard below
@@ -573,10 +563,165 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID /*reserved*/)
 	return TRUE;
 }
 
+// The option pass: the arms live in the feature modules, in the order this tree
+// has always run them; `PatchGame` only walks that order. Every arm reads its own
+// INI option, traces itself and gates its own build scope, so the tables below are
+// only the order - no arm may move.
+using ArmFn = void (*)(const PatchContext&);
 
+constexpr ArmFn kPublishArms[] = {
+	&PublishBadPlayerModelCrashFix,
+	&PublishBlackscreenFix,
+	&PublishBuildingDynamicShadows,
+	&PublishCollisionDeadlockFix,
+	&PublishCopSirensFlag,
+	&PublishDualVehicleHeadlights,
+	&PublishEmissiveLerpFix,
+	&PublishEpisodeSwitchFreezeFix,
+	&PublishFreezeGunFix,
+	&PublishGroupHackFix,
+	&PublishHighFPSBikePhysicsFix,
+	&PublishLoadDLCs,
+	&PublishLocalSettingsPath,
+	&PublishNewFilesCompatibility,
+	&PublishNewMemorySystem,
+	&PublishNewSavesCompatibility,
+	&PublishNoLiveryLimit,
+	&PublishPathNodeCrashFix,
+	&PublishPedModelsInCutscenesFix,
+	&PublishPlaneCrashFix,
+	&PublishPlayerAsPedComponentsFix,
+	&PublishPopupHeadlightsFlag,
+	&PublishSMPA60Fix,
+	&PublishSkipIntro,
+	&PublishSkipMenu,
+	&PublishSpeedupBugFix,
+	&PublishWantedLevelCrashFix,
+	&PublishSuperLODFix,
+	&PublishDrivebyFOVFix,
+	&PublishCrashMsgFix,
+	&PublishBenchmarkFix,
+	&PublishCarPartsShadowFix,
+	&PublishForceCarHeadlightShadows,
+	&PublishPatch4RemoveModChecks,
+	&PublishFreezeCarFix,
+	&PublishCarDynamicShadowFix,
+	&PublishGarageModelFix,
+	&PublishMovingSteeringWheelSupport,
+	&PublishShakingEngineBlock,
+	&PublishMovingPlaneParts,
+	&PublishMouseFix,
+	&PublishOutOfCommissionFix,
+	&PublishHighQualityReflections,
+	&PublishCutsceneFixes,
+	&PublishRemoveGFWLUpdatePopup,
+};
 
-// The option pass: the arms live in the feature modules, in the order this tree has
-// always run them; `PatchGame` only walks that order.
+constexpr ArmFn kInstallArms[] = {
+	&ApplyAimProjectileCrashFix,
+	&ApplyAllowHashesForIDE,
+	&ApplyBadPlayerModelCrashFix,
+	&ApplyBetterMPSync,
+	&ApplyBikeFeetFix,
+	&ApplyBikePhoneAnimsFix,
+	&ApplyBlackscreenFix,
+	&ApplyBuildingAlphaFix,
+	&ApplyBuildingDynamicShadows,
+	// The original applies its singles and RVA tables as the loader's 27th
+	// option read, after BuildingDynamicShadows. The early position is
+	// load-bearing: the tables overwrite one byte of the MiscFixes and
+	// RestoreDeathMusic signatures, suppressing both later arms exactly as in
+	// the original (`zp_dump --ordering` pins it).
+	&ApplyRemoveUselessChecks,
+	&ApplyCollisionDeadlockFix,
+	&ApplyCombinedRadioFreezeFix,
+	&ApplyCopSirensFlag,
+	&ApplyEmissiveLerpFix,
+	&ApplyEpisodeSwitchFreezeFix,
+	&ApplyEpisodicVehicleSupport,
+	&ApplyEpisodicWeaponSupport,
+	&ApplyForceDynamicShadowsEverywhere,
+	&ApplyForceShadowsOnObjects,
+	&ApplyFreezeGunFix,
+	&ApplyGroupHackFix,
+	&ApplyHighFPSBikePhysicsFix,
+	&ApplyHighFPSSpeedupFix,
+	&ApplyImprovedShaderStreaming,
+	&ApplyInfiniteCarBottomDistance,
+	&ApplyLoadDLCs,
+	&ApplyLocalSettingsPath,
+	&ApplyMPNikoCrashFix,
+	&ApplyMiscFixes,
+	&ApplyNewFilesCompatibility,
+	&ApplyNewMemorySystem,
+	&ApplyNewSavesCompatibility,
+	&ApplyNoLiveryLimit,
+	&ApplyPatch6and7RemoveModChecks,
+	&ApplyPathNodeCrashFix,
+	&ApplyPedModelsInCutscenesFix,
+	&ApplyPipeBombDropIconSupport,
+	&ApplyPlaneCrashFix,
+	&ApplyPlayerAsPedComponentsFix,
+	&ApplyPoliceEpisodicWeaponSupport,
+	&ApplyPopupHeadlightsFlag,
+	&ApplyRemoveAllWeaponsProtection,
+	&ApplyRemoveBoundingBoxCulling,
+	&ApplyRemoveRGSCLoginRequirement,
+	&ApplyRemoveStaticCarShadows,
+	&ApplyRemoveStaticCutsceneCarShadows,
+	&ApplyReversingLightFix,
+	&ApplySCOSignatureFix,
+	&ApplySMPA60Fix,
+	&ApplySavegameFix,
+	&ApplySkipIntro,
+	&ApplySkipLauncherOption,
+	&ApplySkipMenu,
+	&ApplySpeedupBugFix,
+	&ApplyTBoGTHeliHeightLimit,
+	&ApplyTeleportProtection,
+	&ApplyTryToSkipAllErrors,
+	&ApplyVRAMFix,
+	&ApplyWantedLevelCrashFix,
+	&ApplyPatch7RemoveModChecks,
+	&ApplySuperLODFix,
+	&ApplyDrivebyFOVFix,
+	&ApplyCrashMsgFix,
+	&ApplyBenchmarkFix,
+	&ApplyCarPartsShadowFix,
+	&ApplyForceCarHeadlightShadows,
+	&ApplyPatch4RemoveModChecks,
+	&ApplyFreezeCarFix,
+	&ApplyCarDynamicShadowFix,
+	&ApplyGarageModelFix,
+	&ApplyMovingSteeringWheelSupport,
+	&ApplyShakingEngineBlock,
+	&ApplyMovingPlaneParts,
+	&ApplyMouseFix,
+	&ApplyOutOfCommissionFix,
+	&ApplyHighQualityReflections,
+	&ApplyCutsceneFixes,
+	&ApplyRemoveGFWLUpdatePopup,
+	&ApplyCarDecalsFix,
+	&ApplyRestoreDeathMusic,
+	&ApplyCarDynamicShadowFixNoE,
+	&ApplyDualVehicleHeadlightsOld,
+	&ApplyDualVehicleHeadlightsNew,
+	&ApplyBorderlessWindowed,
+	&ApplyFastLoading,
+	&ApplyDoNotPauseOnMinimize,
+	&ApplyCarPartsShadowFixStandalone,
+	&ApplyIncreaseVehicleModelLimit,
+	&ApplyNoPhysicsSleep,
+	&ApplyNoImpostorHeightCutoff,
+	&ApplyStartupTimeFix,
+	&ApplyIncreasePtrNodes,
+	&ApplyIncreaseVehicleStructLimit,
+	&ApplyNoLODLightHeightCutoff,
+	&ApplyNoLoadingSleep,
+	&ApplyOverrideGTADatPath,
+	&ApplyVSyncFix,
+};
+
 void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 {
 	PatchContext ctx{image, reinterpret_cast<std::uintptr_t>(image.base), build,
@@ -585,155 +730,12 @@ void PatchGame(GameBuild build, GameImage image, const ConfigDocument& config)
 	// Publish every slot before any arm writes a site: a site write can overwrite the
 	// signature a later arm's slot publish scans for. The feature modules own the blocks;
 	// this order is the only ordering there is (no phase graph).
-	PublishBadPlayerModelCrashFix(ctx);
-	PublishBlackscreenFix(ctx);
-	PublishBuildingDynamicShadows(ctx);
-	PublishCollisionDeadlockFix(ctx);
-	PublishCopSirensFlag(ctx);
-	PublishDualVehicleHeadlights(ctx);
-	PublishEmissiveLerpFix(ctx);
-	PublishEpisodeSwitchFreezeFix(ctx);
-	PublishFreezeGunFix(ctx);
-	PublishGroupHackFix(ctx);
-	PublishHighFPSBikePhysicsFix(ctx);
-	PublishLoadDLCs(ctx);
-	PublishLocalSettingsPath(ctx);
-	PublishNewFilesCompatibility(ctx);
-	PublishNewMemorySystem(ctx);
-	PublishNewSavesCompatibility(ctx);
-	PublishNoLiveryLimit(ctx);
-	PublishPathNodeCrashFix(ctx);
-	PublishPedModelsInCutscenesFix(ctx);
-	PublishPlaneCrashFix(ctx);
-	PublishPlayerAsPedComponentsFix(ctx);
-	PublishPopupHeadlightsFlag(ctx);
-	PublishSMPA60Fix(ctx);
-	PublishSkipIntro(ctx);
-	PublishSkipMenu(ctx);
-	PublishSpeedupBugFix(ctx);
-	PublishWantedLevelCrashFix(ctx);
-	PublishSuperLODFix(ctx);
-	PublishDrivebyFOVFix(ctx);
-	PublishCrashMsgFix(ctx);
-	PublishBenchmarkFix(ctx);
-	PublishCarPartsShadowFix(ctx);
-	PublishForceCarHeadlightShadows(ctx);
-	PublishPatch4RemoveModChecks(ctx);
-	PublishFreezeCarFix(ctx);
-	PublishCarDynamicShadowFix(ctx);
-	PublishGarageModelFix(ctx);
-	PublishMovingSteeringWheelSupport(ctx);
-	PublishShakingEngineBlock(ctx);
-	PublishMovingPlaneParts(ctx);
-	PublishMouseFix(ctx);
-	PublishOutOfCommissionFix(ctx);
-	PublishHighQualityReflections(ctx);
-	PublishCutsceneFixes(ctx);
-	PublishRemoveGFWLUpdatePopup(ctx);
+	for (const ArmFn arm : kPublishArms)
+		arm(ctx);
 
 	// Installs, in the same arm order.
-	ApplyAimProjectileCrashFix(ctx);
-	ApplyAllowHashesForIDE(ctx);
-	ApplyBadPlayerModelCrashFix(ctx);
-	ApplyBetterMPSync(ctx);
-	ApplyBikeFeetFix(ctx);
-	ApplyBikePhoneAnimsFix(ctx);
-	ApplyBlackscreenFix(ctx);
-	ApplyBuildingAlphaFix(ctx);
-	ApplyBuildingDynamicShadows(ctx);
-	// The original applies its singles and RVA tables as the loader's 27th
-	// option read, after BuildingDynamicShadows. The early position is
-	// load-bearing: the tables overwrite one byte of the MiscFixes and
-	// RestoreDeathMusic signatures, suppressing both later arms exactly as in
-	// the original (`zp_dump --ordering` pins it).
-	ApplyRemoveUselessChecks(ctx);
-	ApplyCollisionDeadlockFix(ctx);
-	ApplyCombinedRadioFreezeFix(ctx);
-	ApplyCopSirensFlag(ctx);
-	ApplyEmissiveLerpFix(ctx);
-	ApplyEpisodeSwitchFreezeFix(ctx);
-	ApplyEpisodicVehicleSupport(ctx);
-	ApplyEpisodicWeaponSupport(ctx);
-	ApplyForceDynamicShadowsEverywhere(ctx);
-	ApplyForceShadowsOnObjects(ctx);
-	ApplyFreezeGunFix(ctx);
-	ApplyGroupHackFix(ctx);
-	ApplyHighFPSBikePhysicsFix(ctx);
-	ApplyHighFPSSpeedupFix(ctx);
-	ApplyImprovedShaderStreaming(ctx);
-	ApplyInfiniteCarBottomDistance(ctx);
-	ApplyLoadDLCs(ctx);
-	ApplyLocalSettingsPath(ctx);
-	ApplyMPNikoCrashFix(ctx);
-	ApplyMiscFixes(ctx);
-	ApplyNewFilesCompatibility(ctx);
-	ApplyNewMemorySystem(ctx);
-	ApplyNewSavesCompatibility(ctx);
-	ApplyNoLiveryLimit(ctx);
-	ApplyPatch6and7RemoveModChecks(ctx);
-	ApplyPathNodeCrashFix(ctx);
-	ApplyPedModelsInCutscenesFix(ctx);
-	ApplyPipeBombDropIconSupport(ctx);
-	ApplyPlaneCrashFix(ctx);
-	ApplyPlayerAsPedComponentsFix(ctx);
-	ApplyPoliceEpisodicWeaponSupport(ctx);
-	ApplyPopupHeadlightsFlag(ctx);
-	ApplyRemoveAllWeaponsProtection(ctx);
-	ApplyRemoveBoundingBoxCulling(ctx);
-	ApplyRemoveRGSCLoginRequirement(ctx);
-	ApplyRemoveStaticCarShadows(ctx);
-	ApplyRemoveStaticCutsceneCarShadows(ctx);
-	ApplyReversingLightFix(ctx);
-	ApplySCOSignatureFix(ctx);
-	ApplySMPA60Fix(ctx);
-	ApplySavegameFix(ctx);
-	ApplySkipIntro(ctx);
-	ApplySkipLauncherOption(ctx);
-	ApplySkipMenu(ctx);
-	ApplySpeedupBugFix(ctx);
-	ApplyTBoGTHeliHeightLimit(ctx);
-	ApplyTeleportProtection(ctx);
-	ApplyTryToSkipAllErrors(ctx);
-	ApplyVRAMFix(ctx);
-	ApplyWantedLevelCrashFix(ctx);
-	ApplyPatch7RemoveModChecks(ctx);
-	ApplySuperLODFix(ctx);
-	ApplyDrivebyFOVFix(ctx);
-	ApplyCrashMsgFix(ctx);
-	ApplyBenchmarkFix(ctx);
-	ApplyCarPartsShadowFix(ctx);
-	ApplyForceCarHeadlightShadows(ctx);
-	ApplyPatch4RemoveModChecks(ctx);
-	ApplyFreezeCarFix(ctx);
-	ApplyCarDynamicShadowFix(ctx);
-	ApplyGarageModelFix(ctx);
-	ApplyMovingSteeringWheelSupport(ctx);
-	ApplyShakingEngineBlock(ctx);
-	ApplyMovingPlaneParts(ctx);
-	ApplyMouseFix(ctx);
-	ApplyOutOfCommissionFix(ctx);
-	ApplyHighQualityReflections(ctx);
-	ApplyCutsceneFixes(ctx);
-	ApplyRemoveGFWLUpdatePopup(ctx);
-	ApplyCarDecalsFix(ctx);
-	ApplyRestoreDeathMusic(ctx);
-	ApplyCarDynamicShadowFixNoE(ctx);
-	ApplyDualVehicleHeadlightsOld(ctx);
-	ApplyDualVehicleHeadlightsNew(ctx);
-	ApplyBorderlessWindowed(ctx);
-	ApplyFastLoading(ctx);
-	ApplyDoNotPauseOnMinimize(ctx);
-	ApplyCarPartsShadowFixStandalone(ctx);
-	ApplyIncreaseVehicleModelLimit(ctx);
-	ApplyNoPhysicsSleep(ctx);
-	ApplyNoImpostorHeightCutoff(ctx);
-	ApplyStartupTimeFix(ctx);
-	ApplyIncreasePtrNodes(ctx);
-	ApplyIncreaseVehicleStructLimit(ctx);
-	ApplyNoLODLightHeightCutoff(ctx);
-	ApplyNoLoadingSleep(ctx);
-	ApplyOverrideGTADatPath(ctx);
-	ApplyVSyncFix(ctx);
+	for (const ArmFn arm : kInstallArms)
+		arm(ctx);
 }
 
 void SetMenuIntegration(bool available) noexcept
@@ -741,13 +743,8 @@ void SetMenuIntegration(bool available) noexcept
 	bMenuIntegration = available;
 }
 
-// The loader's pointer scans: the offsets their signatures imply.
-constexpr std::uint32_t kCallOperandOffset = 6u;
-constexpr std::uint32_t kResolverSignatureLength = 10u;
-constexpr std::uint32_t kPreFn59C74Offset = 42u;
-constexpr std::uint32_t kPreFn5D63COffset = 48u;
-constexpr std::uint32_t kPreFn59CDCOffset = 48u;
-
+// The loader's pointer scans: each hit is adjusted by the offsets its signature
+// implies, stated at the use below.
 PreambleReport FindGamePointers(GameImage image) noexcept
 {
 	PreambleReport report;
@@ -774,12 +771,13 @@ PreambleReport FindGamePointers(GameImage image) noexcept
 
 	if (const std::uint8_t* hit = scan("08 0B C2 8B F0 E8"))
 	{
-		zpatch_driveby_resolver = ReadDword(hit + kCallOperandOffset) +
-		                          AddressOf(hit) + kResolverSignatureLength;
+		// +6: the trailing E8's rel32 operand; the resolver body begins 10 bytes
+		// past the match.
+		zpatch_driveby_resolver = ReadDword(hit + 6) + AddressOf(hit) + 10;
 	}
 
 	if (const std::uint8_t* hit = scan("85 F6 74 30 8B 16 8B 42 0C 8B CE FF D0 3C 02 75 23"))
-		zpatch_pre_fn_59c74 = AddressOf(hit) - kPreFn59C74Offset;
+		zpatch_pre_fn_59c74 = AddressOf(hit) - 42;  // entry 42 bytes before the branch
 
 	if (const std::uint8_t* hit = scan("8B 44 24 04 89 44 24 04 66 A1 ? ? ? ? 66 85 C0 76 3E"))
 		zpatch_model_lookup = AddressOf(hit);
@@ -791,11 +789,11 @@ PreambleReport FindGamePointers(GameImage image) noexcept
 		zpatch_pre_fn_59b88 = AddressOf(hit);
 
 	if (const std::uint8_t* hit = scan("0F 10 5E 14 F3 0F 10 66 18 F3 0F 10 4C 24 0C F3"))
-		zpatch_pre_fn_5d63c = AddressOf(hit) - kPreFn5D63COffset;
+		zpatch_pre_fn_5d63c = AddressOf(hit) - 48;  // entry 48 bytes before the match
 
 	if (const std::uint8_t* hit = scan(
 	        "0F 10 16 F3 0F 10 5E 04 F3 0F 10 4C 24 0C F3 0F 10 66 08 F2 0F 5A C0"))
-		zpatch_pre_fn_59cdc = AddressOf(hit) - kPreFn59CDCOffset;
+		zpatch_pre_fn_59cdc = AddressOf(hit) - 48;  // entry 48 bytes before the match
 
 	// Build-probe signature: absent on an unknown build, so all ten hash salts
 	// fall back to these values.

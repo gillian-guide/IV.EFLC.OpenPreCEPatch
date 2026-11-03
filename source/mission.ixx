@@ -29,7 +29,6 @@ void ApplyOutOfCommissionFix(const PatchContext& ctx);
 void PublishPedModelsInCutscenesFix(const PatchContext& ctx)
 {
 	Trace("publish PedModelsInCutscenesFix");
-	// PedModelsInCutscenesFix: 1 slot
 	if (ctx.Option("PedModelsInCutscenesFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -44,7 +43,6 @@ void PublishPedModelsInCutscenesFix(const PatchContext& ctx)
 void PublishOutOfCommissionFix(const PatchContext& ctx)
 {
 	Trace("publish OutOfCommissionFix");
-	// OutOfCommissionFix: 3 slots
 	if (ctx.Option("OutOfCommissionFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -52,15 +50,18 @@ void PublishOutOfCommissionFix(const PatchContext& ctx)
 		if (auto pattern = Pattern(image, "A9 39 44 24 18"); pattern.size() > 0)
 		{
 			// match+0x11: the movq xmm0 resume the branch body returns to.
-			zpatch_ooc_resume = MatchAddress(pattern, 17);
+			zpatch_ooc_resume = RebasedPointer<std::uint8_t>(MatchAddress(pattern, 17));
 		}
 
 		if (auto pattern = Pattern(image, "E8 ? ? ? ? 8B 74 24 14 83 C4 08 6A 00 56"); pattern.size() > 0)
 		{
 			// The logger call is the E8 at match-0x33 (operand -0x32, next -0x2E); the match
 			// itself is the E8 whose original target the wrapper replays.
-			zpatch_ooc_logger = MatchTarget(pattern, -50, -46);
-			zpatch_ooc_orig = MatchTarget(pattern, 1, 5);
+			zpatch_ooc_logger =
+			    RebasedPointer<void(char*, int, int)>(MatchTarget(pattern, -50, -46));
+			zpatch_ooc_orig =
+			    RebasedPointer<std::uint32_t(std::uint32_t, std::uint32_t)>(
+			        MatchTarget(pattern, 1, 5));
 		}
 	}
 }
@@ -68,7 +69,6 @@ void PublishOutOfCommissionFix(const PatchContext& ctx)
 void ApplyEpisodicWeaponSupport(const PatchContext& ctx)
 {
 	Trace("EpisodicWeaponSupport");
-	// EpisodicWeaponSupport: 8 literals
 	if (ctx.Option("EpisodicWeaponSupport", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -111,7 +111,6 @@ void ApplyEpisodicWeaponSupport(const PatchContext& ctx)
 void ApplyPedModelsInCutscenesFix(const PatchContext& ctx)
 {
 	Trace("PedModelsInCutscenesFix");
-	// PedModelsInCutscenesFix: 1 sigjump
 	if (ctx.Option("PedModelsInCutscenesFix", "1"))
 	{
 		const GameImage& image = ctx.image;
@@ -128,7 +127,6 @@ void ApplyPedModelsInCutscenesFix(const PatchContext& ctx)
 void ApplyPoliceEpisodicWeaponSupport(const PatchContext& ctx)
 {
 	Trace("PoliceEpisodicWeaponSupport");
-	// PoliceEpisodicWeaponSupport: 1 literal
 	if (ctx.Option("PoliceEpisodicWeaponSupport", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -152,7 +150,6 @@ void ApplyPoliceEpisodicWeaponSupport(const PatchContext& ctx)
 void ApplyTBoGTHeliHeightLimit(const PatchContext& ctx)
 {
 	Trace("TBoGTHeliHeightLimit");
-	// TBoGTHeliHeightLimit: 1 literal
 	if (ctx.Option("TBoGTHeliHeightLimit", "0"))
 	{
 		const GameImage& image = ctx.image;
@@ -176,7 +173,6 @@ void ApplyTBoGTHeliHeightLimit(const PatchContext& ctx)
 void ApplyOutOfCommissionFix(const PatchContext& ctx)
 {
 	Trace("OutOfCommissionFix");
-	// OutOfCommissionFix: 2 siginstalls
 	if (ctx.Option("OutOfCommissionFix", "1"))
 	{
 		const GameImage& image = ctx.image;

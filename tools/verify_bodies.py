@@ -83,7 +83,7 @@ FANOUT_HELPERS = {
 # documented instruction range. These bodies are NOT byte-compared: their only
 # contract is that range plus the behaviour the native tests exercise.
 CONVERTED_BODIES = [
-    ("abi_new_saves_convert", 0x10051B30, "sub_10051B30", "source/hook_bodies.cpp",
+    ("abi_new_saves_convert", 0x10051B30, "sub_10051B30", "source/new_saves.cpp",
      "compiled port of sub_10051B30: read the 0x110-byte save header, walk 18 chunks of "
      "9-byte header plus payload, record the new-format chunk sizes, then patch game "
      "0x872185/0x7D8C50/0x8DA090"),
@@ -98,6 +98,16 @@ CONVERTED_BODIES = [
      "compiled port of the original launcher pass 0x10045CE0 plus the DFA (0x10004850) "
      "and ROM (0x10004620) installers; the recovered rows are byte arrays in the source "
      "and the stages are covered by the native tests"),
+]
+
+# Bodies whose definition (and therefore the leading comment the INFO rows print)
+# moved out of the assembly unit in P3. The @exact set stays in --source.
+EXTRA_BODY_SOURCES = [
+    "source/new_saves.cpp",
+    "source/nms_allocator.cpp",
+    "source/ooc.cpp",
+    "source/script_calls.cpp",
+    "source/vehicle_steer.cpp",
 ]
 
 _HEX = re.compile(r"0x[0-9a-fA-F]+")
@@ -356,6 +366,11 @@ def main(argv=None) -> int:
 
     text, _body_ids, entries, exact = parse_source(args.source)
     lines = text.splitlines()
+    extra_sources = []
+    for name in EXTRA_BODY_SOURCES:
+        path = ROOT / name
+        if path.is_file():
+            extra_sources.append((name, path.read_text(encoding="utf-8").splitlines()))
     symbols = parse_map(args.map_path)
     documented = parse_documented_bindings(text, args.rebased.read_text(encoding="utf-8"))
     new = Disassembler(args.candidate)
@@ -451,6 +466,13 @@ def main(argv=None) -> int:
     counts = {"PASS": 0, "INFO": 0, "FAIL": 0}
     for reference_va, symbol, port_va, _extra in bodies:
         line, contract = comment_block_above(lines, symbol)
+        source_name = args.source.name
+        if line < 0:
+            for extra_name, extra_lines in extra_sources:
+                line, contract = comment_block_above(extra_lines, symbol)
+                if line >= 0:
+                    source_name = extra_name
+                    break
         contract = contract or "(no leading comment)"
         if reference_va not in exact:
             counts["INFO"] += 1
@@ -460,7 +482,7 @@ def main(argv=None) -> int:
             except ValueError as exc:
                 extent = str(exc)
             if not args.quiet:
-                print(f"INFO {symbol} ref={reference_va:#x} at {args.source.name}:{line + 1}\n"
+                print(f"INFO {symbol} ref={reference_va:#x} at {source_name}:{line + 1}\n"
                       f"     original range {extent}; compiled C++ replacement, not byte-compared\n"
                       f"     contract: {contract}")
             if port_va is None:
