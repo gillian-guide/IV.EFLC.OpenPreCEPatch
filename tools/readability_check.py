@@ -33,6 +33,10 @@ DATA_ALLOWLIST = {
 DEAD_DEFINE = re.compile(r"^\s*#define\s+([A-Za-z_]\w*)", re.M)
 CONST_DECL = re.compile(
     r"^\s*(?:inline\s+)?constexpr\s+[^;=\n]+\s+([A-Za-z_]\w*)\s*(?:=|\{)", re.M)
+ABI_DOUBLE_CAST = re.compile(
+    r"reinterpret_cast<[^;\n]{0,80}?static_cast<uintptr_t>\(\s*zpatch_")
+OFFSETOF_ASSERT = re.compile(r"static_assert\(\s*offsetof\(")
+PAD_BY_CONSTANT = re.compile(r"std::byte\s+pad_\w+\[\s*k[A-Za-z_]")
 
 COMMENT_BLOCK = re.compile(r"/\*.*?\*/", re.S)
 COMMENT_LINE = re.compile(r"//.*")
@@ -64,6 +68,18 @@ def count_file(path: Path) -> dict[str, int]:
     raw = path.read_text(encoding="utf-8", errors="replace")
     code = strip_comments(raw)
     counts: dict[str, int] = {}
+
+    n = len(ABI_DOUBLE_CAST.findall(code))
+    if n:
+        counts["abi-double-cast"] = n
+
+    n = len(OFFSETOF_ASSERT.findall(code))
+    if n:
+        counts["offsetof-assert-wall"] = n
+
+    n = len(PAD_BY_CONSTANT.findall(code))
+    if n:
+        counts["pad-sized-by-constant"] = n
 
     n = len(RAW_VA.findall(code))
     if n:

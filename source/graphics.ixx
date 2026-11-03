@@ -66,12 +66,11 @@ void abi_fchs_check() noexcept
     uint32_t hash = hashes[0];
     zpatch_fchs_offset = std::bit_cast<uint32_t>(kDefaultConeOffset);
     if (hash == 0u) return;
-    const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
-        static_cast<uintptr_t>(zpatch_model_lookup));
+    const auto lookup =
+        Rebased<int(__cdecl*)(uint32_t, int32_t*)>(zpatch_model_lookup);
     // 0x1001AD5C `call dword_10159C0C` and 0x1001AD62 `movsx eax,word [v2+2Eh]`
     // are unguarded in the original.
-    const auto* base = reinterpret_cast<const uint8_t*>(
-        static_cast<uintptr_t>(zpatch_fchs_param));
+    const auto* base = Rebased<const uint8_t*>(zpatch_fchs_param);
     if (lookup == nullptr || base == nullptr)
         return;  // a preamble/parameter miss is a clean skip
     static uint32_t cache_hash[512] = {};
@@ -163,7 +162,7 @@ extern "C" char abi_death_music_install() noexcept
     {
         // The original randomises the track push immediate to 1..5:
         // `rand() % 5 + 1`.
-        auto* site = reinterpret_cast<uint8_t*>(
+        auto* site = Rebased<uint8_t*>(
             static_cast<uintptr_t>(zpatch_death_music_site) + 1);
         injector::WriteMemory<uint8_t>(  // push imm8
             injector::raw_ptr(site),
@@ -181,447 +180,411 @@ namespace opp::features
 
     // BuildingAlphaFix
 
-    void InstallBuildingAlphaFix(PatchContext& ctx)
+    class BuildingAlphaFix
     {
-
-        TraceArm("BuildingAlphaFix");
-
-        // BuildingAlphaFix: 1 literal, 1 siginstall. Patch 6+ only (the LOD
-        // fade-in path it fixes does not exist before 1060).
-        if (ctx.Option("BuildingAlphaFix", "1") &&
-            BuildIs(ctx.build, {GameBuild::v1060, GameBuild::v1061, GameBuild::v1070,
-                                GameBuild::v1080, GameBuild::v1100, GameBuild::v1110,
-                                GameBuild::v1120, GameBuild::v1130, GameBuild::v12043}))
+    public:
+        BuildingAlphaFix()
         {
-            const GameImage& image = ctx.image;
-            // The `0F 84`/`0F 85` branch pair starts seven bytes in, after
-            // `F7 46 24 <imm32>`.
-            constexpr ptrdiff_t kBranchOffset = 7;
-
-            if (auto pattern = Pattern(image, "F7 46 24 00 00 00 40 0F 84"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("InstallBuildingAlphaFix");
 
-                if (InImage(image, reinterpret_cast<uintptr_t>(match + kBranchOffset)))
-                    JumpTo(ctx, match + kBranchOffset,
-                           reinterpret_cast<void*>(BranchTarget(match, kBranchOffset)));
-            }
+                // BuildingAlphaFix: 1 literal, 1 siginstall. Patch 6+ only (the LOD
+                // fade-in path it fixes does not exist before 1060).
+                if (Game::Option("BuildingAlphaFix", "1") &&
+                    BuildIs(Game::Get().build, {GameBuild::v1060, GameBuild::v1061, GameBuild::v1070,
+                                        GameBuild::v1080, GameBuild::v1100, GameBuild::v1110,
+                                        GameBuild::v1120, GameBuild::v1130, GameBuild::v12043}))
+                {
+                    const GameImage& image = Game::Get().image;
+                    // The `0F 84`/`0F 85` branch pair starts seven bytes in, after
+                    // `F7 46 24 <imm32>`.
+                    constexpr ptrdiff_t kBranchOffset = 7;
 
-            if (auto pattern = Pattern(image, "F7 46 24 00 00 00 40 0F 85"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
+                    if (auto pattern = find_pattern("F7 46 24 00 00 00 40 0F 84"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
 
-                // NOP only the six-byte `jnz` at the branch and leave the `test` to
-                // set the flags, which is what the untaken branch would have
-                // produced. (The original 13-byte NOP covered the test too, so
-                // the following code saw stale flags.)
-                NopAt(ctx, match + kBranchOffset, 6);
-            }
+                        if (InImage(image, reinterpret_cast<uintptr_t>(match + kBranchOffset)))
+                            injector::MakeJMP(match + kBranchOffset, reinterpret_cast<void*>(BranchTarget(match, kBranchOffset)), true);
+                    }
+
+                    if (auto pattern = find_pattern("F7 46 24 00 00 00 40 0F 85"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        // NOP only the six-byte `jnz` at the branch and leave the `test` to
+                        // set the flags, which is what the untaken branch would have
+                        // produced. (The original 13-byte NOP covered the test too, so
+                        // the following code saw stale flags.)
+                        injector::MakeNOP(match + kBranchOffset, 6, true);
+                    }
+                }
+            };
         }
-
-    }
-
-
-    // publish BuildingDynamicShadows
-
-    void PublishBuildingDynamicShadows(PatchContext& ctx)
-    {
-
-        TraceArm("publish BuildingDynamicShadows");
-
-        // BuildingDynamicShadows: 4 slots
-        if (ctx.Option("BuildingDynamicShadows", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "8B 47 28 C1 E8 06 83 E0 0F 83 C0"); pattern.size() > 0)
-            {
-                // Two resumes inside the shadow-size function (offsets 15 and
-                // 112); the hash rows' dword operand is named below.
-                zpatch_bds_resume_a = MatchAddress(pattern, 15);
-                zpatch_bds_resume_b = MatchAddress(pattern, 112);
-            }
-
-            // The two hash slots take the same field of the FIRST and the SECOND
-            // match (recovered rows: dword_10159C1C index 0, dword_10159C24 index 1).
-            // The two matches hold different pointers (0xD8FA2C / 0xDCF48C on 1080),
-            // so publishing both from the first is not the original's state.
-            auto hashes = PatternAll(
-                image, "8B 46 28 83 4E 24 05 25 7F FC FF FF 83 C8 40 89 46 28 C7 06");
-            // Exactly the two recovered hash rows; a third or a missing one is a
-            // view mismatch, so neither slot is published (a half-pair is worse).
-            if (hashes.size() > 0 &&
-                ExpectMatchCount(hashes, 2, "BuildingDynamicShadows hash pair"))
-            {
-                // The `mov dword ptr [esi+28h], imm32` operand at +20.
-                constexpr ptrdiff_t kHashOperand = 20;
-                zpatch_bds_hash_a = *hashes.get(0).get<uint32_t>(kHashOperand);
-                zpatch_bds_hash_b = *hashes.get(1).get<uint32_t>(kHashOperand);
-            }
-        }
-
-    }
+    } buildingAlphaFix;
 
 
     // BuildingDynamicShadows
 
-    void InstallBuildingDynamicShadows(PatchContext& ctx)
+    class BuildingDynamicShadows
     {
-
-        TraceArm("BuildingDynamicShadows");
-
-        // BuildingDynamicShadows: 1 sigjump, 1 sigwrite
-        if (ctx.Option("BuildingDynamicShadows", "1"))
+    public:
+        BuildingDynamicShadows()
         {
-            const GameImage& image = ctx.image;
-
+            PublishEvent() += []
             {
-                if (auto pattern = Pattern(image, "50 68 04 01 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
+                TraceArm("PublishBuildingDynamicShadows");
+
+                // BuildingDynamicShadows: 4 slots
+                if (Game::Option("BuildingDynamicShadows", "1"))
                 {
-                    // The low byte of the `push 0x104` immediate: 0x104 -> 0x100
-                    // (the shadow size the arm forces for dynamic shadows).
-                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(2), 0x00u);
+                    if (auto pattern = find_pattern("8B 47 28 C1 E8 06 83 E0 0F 83 C0"); pattern.size() > 0)
+                    {
+                        // Two resumes inside the shadow-size function (offsets 15 and
+                        // 112); the hash rows' dword operand is named below.
+                        zpatch_bds_resume_a = MatchAddress(pattern, 15);
+                        zpatch_bds_resume_b = MatchAddress(pattern, 112);
+                    }
+
+                    // The two hash slots take the same field of the FIRST and the SECOND
+                    // match (recovered rows: dword_10159C1C index 0, dword_10159C24 index 1).
+                    // The two matches hold different pointers (0xD8FA2C / 0xDCF48C on 1080),
+                    // so publishing both from the first is not the original's state.
+                    auto hashes = find_pattern<0>("8B 46 28 83 4E 24 05 25 7F FC FF FF 83 C8 40 89 46 28 C7 06");
+                    // Exactly the two recovered hash rows; a third or a missing one is a
+                    // view mismatch, so neither slot is published (a half-pair is worse).
+                    if (hashes.size() > 0 &&
+                        ExpectMatchCount(hashes, 2, "BuildingDynamicShadows hash pair"))
+                    {
+                        // The `mov dword ptr [esi+28h], imm32` operand at +20.
+                        constexpr ptrdiff_t kHashOperand = 20;
+                        zpatch_bds_hash_a = *hashes.get_first<uint32_t>(kHashOperand);
+                        zpatch_bds_hash_b = *hashes.get(1).get<uint32_t>(kHashOperand);
+                    }
                 }
-            }
-
-            if (auto pattern = Pattern(image, "8B 47 28 C1 E8 06 83 E0 0F 83 C0"); pattern.size() > 0)
+            };
+            InstallEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("InstallBuildingDynamicShadows");
 
-                JumpTo(ctx, match, OPP_BODY(abi_building_dynamic_shadows));
-            }
+                // BuildingDynamicShadows: 1 sigjump, 1 sigwrite
+                if (Game::Option("BuildingDynamicShadows", "1"))
+                {
+                    {
+                        if (auto pattern = find_pattern("50 68 04 01 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
+                        {
+                            // The low byte of the `push 0x104` immediate: 0x104 -> 0x100
+                            // (the shadow size the arm forces for dynamic shadows).
+                            injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(2), 0x00u, true);
+                        }
+                    }
+
+                    if (auto pattern = find_pattern("8B 47 28 C1 E8 06 83 E0 0F 83 C0"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        injector::MakeJMP(match, OPP_BODY(abi_building_dynamic_shadows), true);
+                    }
+                }
+            };
         }
-
-    }
+    } buildingDynamicShadows;
 
 
     // CarDecalsFix
 
-    void InstallCarDecalsFix(PatchContext& ctx)
+    class CarDecalsFix
     {
-
-        TraceArm("CarDecalsFix");
-
-        // CarDecalsFix: 1 siginstall
-        if (ctx.Option("CarDecalsFix", "1"))
+    public:
+        CarDecalsFix()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "8B 44 24 08 8B 48 28 81 E1 C0 03 00 00 81 F9 80 00 00 00"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("InstallCarDecalsFix");
 
-                JumpTo(ctx, match, OPP_BODY(abi_car_decals_fix));
-            }
-        }
-
-    }
-
-
-    // publish CarDynamicShadowFix
-
-    void PublishCarDynamicShadowFix(PatchContext& ctx)
-    {
-
-        TraceArm("publish CarDynamicShadowFix");
-
-        // CarDynamicShadowFix: 5 slots
-        if (ctx.Option("CarDynamicShadowFix", "0"))
-        {
-            const GameImage& image = ctx.image;
-
-            // The two recovered spawner rows, in the original's order. The
-            // resume is the instruction after the first E8; shadow_fn is that
-            // call's target.
-            struct CarShadowRow final
-            {
-                const char* signature;
-                ptrdiff_t resume_offset;
-                ptrdiff_t call_operand;
-            };
-            constexpr CarShadowRow kRows[] = {
-                {"56 6A 02 53 53 57 E8 ?? ?? ?? ?? 56 6A 02 6A 04 6A 05 57 E8",
-                 11, 7},
-                {"56 6A 02 6A 00 6A 00 57 E8 ? ? ? ? 56 6A 02 6A 04 6A 05 57 E8",
-                 13, 9},
-            };
-            for (const CarShadowRow& row : kRows)
-            {
-                if (auto pattern = Pattern(image, row.signature); pattern.size() > 0)
+                // CarDecalsFix: 1 siginstall
+                if (Game::Option("CarDecalsFix", "1"))
                 {
-                    zpatch_carparts_resume_2 = MatchAddress(pattern, row.resume_offset);
-                    zpatch_carparts_shadow_fn = BranchDestination(
-                        pattern.get(0).get<uint8_t>(), row.call_operand);
+                    if (auto pattern = find_pattern("8B 44 24 08 8B 48 28 81 E1 C0 03 00 00 81 F9 80 00 00 00"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        injector::MakeJMP(match, OPP_BODY(abi_car_decals_fix), true);
+                    }
                 }
-            }
-
-            if (auto pattern = Pattern(image, "8B 45 10 8B 16 8B 92 8C 00 00 00"); pattern.size() > 0)
-            {
-                // The match is the published "dynamic shadow entry" function.
-                zpatch_car_dynamic_d = MatchAddress(pattern);
-            }
+            };
         }
-
-    }
+    } carDecalsFix;
 
 
     // CarDynamicShadowFix
 
-    void InstallCarDynamicShadowFix(PatchContext& ctx)
+    class CarDynamicShadowFix
     {
-
-        TraceArm("CarDynamicShadowFix");
-
-        // CarDynamicShadowFix: 3 siginstalls, 2 sigwrites
-        if (ctx.Option("CarDynamicShadowFix", "0"))
+    public:
+        CarDynamicShadowFix()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "56 6A 02 53 53 57 E8 ?? ?? ?? ?? 56 6A 02 6A 04 6A 05 57 E8"); pattern.size() > 0)
+            PublishEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("PublishCarDynamicShadowFix");
 
-                JumpTo(ctx, match, OPP_BODY(abi_carparts_shadow_2));
-            }
-
-            if (auto pattern = Pattern(image, "56 6A 02 6A 00 6A 00 57 E8 ? ? ? ? 56 6A 02 6A 04 6A 05 57 E8"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpTo(ctx, match, OPP_BODY(abi_carparts_shadow_2b));
-            }
-
-            if (auto pattern = Pattern(image, "83 F8 14 7D 05 83 F8 06 7D 14"); pattern.size() > 0)
-            {
-                // `jz +0x18` at +3 becomes an unconditional jump to match+30
-                // (the original's shadow-class skip).
-                JumpTo(ctx, pattern.get(0).get<uint8_t>(3),
-                       reinterpret_cast<void*>(pattern.get(0).get<uint8_t>(30)));
-            }
-
-            {
-                if (auto pattern = Pattern(image, "83 E0 0F 83 F8 03 75 17 F6 86 6C 02 00 00 04"); pattern.size() > 0)
+                // CarDynamicShadowFix: 5 slots
+                if (Game::Option("CarDynamicShadowFix", "0"))
                 {
-                    // The `jnz +0x17` at +6 becomes an unconditional short jmp:
-                    // the original's shadow-class skip (CarDynamicShadowFix).
-                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(6),
-                                        opp::ops::kJmpRel8);
-                }
-            }
+                    // The two recovered spawner rows, in the original's order. The
+                    // resume is the instruction after the first E8; shadow_fn is that
+                    // call's target.
+                    struct CarShadowRow final
+                    {
+                        const char* signature;
+                        ptrdiff_t resume_offset;
+                        ptrdiff_t call_operand;
+                    };
+                    constexpr CarShadowRow kRows[] = {
+                        {"56 6A 02 53 53 57 E8 ?? ?? ?? ?? 56 6A 02 6A 04 6A 05 57 E8",
+                         11, 7},
+                        {"56 6A 02 6A 00 6A 00 57 E8 ? ? ? ? 56 6A 02 6A 04 6A 05 57 E8",
+                         13, 9},
+                    };
+                    for (const CarShadowRow& row : kRows)
+                    {
+                        if (auto pattern = find_pattern(row.signature); pattern.size() > 0)
+                        {
+                            zpatch_carparts_resume_2 = MatchAddress(pattern, row.resume_offset);
+                            zpatch_carparts_shadow_fn = BranchDestination(
+                                pattern.get_first<uint8_t>(), row.call_operand);
+                        }
+                    }
 
+                    if (auto pattern = find_pattern("8B 45 10 8B 16 8B 92 8C 00 00 00"); pattern.size() > 0)
+                    {
+                        // The match is the published "dynamic shadow entry" function.
+                        zpatch_car_dynamic_d = MatchAddress(pattern);
+                    }
+                }
+            };
+            InstallEvent() += []
             {
-                if (auto pattern = Pattern(image, "50 68 04 01 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
-                {
-                    // The low byte of the `push 0x104` immediate: 0x104 -> 0x100
-                    // (the shadow size the arm forces for dynamic shadows).
-                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(2), 0x00u);
-                }
-            }
+                TraceArm("InstallCarDynamicShadowFix");
 
-            // Two further writes the original makes under this arm; they are in its
-            // write log for a CarDynamicShadowFix-only cell but not in the recovered
-            // row tables, so the reconstruction does not make them either. They are
-            // the arm's @noFCHS variant: with ForceCarHeadlightShadows on, the
-            // original takes the other path and makes neither write (probed:
-            // CarDynamic+FCHS writes only 0x8F7422; CarDynamic alone also writes
-            // 0x8F73EC and 0x8F719F).
-            //
-            //  * `0F 84 <rel32>` (jz) becomes `E9 <rel32+1>`: a jmp to the same
-            //    target. The displacement grows by one because the jz encoding is one
-            //    byte longer than the jmp (match+6+rel == match+5+newRel).
-            //  * `push 0x504` becomes `push 0x100` (the shadow size the arm forces),
-            //    written as a dword over the immediate like the original does.
-            if (!ctx.Option("ForceCarHeadlightShadows", "1"))
-            {
-                if (auto pattern = Pattern(image, "0F 84 9E 00 00 00 80 7D 28"); pattern.size() > 0)
+                // CarDynamicShadowFix: 3 siginstalls, 2 sigwrites
+                if (Game::Option("CarDynamicShadowFix", "0"))
                 {
-                    auto* match = pattern.get(0).get<uint8_t>();
+                    if (auto pattern = find_pattern("56 6A 02 53 53 57 E8 ?? ?? ?? ?? 56 6A 02 6A 04 6A 05 57 E8"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
 
-                    // `0F 84 rel32` (6 B) -> `E9 rel32` (5 B): the same target,
-                    // the next instruction's first byte untouched. BranchTarget
-                    // computes the 6-byte Jcc destination.
-                    JumpTo(ctx, match,
-                           reinterpret_cast<void*>(BranchTarget(match, 0)));
-                }
+                        injector::MakeJMP(match, OPP_BODY(abi_carparts_shadow_2), true);
+                    }
 
-                if (auto pattern = Pattern(image, "51 68 04 05 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
-                {
-                    // `push 0x504` becomes `push 0x100`: the shadow size. The
-                    // immediate is the second byte of the six-byte push.
-                    WriteValue<uint32_t>(ctx, pattern.get(0).get<uint8_t>(2), 0x100u);
+                    if (auto pattern = find_pattern("56 6A 02 6A 00 6A 00 57 E8 ? ? ? ? 56 6A 02 6A 04 6A 05 57 E8"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        injector::MakeJMP(match, OPP_BODY(abi_carparts_shadow_2b), true);
+                    }
+
+                    if (auto pattern = find_pattern("83 F8 14 7D 05 83 F8 06 7D 14"); pattern.size() > 0)
+                    {
+                        // `jz +0x18` at +3 becomes an unconditional jump to match+30
+                        // (the original's shadow-class skip).
+                        injector::MakeJMP(pattern.get_first<uint8_t>(3), reinterpret_cast<void*>(pattern.get_first<uint8_t>(30)), true);
+                    }
+
+                    {
+                        if (auto pattern = find_pattern("83 E0 0F 83 F8 03 75 17 F6 86 6C 02 00 00 04"); pattern.size() > 0)
+                        {
+                            // The `jnz +0x17` at +6 becomes an unconditional short jmp:
+                            // the original's shadow-class skip (CarDynamicShadowFix).
+                            injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(6), opp::ops::kJmpRel8, true);
+                        }
+                    }
+
+                    {
+                        if (auto pattern = find_pattern("50 68 04 01 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
+                        {
+                            // The low byte of the `push 0x104` immediate: 0x104 -> 0x100
+                            // (the shadow size the arm forces for dynamic shadows).
+                            injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(2), 0x00u, true);
+                        }
+                    }
+
+                    // Two further writes the original makes under this arm; they are in its
+                    // write log for a CarDynamicShadowFix-only cell but not in the recovered
+                    // row tables, so the reconstruction does not make them either. They are
+                    // the arm's @noFCHS variant: with ForceCarHeadlightShadows on, the
+                    // original takes the other path and makes neither write (probed:
+                    // CarDynamic+FCHS writes only 0x8F7422; CarDynamic alone also writes
+                    // 0x8F73EC and 0x8F719F).
+                    //
+                    //  * `0F 84 <rel32>` (jz) becomes `E9 <rel32+1>`: a jmp to the same
+                    //    target. The displacement grows by one because the jz encoding is one
+                    //    byte longer than the jmp (match+6+rel == match+5+newRel).
+                    //  * `push 0x504` becomes `push 0x100` (the shadow size the arm forces),
+                    //    written as a dword over the immediate like the original does.
+                    if (!Game::Option("ForceCarHeadlightShadows", "1"))
+                    {
+                        if (auto pattern = find_pattern("0F 84 9E 00 00 00 80 7D 28"); pattern.size() > 0)
+                        {
+                            auto* match = pattern.get_first<uint8_t>();
+
+                            // `0F 84 rel32` (6 B) -> `E9 rel32` (5 B): the same target,
+                            // the next instruction's first byte untouched. BranchTarget
+                            // computes the 6-byte Jcc destination.
+                            injector::MakeJMP(match, reinterpret_cast<void*>(BranchTarget(match, 0)), true);
+                        }
+
+                        if (auto pattern = find_pattern("51 68 04 05 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
+                        {
+                            // `push 0x504` becomes `push 0x100`: the shadow size. The
+                            // immediate is the second byte of the six-byte push.
+                            injector::WriteMemory<uint32_t>(pattern.get_first<uint8_t>(2), 0x100u, true);
+                        }
+                    }
                 }
-            }
+            };
         }
-
-    }
+    } carDynamicShadowFix;
 
 
     // CarDynamicShadowFixNoE
 
-    void InstallCarDynamicShadowFixNoE(PatchContext& ctx)
+    class CarDynamicShadowFixNoE
     {
-
-        TraceArm("CarDynamicShadowFixNoE");
-
-        // CarDynamicShadowFix@noE: 1 siginstall
-        if (ctx.Option("CarDynamicShadowFix", "1"))
+    public:
+        CarDynamicShadowFixNoE()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "83 F8 14 7D 05 83 F8 06 7D 14"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                // The six-byte `jz` at +62 the @noE variant NOPs.
-                NopAt(ctx, pattern.get(0).get<uint8_t>(62), 6);
-            }
+                TraceArm("InstallCarDynamicShadowFixNoE");
+
+                // CarDynamicShadowFix@noE: 1 siginstall
+                if (Game::Option("CarDynamicShadowFix", "1"))
+                {
+                    if (auto pattern = find_pattern("83 F8 14 7D 05 83 F8 06 7D 14"); pattern.size() > 0)
+                    {
+                        // The six-byte `jz` at +62 the @noE variant NOPs.
+                        injector::MakeNOP(pattern.get_first<uint8_t>(62), 6, true);
+                    }
+                }
+            };
         }
-
-    }
-
-
-    // publish CarPartsShadowFix
-
-    void PublishCarPartsShadowFix(PatchContext& ctx)
-    {
-
-        TraceArm("publish CarPartsShadowFix");
-
-        // CarPartsShadowFix: 2 slots
-        if (ctx.Option("CarPartsShadowFix", "1") || ctx.Option("CarDynamicShadowFix", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "85 DB 7E 41 55 EB 0A"); pattern.size() > 0)
-            {
-                // The two resumes the shim tail-jumps through, its if/else exits:
-                // the `jle` at +2 and the else path at +69.
-                zpatch_carparts_resume_if = MatchAddress(pattern, 2);
-                zpatch_carparts_resume_else = MatchAddress(pattern, 69);
-            }
-        }
-
-    }
+    } carDynamicShadowFixNoE;
 
 
     // CarPartsShadowFix
 
-    void InstallCarPartsShadowFix(PatchContext& ctx)
+    class CarPartsShadowFix
     {
-
-        TraceArm("CarPartsShadowFix");
-
-        // CarPartsShadowFix: 1 siginstall, 1 sigjump
-        if (ctx.Option("CarPartsShadowFix", "1") || ctx.Option("CarDynamicShadowFix", "1"))
+    public:
+        CarPartsShadowFix()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "85 DB 7E 41 55 EB 0A"); pattern.size() > 0)
+            PublishEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("PublishCarPartsShadowFix");
 
-                // The six bytes before the match are the prologue the shim
-                // replaces.
-                JumpTo(ctx, match - 6, OPP_BODY(abi_carparts_shadow));
-            }
+                // CarPartsShadowFix: 2 slots
+                if (Game::Option("CarPartsShadowFix", "1") || Game::Option("CarDynamicShadowFix", "1"))
+                {
+                    if (auto pattern = find_pattern("85 DB 7E 41 55 EB 0A"); pattern.size() > 0)
+                    {
+                        // The two resumes the shim tail-jumps through, its if/else exits:
+                        // the `jle` at +2 and the else path at +69.
+                        zpatch_carparts_resume_if = MatchAddress(pattern, 2);
+                        zpatch_carparts_resume_else = MatchAddress(pattern, 69);
+                    }
+                }
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallCarPartsShadowFix");
+
+                // CarPartsShadowFix: 1 siginstall, 1 sigjump
+                if (Game::Option("CarPartsShadowFix", "1") || Game::Option("CarDynamicShadowFix", "1"))
+                {
+                    if (auto pattern = find_pattern("85 DB 7E 41 55 EB 0A"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        // The six bytes before the match are the prologue the shim
+                        // replaces.
+                        injector::MakeJMP(match - 6, OPP_BODY(abi_carparts_shadow), true);
+                    }
+                }
+            };
         }
-
-    }
+    } carPartsShadowFix;
 
 
     // CarPartsShadowFixStandalone
 
-    void InstallCarPartsShadowFixStandalone(PatchContext& ctx)
+    class CarPartsShadowFixStandalone
     {
-
-        TraceArm("CarPartsShadowFixStandalone");
-
-        // CarPartsShadowFix@standalone: 2 sigwrites
-        if (ctx.Option("CarPartsShadowFix", "1"))
+    public:
+        CarPartsShadowFixStandalone()
         {
-            const GameImage& image = ctx.image;
-
+            InstallEvent() += []
             {
-                if (auto pattern = Pattern(image, "83 F8 04 C6 44 24 0E 00 75 0F"); pattern.size() > 0)
+                TraceArm("InstallCarPartsShadowFixStandalone");
+
+                // CarPartsShadowFix@standalone: 2 sigwrites
+                if (Game::Option("CarPartsShadowFix", "1"))
                 {
-                    // The `jnz +0x0F` at +8 becomes a short jmp (the car-parts
-                    // shadow fix's unconditional skip).
-                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(8),
-                                        opp::ops::kJmpRel8);
+                    {
+                        if (auto pattern = find_pattern("83 F8 04 C6 44 24 0E 00 75 0F"); pattern.size() > 0)
+                        {
+                            // The `jnz +0x0F` at +8 becomes a short jmp (the car-parts
+                            // shadow fix's unconditional skip).
+                            injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(8), opp::ops::kJmpRel8, true);
+                        }
+                    }
+
+                    {
+                        if (auto pattern = find_pattern("83 FA 04 75 0C"); pattern.size() > 0)
+                        {
+                            // The same rewrite on the second check (`jnz +0x0C` at +3).
+                            injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(3), opp::ops::kJmpRel8, true);
+                        }
+                    }
                 }
-            }
-
-            {
-                if (auto pattern = Pattern(image, "83 FA 04 75 0C"); pattern.size() > 0)
-                {
-                    // The same rewrite on the second check (`jnz +0x0C` at +3).
-                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(3),
-                                        opp::ops::kJmpRel8);
-                }
-            }
+            };
         }
-
-    }
-
-
-    // publish CutsceneFixes
-
-    void PublishCutsceneFixes(PatchContext& ctx)
-    {
-
-        TraceArm("publish CutsceneFixes");
-
-        // CutsceneFixes: 2 slots
-        if (ctx.Option("CutsceneFixes", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "8B 4C 24 2C 5F 5E 5B 33 CC B0 01 E8"); pattern.size() > 0)
-            {
-                // The `call [imm32]` operand at -4 names the camera callee; the
-                // poke target is that call's continuation (+79).
-                constexpr ptrdiff_t kCalleeOperand = -4;
-                zpatch_cutscene_target = MatchAddress(pattern) +
-                                         *pattern.get(0).get<uint32_t>(kCalleeOperand);
-                zpatch_cutscene_poke = MatchTarget(pattern, kCalleeOperand, 79);
-            }
-        }
-
-    }
+    } carPartsShadowFixStandalone;
 
 
     // CutsceneFixes: the three original sites (two call rewrites at the camera
     // call sites plus the branch byte inside the camera callee). Shared by the
     // default arm and by the opt-in callee hook's fallback.
-    void ApplyCutsceneSites(PatchContext& ctx)
+    void ApplyCutsceneSites()
     {
-        const GameImage& image = ctx.image;
-
-        if (auto pattern = Pattern(image, "8B 4C 24 2C 5F 5E 5B 33 CC B0 01 E8"); pattern.size() > 0)
+        if (auto pattern = find_pattern("8B 4C 24 2C 5F 5E 5B 33 CC B0 01 E8"); pattern.size() > 0)
         {
-            auto* match = pattern.get(0).get<uint8_t>();
+            auto* match = pattern.get_first<uint8_t>();
 
             // The two E8 call sites are 5 bytes before their matches.
-            CallTo(ctx, match - 5, OPP_BODY(abi_cutscene_chain_b));
+            injector::MakeCALL(match - 5, OPP_BODY(abi_cutscene_chain_b), true);
         }
 
-        if (auto pattern = Pattern(image, "8B CF 88 44 24 0F E8 ? ? ? ? A1"); pattern.size() > 0)
+        if (auto pattern = find_pattern("8B CF 88 44 24 0F E8 ? ? ? ? A1"); pattern.size() > 0)
         {
-            auto* match = pattern.get(0).get<uint8_t>();
+            auto* match = pattern.get_first<uint8_t>();
 
-            CallTo(ctx, match - 5, OPP_BODY(abi_cutscene_chain_b));
+            injector::MakeCALL(match - 5, OPP_BODY(abi_cutscene_chain_b), true);
         }
 
         {
             // 1080 has exactly one match of the primary pattern (0xC9A840); the
             // alternate is only for builds where it is absent. Falling back on
             // "<= 1 match" threw that single match away and applied nothing.
-            auto pattern = Pattern(image, "74 24 8B 44 24 2C 83 F8 03");
+            auto pattern = find_pattern("74 24 8B 44 24 2C 83 F8 03");
             if (pattern.size() == 0)
-                pattern = Pattern(image, "74 0B 83 7C 24 2C 03");
+                pattern = find_pattern("74 0B 83 7C 24 2C 03");
             if (pattern.size() > 0)
                 // `EB` replaces the `jz` opcode at the match: the original's
                 // unconditional-skip rewrite.
-                WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(),
-                                    opp::ops::kJmpRel8);
+                injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(),
+                                               opp::ops::kJmpRel8, true);
         }
     }
 
@@ -748,511 +711,503 @@ namespace opp::features
         }
     } // namespace
 
-    void InstallCutsceneFixes(PatchContext& ctx)
+    class CutsceneFixes
     {
-
-        TraceArm("CutsceneFixes");
-
-        if (!ctx.Option("CutsceneFixes", "1"))
-            return;
-
-        // One hook at the shared camera callee instead of the three original
-        // sites. The publish arm derived the callee from the call site's rel32;
-        // any shape mismatch, a failed allocation or a relocation that does not
-        // fit applies the three sites instead, so the fix is never lost.
-        const auto callee = static_cast<uintptr_t>(zpatch_cutscene_target);
-        if (void* const copy = CutsceneCalleeCopy(ctx.image, callee))
+    public:
+        CutsceneFixes()
         {
-            zpatch_cutscene_target =
-                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(copy));
-            zpatch_cutscene_poke = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(copy) + kCutscenePokeOffset);
-            JumpTo(ctx, reinterpret_cast<void*>(callee), OPP_BODY(abi_cutscene_chain_b));
-            return;
-        }
-        ApplyCutsceneSites(ctx);
-    }
-
-
-    // publish DualVehicleHeadlights
-
-    void PublishDualVehicleHeadlights(PatchContext& ctx)
-    {
-
-        TraceArm("publish DualVehicleHeadlights");
-
-        // DualVehicleHeadlights: 5 slots
-        if (ctx.Option("DualVehicleHeadlights", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "8B 17 8B 42 64 8B CF FF D0 8B 54"); pattern.size() > 0)
+            PublishEvent() += []
             {
-                // The recovered slots inside the dual-headlights body: the
-                // stored pointer at +207, the two call targets at +140/+331 and
-                // +151 (operands), and the absolute slot at +338.
-                auto* match = pattern.get(0).get<uint8_t>();
-                zpatch_dual_bcc = *pattern.get(0).get<uint32_t>(207);
-                zpatch_dual_bd4 = BranchDestination(match, 331);
-                zpatch_dual_bd0 = BranchDestination(match, 140);
-                zpatch_dual_be4 = BranchDestination(match, 151);
-                zpatch_dual_be0 = MatchAddress(pattern, 338);
-            }
-        }
+                TraceArm("PublishCutsceneFixes");
 
-    }
+                // CutsceneFixes: 2 slots
+                if (Game::Option("CutsceneFixes", "1"))
+                {
+                    if (auto pattern = find_pattern("8B 4C 24 2C 5F 5E 5B 33 CC B0 01 E8"); pattern.size() > 0)
+                    {
+                        // The `call [imm32]` operand at -4 names the camera callee; the
+                        // poke target is that call's continuation (+79).
+                        constexpr ptrdiff_t kCalleeOperand = -4;
+                        zpatch_cutscene_target = MatchAddress(pattern) +
+                                                 *pattern.get_first<uint32_t>(kCalleeOperand);
+                        zpatch_cutscene_poke = MatchTarget(pattern, kCalleeOperand, 79);
+                    }
+                }
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallCutsceneFixes");
+
+                if (!Game::Option("CutsceneFixes", "1"))
+                    return;
+
+                // One hook at the shared camera callee instead of the three original
+                // sites. The publish arm derived the callee from the call site's rel32;
+                // any shape mismatch, a failed allocation or a relocation that does not
+                // fit applies the three sites instead, so the fix is never lost.
+                const auto callee = static_cast<uintptr_t>(zpatch_cutscene_target);
+                if (void* const copy = CutsceneCalleeCopy(Game::Get().image, callee))
+                {
+                    zpatch_cutscene_target =
+                        static_cast<uint32_t>(reinterpret_cast<uintptr_t>(copy));
+                    zpatch_cutscene_poke = static_cast<uint32_t>(
+                        reinterpret_cast<uintptr_t>(copy) + kCutscenePokeOffset);
+                    injector::MakeJMP(reinterpret_cast<void*>(callee), OPP_BODY(abi_cutscene_chain_b), true);
+                    return;
+                }
+                ApplyCutsceneSites();
+            };
+        }
+    } cutsceneFixes;
 
 
     // DualVehicleHeadlights
 
-    void InstallDualVehicleHeadlights(PatchContext& ctx)
+    class DualVehicleHeadlights
     {
-
-        TraceArm("DualVehicleHeadlights");
-
-        // DualVehicleHeadlights (handler 0x10006770): one E9 at the game match.
-        // The original picks the old body for build ids 1..6 and the new body for
-        // 7+ (0x10006630 / 0x100064F0); the bodies are not interchangeable. The
-        // pre-fix layout registered both bodies ungated: the old arm ran first and
-        // overwrote the five bytes the new arm's scan needs, so 1.0.8.0 (build 9)
-        // silently got the old body. Keep the build choice explicit and install
-        // the site once.
-        if (ctx.Option("DualVehicleHeadlights", "1"))
+    public:
+        DualVehicleHeadlights()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "8B 17 8B 42 64 8B CF FF D0 8B 54"); pattern.size() > 0)
+            PublishEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
-                const bool old_body = BuildIs(
-                    ctx.build, {GameBuild::v1000, GameBuild::v1040, GameBuild::v1004});
-                void* const body =
-                    old_body ? OPP_BODY(abi_dual_headlights_old) : OPP_BODY(abi_dual_headlights_new);
+                TraceArm("PublishDualVehicleHeadlights");
 
-                JumpTo(ctx, match, body);
-            }
-        }
-
-    }
-
-
-    // publish EmissiveLerpFix
-
-    void PublishEmissiveLerpFix(PatchContext& ctx)
-    {
-
-        TraceArm("publish EmissiveLerpFix");
-
-        // EmissiveLerpFix: 2 slots
-        if (ctx.Option("EmissiveLerpFix", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "F3 0F 58 C1 F3 0F 2A C8 F3 0F 58 C1"); pattern.size() > 0)
+                // DualVehicleHeadlights: 5 slots
+                if (Game::Option("DualVehicleHeadlights", "1"))
+                {
+                    if (auto pattern = find_pattern("8B 17 8B 42 64 8B CF FF D0 8B 54"); pattern.size() > 0)
+                    {
+                        // The recovered slots inside the dual-headlights body: the
+                        // stored pointer at +207, the two call targets at +140/+331 and
+                        // +151 (operands), and the absolute slot at +338.
+                        auto* match = pattern.get_first<uint8_t>();
+                        zpatch_dual_bcc = *pattern.get_first<uint32_t>(207);
+                        zpatch_dual_bd4 = BranchDestination(match, 331);
+                        zpatch_dual_bd0 = BranchDestination(match, 140);
+                        zpatch_dual_be4 = BranchDestination(match, 151);
+                        zpatch_dual_be0 = MatchAddress(pattern, 338);
+                    }
+                }
+            };
+            InstallEvent() += []
             {
-                // The const float and the resume the shim published: 16 and 12
-                // bytes before the match.
-                zpatch_emissive_const = MatchAddress(pattern, -16);
-                zpatch_emissive_resume = MatchAddress(pattern, -12);
-            }
-        }
+                TraceArm("InstallDualVehicleHeadlights");
 
-    }
+                // DualVehicleHeadlights (handler 0x10006770): one E9 at the game match.
+                // The original picks the old body for build ids 1..6 and the new body for
+                // 7+ (0x10006630 / 0x100064F0); the bodies are not interchangeable. The
+                // pre-fix layout registered both bodies ungated: the old arm ran first and
+                // overwrote the five bytes the new arm's scan needs, so 1.0.8.0 (build 9)
+                // silently got the old body. Keep the build choice explicit and install
+                // the site once.
+                if (Game::Option("DualVehicleHeadlights", "1"))
+                {
+                    if (auto pattern = find_pattern("8B 17 8B 42 64 8B CF FF D0 8B 54"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+                        const bool old_body = BuildIs(
+                            Game::Get().build, {GameBuild::v1000, GameBuild::v1040, GameBuild::v1004});
+                        void* const body =
+                            old_body ? OPP_BODY(abi_dual_headlights_old) : OPP_BODY(abi_dual_headlights_new);
+
+                        injector::MakeJMP(match, body, true);
+                    }
+                }
+            };
+        }
+    } dualVehicleHeadlights;
 
 
     // EmissiveLerpFix
 
-    void InstallEmissiveLerpFix(PatchContext& ctx)
+    class EmissiveLerpFix
     {
-
-        TraceArm("EmissiveLerpFix");
-
-        // EmissiveLerpFix: 1 siginstall
-        if (ctx.Option("EmissiveLerpFix", "1"))
+    public:
+        EmissiveLerpFix()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "F3 0F 58 C1 F3 0F 2A C8 F3 0F 58 C1"); pattern.size() > 0)
+            PublishEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("PublishEmissiveLerpFix");
 
-                // The shim replaces the 24 bytes before the match (its prologue).
-                JumpTo(ctx, match - 24, OPP_BODY(abi_emissive_lerp_shim));
-            }
-        }
-
-    }
-
-
-    // publish ForceCarHeadlightShadows
-
-    void PublishForceCarHeadlightShadows(PatchContext& ctx)
-    {
-
-        TraceArm("publish ForceCarHeadlightShadows");
-
-        // ForceCarHeadlightShadows: 1 slot
-        if (ctx.Option("ForceCarHeadlightShadows", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "55 8B EC 83 E4 F0 81 EC D4 00 00 00 8B 45 20 8B"); pattern.size() > 0)
+                // EmissiveLerpFix: 2 slots
+                if (Game::Option("EmissiveLerpFix", "1"))
+                {
+                    if (auto pattern = find_pattern("F3 0F 58 C1 F3 0F 2A C8 F3 0F 58 C1"); pattern.size() > 0)
+                    {
+                        // The const float and the resume the shim published: 16 and 12
+                        // bytes before the match.
+                        zpatch_emissive_const = MatchAddress(pattern, -16);
+                        zpatch_emissive_resume = MatchAddress(pattern, -12);
+                    }
+                }
+            };
+            InstallEvent() += []
             {
-                // `and esp,-16` (4 bytes) + `sub esp,0xD4` (8 bytes) = the 12
-                // bytes the shim's prologue replay covers.
-                zpatch_fchs_resume = MatchAddress(pattern, 12);
-            }
-        }
+                TraceArm("InstallEmissiveLerpFix");
 
-    }
+                // EmissiveLerpFix: 1 siginstall
+                if (Game::Option("EmissiveLerpFix", "1"))
+                {
+                    if (auto pattern = find_pattern("F3 0F 58 C1 F3 0F 2A C8 F3 0F 58 C1"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        // The shim replaces the 24 bytes before the match (its prologue).
+                        injector::MakeJMP(match - 24, OPP_BODY(abi_emissive_lerp_shim), true);
+                    }
+                }
+            };
+        }
+    } emissiveLerpFix;
 
 
     // ForceCarHeadlightShadows
 
-    void InstallForceCarHeadlightShadows(PatchContext& ctx)
+    class ForceCarHeadlightShadows
     {
-
-        TraceArm("ForceCarHeadlightShadows");
-
-        // ForceCarHeadlightShadows: 2 siginstalls, 5 sigwrites
-        if (ctx.Option("ForceCarHeadlightShadows", "1"))
+    public:
+        ForceCarHeadlightShadows()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "3C 01 75 50 84 DB 75 79"); pattern.size() > 0)
+            PublishEvent() += []
             {
-                // The original's ForceCarHeadlightShadows arm writes two `jmp`
-                // opcodes (+6, +379), re-points the branch at +95 to match+476 and
-                // stores our cone-offset address at +211.
-                WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(6), opp::ops::kJmpRel8);
-                JumpTo(ctx, pattern.get(0).get<uint8_t>(95),
-                       reinterpret_cast<void*>(pattern.get(0).get<uint8_t>(476)));
-                WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(379),
-                                    opp::ops::kJmpRel8);
-                WriteValue<uint32_t>(ctx, pattern.get(0).get<uint8_t>(211),
-                                     AddressOf(&zpatch_fchs_offset));
-            }
+                TraceArm("PublishForceCarHeadlightShadows");
 
-            if (auto pattern = Pattern(image, "55 8B EC 83 E4 F0 81 EC D4 00 00 00 8B 45 20 8B"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                JumpTo(ctx, match, OPP_BODY(abi_fchs_shim));
-            }
-
-            {
-                if (auto pattern = Pattern(image, "8D 4C 24 50 51 68 04 05 00 00"); pattern.size() > 0)
+                // ForceCarHeadlightShadows: 1 slot
+                if (Game::Option("ForceCarHeadlightShadows", "1"))
                 {
-                    // The `push 0x504` immediate bytes are re-stored unchanged
-                    // (04 05), exactly as the original writes them.
-                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(6), 0x04u);
-                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(7), 0x05u);
+                    if (auto pattern = find_pattern("55 8B EC 83 E4 F0 81 EC D4 00 00 00 8B 45 20 8B"); pattern.size() > 0)
+                    {
+                        // `and esp,-16` (4 bytes) + `sub esp,0xD4` (8 bytes) = the 12
+                        // bytes the shim's prologue replay covers.
+                        zpatch_fchs_resume = MatchAddress(pattern, 12);
+                    }
                 }
-            }
-
+            };
+            InstallEvent() += []
             {
-                if (auto pattern = Pattern(image, "8D 44 24 50 50 68 04 01 00 00"); pattern.size() > 0)
-                {
-                    // The second `push 0x104` site: both immediate bytes already
-                    // are 04 01 and are re-stored 1:1 (the original writes them).
-                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(6), 0x04u);
-                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(7), 0x01u);
-                }
-            }
+                TraceArm("InstallForceCarHeadlightShadows");
 
-            {
-                if (auto pattern = Pattern(image, "F3 0F 11 44 24 1C 0F 84 9E 00 00 00"); pattern.size() > 0)
+                // ForceCarHeadlightShadows: 2 siginstalls, 5 sigwrites
+                if (Game::Option("ForceCarHeadlightShadows", "1"))
                 {
-                    // Restore `jz +0x9E` (0F 84 9E 00 00) as the recovered five-byte
-                    // window. The sixth byte of the rel32 is deliberately left alone:
-                    // the original never writes it.
-                    constexpr uint8_t kJzPastShadow[5] = {0x0F, 0x84, 0x9E, 0x00, 0x00};
-                    WriteRaw(ctx, pattern.get(0).get<uint8_t>(6), kJzPastShadow,
-                             sizeof(kJzPastShadow));
+                    if (auto pattern = find_pattern("3C 01 75 50 84 DB 75 79"); pattern.size() > 0)
+                    {
+                        // The original's ForceCarHeadlightShadows arm writes two `jmp`
+                        // opcodes (+6, +379), re-points the branch at +95 to match+476 and
+                        // stores our cone-offset address at +211.
+                        injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(6), opp::ops::kJmpRel8, true);
+                        injector::MakeJMP(pattern.get_first<uint8_t>(95), reinterpret_cast<void*>(pattern.get_first<uint8_t>(476)), true);
+                        injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(379), opp::ops::kJmpRel8, true);
+                        injector::WriteMemory<uint32_t>(pattern.get_first<uint8_t>(211), AddressOf(&zpatch_fchs_offset), true);
+                    }
+
+                    if (auto pattern = find_pattern("55 8B EC 83 E4 F0 81 EC D4 00 00 00 8B 45 20 8B"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        injector::MakeJMP(match, OPP_BODY(abi_fchs_shim), true);
+                    }
+
+                    {
+                        if (auto pattern = find_pattern("8D 4C 24 50 51 68 04 05 00 00"); pattern.size() > 0)
+                        {
+                            // The `push 0x504` immediate bytes are re-stored unchanged
+                            // (04 05), exactly as the original writes them.
+                            injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(6), 0x04u, true);
+                            injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(7), 0x05u, true);
+                        }
+                    }
+
+                    {
+                        if (auto pattern = find_pattern("8D 44 24 50 50 68 04 01 00 00"); pattern.size() > 0)
+                        {
+                            // The second `push 0x104` site: both immediate bytes already
+                            // are 04 01 and are re-stored 1:1 (the original writes them).
+                            injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(6), 0x04u, true);
+                            injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(7), 0x01u, true);
+                        }
+                    }
+
+                    {
+                        if (auto pattern = find_pattern("F3 0F 11 44 24 1C 0F 84 9E 00 00 00"); pattern.size() > 0)
+                        {
+                            // Restore `jz +0x9E` (0F 84 9E 00 00) as the recovered five-byte
+                            // window. The sixth byte of the rel32 is deliberately left alone:
+                            // the original never writes it.
+                            constexpr uint8_t kJzPastShadow[5] = {0x0F, 0x84, 0x9E, 0x00, 0x00};
+                            injector::WriteMemoryRaw(pattern.get_first<uint8_t>(6), const_cast<void*>(static_cast<const void*>(kJzPastShadow)), sizeof(kJzPastShadow), true);
+                        }
+                    }
                 }
-            }
+            };
         }
-
-    }
+    } forceCarHeadlightShadows;
 
 
     // ForceShadowsOnObjects
 
-    void InstallForceShadowsOnObjects(PatchContext& ctx)
+    class ForceShadowsOnObjects
     {
-
-        TraceArm("ForceShadowsOnObjects");
-
-        // ForceShadowsOnObjects: 1 literal
-        if (ctx.Option("ForceShadowsOnObjects", "1"))
+    public:
+        ForceShadowsOnObjects()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "F7 47 40 00 10 00 00 74 07 81 4E 24 00 00"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                // The `jz` at +7 becomes an unconditional skip.
-                WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(7),
-                                    opp::ops::kJmpRel8);
-            }
-        }
+                TraceArm("InstallForceShadowsOnObjects");
 
-    }
+                // ForceShadowsOnObjects: 1 literal
+                if (Game::Option("ForceShadowsOnObjects", "1"))
+                {
+                    if (auto pattern = find_pattern("F7 47 40 00 10 00 00 74 07 81 4E 24 00 00"); pattern.size() > 0)
+                    {
+                        // The `jz` at +7 becomes an unconditional skip.
+                        injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(7), opp::ops::kJmpRel8, true);
+                    }
+                }
+            };
+        }
+    } forceShadowsOnObjects;
 
 
     // InfiniteCarBottomDistance
 
-    void InstallInfiniteCarBottomDistance(PatchContext& ctx)
+    class InfiniteCarBottomDistance
     {
-
-        TraceArm("InfiniteCarBottomDistance");
-
-        // InfiniteCarBottomDistance: 1 sigwrite
-        if (ctx.Option("InfiniteCarBottomDistance", "1"))
+    public:
+        InfiniteCarBottomDistance()
         {
-            const GameImage& image = ctx.image;
-
+            InstallEvent() += []
             {
-                if (auto pattern = Pattern(image, "0F 2F D0 76 25 0F 28 C2"); pattern.size() > 0)
-                {
-                    // `EB 2A` (jmp +0x2A) replaces the `76 25` (jbe) at +3.
-                    WriteValue<uint16_t>(ctx, pattern.get(0).get<uint8_t>(3), 0x2AEBu);
-                }
-            }
-        }
+                TraceArm("InstallInfiniteCarBottomDistance");
 
-    }
+                // InfiniteCarBottomDistance: 1 sigwrite
+                if (Game::Option("InfiniteCarBottomDistance", "1"))
+                {
+                    {
+                        if (auto pattern = find_pattern("0F 2F D0 76 25 0F 28 C2"); pattern.size() > 0)
+                        {
+                            // `EB 2A` (jmp +0x2A) replaces the `76 25` (jbe) at +3.
+                            injector::WriteMemory<uint16_t>(pattern.get_first<uint8_t>(3), 0x2AEBu, true);
+                        }
+                    }
+                }
+            };
+        }
+    } infiniteCarBottomDistance;
 
 
     // NoImpostorHeightCutoff
 
-    void InstallNoImpostorHeightCutoff(PatchContext& ctx)
+    class NoImpostorHeightCutoff
     {
-
-        TraceArm("NoImpostorHeightCutoff");
-
-        // NoImpostorHeightCutoff: 2 matchliterals
-        if (ctx.Option("NoImpostorHeightCutoff", "1"))
+    public:
+        NoImpostorHeightCutoff()
         {
-            const GameImage& image = ctx.image;
-
+            InstallEvent() += []
             {
-                // The original NOPs the recovered literal sites: 1.0.0.0 has one,
-                // every later build has two. A different count is a view mismatch,
-                // so the arm installs nothing (a partial set is worse than none).
-                const size_t expected =
-                    ctx.build == GameBuild::v1000 ? 1u : 2u;
-                if (auto pattern = PatternAll(image, "76 0B F3 0F 11 8C 24 88 00 00 00 EB 09"); pattern.size() > 0 &&
-                    ExpectMatchCount(pattern, expected, "NoImpostorHeightCutoff literals"))
-                {
-                    for (size_t i = 0; i < expected; ++i)
-                        NopAt(ctx, pattern.get(i).get<uint8_t>(), kWordLength);
-                }
-            }
-        }
+                TraceArm("InstallNoImpostorHeightCutoff");
 
-    }
+                // NoImpostorHeightCutoff: 2 matchliterals
+                if (Game::Option("NoImpostorHeightCutoff", "1"))
+                {
+                    {
+                        // The original NOPs the recovered literal sites: 1.0.0.0 has one,
+                        // every later build has two. A different count is a view mismatch,
+                        // so the arm installs nothing (a partial set is worse than none).
+                        const size_t expected =
+                            Game::Get().build == GameBuild::v1000 ? 1u : 2u;
+                        if (auto pattern = find_pattern<0>("76 0B F3 0F 11 8C 24 88 00 00 00 EB 09"); pattern.size() > 0 &&
+                            ExpectMatchCount(pattern, expected, "NoImpostorHeightCutoff literals"))
+                        {
+                            for (size_t i = 0; i < expected; ++i)
+                                injector::MakeNOP(pattern.get(i).get<uint8_t>(), kWordLength, true);
+                        }
+                    }
+                }
+            };
+        }
+    } noImpostorHeightCutoff;
 
 
     // NoLODLightHeightCutoff
 
-    void InstallNoLODLightHeightCutoff(PatchContext& ctx)
+    class NoLODLightHeightCutoff
     {
-
-        TraceArm("NoLODLightHeightCutoff");
-
-        // NoLODLightHeightCutoff: 1 literalstore
-        if (ctx.Option("NoLODLightHeightCutoff", "0"))
+    public:
+        NoLODLightHeightCutoff()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "76 08 F3 0F 11 4C 24 1C EB 06 F3 0F 11 44 24 1C 89 5C 24 64"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("InstallNoLODLightHeightCutoff");
 
-                NopAt(ctx, match, kWordLength);
-            }
+                // NoLODLightHeightCutoff: 1 literalstore
+                if (Game::Option("NoLODLightHeightCutoff", "0"))
+                {
+                    if (auto pattern = find_pattern("76 08 F3 0F 11 4C 24 1C EB 06 F3 0F 11 44 24 1C 89 5C 24 64"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        injector::MakeNOP(match, kWordLength, true);
+                    }
+                }
+            };
         }
-
-    }
+    } noLODLightHeightCutoff;
 
 
     // RemoveStaticCarShadows
 
-    void InstallRemoveStaticCarShadows(PatchContext& ctx)
+    class RemoveStaticCarShadows
     {
-
-        TraceArm("RemoveStaticCarShadows");
-
-        // RemoveStaticCarShadows: 1 literal
-        if (ctx.Option("RemoveStaticCarShadows", "0"))
+    public:
+        RemoveStaticCarShadows()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "F3 0F 11 4C 24 0C 76 5B D9 45 14"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                // The `jbe` (`76 5B`) sits six bytes into the match; the fix
-                // replaces its opcode with a short `jmp`.
-                WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(6),
-                                    opp::ops::kJmpRel8);
-            }
-        }
+                TraceArm("InstallRemoveStaticCarShadows");
 
-    }
+                // RemoveStaticCarShadows: 1 literal
+                if (Game::Option("RemoveStaticCarShadows", "0"))
+                {
+                    if (auto pattern = find_pattern("F3 0F 11 4C 24 0C 76 5B D9 45 14"); pattern.size() > 0)
+                    {
+                        // The `jbe` (`76 5B`) sits six bytes into the match; the fix
+                        // replaces its opcode with a short `jmp`.
+                        injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(6), opp::ops::kJmpRel8, true);
+                    }
+                }
+            };
+        }
+    } removeStaticCarShadows;
 
 
     // RemoveStaticCutsceneCarShadows
 
-    void InstallRemoveStaticCutsceneCarShadows(PatchContext& ctx)
+    class RemoveStaticCutsceneCarShadows
     {
-
-        TraceArm("RemoveStaticCutsceneCarShadows");
-
-        // RemoveStaticCutsceneCarShadows: 1 literal
-        if (ctx.Option("RemoveStaticCutsceneCarShadows", "0"))
+    public:
+        RemoveStaticCutsceneCarShadows()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "F3 0F 11 44 24 0C 76 5B D9 45 14"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                // The `jbe` (`76 5B`) sits six bytes into the match; the fix
-                // replaces its opcode with a short `jmp`.
-                WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(6),
-                                    opp::ops::kJmpRel8);
-            }
-        }
+                TraceArm("InstallRemoveStaticCutsceneCarShadows");
 
-    }
+                // RemoveStaticCutsceneCarShadows: 1 literal
+                if (Game::Option("RemoveStaticCutsceneCarShadows", "0"))
+                {
+                    if (auto pattern = find_pattern("F3 0F 11 44 24 0C 76 5B D9 45 14"); pattern.size() > 0)
+                    {
+                        // The `jbe` (`76 5B`) sits six bytes into the match; the fix
+                        // replaces its opcode with a short `jmp`.
+                        injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(6), opp::ops::kJmpRel8, true);
+                    }
+                }
+            };
+        }
+    } removeStaticCutsceneCarShadows;
 
 
     // ReversingLightFix
 
-    void InstallReversingLightFix(PatchContext& ctx)
+    class ReversingLightFix
     {
-
-        TraceArm("ReversingLightFix");
-
-        // ReversingLightFix: 1 literal
-        if (ctx.Option("ReversingLightFix", "1"))
+    public:
+        ReversingLightFix()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "11 01 00 00 8B 16 8B 42 64 8B CE FF D0 F3 0F 10"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                // 0x60 is `pushad` (readable's kPushadOpcode): the original
-                // replaces the byte at +8 with it.
-                WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(8), 96);  // pushad
-            }
-        }
+                TraceArm("InstallReversingLightFix");
 
-    }
+                // ReversingLightFix: 1 literal
+                if (Game::Option("ReversingLightFix", "1"))
+                {
+                    if (auto pattern = find_pattern("11 01 00 00 8B 16 8B 42 64 8B CE FF D0 F3 0F 10"); pattern.size() > 0)
+                    {
+                        // 0x60 is `pushad` (readable's kPushadOpcode): the original
+                        // replaces the byte at +8 with it.
+                        injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(8), 96, true);  // pushad
+                    }
+                }
+            };
+        }
+    } reversingLightFix;
 
     // PipeBombDropIconSupport
 
-    void InstallPipeBombDropIconSupport(PatchContext& ctx)
+    class PipeBombDropIconSupport
     {
-
-        TraceArm("PipeBombDropIconSupport");
-
-        // PipeBombDropIconSupport: 1 literal
-        if (ctx.Option("PipeBombDropIconSupport", "1"))
+    public:
+        PipeBombDropIconSupport()
         {
-            const GameImage& image = ctx.image;
-
-            if (BuildIs(ctx.build,
-                        {GameBuild::v1004, GameBuild::v1060, GameBuild::v1070, GameBuild::v1080,
-                         GameBuild::v1061, GameBuild::v1100, GameBuild::v1110, GameBuild::v1120,
-                         GameBuild::v1130, GameBuild::v12043}))
+            InstallEvent() += []
             {
+                TraceArm("InstallPipeBombDropIconSupport");
 
-                if (auto pattern = Pattern(image, "83 7D 18 1C 75 14"); pattern.size() > 0)
+                // PipeBombDropIconSupport: 1 literal
+                if (Game::Option("PipeBombDropIconSupport", "1"))
                 {
-                    auto* match = pattern.get(0).get<uint8_t>();
+                    if (BuildIs(Game::Get().build,
+                                {GameBuild::v1004, GameBuild::v1060, GameBuild::v1070, GameBuild::v1080,
+                                 GameBuild::v1061, GameBuild::v1100, GameBuild::v1110, GameBuild::v1120,
+                                 GameBuild::v1130, GameBuild::v12043}))
+                    {
 
-                    // The nine-byte argument-setup sequence before the
-                    // `cmp [ebp+18], 1C` check is NOP'd by the original.
-                    NopAt(ctx, match - 9, 9);
+                        if (auto pattern = find_pattern("83 7D 18 1C 75 14"); pattern.size() > 0)
+                        {
+                            auto* match = pattern.get_first<uint8_t>();
+
+                            // The nine-byte argument-setup sequence before the
+                            // `cmp [ebp+18], 1C` check is NOP'd by the original.
+                            injector::MakeNOP(match - 9, 9, true);
+                        }
+                    }
                 }
-            }
+            };
         }
-
-    }
+    } pipeBombDropIconSupport;
 
 
     // RestoreDeathMusic
 
-    void InstallRestoreDeathMusic(PatchContext& ctx)
-    {
-
-        TraceArm("RestoreDeathMusic");
-
-        // RestoreDeathMusic: 3 siginstalls. The first two call sites are 13
-        // bytes before their matches (the E8 replaced there); the third is the
-        // call at the match itself.
-        if (ctx.Option("RestoreDeathMusic", "0"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "0F 57 C0 F3 0F 11 86 20 02 00 00"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                CallTo(ctx, match - 13, OPP_BODY(abi_death_music_install));
-            }
-
-            if (auto pattern = Pattern(image, "C7 86 04 02 00 00 04 00 00 00 E9"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                CallTo(ctx, match - 13, OPP_BODY(abi_death_music_enabled));
-            }
-
-            if (auto pattern = Pattern(image, "E8 ? ? ? ? 84 C0 74 C6 8B BE"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                CallTo(ctx, match, OPP_BODY(abi_death_music_enabled));
-            }
-        }
-
-    }
-
-namespace
-{
-    class GraphicsFeatures
+    class RestoreDeathMusic
     {
     public:
-        GraphicsFeatures()
+        RestoreDeathMusic()
         {
-            PublishEvent().Add(&PublishBuildingDynamicShadows, "PublishBuildingDynamicShadows");
-            PublishEvent().Add(&PublishDualVehicleHeadlights, "PublishDualVehicleHeadlights");
-            PublishEvent().Add(&PublishEmissiveLerpFix, "PublishEmissiveLerpFix");
-            PublishEvent().Add(&PublishCarPartsShadowFix, "PublishCarPartsShadowFix");
-            PublishEvent().Add(&PublishForceCarHeadlightShadows, "PublishForceCarHeadlightShadows");
-            PublishEvent().Add(&PublishCarDynamicShadowFix, "PublishCarDynamicShadowFix");
-            PublishEvent().Add(&PublishCutsceneFixes, "PublishCutsceneFixes");
-            InstallEvent().Add(&InstallBuildingAlphaFix, "InstallBuildingAlphaFix");
-            InstallEvent().Add(&InstallBuildingDynamicShadows, "InstallBuildingDynamicShadows");
-            InstallEvent().Add(&InstallDualVehicleHeadlights, "InstallDualVehicleHeadlights");
-            InstallEvent().Add(&InstallEmissiveLerpFix, "InstallEmissiveLerpFix");
-            InstallEvent().Add(&InstallForceShadowsOnObjects, "InstallForceShadowsOnObjects");
-            InstallEvent().Add(&InstallInfiniteCarBottomDistance, "InstallInfiniteCarBottomDistance");
-            InstallEvent().Add(&InstallRemoveStaticCarShadows, "InstallRemoveStaticCarShadows");
-            InstallEvent().Add(&InstallRemoveStaticCutsceneCarShadows, "InstallRemoveStaticCutsceneCarShadows");
-            InstallEvent().Add(&InstallReversingLightFix, "InstallReversingLightFix");
-            InstallEvent().Add(&InstallCarPartsShadowFix, "InstallCarPartsShadowFix");
-            InstallEvent().Add(&InstallForceCarHeadlightShadows, "InstallForceCarHeadlightShadows");
-            InstallEvent().Add(&InstallCarDynamicShadowFix, "InstallCarDynamicShadowFix");
-            InstallEvent().Add(&InstallCutsceneFixes, "InstallCutsceneFixes");
-            InstallEvent().Add(&InstallCarDecalsFix, "InstallCarDecalsFix");
-            InstallEvent().Add(&InstallCarDynamicShadowFixNoE, "InstallCarDynamicShadowFixNoE");
-            InstallEvent().Add(&InstallCarPartsShadowFixStandalone, "InstallCarPartsShadowFixStandalone");
-            InstallEvent().Add(&InstallNoImpostorHeightCutoff, "InstallNoImpostorHeightCutoff");
-            InstallEvent().Add(&InstallNoLODLightHeightCutoff, "InstallNoLODLightHeightCutoff");
-            InstallEvent().Add(&InstallPipeBombDropIconSupport, "InstallPipeBombDropIconSupport");
-            InstallEvent().Add(&InstallRestoreDeathMusic, "InstallRestoreDeathMusic");
+            InstallEvent() += []
+            {
+                TraceArm("InstallRestoreDeathMusic");
+
+                // RestoreDeathMusic: 3 siginstalls. The first two call sites are 13
+                // bytes before their matches (the E8 replaced there); the third is the
+                // call at the match itself.
+                if (Game::Option("RestoreDeathMusic", "0"))
+                {
+                    if (auto pattern = find_pattern("0F 57 C0 F3 0F 11 86 20 02 00 00"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        injector::MakeCALL(match - 13, OPP_BODY(abi_death_music_install), true);
+                    }
+
+                    if (auto pattern = find_pattern("C7 86 04 02 00 00 04 00 00 00 E9"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        injector::MakeCALL(match - 13, OPP_BODY(abi_death_music_enabled), true);
+                    }
+
+                    if (auto pattern = find_pattern("E8 ? ? ? ? 84 C0 74 C6 8B BE"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        injector::MakeCALL(match, OPP_BODY(abi_death_music_enabled), true);
+                    }
+                }
+            };
         }
-    } graphicsFeatures;
-} // namespace
+    } restoreDeathMusic;
+
 
 } // namespace opp::features
 

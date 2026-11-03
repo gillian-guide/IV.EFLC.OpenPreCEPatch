@@ -42,10 +42,8 @@ void zpatch_mf_advance_c() noexcept
     // like the original (a null resume would fault; unreachable once installed).
     const auto base = static_cast<uintptr_t>(zpatch_mf_resume_b);
     // sub_100241E0 dereferences the resume slot unconditionally.
-    const auto* x = reinterpret_cast<const int32_t*>(
-        static_cast<uintptr_t>(zpatch_mf_x));
-    const auto* y = reinterpret_cast<const int32_t*>(
-        static_cast<uintptr_t>(zpatch_mf_y));
+    const auto* x = Rebased<const int32_t*>(zpatch_mf_x);
+    const auto* y = Rebased<const int32_t*>(zpatch_mf_y);
     // The axis globals hold mouse units; 1/128 converts a unit to an angle.
     constexpr double kMouseUnitsPerPixel = 1.0 / 128.0;
     static_assert(kMouseUnitsPerPixel == 0.0078125);
@@ -113,103 +111,52 @@ namespace opp::features
     // XLivelessAddon companion repository.
 
 
-    // publish DrivebyFOVFix
-
-    void PublishDrivebyFOVFix(PatchContext& ctx)
-    {
-
-        TraceArm("publish DrivebyFOVFix");
-
-        // DrivebyFOVFix: 2 slots
-        if (ctx.Option("DrivebyFOVFix", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "F3 0F 10 46 60 F3 0F 5C CA"); pattern.size() > 0)
-            {
-                // `movss xmm0, [esi+0x60]` is the five bytes the shim replaces;
-                // the resume is the instruction after them.
-                zpatch_driveby_resume = MatchAddress(pattern, 5);
-            }
-
-            if (auto pattern = Pattern(image, "08 0B C2 8B F0 E8"); pattern.size() > 0)
-            {
-                // The E8 at +5 calls the resolver; its rel32 operand is at +6.
-                zpatch_driveby_resolver = BranchDestination(
-                    pattern.get(0).get<uint8_t>(), 6);
-            }
-        }
-
-    }
-
-
     // DrivebyFOVFix
 
-    void InstallDrivebyFOVFix(PatchContext& ctx)
+    class DrivebyFOVFix
     {
-
-        TraceArm("DrivebyFOVFix");
-
-        // DrivebyFOVFix: 1 sigjump
-        if (ctx.Option("DrivebyFOVFix", "1"))
+    public:
+        DrivebyFOVFix()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "F3 0F 10 46 60 F3 0F 5C CA"); pattern.size() > 0)
+            PublishEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("PublishDrivebyFOVFix");
 
-                JumpTo(ctx, match, OPP_BODY(abi_driveby_fov_shim));
-            }
+                // DrivebyFOVFix: 2 slots
+                if (Game::Option("DrivebyFOVFix", "1"))
+                {
+                    if (auto pattern = find_pattern("F3 0F 10 46 60 F3 0F 5C CA"); pattern.size() > 0)
+                    {
+                        // `movss xmm0, [esi+0x60]` is the five bytes the shim replaces;
+                        // the resume is the instruction after them.
+                        zpatch_driveby_resume = MatchAddress(pattern, 5);
+                    }
+
+                    if (auto pattern = find_pattern("08 0B C2 8B F0 E8"); pattern.size() > 0)
+                    {
+                        // The E8 at +5 calls the resolver; its rel32 operand is at +6.
+                        zpatch_driveby_resolver = BranchDestination(
+                            pattern.get_first<uint8_t>(), 6);
+                    }
+                }
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallDrivebyFOVFix");
+
+                // DrivebyFOVFix: 1 sigjump
+                if (Game::Option("DrivebyFOVFix", "1"))
+                {
+                    if (auto pattern = find_pattern("F3 0F 10 46 60 F3 0F 5C CA"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        injector::MakeJMP(match, OPP_BODY(abi_driveby_fov_shim), true);
+                    }
+                }
+            };
         }
-
-    }
-
-
-    // publish MouseFix
-
-    void PublishMouseFix(PatchContext& ctx)
-    {
-
-        TraceArm("publish MouseFix");
-
-        // MouseFix: 6 slots
-        if (ctx.Option("MouseFix", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            // The two axis pointers are the `mov esi, imm32` / `mov edi, imm32`
-            // operands; the flag pointer is the `cmp [imm32], ...` operand.
-
-            if (auto pattern = Pattern(image, "51 8B 44 24 0C 85 C0 0F 57 D2 56 8B 35 ? ? ? ? 57 8B 3D ? ? ? ? F3 0F 11 54 24 08 75 0C"); pattern.size() > 0)
-            {
-                zpatch_mf_x = *pattern.get(0).get<uint32_t>(13);
-                zpatch_mf_y = *pattern.get(0).get<uint32_t>(20);
-            }
-
-            if (auto pattern = Pattern(image, "8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? 83 C4 08 83 3D"); pattern.size() > 0)
-            {
-                zpatch_mf_flag = *pattern.get(0).get<uint32_t>(20);
-            }
-
-            if (auto pattern = Pattern(image, "83 EC 08 DB 05 ? ? ? ? 68"); pattern.size() > 0)
-            {
-                // The match is GET_MOUSE_SENSITIVITY's entry (sub esp,8; fld
-                // dword [imm32], game 0xB4D3A0); abi_mf_angle_step calls it
-                // through the slot.
-                zpatch_mf_time = MatchAddress(pattern);
-            }
-
-            if (auto pattern = Pattern(image, "53 56 8B F1 57 8B BE 40 01 00 00 85 FF F3 0F 11 46"); pattern.size() > 0)
-            {
-                // Body A is installed 15 bytes before the match and resumes at
-                // it; body B is installed at +1862 and resumes at +1878.
-                zpatch_mf_resume_a = MatchAddress(pattern);
-                zpatch_mf_resume_b = MatchAddress(pattern, 1878);
-            }
-        }
-
-    }
+    } drivebyFOVFix;
 
 
     // MouseFix
@@ -232,147 +179,172 @@ namespace opp::features
         // One x87-to-SSE transition: the store(s) are written before either NOP,
         // as in the original handler. `store_b`/`nop_b` are 0 for the single-axis
         // sites, where `store` is that site's own movd.
-        void ApplyXmmTransition(PatchContext& ctx, uint8_t* match, uint32_t store,
+        void ApplyXmmTransition(uint8_t* match, uint32_t store,
                                 ptrdiff_t store_a, ptrdiff_t store_b,
                                 ptrdiff_t nop_a, ptrdiff_t nop_b)
         {
-            WriteValue<uint32_t>(ctx, match + store_a, store);
+            injector::WriteMemory<uint32_t>(match + store_a, store, true);
             if (store_b != 0)
-                WriteValue<uint32_t>(ctx, match + store_b, store);
-            NopAt(ctx, match + nop_a, 2);
+                injector::WriteMemory<uint32_t>(match + store_b, store, true);
+            injector::MakeNOP(match + nop_a, 2, true);
             if (nop_b != 0)
-                NopAt(ctx, match + nop_b, 2);
+                injector::MakeNOP(match + nop_b, 2, true);
         }
     } // namespace
 
-    void InstallMouseFix(PatchContext& ctx)
+    class MouseFix
     {
-
-        TraceArm("MouseFix");
-
-        // MouseFix: 8 siginstalls
-        if (ctx.Option("MouseFix", "1"))
+    public:
+        MouseFix()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "51 8B 44 24 0C 85 C0 0F 57 D2 56 8B 35 ? ? ? ? 57 8B 3D ? ? ? ? F3 0F 11 54 24 08 75 0C"); pattern.size() > 0)
+            PublishEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("PublishMouseFix");
 
-                JumpTo(ctx, match, OPP_BODY(abi_mouse_axis_float));
-            }
+                // MouseFix: 6 slots
+                if (Game::Option("MouseFix", "1"))
+                {
+                    // The two axis pointers are the `mov esi, imm32` / `mov edi, imm32`
+                    // operands; the flag pointer is the `cmp [imm32], ...` operand.
 
-            if (auto pattern = Pattern(image, "8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? D8"); pattern.size() > 0)
+                    if (auto pattern = find_pattern("51 8B 44 24 0C 85 C0 0F 57 D2 56 8B 35 ? ? ? ? 57 8B 3D ? ? ? ? F3 0F 11 54 24 08 75 0C"); pattern.size() > 0)
+                    {
+                        zpatch_mf_x = *pattern.get_first<uint32_t>(13);
+                        zpatch_mf_y = *pattern.get_first<uint32_t>(20);
+                    }
+
+                    if (auto pattern = find_pattern("8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? 83 C4 08 83 3D"); pattern.size() > 0)
+                    {
+                        zpatch_mf_flag = *pattern.get_first<uint32_t>(20);
+                    }
+
+                    if (auto pattern = find_pattern("83 EC 08 DB 05 ? ? ? ? 68"); pattern.size() > 0)
+                    {
+                        // The match is GET_MOUSE_SENSITIVITY's entry (sub esp,8; fld
+                        // dword [imm32], game 0xB4D3A0); abi_mf_angle_step calls it
+                        // through the slot.
+                        zpatch_mf_time = MatchAddress(pattern);
+                    }
+
+                    if (auto pattern = find_pattern("53 56 8B F1 57 8B BE 40 01 00 00 85 FF F3 0F 11 46"); pattern.size() > 0)
+                    {
+                        // Body A is installed 15 bytes before the match and resumes at
+                        // it; body B is installed at +1862 and resumes at +1878.
+                        zpatch_mf_resume_a = MatchAddress(pattern);
+                        zpatch_mf_resume_b = MatchAddress(pattern, 1878);
+                    }
+                }
+            };
+            InstallEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("InstallMouseFix");
 
-                JumpTo(ctx, match, OPP_BODY(abi_mouse_axis_neg));
-            }
+                // MouseFix: 8 siginstalls
+                if (Game::Option("MouseFix", "1"))
+                {
+                    if (auto pattern = find_pattern("51 8B 44 24 0C 85 C0 0F 57 D2 56 8B 35 ? ? ? ? 57 8B 3D ? ? ? ? F3 0F 11 54 24 08 75 0C"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
 
-            if (auto pattern = Pattern(image, "83 C4 08 F7 D8 F3 0F 2A C0 6A 00 8B CE F3 0F 11 07"); pattern.size() > 0)
-            {
-                ApplyXmmTransition(ctx, pattern.get(0).get<uint8_t>(), kMovdXmm0Eax,
-                                   kMouseSseStoreA, kMouseSseStoreB,
-                                   kMouseSseNopA, kMouseSseNopB);
-            }
+                        injector::MakeJMP(match, OPP_BODY(abi_mouse_axis_float), true);
+                    }
 
-            if (auto pattern = Pattern(image, "83 C4 08 F7 D8 F3 0F 2A C0 6A 01 8B CB F3 0F 11 07"); pattern.size() > 0)
-            {
-                ApplyXmmTransition(ctx, pattern.get(0).get<uint8_t>(), kMovdXmm0Eax,
-                                   kMouseSseStoreA, kMouseSseStoreB,
-                                   kMouseSseNopA, kMouseSseNopB);
-            }
+                    if (auto pattern = find_pattern("8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? D8"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
 
-            if (auto pattern = Pattern(image, "83 C4 08 F7 D8 F3 0F 2A C8 F3 0F 10 46"); pattern.size() > 0)
-            {
-                // 66 0F 6E C8 = movd xmm1, eax: this site's SSE form.
-                ApplyXmmTransition(ctx, pattern.get(0).get<uint8_t>(), 0xC86E0F66u,
-                                   kMouseSseStoreA, 0, kMouseSseNopA, 0);
-            }
+                        injector::MakeJMP(match, OPP_BODY(abi_mouse_axis_neg), true);
+                    }
 
-            if (auto pattern = Pattern(image, "8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? 83 C4 08 83 3D"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
+                    if (auto pattern = find_pattern("83 C4 08 F7 D8 F3 0F 2A C0 6A 00 8B CE F3 0F 11 07"); pattern.size() > 0)
+                    {
+                        ApplyXmmTransition(pattern.get_first<uint8_t>(), kMovdXmm0Eax,
+                                           kMouseSseStoreA, kMouseSseStoreB,
+                                           kMouseSseNopA, kMouseSseNopB);
+                    }
 
-                JumpTo(ctx, match, OPP_BODY(abi_mouse_axis_flag));
-            }
+                    if (auto pattern = find_pattern("83 C4 08 F7 D8 F3 0F 2A C0 6A 01 8B CB F3 0F 11 07"); pattern.size() > 0)
+                    {
+                        ApplyXmmTransition(pattern.get_first<uint8_t>(), kMovdXmm0Eax,
+                                           kMouseSseStoreA, kMouseSseStoreB,
+                                           kMouseSseNopA, kMouseSseNopB);
+                    }
 
-            if (auto pattern = Pattern(image, "56 8B 74 24 08 57 8B 7C 24 10 C7 06 00 00 00 00"); pattern.size() > 0)
-            {
-                // The two int-axis conversion calls in the function.
-                CallTo(ctx, pattern.get(0).get<uint8_t>(51),
-                       OPP_BODY(abi_mouse_axis_int));
-                CallTo(ctx, pattern.get(0).get<uint8_t>(90),
-                       OPP_BODY(abi_mouse_axis_int));
-            }
+                    if (auto pattern = find_pattern("83 C4 08 F7 D8 F3 0F 2A C8 F3 0F 10 46"); pattern.size() > 0)
+                    {
+                        // 66 0F 6E C8 = movd xmm1, eax: this site's SSE form.
+                        ApplyXmmTransition(pattern.get_first<uint8_t>(), 0xC86E0F66u,
+                                           kMouseSseStoreA, 0, kMouseSseNopA, 0);
+                    }
 
-            if (auto pattern = Pattern(image, "53 56 8B F1 57 8B BE 40 01 00 00 85 FF F3 0F 11 46"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
+                    if (auto pattern = find_pattern("8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? 83 C4 08 83 3D"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
 
-                // Body A is installed 15 bytes before the match (replaying its
-                // 15-byte prologue); body B at +1862 (replaying three bytes).
-                JumpTo(ctx, match - 15, OPP_BODY(abi_mouse_angle));
-                JumpTo(ctx, pattern.get(0).get<uint8_t>(1862),
-                       OPP_BODY(abi_mouse_advance));
-            }
+                        injector::MakeJMP(match, OPP_BODY(abi_mouse_axis_flag), true);
+                    }
+
+                    if (auto pattern = find_pattern("56 8B 74 24 08 57 8B 7C 24 10 C7 06 00 00 00 00"); pattern.size() > 0)
+                    {
+                        // The two int-axis conversion calls in the function.
+                        injector::MakeCALL(pattern.get_first<uint8_t>(51), OPP_BODY(abi_mouse_axis_int), true);
+                        injector::MakeCALL(pattern.get_first<uint8_t>(90), OPP_BODY(abi_mouse_axis_int), true);
+                    }
+
+                    if (auto pattern = find_pattern("53 56 8B F1 57 8B BE 40 01 00 00 85 FF F3 0F 11 46"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        // Body A is installed 15 bytes before the match (replaying its
+                        // 15-byte prologue); body B at +1862 (replaying three bytes).
+                        injector::MakeJMP(match - 15, OPP_BODY(abi_mouse_angle), true);
+                        injector::MakeJMP(pattern.get_first<uint8_t>(1862), OPP_BODY(abi_mouse_advance), true);
+                    }
+                }
+            };
         }
-
-    }
+    } mouseFix;
 
 
     // VSyncFix
 
-    void InstallVSyncFix(PatchContext& ctx)
-    {
-
-        TraceArm("VSyncFix");
-
-        // VSyncFix: 2 literalstores
-        if (ctx.Option("VSyncFix", "0"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (BuildIs(ctx.build,
-                        {GameBuild::v1004, GameBuild::v1060, GameBuild::v1070, GameBuild::v1061,
-                         GameBuild::v1100, GameBuild::v1110, GameBuild::v1120, GameBuild::v12043}))
-            {
-
-                // The two recovered operand slots the handler points at its
-                // VSync flag dword (the windows are pre-write).
-
-                if (auto pattern = Pattern(image, "8B 08 8B 51 0C 6A 01 6A 00 6A 00 6A 00 6A 00 50 FF D2 8B F0 81 FE ? ? ? ? 74"); pattern.size() > 0)
-                {
-                    WriteValue<uint32_t>(ctx, pattern.get(0).get<uint8_t>(30),
-                                         static_cast<uint32_t>(
-                                             FindGlobalValue("VSyncFix")));
-                }
-
-                if (auto pattern = Pattern(image, "8B 10 50 8B 82 A8 00 00 00 FF D0 83"); pattern.size() > 0)
-                {
-                    WriteValue<uint32_t>(ctx, pattern.get(0).get<uint8_t>(13),
-                                         static_cast<uint32_t>(
-                                             FindGlobalValue("VSyncFix")));
-                }
-            }
-        }
-    }
-
-namespace
-{
-    class InputFeatures
+    class VSyncFix
     {
     public:
-        InputFeatures()
+        VSyncFix()
         {
-            PublishEvent().Add(&PublishDrivebyFOVFix, "PublishDrivebyFOVFix");
-            PublishEvent().Add(&PublishMouseFix, "PublishMouseFix");
-            InstallEvent().Add(&InstallDrivebyFOVFix, "InstallDrivebyFOVFix");
-            InstallEvent().Add(&InstallMouseFix, "InstallMouseFix");
-            InstallEvent().Add(&InstallVSyncFix, "InstallVSyncFix");
+            InstallEvent() += []
+            {
+                TraceArm("InstallVSyncFix");
+
+                // VSyncFix: 2 literalstores
+                if (Game::Option("VSyncFix", "0"))
+                {
+                    if (BuildIs(Game::Get().build,
+                                {GameBuild::v1004, GameBuild::v1060, GameBuild::v1070, GameBuild::v1061,
+                                 GameBuild::v1100, GameBuild::v1110, GameBuild::v1120, GameBuild::v12043}))
+                    {
+
+                        // The two recovered operand slots the handler points at its
+                        // VSync flag dword (the windows are pre-write).
+
+                        if (auto pattern = find_pattern("8B 08 8B 51 0C 6A 01 6A 00 6A 00 6A 00 6A 00 50 FF D2 8B F0 81 FE ? ? ? ? 74"); pattern.size() > 0)
+                        {
+                            injector::WriteMemory<uint32_t>(pattern.get_first<uint8_t>(30), static_cast<uint32_t>(
+                                                     FindGlobalValue("VSyncFix")), true);
+                        }
+
+                        if (auto pattern = find_pattern("8B 10 50 8B 82 A8 00 00 00 FF D0 83"); pattern.size() > 0)
+                        {
+                            injector::WriteMemory<uint32_t>(pattern.get_first<uint8_t>(13), static_cast<uint32_t>(
+                                                     FindGlobalValue("VSyncFix")), true);
+                        }
+                    }
+                }
+            };
         }
-    } inputFeatures;
-} // namespace
+    } vSyncFix;
+
 
 } // namespace opp::features
 

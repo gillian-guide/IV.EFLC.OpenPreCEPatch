@@ -184,12 +184,10 @@ else()
     # original-VA resolver, so no 32-bit body is ever executed.
     # -----------------------------------------------------------------------
     if(OPCEP_BUILD_PARITY_DUMP)
-        set(OPCEP_DUMP_SOURCES ${OPCEP_CORE_SOURCES})
-
         add_executable(opcep_parity_dump
             tests/dump_main.cpp
             tests/dump_stubs.cpp
-            ${OPCEP_DUMP_SOURCES})
+            ${OPCEP_CORE_SOURCES})
         opcep_configure_target(opcep_parity_dump)
         target_compile_definitions(opcep_parity_dump PRIVATE OPCEP_DUMP_TOOL)
         target_sources(opcep_parity_dump PRIVATE

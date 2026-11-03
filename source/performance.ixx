@@ -804,340 +804,337 @@ namespace opp::features
 
     // FastLoading
 
-    void InstallFastLoading(PatchContext& ctx)
+    class FastLoading
     {
-
-        TraceArm("FastLoading");
-
-        // FastLoading: 1 sigwrite
-        if (ctx.Option("FastLoading", "1"))
+    public:
+        FastLoading()
         {
-            const GameImage& image = ctx.image;
-
+            InstallEvent() += []
             {
-                if (auto pattern = Pattern(image, "6A 0A E8 ? ? ? ? 83 C7 0A 83 C4 04 81 FF E8 03 00 00 75 02 33 FF"); pattern.size() > 0)
-                {
-                    // `6A 0A` is `push 10`: zeroing the immediate byte makes the
-                    // sleep call wait 0 ms instead of 10 (the original's write).
-                    WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(1),
-                                        uint8_t{0});
-                }
-            }
-        }
+                TraceArm("InstallFastLoading");
 
-    }
+                // FastLoading: 1 sigwrite
+                if (Game::Option("FastLoading", "1"))
+                {
+                    {
+                        if (auto pattern = find_pattern("6A 0A E8 ? ? ? ? 83 C7 0A 83 C4 04 81 FF E8 03 00 00 75 02 33 FF"); pattern.size() > 0)
+                        {
+                            // `6A 0A` is `push 10`: zeroing the immediate byte makes the
+                            // sleep call wait 0 ms instead of 10 (the original's write).
+                            injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(1), uint8_t{0}, true);
+                        }
+                    }
+                }
+            };
+        }
+    } fastLoading;
 
 
     // HighFPSSpeedupFix
 
-    void InstallHighFPSSpeedupFix(PatchContext& ctx)
+    class HighFPSSpeedupFix
     {
-
-        TraceArm("HighFPSSpeedupFix");
-
-        // HighFPSSpeedupFix: 9 literals
-        if (ctx.Option("HighFPSSpeedupFix", "1"))
+    public:
+        HighFPSSpeedupFix()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "0F 2F C1 76 03 0F 28 C8 F3 0F 10 15"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                // The original's nine writes, relative to the `comiss` match and
-                // in its write order. -7/+3 and +231/+367/+377/+607/+614/+764
-                // are two-byte jccs of the function's floating-point min/max
-                // clamps (NOP'd); +224 rewrites a `ja` to an unconditional
-                // `jmp` so the clamp is always skipped.
-                NopAt(ctx, pattern.get(0).get<uint8_t>(-7), 2);
-                NopAt(ctx, pattern.get(0).get<uint8_t>(3), 2);
-                WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(224), opp::ops::kJmpRel8);
-                NopAt(ctx, pattern.get(0).get<uint8_t>(231), 2);
-                NopAt(ctx, pattern.get(0).get<uint8_t>(367), 2);
-                NopAt(ctx, pattern.get(0).get<uint8_t>(377), 2);
-                NopAt(ctx, pattern.get(0).get<uint8_t>(607), 2);
-                NopAt(ctx, pattern.get(0).get<uint8_t>(614), 2);
-                NopAt(ctx, pattern.get(0).get<uint8_t>(764), 2);
-            }
-        }
+                TraceArm("InstallHighFPSSpeedupFix");
 
-    }
+                // HighFPSSpeedupFix: 9 literals
+                if (Game::Option("HighFPSSpeedupFix", "1"))
+                {
+                    if (auto pattern = find_pattern("0F 2F C1 76 03 0F 28 C8 F3 0F 10 15"); pattern.size() > 0)
+                    {
+                        // The original's nine writes, relative to the `comiss` match and
+                        // in its write order. -7/+3 and +231/+367/+377/+607/+614/+764
+                        // are two-byte jccs of the function's floating-point min/max
+                        // clamps (NOP'd); +224 rewrites a `ja` to an unconditional
+                        // `jmp` so the clamp is always skipped.
+                        injector::MakeNOP(pattern.get_first<uint8_t>(-7), 2, true);
+                        injector::MakeNOP(pattern.get_first<uint8_t>(3), 2, true);
+                        injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(224), opp::ops::kJmpRel8, true);
+                        injector::MakeNOP(pattern.get_first<uint8_t>(231), 2, true);
+                        injector::MakeNOP(pattern.get_first<uint8_t>(367), 2, true);
+                        injector::MakeNOP(pattern.get_first<uint8_t>(377), 2, true);
+                        injector::MakeNOP(pattern.get_first<uint8_t>(607), 2, true);
+                        injector::MakeNOP(pattern.get_first<uint8_t>(614), 2, true);
+                        injector::MakeNOP(pattern.get_first<uint8_t>(764), 2, true);
+                    }
+                }
+            };
+        }
+    } highFPSSpeedupFix;
 
 
     // ImprovedShaderStreaming
 
-    void InstallImprovedShaderStreaming(PatchContext& ctx)
+    class ImprovedShaderStreaming
     {
-
-        TraceArm("ImprovedShaderStreaming");
-
-        // ImprovedShaderStreaming: 1 siginstall
-        if (ctx.Option("ImprovedShaderStreaming", "1"))
+    public:
+        ImprovedShaderStreaming()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "33 F6 8B 4C 24 08 8B 06 8B 50 04 51 8B CE FF D2 F6 D8 1B C0 23 C6 5E C3 8B 44 24 0C 8B 74 24"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("InstallImprovedShaderStreaming");
 
-                // The first lookup in each class chain is replaced by the HPE
-                // and V filters. The original ZolikaPatch also rewrote the two
-                // `mov ecx, [esi+8]` instructions that follow (a jump to the
-                // other filter block / the function end) to skip the remaining
-                // names. Those two jumps are only a speed-up: when a filter
-                // finds no entry it returns null and the untouched chain below
-                // simply continues. Dropping them keeps LibertyCityPlates'
-                // `addCustomShaderEffect` address scan intact; the scan covers
-                // the bytes at +0xEA/+0xFB, and a mod that had already scanned
-                // before us would otherwise lose its hook address.
-                constexpr ptrdiff_t kHpeFilterCall = 85;
-                constexpr ptrdiff_t kVFilterCall = 253;
-                constexpr uint8_t kCallOpcode = 0xE8;
-
-                // A different build can match the surrounding bytes while the
-                // two call sites are not call instructions. Writing a branch
-                // over them would corrupt an arbitrary instruction, so refuse
-                // the whole arm instead.
-                if (match[kHpeFilterCall] != kCallOpcode ||
-                    match[kVFilterCall] != kCallOpcode)
+                // ImprovedShaderStreaming: 1 siginstall
+                if (Game::Option("ImprovedShaderStreaming", "1"))
                 {
-                    SkipArmWrite("ImprovedShaderStreaming: unexpected call opcode");
-                    return;
+                    if (auto pattern = find_pattern("33 F6 8B 4C 24 08 8B 06 8B 50 04 51 8B CE FF D2 F6 D8 1B C0 23 C6 5E C3 8B 44 24 0C 8B 74 24"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        // The first lookup in each class chain is replaced by the HPE
+                        // and V filters. The original ZolikaPatch also rewrote the two
+                        // `mov ecx, [esi+8]` instructions that follow (a jump to the
+                        // other filter block / the function end) to skip the remaining
+                        // names. Those two jumps are only a speed-up: when a filter
+                        // finds no entry it returns null and the untouched chain below
+                        // simply continues. Dropping them keeps LibertyCityPlates'
+                        // `addCustomShaderEffect` address scan intact; the scan covers
+                        // the bytes at +0xEA/+0xFB, and a mod that had already scanned
+                        // before us would otherwise lose its hook address.
+                        constexpr ptrdiff_t kHpeFilterCall = 85;
+                        constexpr ptrdiff_t kVFilterCall = 253;
+                        constexpr uint8_t kCallOpcode = 0xE8;
+
+                        // A different build can match the surrounding bytes while the
+                        // two call sites are not call instructions. Writing a branch
+                        // over them would corrupt an arbitrary instruction, so refuse
+                        // the whole arm instead.
+                        if (match[kHpeFilterCall] != kCallOpcode ||
+                            match[kVFilterCall] != kCallOpcode)
+                        {
+                            Log("arm %s: ImprovedShaderStreaming: unexpected call opcode",
+                                CurrentArm());
+                            return;
+                        }
+
+                        injector::MakeCALL(match + kHpeFilterCall, OPP_BODY(abi_improved_shader_streaming_find_hpe), true);
+                        injector::MakeCALL(match + kVFilterCall, OPP_BODY(abi_improved_shader_streaming_find_v), true);
+                    }
                 }
-
-                CallTo(ctx, match + kHpeFilterCall, OPP_BODY(abi_improved_shader_streaming_find_hpe));
-                CallTo(ctx, match + kVFilterCall, OPP_BODY(abi_improved_shader_streaming_find_v));
-            }
+            };
         }
-
-    }
+    } improvedShaderStreaming;
 
 
     // IncreasePtrNodes
 
-    void InstallIncreasePtrNodes(PatchContext& ctx)
+    class IncreasePtrNodes
     {
-
-        TraceArm("IncreasePtrNodes");
-
-        // IncreasePtrNodes: 3 literalstores
-        if (ctx.Option("IncreasePtrNodes", "1"))
+    public:
+        IncreasePtrNodes()
         {
-            const GameImage& image = ctx.image;
-
-            // The `push imm32` operand at +8 is each pool's node count. The
-            // recovered originals are 0x13880 (80,000) and 0x3E80 (16,000); the
-            // writes raise them to 0x4E200 (320,000) and 0xFA00 (64,000).
-            constexpr ptrdiff_t kPoolCountOperand = 8;
-            constexpr uint32_t kPoolCountFrom16k = 0xFA00u;   // 64,000
-
-            if (auto pattern = Pattern(image, "6A 08 ? ? ? ? ? 68 80 38 01 00"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("InstallIncreasePtrNodes");
 
-                WriteValue<uint32_t>(ctx, match + kPoolCountOperand, 0x4E200u);
-            }
+                // IncreasePtrNodes: 3 literalstores
+                if (Game::Option("IncreasePtrNodes", "1"))
+                {
+                    // The `push imm32` operand at +8 is each pool's node count. The
+                    // recovered originals are 0x13880 (80,000) and 0x3E80 (16,000); the
+                    // writes raise them to 0x4E200 (320,000) and 0xFA00 (64,000).
+                    constexpr ptrdiff_t kPoolCountOperand = 8;
+                    constexpr uint32_t kPoolCountFrom16k = 0xFA00u;   // 64,000
 
-            if (auto pattern = Pattern(image, "6A 10 ? ? ? ? ? 68 80 3E 00 00"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
+                    if (auto pattern = find_pattern("6A 08 ? ? ? ? ? 68 80 38 01 00"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
 
-                WriteValue<uint32_t>(ctx, match + kPoolCountOperand, kPoolCountFrom16k);
-            }
+                        injector::WriteMemory<uint32_t>(match + kPoolCountOperand, 0x4E200u, true);
+                    }
 
-            if (auto pattern = Pattern(image, "6A 14 ? ? ? ? ? 68 80 3E 00 00"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
+                    if (auto pattern = find_pattern("6A 10 ? ? ? ? ? 68 80 3E 00 00"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
 
-                WriteValue<uint32_t>(ctx, match + kPoolCountOperand, kPoolCountFrom16k);
-            }
+                        injector::WriteMemory<uint32_t>(match + kPoolCountOperand, kPoolCountFrom16k, true);
+                    }
+
+                    if (auto pattern = find_pattern("6A 14 ? ? ? ? ? 68 80 3E 00 00"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        injector::WriteMemory<uint32_t>(match + kPoolCountOperand, kPoolCountFrom16k, true);
+                    }
+                }
+            };
         }
-
-    }
+    } increasePtrNodes;
 
 
     // IncreaseVehicleModelLimit
 
-    void InstallIncreaseVehicleModelLimit(PatchContext& ctx)
+    class IncreaseVehicleModelLimit
     {
-
-        TraceArm("IncreaseVehicleModelLimit");
-
-        // IncreaseVehicleModelLimit: 1 indirect
-        if (ctx.Option("IncreaseVehicleModelLimit", "1"))
+    public:
+        IncreaseVehicleModelLimit()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "83 C7 01 81 FF 18 79 00 00 7C D2"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                // The `mov ecx, imm32` operand at +77 names the model-limit
-                // dword (0xF3E8E8 on 1.0.8.0); the original raises it to 1024.
-                auto* target = MatchPointer(pattern, 77);
-                if (target != nullptr)
-                    WriteValue<uint32_t>(ctx, target, 1024u);
-            }
-        }
+                TraceArm("InstallIncreaseVehicleModelLimit");
 
-    }
+                // IncreaseVehicleModelLimit: 1 indirect
+                if (Game::Option("IncreaseVehicleModelLimit", "1"))
+                {
+                    if (auto pattern = find_pattern("83 C7 01 81 FF 18 79 00 00 7C D2"); pattern.size() > 0)
+                    {
+                        // The `mov ecx, imm32` operand at +77 names the model-limit
+                        // dword (0xF3E8E8 on 1.0.8.0); the original raises it to 1024.
+                        auto* target = MatchPointer(pattern, 77);
+                        if (target != nullptr)
+                            injector::WriteMemory<uint32_t>(target, 1024u, true);
+                    }
+                }
+            };
+        }
+    } increaseVehicleModelLimit;
 
 
     // IncreaseVehicleStructLimit
 
-    void InstallIncreaseVehicleStructLimit(PatchContext& ctx)
+    class IncreaseVehicleStructLimit
     {
-
-        TraceArm("IncreaseVehicleStructLimit");
-
-        // IncreaseVehicleStructLimit: 1 literalstore
-        if (ctx.Option("IncreaseVehicleStructLimit", "1"))
+    public:
+        IncreaseVehicleStructLimit()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "68 ? ? ? ? 6A 32 8B C8"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                // The `push 0x32` immediate at +6 becomes 0x64 (100): the
-                // vehicle-struct count the allocator is asked for.
-                WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(6), 0x64u);
-            }
+                TraceArm("InstallIncreaseVehicleStructLimit");
+
+                // IncreaseVehicleStructLimit: 1 literalstore
+                if (Game::Option("IncreaseVehicleStructLimit", "1"))
+                {
+                    if (auto pattern = find_pattern("68 ? ? ? ? 6A 32 8B C8"); pattern.size() > 0)
+                    {
+                        // The `push 0x32` immediate at +6 becomes 0x64 (100): the
+                        // vehicle-struct count the allocator is asked for.
+                        injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(6), 0x64u, true);
+                    }
+                }
+            };
         }
-
-    }
-
-
-    // publish NewMemorySystem
-
-    void PublishNewMemorySystem(PatchContext& ctx)
-    {
-
-        TraceArm("publish NewMemorySystem");
-
-        // NewMemorySystem: 1 slot
-        if (ctx.Option("NewMemorySystem", "0"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "6A 01 B9 00 00 40 06"); pattern.size() > 0)
-            {
-                // The `mov esi, imm32` at +7 names the allocator singleton
-                // (0x19CF9F0 on 1.0.8.0); the install writes our vtable there.
-                zpatch_nms_object = *pattern.get(0).get<uint32_t>(8);
-            }
-        }
-
-    }
+    } increaseVehicleStructLimit;
 
 
     // NewMemorySystem
 
-    void InstallNewMemorySystem(PatchContext& ctx)
+    class NewMemorySystem
     {
-
-        TraceArm("NewMemorySystem");
-
-        // NewMemorySystem: 1 siginstall
-        if (ctx.Option("NewMemorySystem", "0"))
+    public:
+        NewMemorySystem()
         {
-            const GameImage& image = ctx.image;
-
-            // The publish arm resolves the allocator singleton from a different
-            // signature. Without it abi_nms_apply has no object to write, and
-            // replacing the constructor call would skip the original allocator
-            // setup without installing anything: the game would run with an
-            // uninitialised allocator. A missing publish is a clean skip.
-            if (zpatch_nms_object == 0)
+            PublishEvent() += []
             {
-                SkipArmWrite("NewMemorySystem: allocator singleton not published");
-                return;
-            }
+                TraceArm("PublishNewMemorySystem");
 
-            if (auto pattern = Pattern(image, "3D 80 99 99 59 73 05"); pattern.size() > 0)
+                // NewMemorySystem: 1 slot
+                if (Game::Option("NewMemorySystem", "0"))
+                {
+                    if (auto pattern = find_pattern("6A 01 B9 00 00 40 06"); pattern.size() > 0)
+                    {
+                        // The `mov esi, imm32` at +7 names the allocator singleton
+                        // (0x19CF9F0 on 1.0.8.0); the install writes our vtable there.
+                        zpatch_nms_object = *pattern.get_first<uint32_t>(8);
+                    }
+                }
+            };
+            InstallEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("InstallNewMemorySystem");
 
-                // The match is the allocator-init `cmp eax, 0x59999980`. The
-                // original's init call is at -34; the jump at -29 replaces the
-                // `push` after it and skips the remaining init instructions,
-                // resuming at the `mov edi, 0x28000` (-16).
-                CallTo(ctx, match - 34, OPP_BODY(abi_nms_apply));
-                JumpTo(ctx, match - 29,
-                       reinterpret_cast<void*>(match - 16));
-            }
+                // NewMemorySystem: 1 siginstall
+                if (Game::Option("NewMemorySystem", "0"))
+                {
+                    // The publish arm resolves the allocator singleton from a different
+                    // signature. Without it abi_nms_apply has no object to write, and
+                    // replacing the constructor call would skip the original allocator
+                    // setup without installing anything: the game would run with an
+                    // uninitialised allocator. A missing publish is a clean skip.
+                    if (zpatch_nms_object == 0)
+                    {
+                        Log("arm %s: NewMemorySystem: allocator singleton not published",
+                            CurrentArm());
+                        return;
+                    }
+
+                    if (auto pattern = find_pattern("3D 80 99 99 59 73 05"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        // The match is the allocator-init `cmp eax, 0x59999980`. The
+                        // original's init call is at -34; the jump at -29 replaces the
+                        // `push` after it and skips the remaining init instructions,
+                        // resuming at the `mov edi, 0x28000` (-16).
+                        injector::MakeCALL(match - 34, OPP_BODY(abi_nms_apply), true);
+                        injector::MakeJMP(match - 29, reinterpret_cast<void*>(match - 16), true);
+                    }
+                }
+            };
         }
-
-    }
+    } newMemorySystem;
 
     // NoLoadingSleep
 
-    void InstallNoLoadingSleep(PatchContext& ctx)
+    class NoLoadingSleep
     {
-
-        TraceArm("NoLoadingSleep");
-
-        // NoLoadingSleep: 1 literalstore
-        if (ctx.Option("NoLoadingSleep", "0"))
+    public:
+        NoLoadingSleep()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "68 88 13 00 00 FF 15"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                // `push 0x1388` (5000 ms) becomes `push 0`: the loading sleep
-                // the original removes.
-                WriteValue<uint32_t>(ctx, pattern.get(0).get<uint8_t>(1), uint32_t{0});
-            }
-        }
+                TraceArm("InstallNoLoadingSleep");
 
-    }
+                // NoLoadingSleep: 1 literalstore
+                if (Game::Option("NoLoadingSleep", "0"))
+                {
+                    if (auto pattern = find_pattern("68 88 13 00 00 FF 15"); pattern.size() > 0)
+                    {
+                        // `push 0x1388` (5000 ms) becomes `push 0`: the loading sleep
+                        // the original removes.
+                        injector::WriteMemory<uint32_t>(pattern.get_first<uint8_t>(1), uint32_t{0}, true);
+                    }
+                }
+            };
+        }
+    } noLoadingSleep;
 
 
     // StartupTimeFix
 
-    void InstallStartupTimeFix(PatchContext& ctx)
-    {
-
-        TraceArm("StartupTimeFix");
-
-        // StartupTimeFix: 1 matchliteral
-        if (ctx.Option("StartupTimeFix", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            {
-                // The original walks every match of this literal
-                // (`for_each_result`) and patches each one, so the hit count is
-                // image data rather than a recovered per-build constant: there is
-                // no expected count to assert here. P13 guards cover the arms
-                // whose original read a fixed site set instead.
-                if (auto pattern = PatternAll(image, "68 00 C2 EC 80 68"); pattern.size() > 0)
-                {
-                    // The `push imm32` operand at +6 is the startup-time value
-                    // the original writes from its INI-backed global.
-                    for (size_t i = 0; i < pattern.size(); ++i)
-                        WriteValue<uint32_t>(
-                            ctx, pattern.get(i).get<uint8_t>(6),
-                            static_cast<uint32_t>(FindGlobalValue("StartupTimeFix")));
-                }
-            }
-        }
-
-    }
-
-namespace
-{
-    class PerformanceFeatures
+    class StartupTimeFix
     {
     public:
-        PerformanceFeatures()
+        StartupTimeFix()
         {
-            PublishEvent().Add(&PublishNewMemorySystem, "PublishNewMemorySystem");
-            InstallEvent().Add(&InstallHighFPSSpeedupFix, "InstallHighFPSSpeedupFix");
-            InstallEvent().Add(&InstallImprovedShaderStreaming, "InstallImprovedShaderStreaming");
-            InstallEvent().Add(&InstallNewMemorySystem, "InstallNewMemorySystem");
-            InstallEvent().Add(&InstallFastLoading, "InstallFastLoading");
-            InstallEvent().Add(&InstallIncreaseVehicleModelLimit, "InstallIncreaseVehicleModelLimit");
-            InstallEvent().Add(&InstallStartupTimeFix, "InstallStartupTimeFix");
-            InstallEvent().Add(&InstallIncreasePtrNodes, "InstallIncreasePtrNodes");
-            InstallEvent().Add(&InstallIncreaseVehicleStructLimit, "InstallIncreaseVehicleStructLimit");
-            InstallEvent().Add(&InstallNoLoadingSleep, "InstallNoLoadingSleep");
+            InstallEvent() += []
+            {
+                TraceArm("InstallStartupTimeFix");
+
+                // StartupTimeFix: 1 matchliteral
+                if (Game::Option("StartupTimeFix", "1"))
+                {
+                    {
+                        // The original walks every match of this literal
+                        // (`for_each_result`) and patches each one, so the hit count is
+                        // image data rather than a recovered per-build constant: there is
+                        // no expected count to assert here. P13 guards cover the arms
+                        // whose original read a fixed site set instead.
+                        if (auto pattern = find_pattern<0>("68 00 C2 EC 80 68"); pattern.size() > 0)
+                        {
+                            // The `push imm32` operand at +6 is the startup-time value
+                            // the original writes from its INI-backed global.
+                            for (size_t i = 0; i < pattern.size(); ++i)
+                                injector::WriteMemory<uint32_t>(pattern.get(i).get<uint8_t>(6), static_cast<uint32_t>(FindGlobalValue("StartupTimeFix")), true);
+                        }
+                    }
+                }
+            };
         }
-    } performanceFeatures;
-} // namespace
+    } startupTimeFix;
+
 
 } // namespace opp::features

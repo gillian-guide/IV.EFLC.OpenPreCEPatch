@@ -244,8 +244,8 @@ uint32_t PopupAngleFor(uint32_t hash) noexcept
 
 void abi_popup_check() noexcept
 {
-    const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
-        static_cast<uintptr_t>(zpatch_model_lookup));
+    const auto lookup =
+        Rebased<int(__cdecl*)(uint32_t, int32_t*)>(zpatch_model_lookup);
     zpatch_popup_angle = std::bit_cast<uint32_t>(kHalfPi);  // dword_101580CC
     zpatch_popup_flag = 0;                                 // dword_1015BE24
     if (lookup == nullptr)
@@ -312,15 +312,14 @@ const void* abi_vehicle_component(const void* registry,
 
 uint32_t abi_steer_body() noexcept
 {
-    auto* const vehicle = reinterpret_cast<VehicleView*>(
-        static_cast<uintptr_t>(zpatch_steer_vehicle));
+    auto* const vehicle = Rebased<VehicleView*>(zpatch_steer_vehicle);
     if (vehicle == nullptr) return 0;
 
     using BoneFn = uint32_t*(__thiscall*)(void*, uint32_t);
     using SetFn = void(__thiscall*)(uint32_t*, float);
     using PartFn = void(__thiscall*)(void*, int, int, float, int, int, int);
-    const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
-        static_cast<uintptr_t>(zpatch_model_lookup));
+    const auto lookup =
+        Rebased<int(__cdecl*)(uint32_t, int32_t*)>(zpatch_model_lookup);
     const auto get_bone = GameFunction<BoneFn>(
         static_cast<uintptr_t>(zpatch_pre_fn_59b88));
     const auto set_a = GameFunction<SetFn>(
@@ -530,7 +529,7 @@ extern "C" void abi_nolivery_hash_sign()  // sub_1003D220
     // Original: sprintf(buffer, 0x40, "%s_sign_%d", name, index + 1).
     zpatch_spawns_sprintf(
         buffer, sizeof(buffer), "%s_sign_%d",
-        reinterpret_cast<const char*>(static_cast<uintptr_t>(zpatch_nolivery_name)),
+        Rebased<const char*>(zpatch_nolivery_name),
         static_cast<int>(zpatch_nolivery_index) + 1);
     zpatch_nolivery_hash = GameHash(buffer);
     zpatch_cookie_tail();
@@ -539,9 +538,8 @@ extern "C" void abi_nolivery_copy_name()  // sub_1003D2F0
 {
     // push [bufptr]; push 0x10; push [dest]; call [strcpy_s]; add esp,0xc; ret.
     // Reads both globals unguarded and has no /GS cookie tail (leaf).
-    char* const dst = reinterpret_cast<char*>(static_cast<uintptr_t>(zpatch_nolivery_dest));
-    const char* const src =
-        reinterpret_cast<const char*>(static_cast<uintptr_t>(zpatch_nolivery_bufptr));
+    char* const dst = Rebased<char*>(zpatch_nolivery_dest);
+    const char* const src = Rebased<const char*>(zpatch_nolivery_bufptr);
     // The original copies into a 16-byte name buffer (sub_1003D2F0 pushes 0x10
     // as the strcpy_s destination size).
     zpatch_secure_strcpy_s(dst, 16, src);
@@ -550,9 +548,8 @@ extern "C" void abi_nolivery_count_loop()  // sub_1003D270
 {
     using LookupFn = int(__fastcall*)(void* self, int, uint32_t hash);
     const auto fn = GameFunction<LookupFn>(static_cast<uintptr_t>(zpatch_nolivery_fn));
-    void* const self = reinterpret_cast<void*>(static_cast<uintptr_t>(zpatch_nolivery_arg));
-    const char* const name =
-        reinterpret_cast<const char*>(static_cast<uintptr_t>(zpatch_nolivery_bufptr));
+    void* const self = Rebased<void*>(zpatch_nolivery_arg);
+    const char* const name = Rebased<const char*>(zpatch_nolivery_bufptr);
     zpatch_nolivery_count = 0;
     for (uint32_t i = 1;; ++i)
     {
@@ -576,8 +573,8 @@ extern "C" int abi_copsirens_check_a()  // sub_10005F70
             "police",     "police2",    "police3",  "police4",   "noose",      "pstockade",
             "nstockade",  "polpatriot", "fbi",      "n_police",  "n_police2",  "n_polpatriot",
             "n_pstockade", nullptr};
-    const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
-        static_cast<uintptr_t>(zpatch_model_lookup));
+    const auto lookup =
+        Rebased<int(__cdecl*)(uint32_t, int32_t*)>(zpatch_model_lookup);
     const int32_t index = static_cast<int32_t>(zpatch_copsirens_index);
     zpatch_copsirens_flag = 0;
     // sub_10005F70's `call dword_10159C0C` is unguarded. A missing lookup
@@ -614,8 +611,8 @@ extern "C" int abi_copsirens_check_a()  // sub_10005F70
 }
 extern "C" int abi_copsirens_check_b()  // sub_10006260
 {
-    const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
-        static_cast<uintptr_t>(zpatch_model_lookup));
+    const auto lookup =
+        Rebased<int(__cdecl*)(uint32_t, int32_t*)>(zpatch_model_lookup);
     const int32_t index = static_cast<int32_t>(zpatch_copsirens_index_b);
     zpatch_copsirens_flag_b = 0;
     int32_t out = -1;
@@ -662,12 +659,11 @@ bool prefix_ci(const char* text, const char* prefix, size_t length) noexcept
 extern "C" void abi_ide_parse()  // sub_10003FA0
 {
     // The original tests the string unguarded; a null zpatch_ide_string faults.
-    const char* const str =
-        reinterpret_cast<const char*>(static_cast<uintptr_t>(zpatch_ide_string));
+    const char* const str = Rebased<const char*>(zpatch_ide_string);
     // The IDE entry's model index is the dword at +0x3C (not the entity's int16
     // at +0x2E, hooks.h kModelIndexOffset).
-    const uint32_t model = *reinterpret_cast<const uint32_t*>(
-        reinterpret_cast<const void*>(static_cast<uintptr_t>(zpatch_ide_model) + 60));
+    const uint32_t model =
+        *Rebased<const uint32_t*>(static_cast<uintptr_t>(zpatch_ide_model) + 60);
     const auto append = [](uint32_t* array, uint32_t value)
     {
         for (uint32_t i = 0; i < kModelTableSlots; ++i)
@@ -760,31 +756,32 @@ namespace opp::features
         };
 
         template <size_t Count>
-        void ApplyNopSites(PatchContext& ctx, const NopSite (&sites)[Count])
+        void ApplyNopSites(const NopSite (&sites)[Count])
         {
             for (const NopSite& site : sites)
             {
                 if (site.expected != 0u)
                 {
-                    if (auto pattern = PatternAll(ctx.image, site.signature);
+                    if (auto pattern = find_pattern<0>(site.signature);
                         pattern.size() > 0 &&
                         ExpectMatchCount(pattern, site.expected, site.countLabel))
                     {
                         for (size_t match = 0; match < site.expected; ++match)
                         {
-                            NopAt(ctx,
-                                  pattern.get(match).get<uint8_t>() + site.primary.offset,
-                                  site.primary.length);
+                            injector::MakeNOP(
+                                pattern.get(match).get<uint8_t>() + site.primary.offset,
+                                site.primary.length, true);
                         }
                     }
                     continue;
                 }
-                if (auto pattern = Pattern(ctx.image, site.signature); pattern.size() > 0)
+                if (auto pattern = find_pattern(site.signature); pattern.size() > 0)
                 {
-                    auto* match = pattern.get(0).get<uint8_t>();
-                    NopAt(ctx, match + site.primary.offset, site.primary.length);
+                    auto* match = pattern.get_first<uint8_t>();
+                    injector::MakeNOP(match + site.primary.offset, site.primary.length, true);
                     if (site.secondary.length != 0u)
-                        NopAt(ctx, match + site.secondary.offset, site.secondary.length);
+                        injector::MakeNOP(match + site.secondary.offset,
+                                          site.secondary.length, true);
                 }
             }
         }
@@ -889,43 +886,41 @@ namespace opp::features
         };
 
         // ----- the shared steering sites --------------------------------------
-        void PublishSteerSlots(PatchContext& ctx)
+        void PublishSteerSlots()
         {
             // The first pattern is the EAX call variant, the second the EDX one;
             // the calls' resumes are 16 bytes into the match.
             constexpr ptrdiff_t kSteerResumeOffset = 16;
             // The call each variant makes, as the E8 operand's offset.
-            const GameImage& image = ctx.image;
-            if (auto pattern = Pattern(image, kSteerEaxPattern); pattern.size() > 0)
+            if (auto pattern = find_pattern(kSteerEaxPattern); pattern.size() > 0)
             {
                 zpatch_steer_resume = MatchAddress(pattern, kSteerResumeOffset);
                 zpatch_steer_vtable_fn = BranchDestination(
-                    pattern.get(0).get<uint8_t>(), 423);
+                    pattern.get_first<uint8_t>(), 423);
             }
-            if (auto pattern = Pattern(image, kSteerEdxPattern); pattern.size() > 0)
+            if (auto pattern = find_pattern(kSteerEdxPattern); pattern.size() > 0)
             {
                 zpatch_steer_resume = MatchAddress(pattern, kSteerResumeOffset);
                 zpatch_steer_vtable_fn = BranchDestination(
-                    pattern.get(0).get<uint8_t>(), 140);
+                    pattern.get_first<uint8_t>(), 140);
             }
-            if (auto pattern = Pattern(image, kIdeHookPattern); pattern.size() > 0)
+            if (auto pattern = find_pattern(kIdeHookPattern); pattern.size() > 0)
                 zpatch_ide_hook_slot = MatchAddress(pattern, kIdeHookSlotOffset);
         }
 
-        void InstallSteerSlots(PatchContext& ctx)
+        void InstallSteerSlots()
         {
             // The E9 replaces the call at match+2.
             constexpr ptrdiff_t kSteerInstallOffset = 2;
-            const GameImage& image = ctx.image;
-            if (auto pattern = Pattern(image, kSteerEaxPattern); pattern.size() > 0)
-                JumpTo(ctx, pattern.get(0).get<uint8_t>() + kSteerInstallOffset,
-                       OPP_BODY(abi_steer_detour_eax));
-            if (auto pattern = Pattern(image, kSteerEdxPattern); pattern.size() > 0)
-                JumpTo(ctx, pattern.get(0).get<uint8_t>() + kSteerInstallOffset,
-                       OPP_BODY(abi_steer_detour_edx));
-            if (auto pattern = Pattern(image, kIdeHookPattern); pattern.size() > 0)
-                JumpTo(ctx, pattern.get(0).get<uint8_t>() + kIdeHookInstallOffset,
-                       OPP_BODY(abi_copsirens_ide));
+            if (auto pattern = find_pattern(kSteerEaxPattern); pattern.size() > 0)
+                injector::MakeJMP(pattern.get_first<uint8_t>() + kSteerInstallOffset,
+                                  OPP_BODY(abi_steer_detour_eax), true);
+            if (auto pattern = find_pattern(kSteerEdxPattern); pattern.size() > 0)
+                injector::MakeJMP(pattern.get_first<uint8_t>() + kSteerInstallOffset,
+                                  OPP_BODY(abi_steer_detour_edx), true);
+            if (auto pattern = find_pattern(kIdeHookPattern); pattern.size() > 0)
+                injector::MakeJMP(pattern.get_first<uint8_t>() + kIdeHookInstallOffset,
+                                  OPP_BODY(abi_copsirens_ide), true);
         }
 
         // ----- PopupHeadlightsFlag --------------------------------------------
@@ -941,13 +936,14 @@ namespace opp::features
 
         // The jump at the match start, the `jz` at +10 and the `fld` operand at +82
         // that now loads our pi/2 float.
-        void WritePopupSite(PatchContext& ctx, hook::pattern& pattern, void* body)
+        void WritePopupSite(hook::pattern& pattern, void* body)
         {
-            auto* match = pattern.get(0).get<uint8_t>();
-            JumpTo(ctx, match, body);
-            WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(10), opp::ops::kJmpRel8);
-            WriteValue<uint32_t>(ctx, pattern.get(0).get<uint8_t>(82),
-                                 AddressOf(&zpatch_popup_angle));
+            auto* match = pattern.get_first<uint8_t>();
+            injector::MakeJMP(match, body, true);
+            injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(10),
+                                           opp::ops::kJmpRel8, true);
+            injector::WriteMemory<uint32_t>(pattern.get_first<uint8_t>(82),
+                                            AddressOf(&zpatch_popup_angle), true);
         }
 
         // ----- CopSirensFlag --------------------------------------------------
@@ -955,492 +951,469 @@ namespace opp::features
 
     // BikeFeetFix
 
-    void InstallBikeFeetFix(PatchContext& ctx)
+    class BikeFeetFix
     {
+    public:
+        BikeFeetFix()
+        {
+            InstallEvent() += []
+            {
+                TraceArm("InstallBikeFeetFix");
 
-        TraceArm("BikeFeetFix");
-
-        // BikeFeetFix: 1 literal
-        if (ctx.Option("BikeFeetFix", "1"))
-            ApplyNopSites(ctx, kBikeFeetFixSites);
-
-    }
+                // BikeFeetFix: 1 literal
+                if (Game::Option("BikeFeetFix", "1"))
+                    ApplyNopSites(kBikeFeetFixSites);
+            };
+        }
+    } bikeFeetFix;
 
 
     // BikePhoneAnimsFix
 
-    void InstallBikePhoneAnimsFix(PatchContext& ctx)
+    class BikePhoneAnimsFix
     {
-
-        TraceArm("BikePhoneAnimsFix");
-
-        // BikePhoneAnimsFix: 1 literal
-        if (ctx.Option("BikePhoneAnimsFix", "1"))
-            ApplyNopSites(ctx, kBikePhoneAnimsFixSites);
-
-    }
-
-
-    // publish CopSirensFlag
-
-    void PublishCopSirensFlag(PatchContext& ctx)
-    {
-
-        TraceArm("publish CopSirensFlag");
-
-        // CopSirensFlag: 3 slots
-        if (ctx.Option("CopSirensFlag", "1"))
+    public:
+        BikePhoneAnimsFix()
         {
-            // The resume after the five-byte E8, and the second resume 28 bytes
-            // into the model match.
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, kCopSirensCallPattern); pattern.size() > 0)
+            InstallEvent() += []
             {
-                zpatch_copsirens_resume = MatchAddress(pattern, 5);
-            }
+                TraceArm("InstallBikePhoneAnimsFix");
 
-            if (auto pattern = Pattern(image, kCopSirensModelPattern); pattern.size() > 0)
-            {
-                zpatch_copsirens_resume_b = MatchAddress(pattern, 28);
-            }
-
-            if (auto pattern = Pattern(image, kIdeHookPattern); pattern.size() > 0)
-            {
-                // The shared IDE parser hook slot is the byte before the match.
-                zpatch_ide_hook_slot = MatchAddress(pattern, kIdeHookSlotOffset);
-            }
+                // BikePhoneAnimsFix: 1 literal
+                if (Game::Option("BikePhoneAnimsFix", "1"))
+                    ApplyNopSites(kBikePhoneAnimsFixSites);
+            };
         }
-
-    }
+    } bikePhoneAnimsFix;
 
 
     // CopSirensFlag
 
-    void InstallCopSirensFlag(PatchContext& ctx)
+    class CopSirensFlag
     {
-
-        TraceArm("CopSirensFlag");
-
-        // CopSirensFlag: 3 siginstalls, 2 sigjumps
-        if (ctx.Option("CopSirensFlag", "1"))
+    public:
+        CopSirensFlag()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, kCopSirensCallPattern); pattern.size() > 0)
+            PublishEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("PublishCopSirensFlag");
 
-                JumpTo(ctx, match, OPP_BODY(abi_copsirens_a));
-            }
+                // CopSirensFlag: 3 slots
+                if (Game::Option("CopSirensFlag", "1"))
+                {
+                    // The resume after the five-byte E8, and the second resume 28 bytes
+                    // into the model match.
+                    if (auto pattern = find_pattern(kCopSirensCallPattern); pattern.size() > 0)
+                    {
+                        zpatch_copsirens_resume = MatchAddress(pattern, 5);
+                    }
 
-            if (auto pattern = Pattern(image, kCopSirensModelPattern); pattern.size() > 0)
+                    if (auto pattern = find_pattern(kCopSirensModelPattern); pattern.size() > 0)
+                    {
+                        zpatch_copsirens_resume_b = MatchAddress(pattern, 28);
+                    }
+
+                    if (auto pattern = find_pattern(kIdeHookPattern); pattern.size() > 0)
+                    {
+                        // The shared IDE parser hook slot is the byte before the match.
+                        zpatch_ide_hook_slot = MatchAddress(pattern, kIdeHookSlotOffset);
+                    }
+                }
+            };
+            InstallEvent() += []
             {
-                // The model-check detour's entry, 22 bytes into the match.
-                JumpTo(ctx, pattern.get(0).get<uint8_t>(22), OPP_BODY(abi_copsirens_b));
-            }
+                TraceArm("InstallCopSirensFlag");
 
-            if (auto pattern = Pattern(image, kIdeHookPattern); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
+                // CopSirensFlag: 3 siginstalls, 2 sigjumps
+                if (Game::Option("CopSirensFlag", "1"))
+                {
+                    if (auto pattern = find_pattern(kCopSirensCallPattern); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
 
-                // The shared IDE parser hook is installed 10 bytes before the
-                // match (the body rewrites the match-1 slot).
-                JumpTo(ctx, match + kIdeHookInstallOffset, OPP_BODY(abi_copsirens_ide));
-            }
+                        injector::MakeJMP(match, OPP_BODY(abi_copsirens_a), true);
+                    }
+
+                    if (auto pattern = find_pattern(kCopSirensModelPattern); pattern.size() > 0)
+                    {
+                        // The model-check detour's entry, 22 bytes into the match.
+                        injector::MakeJMP(pattern.get_first<uint8_t>(22), OPP_BODY(abi_copsirens_b), true);
+                    }
+
+                    if (auto pattern = find_pattern(kIdeHookPattern); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        // The shared IDE parser hook is installed 10 bytes before the
+                        // match (the body rewrites the match-1 slot).
+                        injector::MakeJMP(match + kIdeHookInstallOffset, OPP_BODY(abi_copsirens_ide), true);
+                    }
+                }
+            };
         }
-
-    }
+    } copSirensFlag;
 
 
     // EpisodicVehicleSupport
 
-    void InstallEpisodicVehicleSupport(PatchContext& ctx)
+    class EpisodicVehicleSupport
     {
-
-        TraceArm("EpisodicVehicleSupport");
-
-        // EpisodicVehicleSupport: the four episode-flag pointer stores and the
-        // recovered NOP sites.
-        if (ctx.Option("EpisodicVehicleSupport", "1"))
+    public:
+        EpisodicVehicleSupport()
         {
-            const GameImage& image = ctx.image;
-
-            for (const FlagStoreSite& site : kEpisodeFlagSites)
+            InstallEvent() += []
             {
-                if (site.build != ctx.build) continue;
-                if (auto pattern = Pattern(image, site.signature); pattern.size() > 0)
+                TraceArm("InstallEpisodicVehicleSupport");
+
+                // EpisodicVehicleSupport: the four episode-flag pointer stores and the
+                // recovered NOP sites.
+                if (Game::Option("EpisodicVehicleSupport", "1"))
                 {
-                    WriteValue<uint32_t>(ctx, pattern.get(0).get<uint8_t>(),
-                                         AddressOf(&zpatch_episode_flag));
+                    for (const FlagStoreSite& site : kEpisodeFlagSites)
+                    {
+                        if (site.build != Game::Get().build) continue;
+                        if (auto pattern = find_pattern(site.signature); pattern.size() > 0)
+                        {
+                            injector::WriteMemory<uint32_t>(pattern.get_first<uint8_t>(), AddressOf(&zpatch_episode_flag), true);
+                        }
+                    }
+
+                    if (IsEpisodicBuild(Game::Get().build))
+                        ApplyNopSites(kEpisodicVehicleSites);
                 }
-            }
-
-            if (IsEpisodicBuild(ctx.build))
-                ApplyNopSites(ctx, kEpisodicVehicleSites);
+            };
         }
-
-    }
+    } episodicVehicleSupport;
 
 
     // EpisodicWeaponSupport
 
-    void InstallEpisodicWeaponSupport(PatchContext& ctx)
+    class EpisodicWeaponSupport
     {
-
-        TraceArm("EpisodicWeaponSupport");
-
-        // EpisodicWeaponSupport: the recovered NOP sites.
-        if (ctx.Option("EpisodicWeaponSupport", "1") && IsEpisodicBuild(ctx.build))
-            ApplyNopSites(ctx, kEpisodicWeaponSites);
-
-    }
-
-
-    // publish HighFPSBikePhysicsFix
-
-    void PublishHighFPSBikePhysicsFix(PatchContext& ctx)
-    {
-
-        TraceArm("publish HighFPSBikePhysicsFix");
-
-        // HighFPSBikePhysicsFix: 1 slot
-        if (ctx.Option("HighFPSBikePhysicsFix", "1"))
+    public:
+        EpisodicWeaponSupport()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "D9 45 08 51 8B CE D9 1C 24 E8 ? ? ? ? 8A 86 90 14 00 00"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                zpatch_bike_resume = MatchAddress(pattern, 9);
-            }
-        }
+                TraceArm("InstallEpisodicWeaponSupport");
 
-    }
+                // EpisodicWeaponSupport: the recovered NOP sites.
+                if (Game::Option("EpisodicWeaponSupport", "1") && IsEpisodicBuild(Game::Get().build))
+                    ApplyNopSites(kEpisodicWeaponSites);
+            };
+        }
+    } episodicWeaponSupport;
 
 
     // HighFPSBikePhysicsFix
 
-    void InstallHighFPSBikePhysicsFix(PatchContext& ctx)
+    class HighFPSBikePhysicsFix
     {
-
-        TraceArm("HighFPSBikePhysicsFix");
-
-        // HighFPSBikePhysicsFix: 1 sigjump
-        if (ctx.Option("HighFPSBikePhysicsFix", "1"))
+    public:
+        HighFPSBikePhysicsFix()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "D9 45 08 51 8B CE D9 1C 24 E8 ? ? ? ? 8A 86 90 14 00 00"); pattern.size() > 0)
+            PublishEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("PublishHighFPSBikePhysicsFix");
 
-                JumpTo(ctx, match, OPP_BODY(abi_bike_physics_detour));
-            }
+                // HighFPSBikePhysicsFix: 1 slot
+                if (Game::Option("HighFPSBikePhysicsFix", "1"))
+                {
+                    if (auto pattern = find_pattern("D9 45 08 51 8B CE D9 1C 24 E8 ? ? ? ? 8A 86 90 14 00 00"); pattern.size() > 0)
+                    {
+                        zpatch_bike_resume = MatchAddress(pattern, 9);
+                    }
+                }
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallHighFPSBikePhysicsFix");
+
+                // HighFPSBikePhysicsFix: 1 sigjump
+                if (Game::Option("HighFPSBikePhysicsFix", "1"))
+                {
+                    if (auto pattern = find_pattern("D9 45 08 51 8B CE D9 1C 24 E8 ? ? ? ? 8A 86 90 14 00 00"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        injector::MakeJMP(match, OPP_BODY(abi_bike_physics_detour), true);
+                    }
+                }
+            };
         }
-
-    }
+    } highFPSBikePhysicsFix;
 
 
     // MovingPlaneParts / MovingSteeringWheelSupport / ShakingEngineBlock are
     // three INI arms over the same five slots (PublishSteerSlots/InstallSteerSlots
     // above).
 
-    // publish MovingPlaneParts
-
-    void PublishMovingPlaneParts(PatchContext& ctx)
-    {
-
-        TraceArm("publish MovingPlaneParts");
-
-        // MovingPlaneParts: 5 slots (the shared steering slots).
-        if (ctx.Option("MovingPlaneParts", "1"))
-            PublishSteerSlots(ctx);
-
-    }
-
 
     // MovingPlaneParts
 
-    void InstallMovingPlaneParts(PatchContext& ctx)
+    class MovingPlaneParts
     {
+    public:
+        MovingPlaneParts()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishMovingPlaneParts");
 
-        TraceArm("MovingPlaneParts");
+                // MovingPlaneParts: 5 slots (the shared steering slots).
+                if (Game::Option("MovingPlaneParts", "1"))
+                    PublishSteerSlots();
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallMovingPlaneParts");
 
-        // MovingPlaneParts: 3 siginstalls (the shared steering sites).
-        if (ctx.Option("MovingPlaneParts", "1"))
-            InstallSteerSlots(ctx);
-
-    }
-
-
-    // publish MovingSteeringWheelSupport
-
-    void PublishMovingSteeringWheelSupport(PatchContext& ctx)
-    {
-
-        TraceArm("publish MovingSteeringWheelSupport");
-
-        // MovingSteeringWheelSupport: 5 slots (the shared steering slots).
-        if (ctx.Option("MovingSteeringWheelSupport", "1"))
-            PublishSteerSlots(ctx);
-
-    }
+                // MovingPlaneParts: 3 siginstalls (the shared steering sites).
+                if (Game::Option("MovingPlaneParts", "1"))
+                    InstallSteerSlots();
+            };
+        }
+    } movingPlaneParts;
 
 
     // MovingSteeringWheelSupport
 
-    void InstallMovingSteeringWheelSupport(PatchContext& ctx)
+    class MovingSteeringWheelSupport
     {
-
-        TraceArm("MovingSteeringWheelSupport");
-
-        // MovingSteeringWheelSupport: 3 siginstalls (the shared steering sites).
-        if (ctx.Option("MovingSteeringWheelSupport", "1"))
-            InstallSteerSlots(ctx);
-
-    }
-
-
-    // publish NoLiveryLimit
-
-    void PublishNoLiveryLimit(PatchContext& ctx)
-    {
-
-        TraceArm("publish NoLiveryLimit");
-
-        // NoLiveryLimit: 5 slots
-        if (ctx.Option("NoLiveryLimit", "1"))
+    public:
+        MovingSteeringWheelSupport()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "74 52 8D B5 3C 01 00 00 83 FB 04"); pattern.size() > 0)
+            PublishEvent() += []
             {
-                // The call operand at -6 (its next instruction is at -2); the
-                // resume is 90 bytes into the match.
-                auto* match = pattern.get(0).get<uint8_t>();
-                zpatch_nolivery_fn = BranchDestination(match - 2, -6);
-                zpatch_nolivery_resume_d = MatchAddress(pattern, 90);
-            }
+                TraceArm("PublishMovingSteeringWheelSupport");
 
-            if (auto pattern = Pattern(image, "8B 8C 83 3C 01 00 00 0F BF 53 48"); pattern.size() > 0)
+                // MovingSteeringWheelSupport: 5 slots (the shared steering slots).
+                if (Game::Option("MovingSteeringWheelSupport", "1"))
+                    PublishSteerSlots();
+            };
+            InstallEvent() += []
             {
-                // The resume is 13 bytes into the match (after its prologue).
-                zpatch_nolivery_resume = MatchAddress(pattern, 13);
-            }
+                TraceArm("InstallMovingSteeringWheelSupport");
 
-            if (auto pattern = Pattern(image, "8D AF 3C 01 00 00 8D 54 24 20"); pattern.size() > 0)
-            {
-                // The same call shape as the first row, four bytes earlier.
-                auto* match = pattern.get(0).get<uint8_t>();
-                zpatch_nolivery_fn = BranchDestination(match - 4, -8);
-                zpatch_nolivery_resume_d = MatchAddress(pattern, 84);
-            }
+                // MovingSteeringWheelSupport: 3 siginstalls (the shared steering sites).
+                if (Game::Option("MovingSteeringWheelSupport", "1"))
+                    InstallSteerSlots();
+            };
         }
-
-    }
+    } movingSteeringWheelSupport;
 
 
     // NoLiveryLimit
 
-    void InstallNoLiveryLimit(PatchContext& ctx)
+    class NoLiveryLimit
     {
-
-        TraceArm("NoLiveryLimit");
-
-        // NoLiveryLimit: 1 siginstall, 3 sigjumps
-        if (ctx.Option("NoLiveryLimit", "1"))
+    public:
+        NoLiveryLimit()
         {
-            const GameImage& image = ctx.image;
+            PublishEvent() += []
+            {
+                TraceArm("PublishNoLiveryLimit");
 
-            // The naked bodies tail-jump through the handler-published resume
-            // and call the published count function. If any publish pattern
-            // missed, those slots are not game addresses; installing the bodies
-            // would jump/call through the stale values. The failsafe skips the
-            // arm instead (the original handler's signature-miss behaviour).
-#if !defined(_WIN64)
-            const auto is_game_address = [&ctx](uint32_t va) {
-                const auto base = reinterpret_cast<uintptr_t>(ctx.image.base);
-                return base != 0u && va >= base && (va - base) < ctx.image.size;
+                // NoLiveryLimit: 5 slots
+                if (Game::Option("NoLiveryLimit", "1"))
+                {
+                    if (auto pattern = find_pattern("74 52 8D B5 3C 01 00 00 83 FB 04"); pattern.size() > 0)
+                    {
+                        // The call operand at -6 (its next instruction is at -2); the
+                        // resume is 90 bytes into the match.
+                        auto* match = pattern.get_first<uint8_t>();
+                        zpatch_nolivery_fn = BranchDestination(match - 2, -6);
+                        zpatch_nolivery_resume_d = MatchAddress(pattern, 90);
+                    }
+
+                    if (auto pattern = find_pattern("8B 8C 83 3C 01 00 00 0F BF 53 48"); pattern.size() > 0)
+                    {
+                        // The resume is 13 bytes into the match (after its prologue).
+                        zpatch_nolivery_resume = MatchAddress(pattern, 13);
+                    }
+
+                    if (auto pattern = find_pattern("8D AF 3C 01 00 00 8D 54 24 20"); pattern.size() > 0)
+                    {
+                        // The same call shape as the first row, four bytes earlier.
+                        auto* match = pattern.get_first<uint8_t>();
+                        zpatch_nolivery_fn = BranchDestination(match - 4, -8);
+                        zpatch_nolivery_resume_d = MatchAddress(pattern, 84);
+                    }
+                }
             };
-            if (zpatch_failsafe_skip("NoLiveryLimit publish",
-                                     !is_game_address(zpatch_nolivery_resume) ||
-                                         !is_game_address(zpatch_nolivery_resume_d) ||
-                                         !is_game_address(zpatch_nolivery_fn)))
-                return;
-#endif
-
-            if (auto pattern = Pattern(image, "8B 8C 83 3C 01 00 00 0F BF 53 48"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("InstallNoLiveryLimit");
 
-                // The three no-livery body entries relative to their shared match.
-                JumpTo(ctx, match - 237, OPP_BODY(abi_nolivery_b));
-                JumpTo(ctx, match - 199, OPP_BODY(abi_nolivery_c));
-                JumpTo(ctx, match, OPP_BODY(abi_nolivery_a));
-            }
+                // NoLiveryLimit: 1 siginstall, 3 sigjumps
+                if (Game::Option("NoLiveryLimit", "1"))
+                {
+                    // The naked bodies tail-jump through the handler-published resume
+                    // and call the published count function. If any publish pattern
+                    // missed, those slots are not game addresses; installing the bodies
+                    // would jump/call through the stale values. The failsafe skips the
+                    // arm instead (the original handler's signature-miss behaviour).
+        #if !defined(_WIN64)
+                    const auto is_game_address = [](uint32_t va) {
+                        const auto base = reinterpret_cast<uintptr_t>(Game::Get().image.base);
+                        return base != 0u && va >= base && (va - base) < Game::Get().image.size;
+                    };
+                    if (zpatch_failsafe_skip("NoLiveryLimit publish",
+                                             !is_game_address(zpatch_nolivery_resume) ||
+                                                 !is_game_address(zpatch_nolivery_resume_d) ||
+                                                 !is_game_address(zpatch_nolivery_fn)))
+                        return;
+        #endif
 
-            if (auto pattern = Pattern(image, "74 52 8D B5 3C 01 00 00 83 FB 04"); pattern.size() > 0)
-            {
-                JumpTo(ctx, pattern.get(0).get<uint8_t>(2), OPP_BODY(abi_nolivery_d));
-            }
+                    if (auto pattern = find_pattern("8B 8C 83 3C 01 00 00 0F BF 53 48"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
 
-            if (auto pattern = Pattern(image, "8D AF 3C 01 00 00 8D 54 24 20"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
+                        // The three no-livery body entries relative to their shared match.
+                        injector::MakeJMP(match - 237, OPP_BODY(abi_nolivery_b), true);
+                        injector::MakeJMP(match - 199, OPP_BODY(abi_nolivery_c), true);
+                        injector::MakeJMP(match, OPP_BODY(abi_nolivery_a), true);
+                    }
 
-                JumpTo(ctx, match, OPP_BODY(abi_nolivery_e));
-            }
+                    if (auto pattern = find_pattern("74 52 8D B5 3C 01 00 00 83 FB 04"); pattern.size() > 0)
+                    {
+                        injector::MakeJMP(pattern.get_first<uint8_t>(2), OPP_BODY(abi_nolivery_d), true);
+                    }
+
+                    if (auto pattern = find_pattern("8D AF 3C 01 00 00 8D 54 24 20"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        injector::MakeJMP(match, OPP_BODY(abi_nolivery_e), true);
+                    }
+                }
+            };
         }
-
-    }
+    } noLiveryLimit;
 
 
     // PoliceEpisodicWeaponSupport
 
-    void InstallPoliceEpisodicWeaponSupport(PatchContext& ctx)
+    class PoliceEpisodicWeaponSupport
     {
-
-        TraceArm("PoliceEpisodicWeaponSupport");
-
-        // PoliceEpisodicWeaponSupport: 1 literal
-        if (ctx.Option("PoliceEpisodicWeaponSupport", "0") && IsEpisodicBuild(ctx.build))
-            ApplyNopSites(ctx, kPoliceEpisodicSites);
-
-    }
-
-
-    // publish PopupHeadlightsFlag
-
-    void PublishPopupHeadlightsFlag(PatchContext& ctx)
-    {
-
-        TraceArm("publish PopupHeadlightsFlag");
-
-        // PopupHeadlightsFlag: 5 slots
-        if (ctx.Option("PopupHeadlightsFlag", "1"))
+    public:
+        PoliceEpisodicWeaponSupport()
         {
-            const GameImage& image = ctx.image;
+            InstallEvent() += []
+            {
+                TraceArm("InstallPoliceEpisodicWeaponSupport");
 
-            // The original handler (0x10044590) is `if (pattern A) { ... }
-            // else { pattern B ... }`: exactly ONE of the two EAX/EDX sites is
-            // ever patched, and the two resume slots belong to that site. Two
-            // independent `if`s would write both against whichever pattern
-            // matched last, so the first body would tail-jump to the second
-            // site's resume.
-            if (auto pattern = Pattern(image, kPopupEaxPattern); pattern.size() > 0)
-                StorePopupResumes(pattern);
-            else if (auto pattern = Pattern(image, kPopupEdxPattern); pattern.size() > 0)
-                StorePopupResumes(pattern);
-
-            // The IDE parser hook is independent of the two model tests and is
-            // shared with the other arms that install it.
-            if (auto pattern = Pattern(image, kIdeHookPattern); pattern.size() > 0)
-                zpatch_ide_hook_slot = MatchAddress(pattern, kIdeHookSlotOffset);
+                // PoliceEpisodicWeaponSupport: 1 literal
+                if (Game::Option("PoliceEpisodicWeaponSupport", "0") && IsEpisodicBuild(Game::Get().build))
+                    ApplyNopSites(kPoliceEpisodicSites);
+            };
         }
-
-    }
+    } policeEpisodicWeaponSupport;
 
 
     // PopupHeadlightsFlag
 
-    void InstallPopupHeadlightsFlag(PatchContext& ctx)
+    class PopupHeadlightsFlag
     {
-
-        TraceArm("PopupHeadlightsFlag");
-
-        // PopupHeadlightsFlag: 3 siginstalls, 1 sigjump
-        if (ctx.Option("PopupHeadlightsFlag", "1"))
+    public:
+        PopupHeadlightsFlag()
         {
-            const GameImage& image = ctx.image;
-
-            // if / else, like the original: see the publish arm above.
-            if (auto pattern = Pattern(image, kPopupEaxPattern); pattern.size() > 0)
-                WritePopupSite(ctx, pattern, OPP_BODY(abi_popup_headlights));
-            else if (auto pattern = Pattern(image, kPopupEdxPattern); pattern.size() > 0)
-                WritePopupSite(ctx, pattern, OPP_BODY(abi_popup_headlights_edx));
-
-            if (auto pattern = Pattern(image, kIdeHookPattern); pattern.size() > 0)
+            PublishEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("PublishPopupHeadlightsFlag");
 
-                JumpTo(ctx, match + kIdeHookInstallOffset, OPP_BODY(abi_copsirens_ide));
-            }
+                // PopupHeadlightsFlag: 5 slots
+                if (Game::Option("PopupHeadlightsFlag", "1"))
+                {
+                    // The original handler (0x10044590) is `if (pattern A) { ... }
+                    // else { pattern B ... }`: exactly ONE of the two EAX/EDX sites is
+                    // ever patched, and the two resume slots belong to that site. Two
+                    // independent `if`s would write both against whichever pattern
+                    // matched last, so the first body would tail-jump to the second
+                    // site's resume.
+                    if (auto pattern = find_pattern(kPopupEaxPattern); pattern.size() > 0)
+                        StorePopupResumes(pattern);
+                    else if (auto edx_pattern = find_pattern(kPopupEdxPattern);
+                             edx_pattern.size() > 0)
+                        StorePopupResumes(edx_pattern);
+
+                    // The IDE parser hook is independent of the two model tests and is
+                    // shared with the other arms that install it.
+                    if (auto pattern = find_pattern(kIdeHookPattern); pattern.size() > 0)
+                        zpatch_ide_hook_slot = MatchAddress(pattern, kIdeHookSlotOffset);
+                }
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallPopupHeadlightsFlag");
+
+                // PopupHeadlightsFlag: 3 siginstalls, 1 sigjump
+                if (Game::Option("PopupHeadlightsFlag", "1"))
+                {
+                    // if / else, like the original: see the publish arm above.
+                    if (auto pattern = find_pattern(kPopupEaxPattern); pattern.size() > 0)
+                        WritePopupSite(pattern, OPP_BODY(abi_popup_headlights));
+                    else if (auto edx_pattern = find_pattern(kPopupEdxPattern);
+                             edx_pattern.size() > 0)
+                        WritePopupSite(edx_pattern, OPP_BODY(abi_popup_headlights_edx));
+
+                    if (auto pattern = find_pattern(kIdeHookPattern); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        injector::MakeJMP(match + kIdeHookInstallOffset, OPP_BODY(abi_copsirens_ide), true);
+                    }
+                }
+            };
         }
-
-    }
-
-
-    // publish ShakingEngineBlock
-
-    void PublishShakingEngineBlock(PatchContext& ctx)
-    {
-
-        TraceArm("publish ShakingEngineBlock");
-
-        // ShakingEngineBlock: 5 slots (the shared steering slots).
-        if (ctx.Option("ShakingEngineBlock", "1"))
-            PublishSteerSlots(ctx);
-
-    }
+    } popupHeadlightsFlag;
 
 
     // ShakingEngineBlock
 
-    void InstallShakingEngineBlock(PatchContext& ctx)
+    class ShakingEngineBlock
     {
+    public:
+        ShakingEngineBlock()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishShakingEngineBlock");
 
-        TraceArm("ShakingEngineBlock");
+                // ShakingEngineBlock: 5 slots (the shared steering slots).
+                if (Game::Option("ShakingEngineBlock", "1"))
+                    PublishSteerSlots();
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallShakingEngineBlock");
 
-        // ShakingEngineBlock: 3 siginstalls (the shared steering sites).
-        if (ctx.Option("ShakingEngineBlock", "1"))
-            InstallSteerSlots(ctx);
-
-    }
+                // ShakingEngineBlock: 3 siginstalls (the shared steering sites).
+                if (Game::Option("ShakingEngineBlock", "1"))
+                    InstallSteerSlots();
+            };
+        }
+    } shakingEngineBlock;
 
 
     // TBoGTHeliHeightLimit
 
-    void InstallTBoGTHeliHeightLimit(PatchContext& ctx)
-    {
-
-        TraceArm("TBoGTHeliHeightLimit");
-
-        // TBoGTHeliHeightLimit: 1 literal
-        if (ctx.Option("TBoGTHeliHeightLimit", "0") && IsEpisodicBuild(ctx.build))
-            ApplyNopSites(ctx, kHeliHeightLimitSites);
-
-    }
-
-namespace
-{
-    class VehiclesFeatures
+    class TBoGTHeliHeightLimit
     {
     public:
-        VehiclesFeatures()
+        TBoGTHeliHeightLimit()
         {
-            PublishEvent().Add(&PublishCopSirensFlag, "PublishCopSirensFlag");
-            PublishEvent().Add(&PublishHighFPSBikePhysicsFix, "PublishHighFPSBikePhysicsFix");
-            PublishEvent().Add(&PublishNoLiveryLimit, "PublishNoLiveryLimit");
-            PublishEvent().Add(&PublishPopupHeadlightsFlag, "PublishPopupHeadlightsFlag");
-            PublishEvent().Add(&PublishMovingSteeringWheelSupport, "PublishMovingSteeringWheelSupport");
-            PublishEvent().Add(&PublishShakingEngineBlock, "PublishShakingEngineBlock");
-            PublishEvent().Add(&PublishMovingPlaneParts, "PublishMovingPlaneParts");
-            InstallEvent().Add(&InstallBikeFeetFix, "InstallBikeFeetFix");
-            InstallEvent().Add(&InstallBikePhoneAnimsFix, "InstallBikePhoneAnimsFix");
-            InstallEvent().Add(&InstallCopSirensFlag, "InstallCopSirensFlag");
-            InstallEvent().Add(&InstallEpisodicVehicleSupport, "InstallEpisodicVehicleSupport");
-            InstallEvent().Add(&InstallEpisodicWeaponSupport, "InstallEpisodicWeaponSupport");
-            InstallEvent().Add(&InstallHighFPSBikePhysicsFix, "InstallHighFPSBikePhysicsFix");
-            InstallEvent().Add(&InstallNoLiveryLimit, "InstallNoLiveryLimit");
-            InstallEvent().Add(&InstallPoliceEpisodicWeaponSupport, "InstallPoliceEpisodicWeaponSupport");
-            InstallEvent().Add(&InstallPopupHeadlightsFlag, "InstallPopupHeadlightsFlag");
-            InstallEvent().Add(&InstallTBoGTHeliHeightLimit, "InstallTBoGTHeliHeightLimit");
-            InstallEvent().Add(&InstallMovingSteeringWheelSupport, "InstallMovingSteeringWheelSupport");
-            InstallEvent().Add(&InstallShakingEngineBlock, "InstallShakingEngineBlock");
-            InstallEvent().Add(&InstallMovingPlaneParts, "InstallMovingPlaneParts");
+            InstallEvent() += []
+            {
+                TraceArm("InstallTBoGTHeliHeightLimit");
+
+                // TBoGTHeliHeightLimit: 1 literal
+                if (Game::Option("TBoGTHeliHeightLimit", "0") && IsEpisodicBuild(Game::Get().build))
+                    ApplyNopSites(kHeliHeightLimitSites);
+            };
         }
-    } vehiclesFeatures;
-} // namespace
+    } tBoGTHeliHeightLimit;
+
 
 } // namespace opp::features
 

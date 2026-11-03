@@ -382,8 +382,7 @@ extern "C" void abi_new_saves_prepare() noexcept
     // directory + save-name path.
     using GetSaveDirectoryFn = uint8_t(__cdecl*)(int episode, char* directory,
                                                  char* trailing_byte);
-    const auto* name = reinterpret_cast<const char*>(
-        static_cast<uintptr_t>(zpatch_new_saves_src));
+    const auto* name = Rebased<const char*>(zpatch_new_saves_src);
     if (name == nullptr) return;
     static const uint8_t* get_dir = nullptr;
     if (get_dir == nullptr)
@@ -627,8 +626,6 @@ struct DlcRegisterRequest final
     uint8_t  tail[kDlcRequestSize -
                   (kDlcRequestModeOffset + sizeof(uint8_t))];          // +0x167
 };
-static_assert(offsetof(DlcRegisterRequest, flag) == kDlcRequestFlagOffset);
-static_assert(offsetof(DlcRegisterRequest, mode) == kDlcRequestModeOffset);
 static_assert(sizeof(DlcRegisterRequest) == kDlcRequestSize);
 
 void* dlc_discovery_post(void* object)
@@ -823,136 +820,129 @@ namespace opp::features
         }
 
         // A site inside the game image, as the RVA the body rebases.
-        uint32_t AsRva(const PatchContext& ctx, const void* address) noexcept
+        uint32_t AsRva(const void* address) noexcept
         {
             return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(address) -
-                                         ctx.gameBase);
+                                         Game::Get().gameBase);
         }
 
         // One scan of a recovered window; `nullptr` leaves the site alone (an
         // image that is not the one the window was proved on).
-        uint8_t* FindSite(const GameImage& image, std::string_view window,
-                          const char* what)
+        uint8_t* FindSite(std::string_view window, const char* what)
         {
             if (window.empty())
                 return nullptr;
-            auto pattern = Pattern(image, window);
+            auto pattern = find_pattern(window);
             if (pattern.size() == 0 || !ExpectMatchCount(pattern, 1, what))
                 return nullptr;
-            return pattern.get(0).get<uint8_t>();
+            return pattern.get_first<uint8_t>();
         }
     } // namespace
-
-    void PublishLoadDLCs(PatchContext& ctx)
-    {
-
-        TraceArm("publish LoadDLCs");
-
-        // LoadDLCs. The two helpers the discovery loop calls
-        // (DlcRegisterRva/DlcApplyRva) are separate functions; the per-build RVAs
-        // come from each function's own unique window, proved on the on-disk
-        // builds by tools/opcep_sigcheck.py (tests/parity/address_sites.tsv).
-        if (ctx.Option("LoadDLCs", "1"))
-        {
-            const DlcWindows* const windows = FindDlcWindows(ctx.build);
-            if (windows == nullptr)
-                return;
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, windows->fixup);
-                pattern.size() > 0 && ExpectMatchCount(pattern, 1, "LoadDLCs struct fixup"))
-            {
-                // The loader callback entry sits 0x8C past the struct-fixup site on
-                // every gated build (1.0.6.0 0x4144D4->0x414560, 1.0.7.0
-                // 0x414274->0x414300, 1.0.8.0 0x4903D4->0x490460); the publish scans
-                // the same window the install does instead of carrying three RVAs.
-                zpatch_dlc_load_callback = static_cast<uint32_t>(
-                    MatchAddress(pattern) + 140);  // 0x8C
-            }
-            // The register helper (sub_88F440) is the stack-cookie prologue whose A1
-            // operand is an absolute VA: the game is relocated at load, so it stays a
-            // wildcard or the scan misses on every non-preferred base. The window ends
-            // before the fourth push, the only byte 1.0.8.0 changes (57 / 8B), so one
-            // window fits all gated builds.
-            if (auto pattern = Pattern(
-                    image,
-                    "81 EC 0C 02 00 00 A1 ?? ?? ?? ?? 33 C4 89 84 24 08 02 00 00 53 55 56");
-                pattern.size() > 0 && ExpectMatchCount(pattern, 1, "LoadDLCs register helper"))
-            {
-                DlcRegisterRva() = AsRva(ctx, pattern.get(0).get<uint8_t>());
-            }
-            // The apply helper (sub_88FE00) is identical on every gated build.
-            if (auto pattern = Pattern(
-                    image, "51 53 8B D9 0F B7 8B 50 01 00 00 55 56 33 ED 85");
-                pattern.size() > 0 && ExpectMatchCount(pattern, 1, "LoadDLCs apply helper"))
-            {
-                DlcApplyRva() = AsRva(ctx, pattern.get(0).get<uint8_t>());
-            }
-        }
-
-    }
 
 
     // LoadDLCs
 
-    void InstallLoadDLCs(PatchContext& ctx)
+    class LoadDLCs
     {
-
-        TraceArm("LoadDLCs");
-
-        // LoadDLCs: 6 sites per build, each the pre-write instruction window at the
-        // recovered RVA.
-        if (ctx.Option("LoadDLCs", "1"))
+    public:
+        LoadDLCs()
         {
-            const DlcWindows* const windows = FindDlcWindows(ctx.build);
-            if (windows == nullptr)
-                return;
-            // The struct-fixup body calls the callback slot before the discovery
-            // step. If the callback publish missed, installing the body would
-            // call a null slot; skip the arm instead.
-#if !defined(_WIN64)
-            if (zpatch_failsafe_skip("LoadDLCs callback", zpatch_dlc_load_callback == 0u))
-                return;
-#endif
-            const GameImage& image = ctx.image;
+            PublishEvent() += []
+            {
+                TraceArm("PublishLoadDLCs");
 
-            // The scans happen before the writes: the call site's window contains
-            // the twelve bytes the original NOPs after it. The fixup and dummy-call
-            // windows are per build; the other four are shared by every gated build.
-            uint8_t* const dummyCall = FindSite(image, windows->dummy_call, "LoadDLCs dummy call");
-            uint8_t* const earlyJump = FindSite(
-                image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24",
-                "LoadDLCs early jump");
-            uint8_t* const structFixup = FindSite(image, windows->fixup, "LoadDLCs struct fixup");
-            uint8_t* const skipFixupJump = FindSite(
-                image,
-                "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E",
-                "LoadDLCs skip-fixup jump");
-            uint8_t* const helperCall = FindSite(
-                image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E",
-                "LoadDLCs helper call");
-            uint8_t* const tail = FindSite(
-                image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC",
-                "LoadDLCs tail");
+                // LoadDLCs. The two helpers the discovery loop calls
+                // (DlcRegisterRva/DlcApplyRva) are separate functions; the per-build RVAs
+                // come from each function's own unique window, proved on the on-disk
+                // builds by tools/opcep_sigcheck.py (tests/parity/address_sites.tsv).
+                if (Game::Option("LoadDLCs", "1"))
+                {
+                    const DlcWindows* const windows = FindDlcWindows(Game::Get().build);
+                    if (windows == nullptr)
+                        return;
+                    if (auto pattern = find_pattern(windows->fixup);
+                        pattern.size() > 0 && ExpectMatchCount(pattern, 1, "LoadDLCs struct fixup"))
+                    {
+                        // The loader callback entry sits 0x8C past the struct-fixup site on
+                        // every gated build (1.0.6.0 0x4144D4->0x414560, 1.0.7.0
+                        // 0x414274->0x414300, 1.0.8.0 0x4903D4->0x490460); the publish scans
+                        // the same window the install does instead of carrying three RVAs.
+                        zpatch_dlc_load_callback = static_cast<uint32_t>(
+                            MatchAddress(pattern) + 140);  // 0x8C
+                    }
+                    // The register helper (sub_88F440) is the stack-cookie prologue whose A1
+                    // operand is an absolute VA: the game is relocated at load, so it stays a
+                    // wildcard or the scan misses on every non-preferred base. The window ends
+                    // before the fourth push, the only byte 1.0.8.0 changes (57 / 8B), so one
+                    // window fits all gated builds.
+                    if (auto pattern = find_pattern("81 EC 0C 02 00 00 A1 ?? ?? ?? ?? 33 C4 89 84 24 08 02 00 00 53 55 56");
+                        pattern.size() > 0 && ExpectMatchCount(pattern, 1, "LoadDLCs register helper"))
+                    {
+                        DlcRegisterRva() = AsRva(pattern.get_first<uint8_t>());
+                    }
+                    // The apply helper (sub_88FE00) is identical on every gated build.
+                    if (auto pattern = find_pattern("51 53 8B D9 0F B7 8B 50 01 00 00 55 56 33 ED 85");
+                        pattern.size() > 0 && ExpectMatchCount(pattern, 1, "LoadDLCs apply helper"))
+                    {
+                        DlcApplyRva() = AsRva(pattern.get_first<uint8_t>());
+                    }
+                }
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallLoadDLCs");
 
-            // Destinations as deltas from the site: +0x5C jumps into the same block,
-            // +0x1E skips the fixup (identical on 1.0.6.0/1.0.7.0).
-            if (dummyCall != nullptr)
-                CallTo(ctx, dummyCall, OPP_BODY(abi_load_dlcs_dummy));
-            if (earlyJump != nullptr)
-                JumpTo(ctx, earlyJump, earlyJump + 92);  // 0x5C
-            if (structFixup != nullptr)
-                JumpTo(ctx, structFixup, OPP_BODY(abi_load_dlcs_struct_fixup));
-            if (skipFixupJump != nullptr)
-                JumpTo(ctx, skipFixupJump, skipFixupJump + 30);  // 0x1E
-            if (helperCall != nullptr)
-                CallTo(ctx, helperCall, helperCall - windows->helper_before);
-            // The call following the tail site has twelve bytes the original NOPs.
-            if (tail != nullptr)
-                NopAt(ctx, tail, 12);
+                // LoadDLCs: 6 sites per build, each the pre-write instruction window at the
+                // recovered RVA.
+                if (Game::Option("LoadDLCs", "1"))
+                {
+                    const DlcWindows* const windows = FindDlcWindows(Game::Get().build);
+                    if (windows == nullptr)
+                        return;
+                    // The struct-fixup body calls the callback slot before the discovery
+                    // step. If the callback publish missed, installing the body would
+                    // call a null slot; skip the arm instead.
+        #if !defined(_WIN64)
+                    if (zpatch_failsafe_skip("LoadDLCs callback", zpatch_dlc_load_callback == 0u))
+                        return;
+        #endif
+                    // The scans happen before the writes: the call site's window contains
+                    // the twelve bytes the original NOPs after it. The fixup and dummy-call
+                    // windows are per build; the other four are shared by every gated build.
+                    uint8_t* const dummyCall = FindSite(windows->dummy_call, "LoadDLCs dummy call");
+                    uint8_t* const earlyJump = FindSite(
+                        "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24",
+                        "LoadDLCs early jump");
+                    uint8_t* const structFixup = FindSite(windows->fixup, "LoadDLCs struct fixup");
+                    uint8_t* const skipFixupJump = FindSite(
+                        "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E",
+                        "LoadDLCs skip-fixup jump");
+                    uint8_t* const helperCall = FindSite(
+                        "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E",
+                        "LoadDLCs helper call");
+                    uint8_t* const tail = FindSite(
+                        "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC",
+                        "LoadDLCs tail");
+
+                    // Destinations as deltas from the site: +0x5C jumps into the same block,
+                    // +0x1E skips the fixup (identical on 1.0.6.0/1.0.7.0).
+                    if (dummyCall != nullptr)
+                        injector::MakeCALL(dummyCall, OPP_BODY(abi_load_dlcs_dummy), true);
+                    if (earlyJump != nullptr)
+                        injector::MakeJMP(earlyJump, earlyJump + 92, true);  // 0x5C
+                    if (structFixup != nullptr)
+                        injector::MakeJMP(structFixup, OPP_BODY(abi_load_dlcs_struct_fixup), true);
+                    if (skipFixupJump != nullptr)
+                        injector::MakeJMP(skipFixupJump, skipFixupJump + 30, true);  // 0x1E
+                    if (helperCall != nullptr)
+                        injector::MakeCALL(helperCall, helperCall - windows->helper_before, true);
+                    // The call following the tail site has twelve bytes the original NOPs.
+                    if (tail != nullptr)
+                        injector::MakeNOP(tail, 12, true);
+                }
+            };
         }
-
-    }
+    } loadDLCs;
 
 
     // publish NewFilesCompatibility
@@ -966,64 +956,57 @@ namespace opp::features
         constexpr std::string_view kNewFilesRegistrarWindow = "68 64 28 C8 67 E8";
     } // namespace
 
-    void PublishNewFilesCompatibility(PatchContext& ctx)
-    {
-
-        TraceArm("publish NewFilesCompatibility");
-
-        // NewFilesCompatibility: 1 slot
-        if (ctx.Option("NewFilesCompatibility", "1") && !NewFilesConflictModulesPresent())
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, kNewFilesRegistrarWindow); pattern.size() > 0)
-            {
-                // The E8 to the registrar: its rel32 operand is at +6.
-                zpatch_newfiles_register_slot = BranchDestination(
-                    pattern.get(0).get<uint8_t>(), 6);
-            }
-        }
-
-    }
-
 
     // NewFilesCompatibility
 
-    void InstallNewFilesCompatibility(PatchContext& ctx)
+    class NewFilesCompatibility
     {
-
-        TraceArm("NewFilesCompatibility");
-
-        // NewFilesCompatibility: 2 siginstalls, 1 sigjump
-        if (ctx.Option("NewFilesCompatibility", "1") && !NewFilesConflictModulesPresent())
+    public:
+        NewFilesCompatibility()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(
-                    image,
-                    "E8 ? ? ? ? 8B 36 85 F6 75 ED E8 ? ? ? ? 8B 3F 03 EB 85 FF 0F 85 7B FF FF FF");
-                pattern.size() > 0 && ExpectMatchCount(pattern, 1, "NewFiles update A"))
+            PublishEvent() += []
             {
-                CallTo(ctx, pattern.get(0).get<uint8_t>(), OPP_BODY(abi_newfiles_update_a));
-            }
+                TraceArm("PublishNewFilesCompatibility");
 
-            if (auto pattern = Pattern(
-                    image,
-                    "E8 ? ? ? ? 8B 36 85 F6 75 ED E8 ? ? ? ? 8B 3F 03 EB 85 FF 0F 85 6C FF FF FF");
-                pattern.size() > 0 && ExpectMatchCount(pattern, 1, "NewFiles update B"))
+                // NewFilesCompatibility: 1 slot
+                if (Game::Option("NewFilesCompatibility", "1") && !NewFilesConflictModulesPresent())
+                {
+                    if (auto pattern = find_pattern(kNewFilesRegistrarWindow); pattern.size() > 0)
+                    {
+                        // The E8 to the registrar: its rel32 operand is at +6.
+                        zpatch_newfiles_register_slot = BranchDestination(
+                            pattern.get_first<uint8_t>(), 6);
+                    }
+                }
+            };
+            InstallEvent() += []
             {
-                CallTo(ctx, pattern.get(0).get<uint8_t>(), OPP_BODY(abi_newfiles_update_b));
-            }
+                TraceArm("InstallNewFilesCompatibility");
 
-            if (auto pattern = Pattern(image, kNewFilesRegistrarWindow); pattern.size() > 0)
-            {
-                // The registrar call itself is at +28 in this window.
-                JumpTo(ctx, pattern.get(0).get<uint8_t>() + 28,
-                       OPP_BODY(abi_newfiles_register_body));
-            }
+                // NewFilesCompatibility: 2 siginstalls, 1 sigjump
+                if (Game::Option("NewFilesCompatibility", "1") && !NewFilesConflictModulesPresent())
+                {
+                    if (auto pattern = find_pattern("E8 ? ? ? ? 8B 36 85 F6 75 ED E8 ? ? ? ? 8B 3F 03 EB 85 FF 0F 85 7B FF FF FF");
+                        pattern.size() > 0 && ExpectMatchCount(pattern, 1, "NewFiles update A"))
+                    {
+                        injector::MakeCALL(pattern.get_first<uint8_t>(), OPP_BODY(abi_newfiles_update_a), true);
+                    }
+
+                    if (auto pattern = find_pattern("E8 ? ? ? ? 8B 36 85 F6 75 ED E8 ? ? ? ? 8B 3F 03 EB 85 FF 0F 85 6C FF FF FF");
+                        pattern.size() > 0 && ExpectMatchCount(pattern, 1, "NewFiles update B"))
+                    {
+                        injector::MakeCALL(pattern.get_first<uint8_t>(), OPP_BODY(abi_newfiles_update_b), true);
+                    }
+
+                    if (auto pattern = find_pattern(kNewFilesRegistrarWindow); pattern.size() > 0)
+                    {
+                        // The registrar call itself is at +28 in this window.
+                        injector::MakeJMP(pattern.get_first<uint8_t>() + 28, OPP_BODY(abi_newfiles_register_body), true);
+                    }
+                }
+            };
         }
-
-    }
+    } newFilesCompatibility;
 
 
     // publish NewSavesCompatibility
@@ -1039,135 +1022,117 @@ namespace opp::features
             "89 84 24 E0 01 00 00 8B 45 08 53 33 DB";
     } // namespace
 
-    void PublishNewSavesCompatibility(PatchContext& ctx)
-    {
-
-        TraceArm("publish NewSavesCompatibility");
-
-        // NewSavesCompatibility: 3 slots. The newer save format is 1060-1080
-        // only; gate the arm instead of relying on the pattern coincidentally
-        // missing on 1000/1004/1040 and EFLC.
-        if (ctx.Option("NewSavesCompatibility", "1") &&
-            BuildIs(ctx.build, {GameBuild::v1060, GameBuild::v1061, GameBuild::v1070,
-                                GameBuild::v1080}))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto boot = Pattern(image, kNewSavesBootWindow); boot.size() > 0)
-            {
-                // The push imm32 operand is the save-name pointer.
-                zpatch_new_saves_src = *boot.get(0).get<uint32_t>(1);
-                if (auto pattern = Pattern(image, kNewSavesEntryWindow); pattern.size() > 0)
-                {
-                    zpatch_new_saves_resume = MatchAddress(pattern, 13);
-                }
-            }
-        }
-
-    }
-
 
     // NewSavesCompatibility
 
-    void InstallNewSavesCompatibility(PatchContext& ctx)
+    class NewSavesCompatibility
     {
-
-        TraceArm("NewSavesCompatibility");
-
-        // NewSavesCompatibility: 1 sigjump. The savegame-load entry is only
-        // redirected when both the tramp site and the entry window exist.
-        if (ctx.Option("NewSavesCompatibility", "1") &&
-            BuildIs(ctx.build, {GameBuild::v1060, GameBuild::v1061, GameBuild::v1070,
-                                GameBuild::v1080}))
+    public:
+        NewSavesCompatibility()
         {
-            const GameImage& image = ctx.image;
-
-            if (Pattern(image, kNewSavesBootWindow).size() > 0)
+            PublishEvent() += []
             {
-                if (auto pattern = Pattern(image, kNewSavesEntryWindow); pattern.size() > 0)
-                {
-                    JumpTo(ctx, pattern.get(0).get<uint8_t>(),
-                           OPP_BODY(abi_new_saves_compat));
-                }
-            }
-        }
+                TraceArm("PublishNewSavesCompatibility");
 
-    }
+                // NewSavesCompatibility: 3 slots. The newer save format is 1060-1080
+                // only; gate the arm instead of relying on the pattern coincidentally
+                // missing on 1000/1004/1040 and EFLC.
+                if (Game::Option("NewSavesCompatibility", "1") &&
+                    BuildIs(Game::Get().build, {GameBuild::v1060, GameBuild::v1061, GameBuild::v1070,
+                                        GameBuild::v1080}))
+                {
+                    if (auto boot = find_pattern(kNewSavesBootWindow); boot.size() > 0)
+                    {
+                        // The push imm32 operand is the save-name pointer.
+                        zpatch_new_saves_src = *boot.get_first<uint32_t>(1);
+                        if (auto pattern = find_pattern(kNewSavesEntryWindow); pattern.size() > 0)
+                        {
+                            zpatch_new_saves_resume = MatchAddress(pattern, 13);
+                        }
+                    }
+                }
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallNewSavesCompatibility");
+
+                // NewSavesCompatibility: 1 sigjump. The savegame-load entry is only
+                // redirected when both the tramp site and the entry window exist.
+                if (Game::Option("NewSavesCompatibility", "1") &&
+                    BuildIs(Game::Get().build, {GameBuild::v1060, GameBuild::v1061, GameBuild::v1070,
+                                        GameBuild::v1080}))
+                {
+                    if (find_pattern(kNewSavesBootWindow).size() > 0)
+                    {
+                        if (auto pattern = find_pattern(kNewSavesEntryWindow); pattern.size() > 0)
+                        {
+                            injector::MakeJMP(pattern.get_first<uint8_t>(), OPP_BODY(abi_new_saves_compat), true);
+                        }
+                    }
+                }
+            };
+        }
+    } newSavesCompatibility;
 
 
     // OverrideGTADatPath
 
-    void InstallOverrideGTADatPath(PatchContext& ctx)
+    class OverrideGTADatPath
     {
-
-        TraceArm("OverrideGTADatPath");
-
-        // OverrideGTADatPath: 1 literalstore
-        if (ctx.Option("OverrideGTADatPath", "0"))
+    public:
+        OverrideGTADatPath()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(
-                    image, "68 ? ? ? ? E8 ? ? ? ? 83 C4 04 E8 ? ? ? ? E8 ? ? ? ? E8");
-                pattern.size() > 0)
+            InstallEvent() += []
             {
-                // The `push imm32` operand names the gta.dat path pointer the
-                // original pushes; the arm points it at the configured path.
-                WriteValue<uint32_t>(ctx, pattern.get(0).get<uint8_t>(1),
-                                     static_cast<uint32_t>(
-                                         FindGlobalValue("OverrideGTADatPath")));
-            }
-        }
+                TraceArm("InstallOverrideGTADatPath");
 
-    }
+                // OverrideGTADatPath: 1 literalstore
+                if (Game::Option("OverrideGTADatPath", "0"))
+                {
+                    if (auto pattern = find_pattern("68 ? ? ? ? E8 ? ? ? ? 83 C4 04 E8 ? ? ? ? E8 ? ? ? ? E8");
+                        pattern.size() > 0)
+                    {
+                        // The `push imm32` operand names the gta.dat path pointer the
+                        // original pushes; the arm points it at the configured path.
+                        injector::WriteMemory<uint32_t>(pattern.get_first<uint8_t>(1), static_cast<uint32_t>(
+                                                 FindGlobalValue("OverrideGTADatPath")), true);
+                    }
+                }
+            };
+        }
+    } overrideGTADatPath;
 
 
     // SCOSignatureFix
 
-    void InstallSCOSignatureFix(PatchContext& ctx)
-    {
-
-        TraceArm("SCOSignatureFix");
-
-        // SCOSignatureFix: 1 literal. The recovered op row anchors the write at
-        // offset 0 of its own signature. The old arm scanned a signature 32 bytes
-        // downstream and wrote at match-32, which is only correct while that
-        // distance holds; a build where it does not would flip an unrelated `jz`.
-        // This signature ends on the `jz` itself (`mov ds:X,edi; test ebp,ebp; jz`),
-        // unique on 1.0.8.0.
-        if (ctx.Option("SCOSignatureFix", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "89 3D ? ? ? ? 85 ED 74 1E");
-                pattern.size() > 0)
-            {
-                // `mov ds:X,edi` (6 bytes) + `test ebp,ebp` (2) put the `jz`
-                // opcode at +8; the original flips it to a `jmp`.
-                WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(8),
-                                    opp::ops::kJmpRel8);
-            }
-        }
-
-    }
-
-namespace
-{
-    class LoadingFeatures
+    class SCOSignatureFix
     {
     public:
-        LoadingFeatures()
+        SCOSignatureFix()
         {
-            PublishEvent().Add(&PublishLoadDLCs, "PublishLoadDLCs");
-            PublishEvent().Add(&PublishNewFilesCompatibility, "PublishNewFilesCompatibility");
-            PublishEvent().Add(&PublishNewSavesCompatibility, "PublishNewSavesCompatibility");
-            InstallEvent().Add(&InstallLoadDLCs, "InstallLoadDLCs");
-            InstallEvent().Add(&InstallNewFilesCompatibility, "InstallNewFilesCompatibility");
-            InstallEvent().Add(&InstallNewSavesCompatibility, "InstallNewSavesCompatibility");
-            InstallEvent().Add(&InstallSCOSignatureFix, "InstallSCOSignatureFix");
-            InstallEvent().Add(&InstallOverrideGTADatPath, "InstallOverrideGTADatPath");
+            InstallEvent() += []
+            {
+                TraceArm("InstallSCOSignatureFix");
+
+                // SCOSignatureFix: 1 literal. The recovered op row anchors the write at
+                // offset 0 of its own signature. The old arm scanned a signature 32 bytes
+                // downstream and wrote at match-32, which is only correct while that
+                // distance holds; a build where it does not would flip an unrelated `jz`.
+                // This signature ends on the `jz` itself (`mov ds:X,edi; test ebp,ebp; jz`),
+                // unique on 1.0.8.0.
+                if (Game::Option("SCOSignatureFix", "1"))
+                {
+                    if (auto pattern = find_pattern("89 3D ? ? ? ? 85 ED 74 1E");
+                        pattern.size() > 0)
+                    {
+                        // `mov ds:X,edi` (6 bytes) + `test ebp,ebp` (2) put the `jz`
+                        // opcode at +8; the original flips it to a `jmp`.
+                        injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(8), opp::ops::kJmpRel8, true);
+                    }
+                }
+            };
         }
-    } loadingFeatures;
-} // namespace
+    } sCOSignatureFix;
+
 
 } // namespace opp::features

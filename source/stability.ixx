@@ -36,25 +36,22 @@ namespace
     // views over live game memory and are never constructed.
 
     // CEntity prefix: the model index every entity carries.
-    constexpr size_t kEntityModelIndex = kModelIndexOffset;  // 0x02E, int16
     struct EntityView final
     {
-        std::byte pad_0000[kEntityModelIndex];
-        int16_t modelIndex;  // 0x02E
+        std::byte pad_0000[46];  // modelIndex at 0x02E
+        int16_t modelIndex;      // 0x02E
     };
-    static_assert(offsetof(EntityView, modelIndex) == kEntityModelIndex);
-    static_assert(sizeof(EntityView) == kEntityModelIndex + sizeof(int16_t));
+    static_assert(sizeof(EntityView) == 0x30);
 
     // CBaseModelInfo prefix: the model's name hash, the key
     // CModelInfoStore::getModelByKey (0x8DD2D0) resolves. BadPlayerModelCrashFix
     // reports it and the garage stores it in its slot.
-    constexpr size_t kModelInfoHashKey = 0x3C;
     struct ModelInfoView final
     {
-        std::byte pad_0000[kModelInfoHashKey];
-        uint32_t hashKey;  // 0x03C
+        std::byte pad_0000[60];  // hashKey at 0x03C
+        uint32_t hashKey;        // 0x03C
     };
-    static_assert(offsetof(ModelInfoView, hashKey) == kModelInfoHashKey);
+    static_assert(sizeof(ModelInfoView) == 0x40);
 
     // The model-info table the preamble scan publishes: one CBaseModelInfo* per
     // model index.
@@ -166,8 +163,8 @@ void abi_ooc_branch();
 bool abi_super_lod_helper(const void* object) noexcept
 {
     int32_t index = -1;
-    const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
-        static_cast<uintptr_t>(zpatch_super_lod_lookup));
+    const auto lookup =
+        opp::Rebased<int(__cdecl*)(uint32_t, int32_t*)>(zpatch_super_lod_lookup);
     if (zpatch_failsafe_skip("SuperLODFix lookup", lookup == nullptr) ||
         zpatch_failsafe_skip("SuperLODFix object", object == nullptr))
         return false;
@@ -182,8 +179,7 @@ bool abi_super_lod_helper(const void* object) noexcept
 // because the original leaves it there for its `call eax`.
 void abi_bpm_check() noexcept
 {
-    const auto models = reinterpret_cast<ModelInfoTable>(
-        static_cast<uintptr_t>(zpatch_pre_ped_array));
+    const auto models = opp::Rebased<ModelInfoTable>(zpatch_pre_ped_array);
     if (zpatch_failsafe_skip("BadPlayerModelCrashFix model table", models == nullptr))
         return;  // nothing to remap: the site keeps the model it was given
     ModelInfoView* const model = models[zpatch_bpm_model_index];
@@ -198,8 +194,8 @@ void abi_bpm_check() noexcept
     {
         const char* const model_name = zpatch_bpm_model_name(model->hashKey);
         uint32_t entity = zpatch_bpm_obj;
-        const char* const who = reinterpret_cast<const char*>(static_cast<uintptr_t>(
-            zpatch_script_call(zpatch_salt_c8, 1, &entity)));
+        const char* const who =
+            opp::Rebased<const char*>(zpatch_script_call(zpatch_salt_c8, 1, &entity));
         char buffer[64];
         std::snprintf(buffer, sizeof(buffer), "%s used a non-ped model (%s)", who, model_name);
         const uint32_t text = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(buffer));
@@ -208,15 +204,15 @@ void abi_bpm_check() noexcept
     const uint32_t hash = GameHash("m_y_multiplayer");
     if (zpatch_script_call_bool(zpatch_salt_b8, 1, &hash) == 0)
     {
-        const auto detour = reinterpret_cast<void(__cdecl*)(uint32_t, uint32_t)>(
-            static_cast<uintptr_t>(zpatch_pre_fn_59c74));
+        const auto detour =
+            opp::Rebased<void(__cdecl*)(uint32_t, uint32_t)>(zpatch_pre_fn_59c74);
         if (!zpatch_failsafe_skip("BadPlayerModelCrashFix script detour", detour == nullptr))
             detour(hash, 0);
         zpatch_script_call(zpatch_salt_40, 0, nullptr);
     }
     int32_t new_index = -1;
-    const auto lookup = reinterpret_cast<void(__cdecl*)(uint32_t, int32_t*)>(
-        static_cast<uintptr_t>(zpatch_model_lookup));
+    const auto lookup =
+        opp::Rebased<void(__cdecl*)(uint32_t, int32_t*)>(zpatch_model_lookup);
     if (!zpatch_failsafe_skip("BadPlayerModelCrashFix model lookup", lookup == nullptr))
     {
         lookup(hash, &new_index);
@@ -241,8 +237,8 @@ int32_t zpatch_garage_lookup_c(uint8_t* object) noexcept
     if (hash == 0u)
         return hash_low_byte;
     // 0x10046C10 / 0x10046C4A call dword_10159C0C unguarded.
-    const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
-        static_cast<uintptr_t>(zpatch_model_lookup));
+    const auto lookup =
+        opp::Rebased<int(__cdecl*)(uint32_t, int32_t*)>(zpatch_model_lookup);
     if (zpatch_failsafe_skip("GarageModelFix model lookup", lookup == nullptr))
         return hash_low_byte;  // the garage keeps the model it stored
     // A successful resolution is remembered: the hash -> index mapping is static
@@ -307,8 +303,8 @@ int __cdecl abi_combined_radio_freeze_fix() noexcept
 // matches.
 bool __fastcall abi_ped_models_in_cutscenes_check(const void* self, void*)
 {
-    const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
-        static_cast<uintptr_t>(zpatch_model_lookup));
+    const auto lookup =
+        opp::Rebased<int(__cdecl*)(uint32_t, int32_t*)>(zpatch_model_lookup);
     // `call dword_10159C0C` is unguarded in the original. A missing lookup or a
     // null self answers "not the player model", the un-patched answer.
     if (zpatch_failsafe_skip("PedModelsInCutscenesFix model lookup", lookup == nullptr) ||
@@ -338,7 +334,7 @@ void* __fastcall abi_speedup_body(void* self, int) noexcept
     }
     // The original dereferences the timing pointers unconditionally; its one-time
     // test is on the first constant, not on the pointers.
-    float* const first = reinterpret_cast<float*>(static_cast<uintptr_t>(zpatch_speedup_t50));
+    float* const first = opp::Rebased<float*>(zpatch_speedup_t50);
     if (*first == 0.0f)
     {
         LARGE_INTEGER frequency{};
@@ -351,22 +347,20 @@ void* __fastcall abi_speedup_body(void* self, int) noexcept
         const float seconds = static_cast<float>(milliseconds_per_tick * kMillisecondScale);
         const float ticks_per_millisecond =
             static_cast<float>(kMillisecondScale / milliseconds_per_tick);
-        *reinterpret_cast<float*>(static_cast<uintptr_t>(zpatch_speedup_t64)) = milliseconds;
-        *reinterpret_cast<float*>(static_cast<uintptr_t>(zpatch_speedup_t60)) = microseconds;
-        *reinterpret_cast<float*>(static_cast<uintptr_t>(zpatch_speedup_t50)) = seconds;
-        *reinterpret_cast<float*>(static_cast<uintptr_t>(zpatch_speedup_t5c)) =
-            ticks_per_millisecond;
-        *reinterpret_cast<float*>(static_cast<uintptr_t>(zpatch_speedup_t68)) = milliseconds;
-        *reinterpret_cast<float*>(static_cast<uintptr_t>(zpatch_speedup_t4c)) = microseconds;
-        *reinterpret_cast<float*>(static_cast<uintptr_t>(zpatch_speedup_t54)) = seconds;
-        *reinterpret_cast<float*>(static_cast<uintptr_t>(zpatch_speedup_t58)) =
-            ticks_per_millisecond;
+        *opp::Rebased<float*>(zpatch_speedup_t64) = milliseconds;
+        *opp::Rebased<float*>(zpatch_speedup_t60) = microseconds;
+        *opp::Rebased<float*>(zpatch_speedup_t50) = seconds;
+        *opp::Rebased<float*>(zpatch_speedup_t5c) = ticks_per_millisecond;
+        *opp::Rebased<float*>(zpatch_speedup_t68) = milliseconds;
+        *opp::Rebased<float*>(zpatch_speedup_t4c) = microseconds;
+        *opp::Rebased<float*>(zpatch_speedup_t54) = seconds;
+        *opp::Rebased<float*>(zpatch_speedup_t58) = ticks_per_millisecond;
     }
     using ClockFn = __int64(__cdecl*)(void);
     // The original calls its resolved clock function unconditionally; a failed
     // scan faults at match-51.
-    const __int64 stamp = reinterpret_cast<ClockFn>(
-        static_cast<uintptr_t>(zpatch_speedup_clock) - 51)();
+    const __int64 stamp =
+        opp::Rebased<ClockFn>(static_cast<uintptr_t>(zpatch_speedup_clock) - 51)();
     *reinterpret_cast<__int64*>(self) = stamp;
     return self;
 }
@@ -417,12 +411,9 @@ namespace
 
     void zpatch_ooc_register_entry(std::span<const std::byte> table)
     {
-        auto* begin = reinterpret_cast<OocPakEntry*>(
-            static_cast<uintptr_t>(zpatch_ooc_vector_begin));
-        auto* end = reinterpret_cast<OocPakEntry*>(
-            static_cast<uintptr_t>(zpatch_ooc_vector_end));
-        auto* capacity = reinterpret_cast<OocPakEntry*>(
-            static_cast<uintptr_t>(zpatch_ooc_vector_capacity));
+        auto* begin = opp::Rebased<OocPakEntry*>(zpatch_ooc_vector_begin);
+        auto* end = opp::Rebased<OocPakEntry*>(zpatch_ooc_vector_end);
+        auto* capacity = opp::Rebased<OocPakEntry*>(zpatch_ooc_vector_capacity);
         const size_t size = begin == nullptr ? 0u : static_cast<size_t>(end - begin);
         const size_t cap = begin == nullptr ? 0u : static_cast<size_t>(capacity - begin);
         bool reallocated = false;
@@ -818,13 +809,12 @@ uint32_t abi_ooc_wrap(uint32_t arg0, uint32_t arg1) noexcept
         zpatch_spawns_sprintf(buffer, 64, zpatch_ooc_fmt_b, zpatch_ooc_fmt_a, ':', '$',
                               static_cast<int>(archive), static_cast<int>(zpatch_ooc_state), '0',
                               ':', static_cast<const char*>(nullptr));
-        const auto logger = reinterpret_cast<void(__cdecl*)(char*, int, int)>(
-            static_cast<uintptr_t>(zpatch_ooc_logger));
+        const auto logger = opp::Rebased<void(__cdecl*)(char*, int, int)>(zpatch_ooc_logger);
         // sub_1004C350 calls the logger and the original target unguarded.
         logger(buffer, 1, -1);
     }
-    const auto original = reinterpret_cast<uint32_t(__cdecl*)(uint32_t, uint32_t)>(
-        static_cast<uintptr_t>(zpatch_ooc_orig));
+    const auto original =
+        opp::Rebased<uint32_t(__cdecl*)(uint32_t, uint32_t)>(zpatch_ooc_orig);
     return original(arg0, arg1);
 }
 }  // extern "C"
@@ -853,29 +843,29 @@ namespace opp::features
 
         // Installs one body at its site; false when the signature did not resolve
         // (the original handler's own signature-miss behaviour).
-        bool InstallBody(PatchContext& ctx, const BodySite& site)
+        bool InstallBody(const BodySite& site)
         {
-            auto pattern = Pattern(ctx.image, site.signature);
+            auto pattern = find_pattern(site.signature);
             if (pattern.size() == 0)
                 return false;
-            JumpTo(ctx, pattern.get(0).get<uint8_t>(site.offset), site.body);
+            injector::MakeJMP(pattern.get_first<uint8_t>(site.offset), site.body, true);
             return true;
         }
 
         // Installs one body at a call site (E8) instead of a jump site (E9).
-        bool CallBody(PatchContext& ctx, const BodySite& site)
+        bool CallBody(const BodySite& site)
         {
-            auto pattern = Pattern(ctx.image, site.signature);
+            auto pattern = find_pattern(site.signature);
             if (pattern.size() == 0)
                 return false;
-            CallTo(ctx, pattern.get(0).get<uint8_t>(site.offset), site.body);
+            injector::MakeCALL(pattern.get_first<uint8_t>(site.offset), site.body, true);
             return true;
         }
 
         // Publishes the resume/slot address one signature resolves.
-        bool PublishSlot(PatchContext& ctx, const Site& site, uint32_t& slot)
+        bool PublishSlot(const Site& site, uint32_t& slot)
         {
-            auto pattern = Pattern(ctx.image, site.signature);
+            auto pattern = find_pattern(site.signature);
             if (pattern.size() == 0)
                 return false;
             slot = MatchAddress(pattern, site.offset);
@@ -937,539 +927,614 @@ namespace opp::features
         }
     }  // namespace
 
-    void InstallAimProjectileCrashFix(PatchContext& ctx)
+    class AimProjectileCrashFix
     {
-        TraceArm("AimProjectileCrashFix");
-        if (!ctx.Option("AimProjectileCrashFix", "1"))
-            return;
-        InstallBody(ctx, {"8B 44 24 08 89 41 20 8B 44 24 0C 89 41 24 F7 D8", 0,
-                          OPP_BODY(abi_aim_projectile_crash_fix)});
-    }
-
-    void PublishBadPlayerModelCrashFix(PatchContext& ctx)
-    {
-        TraceArm("publish BadPlayerModelCrashFix");
-        if (ctx.Option("BadPlayerModelCrashFix", "1"))
-            PublishSlot(ctx, {kBadPlayerModelSite, 10}, zpatch_bpm_resume);
-    }
-
-    void InstallBadPlayerModelCrashFix(PatchContext& ctx)
-    {
-        TraceArm("BadPlayerModelCrashFix");
-        if (!ctx.Option("BadPlayerModelCrashFix", "1"))
-            return;
-        InstallBody(ctx, {kBadPlayerModelSite, 0, OPP_BODY(abi_bad_player_model)});
-    }
-
-    void PublishBenchmarkFix(PatchContext& ctx)
-    {
-        TraceArm("publish BenchmarkFix");
-        if (!ctx.Option("BenchmarkFix", "1"))
-            return;
-        auto pattern = Pattern(ctx.image, kBenchmarkSite);
-        if (pattern.size() == 0)
-            return;
-        zpatch_benchmark_resume_a = MatchAddress(pattern, kBenchmarkResumeOffset);
-        zpatch_benchmark_resume_b = MatchAddress(pattern, kBenchmarkResumeOffset);
-    }
-
-    void InstallBenchmarkFix(PatchContext& ctx)
-    {
-        TraceArm("BenchmarkFix");
-        if (!ctx.Option("BenchmarkFix", "1"))
-            return;
-        if (!BuildIs(ctx.build, {GameBuild::v1000, GameBuild::v1040, GameBuild::v1004,
-                                 GameBuild::v1060, GameBuild::v1070, GameBuild::v1061,
-                                 GameBuild::v1100, GameBuild::v1110, GameBuild::v1120,
-                                 GameBuild::v12043}))
-            return;
-        // The original patches exactly the two benchmark entries (bodies a and b);
-        // a different count is a view mismatch, so the arm installs nothing.
-        auto pattern = PatternAll(ctx.image, kBenchmarkSite);
-        if (pattern.size() == 0 ||
-            !ExpectMatchCount(pattern, 2, "BenchmarkFix entries"))
-            return;
-        JumpTo(ctx, pattern.get(0).get<uint8_t>(kBenchmarkCallOffset), OPP_BODY(abi_benchmark_a));
-        JumpTo(ctx, pattern.get(1).get<uint8_t>(kBenchmarkCallOffset), OPP_BODY(abi_benchmark_b));
-    }
-
-    void PublishBlackscreenFix(PatchContext& ctx)
-    {
-        TraceArm("publish BlackscreenFix");
-        if (!ctx.Option("BlackscreenFix", "1"))
-            return;
-        auto pattern = Pattern(ctx.image, kBlackscreenSite);
-        if (pattern.size() == 0)
-            return;
-        // The branch at +0x52 jumps through the original target two bytes later;
-        // the dword one byte past that is the value pointer the body reads.
-        constexpr ptrdiff_t kBranchOperand = 82;
-        zpatch_blackscreen_resume = MatchTarget(pattern, kBranchOperand, 86);
-        const auto address = static_cast<uintptr_t>(
-            MatchTarget(pattern, kBranchOperand, 87));
-        if (InImage(ctx.image, address))
-            zpatch_blackscreen_value_ptr = *reinterpret_cast<const uint32_t*>(address);
-    }
-
-    void InstallBlackscreenFix(PatchContext& ctx)
-    {
-        TraceArm("BlackscreenFix");
-        if (!ctx.Option("BlackscreenFix", "1"))
-            return;
-        // The site is the `jle` 81 bytes into the match.
-        InstallBody(ctx, {kBlackscreenSite, 81, OPP_BODY(abi_blackscreen_shim)});
-    }
-
-    void PublishCollisionDeadlockFix(PatchContext& ctx)
-    {
-        TraceArm("publish CollisionDeadlockFix");
-        if (!ctx.Option("CollisionDeadlockFix", "1"))
-            return;
-        // The `call rel32` predicate site at +91 (its next instruction at +95) is
-        // the walk function the shim calls.
-        if (auto pattern = Pattern(ctx.image, kCollisionWalkSite); pattern.size() > 0)
-            zpatch_collision_deadlock_should_walk = MatchTarget(pattern, 91, 95);
-    }
-
-    void InstallCollisionDeadlockFix(PatchContext& ctx)
-    {
-        TraceArm("CollisionDeadlockFix");
-        if (!ctx.Option("CollisionDeadlockFix", "1"))
-            return;
-        InstallBody(ctx, {kCollisionWalkSite, 0, OPP_BODY(abi_collision_deadlock_walk)});
-    }
-
-    void InstallCombinedRadioFreezeFix(PatchContext& ctx)
-    {
-        TraceArm("CombinedRadioFreezeFix");
-        if (!ctx.Option("CombinedRadioFreezeFix", "1"))
-            return;
-        CallBody(ctx, {"E8 ? ? ? ? 8B 35 ? ? ? ? 3B F0", 0,
-                       OPP_BODY(abi_combined_radio_freeze_fix)});
-    }
-
-    void PublishCrashMsgFix(PatchContext& ctx)
-    {
-        TraceArm("publish CrashMsgFix");
-        if (!ctx.Option("CrashMsgFix", "1"))
-            return;
-        auto pattern = Pattern(ctx.image, kCrashMsgSite);
-        if (pattern.size() == 0)
-            return;
-        // *(match-4) is the call target the site's E8 replaced; the getter's own
-        // first instruction is a branch whose rel32 sits at +1.
-        constexpr ptrdiff_t kCallOperand = -4;
-        constexpr ptrdiff_t kBranchOperand = 1;
-        const auto site = static_cast<uintptr_t>(*pattern.get(0).get<uint32_t>(kCallOperand));
-        if (InImage(ctx.image, site))
-            zpatch_crash_msg_getter =
-                BranchDestination(reinterpret_cast<const uint8_t*>(site), kBranchOperand);
-    }
-
-    void InstallCrashMsgFix(PatchContext& ctx)
-    {
-        TraceArm("CrashMsgFix");
-        if (!ctx.Option("CrashMsgFix", "1"))
-            return;
-        // The E8 the body replaces sits four bytes before the match, and its rel32
-        // operand is the call target the body's first instruction loads.
-        constexpr ptrdiff_t kCallOperand = -4;
-        auto pattern = Pattern(ctx.image, kCrashMsgSite);
-        if (pattern.size() == 0)
-            return;
-        CallTo(ctx, MatchPointer(pattern, kCallOperand), OPP_BODY(abi_crash_msg_shim));
-    }
-
-    void PublishEpisodeSwitchFreezeFix(PatchContext& ctx)
-    {
-        TraceArm("publish EpisodeSwitchFreezeFix");
-        if (!ctx.Option("EpisodeSwitchFreezeFix", "1"))
-            return;
-        PublishSlot(ctx, {kEpisodeLoadSite, 5}, zpatch_episode_switch_resume_a);
-        PublishSlot(ctx, {kEpisodeCompareSite, 6}, zpatch_episode_switch_resume_b);
-        PublishSlot(ctx, {kEpisodeTouchSite, 7}, zpatch_episode_switch_resume_c);
-    }
-
-    void InstallEpisodeSwitchFreezeFix(PatchContext& ctx)
-    {
-        TraceArm("EpisodeSwitchFreezeFix");
-        if (!ctx.Option("EpisodeSwitchFreezeFix", "1"))
-            return;
-        // The five replacement functions, installed in this order.
-        const BodySite sites[] = {
-            {kEpisodeTouchSite, 0, OPP_BODY(abi_episode_switch_shim_c)},
-            {kEpisodeLoadSite, 0, OPP_BODY(abi_episode_switch_store_shim)},
-            {"8B 41 10 03 41 0C C3", 0, OPP_BODY(abi_episode_switch_sum)},
-            {kEpisodeCompareSite, 0, OPP_BODY(abi_episode_switch_shim_b)},
-            {"8B C1 8B 08 8B 11 8B 40 04 8B 52 30 50 FF D2 C3", 0,
-             OPP_BODY(abi_episode_switch_vcall)},
-        };
-        for (const BodySite& site : sites)
-            InstallBody(ctx, site);
-    }
-
-    void PublishGarageModelFix(PatchContext& ctx)
-    {
-        TraceArm("publish GarageModelFix");
-        if (!ctx.Option("GarageModelFix", "1"))
-            return;
-        auto pattern = Pattern(ctx.image, kGarageSaveSite);
-        if (pattern.size() == 0)
-            return;
-        zpatch_garage_resume_a = MatchAddress(pattern, 6);
-        // The hook goes to the function prologue 0x20 bytes before the anchor; its
-        // resume is just past the 8-byte `movss xmm0, ds:X` it skips, and the float
-        // to reload is that instruction's operand.
-        zpatch_garage_entry_resume_a = MatchAddress(pattern, kGarageEntryResumeDelta);
-        zpatch_garage_scale = *reinterpret_cast<const float*>(static_cast<uintptr_t>(
-            Field(pattern.get(0).get<uint8_t>(), kGarageScaleOperandDelta)));
-        PublishSlot(ctx, {kGarageRequestSite, 5}, zpatch_garage_resume_b);
-    }
-
-    void InstallGarageModelFix(PatchContext& ctx)
-    {
-        TraceArm("GarageModelFix");
-        if (!ctx.Option("GarageModelFix", "1"))
-            return;
-        // Site A is hooked at the prologue, 0x20 bytes before the anchor; the body
-        // reloads the xmm0 the skipped instruction sets.
-        InstallBody(ctx, {kGarageSaveSite, kGarageEntryDelta, OPP_BODY(abi_garage_entry_a)});
-        InstallBody(ctx, {kGarageRequestSite, 0, OPP_BODY(abi_garage_body_b)});
-    }
-
-    void PublishGroupHackFix(PatchContext& ctx)
-    {
-        TraceArm("publish GroupHackFix");
-        if (ctx.Option("GroupHackFix", "1"))
-            PublishSlot(ctx, {kGroupHackSite, 11}, zpatch_group_hack_resume);
-    }
-
-    void InstallGroupHackFix(PatchContext& ctx)
-    {
-        TraceArm("GroupHackFix");
-        if (!ctx.Option("GroupHackFix", "1"))
-            return;
-        InstallBody(ctx, {kGroupHackSite, 0, OPP_BODY(abi_group_hack_shim)});
-    }
-
-    void InstallMPNikoCrashFix(PatchContext& ctx)
-    {
-        TraceArm("MPNikoCrashFix");
-        if (!ctx.Option("MPNikoCrashFix", "1"))
-            return;
-        // The crash is the conditional jump itself: turning it into an
-        // unconditional short jump skips the freed-model dereference.
-        auto pattern = Pattern(ctx.image, "74 2B 57 E8 ? ? ? ? 8B BE A8 0E 00 00");
-        if (pattern.size() == 0)
-            return;
-        WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(), opp::ops::kJmpRel8);
-    }
-
-    void PublishOutOfCommissionFix(PatchContext& ctx)
-    {
-        TraceArm("publish OutOfCommissionFix");
-        if (!ctx.Option("OutOfCommissionFix", "1") || !IsFinaleBuild(ctx.build))
-            return;
-        // The branch body resumes at match+0x11.
-        PublishSlot(ctx, {kOocBranchSite, 17}, zpatch_ooc_resume);
-        auto pattern = Pattern(ctx.image, kOocWrapperSite);
-        if (pattern.size() == 0)
-            return;
-        // The match is the first E8; the logger is the call whose rel32 operand
-        // sits 50 bytes before it (next at -46), and the original call target is
-        // the match's own operand (at +1, next at +5).
-        zpatch_ooc_logger = MatchTarget(pattern, -50, -46);
-        zpatch_ooc_orig = MatchTarget(pattern, 1, 5);
-    }
-
-    void InstallOutOfCommissionFix(PatchContext& ctx)
-    {
-        TraceArm("OutOfCommissionFix");
-        if (!ctx.Option("OutOfCommissionFix", "1") || !IsFinaleBuild(ctx.build))
-            return;
-        InstallBody(ctx, {kOocBranchSite, 7, OPP_BODY(abi_ooc_branch)});
-        CallBody(ctx, {kOocWrapperSite, 0, OPP_BODY(abi_ooc_wrap)});
-    }
-
-    void PublishPathNodeCrashFix(PatchContext& ctx)
-    {
-        TraceArm("publish PathNodeCrashFix");
-        if (!ctx.Option("PathNodeCrashFix", "1"))
-            return;
-        auto pattern = Pattern(ctx.image, kPathNodeSite);
-        if (pattern.size() == 0)
-            return;
-        zpatch_path_node_resume_ok = MatchAddress(pattern);
-        zpatch_path_node_resume_fail = MatchAddress(pattern, 59);
-    }
-
-    void InstallPathNodeCrashFix(PatchContext& ctx)
-    {
-        TraceArm("PathNodeCrashFix");
-        if (!ctx.Option("PathNodeCrashFix", "1"))
-            return;
-        // The shim replaces the `mov dl, [eax+0x1F]` 53 bytes into the match.
-        InstallBody(ctx, {kPathNodeSite, 53, OPP_BODY(abi_path_node_shim)});
-    }
-
-    void PublishPedModelsInCutscenesFix(PatchContext& ctx)
-    {
-        TraceArm("publish PedModelsInCutscenesFix");
-        if (ctx.Option("PedModelsInCutscenesFix", "1"))
-            PublishSlot(ctx, {kModelLookupSite, 0}, zpatch_model_lookup);
-    }
-
-    void InstallPedModelsInCutscenesFix(PatchContext& ctx)
-    {
-        TraceArm("PedModelsInCutscenesFix");
-        if (!ctx.Option("PedModelsInCutscenesFix", "1"))
-            return;
-        InstallBody(ctx, {"56 8B F1 E8 ? ? ? ? 85 C0 74 0E 66 8B 40 2E", 0,
-                          OPP_BODY(abi_ped_models_in_cutscenes_check)});
-    }
-
-    void PublishPlaneCrashFix(PatchContext& ctx)
-    {
-        TraceArm("publish PlaneCrashFix");
-        if (!ctx.Option("PlaneCrashFix", "1"))
-            return;
-        auto pattern = Pattern(ctx.image, kPlaneCrashSite);
-        if (pattern.size() == 0)
-            return;
-        zpatch_plane_crash_resume_b = MatchAddress(pattern, 14);
-        zpatch_plane_crash_resume_a = MatchAddress(pattern, -705);
-    }
-
-    void InstallPlaneCrashFix(PatchContext& ctx)
-    {
-        TraceArm("PlaneCrashFix");
-        if (!ctx.Option("PlaneCrashFix", "1"))
-            return;
-        // The shim replaces the store 3 bytes into the match.
-        InstallBody(ctx, {kPlaneCrashSite, 3, OPP_BODY(abi_plane_crash_shim)});
-    }
-
-    void PublishPlayerAsPedComponentsFix(PatchContext& ctx)
-    {
-        TraceArm("publish PlayerAsPedComponentsFix");
-        if (!ctx.Option("PlayerAsPedComponentsFix", "1"))
-            return;
-        PublishSlot(ctx, {kPlayerPedSite, 14}, zpatch_player_ped_resume);
-        PublishSlot(ctx, {kModelLookupSite, 0}, zpatch_model_lookup);
-    }
-
-    void InstallPlayerAsPedComponentsFix(PatchContext& ctx)
-    {
-        TraceArm("PlayerAsPedComponentsFix");
-        if (!ctx.Option("PlayerAsPedComponentsFix", "1"))
-            return;
-        InstallBody(ctx, {kPlayerPedSite, 5, OPP_BODY(abi_player_ped_components_shim)});
-    }
-
-    void PublishSMPA60Fix(PatchContext& ctx)
-    {
-        TraceArm("publish SMPA60Fix");
-        if (!ctx.Option("SMPA60Fix", "1"))
-            return;
-        if (Pattern(ctx.image, kSmpa60GateSite).size() == 0)
-            return;
-        auto pattern = Pattern(ctx.image, kSmpa60ShimSite);
-        if (pattern.size() == 0)
-            return;
-        zpatch_smpa60_resume_a = MatchAddress(pattern, 28);
-        zpatch_smpa60_resume_b = MatchAddress(pattern, 14);
-        auto gate = Pattern(ctx.image, kSmpa60GateSite);
-        if (gate.size() > 0)
-            zpatch_smpa60_resume_c = MatchAddress(gate, 136);
-    }
-
-    void InstallSMPA60Fix(PatchContext& ctx)
-    {
-        TraceArm("SMPA60Fix");
-        if (!ctx.Option("SMPA60Fix", "1"))
-            return;
-        if (Pattern(ctx.image, kSmpa60GateSite).size() == 0)
-            return;
-        auto site = Pattern(ctx.image, kSmpa60GateSite);
-        if (site.size() > 0)
+    public:
+        AimProjectileCrashFix()
         {
-            auto* const match = site.get(0).get<uint8_t>();
-            // The A60 tail sits 123 bytes after the anchor; the branch the fix
-            // widens is 38 bytes before it.
-            JumpTo(ctx, site.get(0).get<uint8_t>(123), OPP_BODY(abi_smpa60_tail_shim));
-            WriteValue<uint8_t>(ctx, match - 38, opp::ops::kJmpRel8);
-        }
-        InstallBody(ctx, {kSmpa60ShimSite, 0, OPP_BODY(abi_smpa60_shim)});
-    }
-
-    void PublishSpeedupBugFix(PatchContext& ctx)
-    {
-        TraceArm("publish SpeedupBugFix");
-        if (!ctx.Option("SpeedupBugFix", "1"))
-            return;
-        auto pattern = Pattern(ctx.image, kSpeedupSite);
-        if (pattern.size() == 0)
-            return;
-        struct SpeedupSlot final
-        {
-            uint32_t* slot;
-            ptrdiff_t operand;
-        };
-        // The eight timing-constant operands inside the function kSpeedupSite
-        // matches, one per published pointer, in the recovered instruction order.
-        const SpeedupSlot slots[] = {
-            {&zpatch_speedup_t50, 26},  {&zpatch_speedup_t64, 165},
-            {&zpatch_speedup_t60, 188}, {&zpatch_speedup_t5c, 226},
-            {&zpatch_speedup_t68, 234}, {&zpatch_speedup_t4c, 249},
-            {&zpatch_speedup_t54, 264}, {&zpatch_speedup_t58, 276},
-        };
-        static_assert(std::size(slots) == 8);
-        for (const SpeedupSlot& slot : slots)
-            *slot.slot = *pattern.get(0).get<uint32_t>(slot.operand);
-    }
-
-    void InstallSpeedupBugFix(PatchContext& ctx)
-    {
-        TraceArm("SpeedupBugFix");
-        if (!ctx.Option("SpeedupBugFix", "1"))
-            return;
-        // The body replaces the 21-byte prologue before the match.
-        InstallBody(ctx, {kSpeedupSite, -21, OPP_BODY(abi_speedup_body)});
-    }
-
-    void PublishSuperLODFix(PatchContext& ctx)
-    {
-        TraceArm("publish SuperLODFix");
-        if (!ctx.Option("SuperLODFix", "1"))
-            return;
-        // The shim's three targets are derived from the arm's own site scan and the
-        // lookup function's entry scan: the fail/ok blocks sit a fixed distance past
-        // the site on both gated builds, and the lookup window is unique (proved
-        // with tools/opcep_sigcheck.py). The build gate keeps both scans on the
-        // build the original patched.
-        if (!BuildIs(ctx.build, {GameBuild::v1070, GameBuild::v1080}))
-            return;
-        if (auto pattern = Pattern(ctx.image, kSuperLodSite); pattern.size() > 0)
-        {
-            const auto* const site = pattern.get(0).get<uint8_t>();
-            // The fail/ok blocks sit 0x4E and 6 bytes past the site.
-            zpatch_super_lod_fail = AddressOf(site + 78);
-            zpatch_super_lod_ok = AddressOf(site + 6);
-        }
-        // The same model-lookup entry kModelLookupSite finds, read one byte past
-        // its first match (the scan the original SuperLOD handler used).
-        if (auto pattern = Pattern(ctx.image,
-                                   "8B 44 24 04 89 44 24 04 66 A1 ?? ?? ?? ?? 66 85 C0 76 3E 8B");
-            pattern.size() > 0)
-            zpatch_super_lod_lookup = AddressOf(pattern.get(0).get<uint8_t>());
-    }
-
-    void InstallSuperLODFix(PatchContext& ctx)
-    {
-        TraceArm("SuperLODFix");
-        if (!ctx.Option("SuperLODFix", "1"))
-            return;
-        // The recovered handler writes the same site on 1.0.7.0 (RVA 0x4A3CE9) and
-        // 1.0.8.0 (RVA 0x540E19); the scan is the instruction pair at the site and
-        // resolves on both, so the RVA table is gone. The build gate stays: the
-        // same bytes exist on other builds and the original only installed it on
-        // these two.
-        if (!BuildIs(ctx.build, {GameBuild::v1070, GameBuild::v1080}))
-            return;
-#if !defined(_WIN64)
-        // The shim tail-jumps through the three published slots. If any of them
-        // missed (a relocated absolute in the lookup window, or a different
-        // build), installing the shim would jump through a null slot; skip the arm
-        // instead.
-        if (zpatch_failsafe_skip("SuperLODFix targets", zpatch_super_lod_lookup == 0u ||
-                                                              zpatch_super_lod_fail == 0u ||
-                                                              zpatch_super_lod_ok == 0u))
-            return;
-#endif
-        InstallBody(ctx, {kSuperLodSite, 0, OPP_BODY(abi_super_lod_fix_shim)});
-    }
-
-    void InstallTryToSkipAllErrors(PatchContext& ctx)
-    {
-        TraceArm("TryToSkipAllErrors");
-        if (!ctx.Option("TryToSkipAllErrors", "1"))
-            return;
-        // The arm replaces the function's first byte with a `ret`.
-        auto pattern = Pattern(ctx.image, "81 EC 40 08 00 00 53 55 8B AC 24 4C 08 00 00");
-        if (pattern.size() == 0)
-            return;
-        WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(), 195);  // ret
-    }
-
-    void PublishWantedLevelCrashFix(PatchContext& ctx)
-    {
-        TraceArm("publish WantedLevelCrashFix");
-        if (ctx.Option("WantedLevelCrashFix", "1"))
-            PublishSlot(ctx, {kWantedSite, 12}, zpatch_wanted_level_resume);
-    }
-
-    void InstallWantedLevelCrashFix(PatchContext& ctx)
-    {
-        TraceArm("WantedLevelCrashFix");
-        if (!ctx.Option("WantedLevelCrashFix", "1"))
-            return;
-        InstallBody(ctx, {kWantedSite, 0, OPP_BODY(abi_wanted_level_shim)});
-    }
-
-    namespace
-    {
-        class StabilityFeatures
-        {
-        public:
-            StabilityFeatures()
+            InstallEvent() += []
             {
-                PublishEvent().Add(&PublishBadPlayerModelCrashFix, "PublishBadPlayerModelCrashFix");
-                PublishEvent().Add(&PublishBlackscreenFix, "PublishBlackscreenFix");
-                PublishEvent().Add(&PublishCollisionDeadlockFix, "PublishCollisionDeadlockFix");
-                PublishEvent().Add(&PublishEpisodeSwitchFreezeFix,
-                                   "PublishEpisodeSwitchFreezeFix");
-                PublishEvent().Add(&PublishGroupHackFix, "PublishGroupHackFix");
-                PublishEvent().Add(&PublishPathNodeCrashFix, "PublishPathNodeCrashFix");
-                PublishEvent().Add(&PublishPedModelsInCutscenesFix,
-                                   "PublishPedModelsInCutscenesFix");
-                PublishEvent().Add(&PublishPlaneCrashFix, "PublishPlaneCrashFix");
-                PublishEvent().Add(&PublishPlayerAsPedComponentsFix,
-                                   "PublishPlayerAsPedComponentsFix");
-                PublishEvent().Add(&PublishSMPA60Fix, "PublishSMPA60Fix");
-                PublishEvent().Add(&PublishSpeedupBugFix, "PublishSpeedupBugFix");
-                PublishEvent().Add(&PublishWantedLevelCrashFix, "PublishWantedLevelCrashFix");
-                PublishEvent().Add(&PublishSuperLODFix, "PublishSuperLODFix");
-                PublishEvent().Add(&PublishCrashMsgFix, "PublishCrashMsgFix");
-                PublishEvent().Add(&PublishBenchmarkFix, "PublishBenchmarkFix");
-                PublishEvent().Add(&PublishGarageModelFix, "PublishGarageModelFix");
-                PublishEvent().Add(&PublishOutOfCommissionFix, "PublishOutOfCommissionFix");
-                InstallEvent().Add(&InstallAimProjectileCrashFix, "InstallAimProjectileCrashFix");
-                InstallEvent().Add(&InstallBadPlayerModelCrashFix, "InstallBadPlayerModelCrashFix");
-                InstallEvent().Add(&InstallBlackscreenFix, "InstallBlackscreenFix");
-                InstallEvent().Add(&InstallCollisionDeadlockFix, "InstallCollisionDeadlockFix");
-                InstallEvent().Add(&InstallCombinedRadioFreezeFix, "InstallCombinedRadioFreezeFix");
-                InstallEvent().Add(&InstallEpisodeSwitchFreezeFix,
-                                   "InstallEpisodeSwitchFreezeFix");
-                InstallEvent().Add(&InstallGroupHackFix, "InstallGroupHackFix");
-                InstallEvent().Add(&InstallMPNikoCrashFix, "InstallMPNikoCrashFix");
-                InstallEvent().Add(&InstallPathNodeCrashFix, "InstallPathNodeCrashFix");
-                InstallEvent().Add(&InstallPedModelsInCutscenesFix,
-                                   "InstallPedModelsInCutscenesFix");
-                InstallEvent().Add(&InstallPlaneCrashFix, "InstallPlaneCrashFix");
-                InstallEvent().Add(&InstallPlayerAsPedComponentsFix,
-                                   "InstallPlayerAsPedComponentsFix");
-                InstallEvent().Add(&InstallSMPA60Fix, "InstallSMPA60Fix");
-                InstallEvent().Add(&InstallSpeedupBugFix, "InstallSpeedupBugFix");
-                InstallEvent().Add(&InstallTryToSkipAllErrors, "InstallTryToSkipAllErrors");
-                InstallEvent().Add(&InstallWantedLevelCrashFix, "InstallWantedLevelCrashFix");
-                InstallEvent().Add(&InstallSuperLODFix, "InstallSuperLODFix");
-                InstallEvent().Add(&InstallCrashMsgFix, "InstallCrashMsgFix");
-                InstallEvent().Add(&InstallBenchmarkFix, "InstallBenchmarkFix");
-                InstallEvent().Add(&InstallGarageModelFix, "InstallGarageModelFix");
-                InstallEvent().Add(&InstallOutOfCommissionFix, "InstallOutOfCommissionFix");
-            }
-        } stabilityFeatures;
-    }  // namespace
+                TraceArm("InstallAimProjectileCrashFix");
+                if (!Game::Option("AimProjectileCrashFix", "1"))
+                    return;
+                InstallBody({"8B 44 24 08 89 41 20 8B 44 24 0C 89 41 24 F7 D8", 0,
+                                  OPP_BODY(abi_aim_projectile_crash_fix)});
+            };
+        }
+    } aimProjectileCrashFix;
+
+    class BadPlayerModelCrashFix
+    {
+    public:
+        BadPlayerModelCrashFix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishBadPlayerModelCrashFix");
+                if (Game::Option("BadPlayerModelCrashFix", "1"))
+                    PublishSlot({kBadPlayerModelSite, 10}, zpatch_bpm_resume);
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallBadPlayerModelCrashFix");
+                if (!Game::Option("BadPlayerModelCrashFix", "1"))
+                    return;
+                InstallBody({kBadPlayerModelSite, 0, OPP_BODY(abi_bad_player_model)});
+            };
+        }
+    } badPlayerModelCrashFix;
+
+    class BenchmarkFix
+    {
+    public:
+        BenchmarkFix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishBenchmarkFix");
+                if (!Game::Option("BenchmarkFix", "1"))
+                    return;
+                auto pattern = find_pattern(kBenchmarkSite);
+                if (pattern.size() == 0)
+                    return;
+                zpatch_benchmark_resume_a = MatchAddress(pattern, kBenchmarkResumeOffset);
+                zpatch_benchmark_resume_b = MatchAddress(pattern, kBenchmarkResumeOffset);
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallBenchmarkFix");
+                if (!Game::Option("BenchmarkFix", "1"))
+                    return;
+                if (!BuildIs(Game::Get().build, {GameBuild::v1000, GameBuild::v1040, GameBuild::v1004,
+                                         GameBuild::v1060, GameBuild::v1070, GameBuild::v1061,
+                                         GameBuild::v1100, GameBuild::v1110, GameBuild::v1120,
+                                         GameBuild::v12043}))
+                    return;
+                // The original patches exactly the two benchmark entries (bodies a and b);
+                // a different count is a view mismatch, so the arm installs nothing.
+                auto pattern = find_pattern<0>(kBenchmarkSite);
+                if (pattern.size() == 0 ||
+                    !ExpectMatchCount(pattern, 2, "BenchmarkFix entries"))
+                    return;
+                injector::MakeJMP(pattern.get_first<uint8_t>(kBenchmarkCallOffset), OPP_BODY(abi_benchmark_a), true);
+                injector::MakeJMP(pattern.get(1).get<uint8_t>(kBenchmarkCallOffset), OPP_BODY(abi_benchmark_b), true);
+            };
+        }
+    } benchmarkFix;
+
+    class BlackscreenFix
+    {
+    public:
+        BlackscreenFix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishBlackscreenFix");
+                if (!Game::Option("BlackscreenFix", "1"))
+                    return;
+                auto pattern = find_pattern(kBlackscreenSite);
+                if (pattern.size() == 0)
+                    return;
+                // The branch at +0x52 jumps through the original target two bytes later;
+                // the dword one byte past that is the value pointer the body reads.
+                constexpr ptrdiff_t kBranchOperand = 82;
+                zpatch_blackscreen_resume = MatchTarget(pattern, kBranchOperand, 86);
+                const auto address = static_cast<uintptr_t>(
+                    MatchTarget(pattern, kBranchOperand, 87));
+                if (InImage(Game::Get().image, address))
+                    zpatch_blackscreen_value_ptr = *reinterpret_cast<const uint32_t*>(address);
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallBlackscreenFix");
+                if (!Game::Option("BlackscreenFix", "1"))
+                    return;
+                // The site is the `jle` 81 bytes into the match.
+                InstallBody({kBlackscreenSite, 81, OPP_BODY(abi_blackscreen_shim)});
+            };
+        }
+    } blackscreenFix;
+
+    class CollisionDeadlockFix
+    {
+    public:
+        CollisionDeadlockFix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishCollisionDeadlockFix");
+                if (!Game::Option("CollisionDeadlockFix", "1"))
+                    return;
+                // The `call rel32` predicate site at +91 (its next instruction at +95) is
+                // the walk function the shim calls.
+                if (auto pattern = find_pattern(kCollisionWalkSite); pattern.size() > 0)
+                    zpatch_collision_deadlock_should_walk = MatchTarget(pattern, 91, 95);
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallCollisionDeadlockFix");
+                if (!Game::Option("CollisionDeadlockFix", "1"))
+                    return;
+                InstallBody({kCollisionWalkSite, 0, OPP_BODY(abi_collision_deadlock_walk)});
+            };
+        }
+    } collisionDeadlockFix;
+
+    class CombinedRadioFreezeFix
+    {
+    public:
+        CombinedRadioFreezeFix()
+        {
+            InstallEvent() += []
+            {
+                TraceArm("InstallCombinedRadioFreezeFix");
+                if (!Game::Option("CombinedRadioFreezeFix", "1"))
+                    return;
+                CallBody({"E8 ? ? ? ? 8B 35 ? ? ? ? 3B F0", 0,
+                               OPP_BODY(abi_combined_radio_freeze_fix)});
+            };
+        }
+    } combinedRadioFreezeFix;
+
+    class CrashMsgFix
+    {
+    public:
+        CrashMsgFix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishCrashMsgFix");
+                if (!Game::Option("CrashMsgFix", "1"))
+                    return;
+                auto pattern = find_pattern(kCrashMsgSite);
+                if (pattern.size() == 0)
+                    return;
+                // *(match-4) is the call target the site's E8 replaced; the getter's own
+                // first instruction is a branch whose rel32 sits at +1.
+                constexpr ptrdiff_t kCallOperand = -4;
+                constexpr ptrdiff_t kBranchOperand = 1;
+                const auto site = static_cast<uintptr_t>(*pattern.get_first<uint32_t>(kCallOperand));
+                if (InImage(Game::Get().image, site))
+                    zpatch_crash_msg_getter =
+                        BranchDestination(reinterpret_cast<const uint8_t*>(site), kBranchOperand);
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallCrashMsgFix");
+                if (!Game::Option("CrashMsgFix", "1"))
+                    return;
+                // The E8 the body replaces sits four bytes before the match, and its rel32
+                // operand is the call target the body's first instruction loads.
+                constexpr ptrdiff_t kCallOperand = -4;
+                auto pattern = find_pattern(kCrashMsgSite);
+                if (pattern.size() == 0)
+                    return;
+                injector::MakeCALL(MatchPointer(pattern, kCallOperand), OPP_BODY(abi_crash_msg_shim), true);
+            };
+        }
+    } crashMsgFix;
+
+    class EpisodeSwitchFreezeFix
+    {
+    public:
+        EpisodeSwitchFreezeFix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishEpisodeSwitchFreezeFix");
+                if (!Game::Option("EpisodeSwitchFreezeFix", "1"))
+                    return;
+                PublishSlot({kEpisodeLoadSite, 5}, zpatch_episode_switch_resume_a);
+                PublishSlot({kEpisodeCompareSite, 6}, zpatch_episode_switch_resume_b);
+                PublishSlot({kEpisodeTouchSite, 7}, zpatch_episode_switch_resume_c);
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallEpisodeSwitchFreezeFix");
+                if (!Game::Option("EpisodeSwitchFreezeFix", "1"))
+                    return;
+                // The five replacement functions, installed in this order.
+                const BodySite sites[] = {
+                    {kEpisodeTouchSite, 0, OPP_BODY(abi_episode_switch_shim_c)},
+                    {kEpisodeLoadSite, 0, OPP_BODY(abi_episode_switch_store_shim)},
+                    {"8B 41 10 03 41 0C C3", 0, OPP_BODY(abi_episode_switch_sum)},
+                    {kEpisodeCompareSite, 0, OPP_BODY(abi_episode_switch_shim_b)},
+                    {"8B C1 8B 08 8B 11 8B 40 04 8B 52 30 50 FF D2 C3", 0,
+                     OPP_BODY(abi_episode_switch_vcall)},
+                };
+                for (const BodySite& site : sites)
+                    InstallBody(site);
+            };
+        }
+    } episodeSwitchFreezeFix;
+
+    class GarageModelFix
+    {
+    public:
+        GarageModelFix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishGarageModelFix");
+                if (!Game::Option("GarageModelFix", "1"))
+                    return;
+                auto pattern = find_pattern(kGarageSaveSite);
+                if (pattern.size() == 0)
+                    return;
+                zpatch_garage_resume_a = MatchAddress(pattern, 6);
+                // The hook goes to the function prologue 0x20 bytes before the anchor; its
+                // resume is just past the 8-byte `movss xmm0, ds:X` it skips, and the float
+                // to reload is that instruction's operand.
+                zpatch_garage_entry_resume_a = MatchAddress(pattern, kGarageEntryResumeDelta);
+                zpatch_garage_scale = *opp::Rebased<const float*>(
+                    Field(pattern.get_first<uint8_t>(), kGarageScaleOperandDelta));
+                PublishSlot({kGarageRequestSite, 5}, zpatch_garage_resume_b);
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallGarageModelFix");
+                if (!Game::Option("GarageModelFix", "1"))
+                    return;
+                // Site A is hooked at the prologue, 0x20 bytes before the anchor; the body
+                // reloads the xmm0 the skipped instruction sets.
+                InstallBody({kGarageSaveSite, kGarageEntryDelta, OPP_BODY(abi_garage_entry_a)});
+                InstallBody({kGarageRequestSite, 0, OPP_BODY(abi_garage_body_b)});
+            };
+        }
+    } garageModelFix;
+
+    class GroupHackFix
+    {
+    public:
+        GroupHackFix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishGroupHackFix");
+                if (Game::Option("GroupHackFix", "1"))
+                    PublishSlot({kGroupHackSite, 11}, zpatch_group_hack_resume);
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallGroupHackFix");
+                if (!Game::Option("GroupHackFix", "1"))
+                    return;
+                InstallBody({kGroupHackSite, 0, OPP_BODY(abi_group_hack_shim)});
+            };
+        }
+    } groupHackFix;
+
+    class MPNikoCrashFix
+    {
+    public:
+        MPNikoCrashFix()
+        {
+            InstallEvent() += []
+            {
+                TraceArm("InstallMPNikoCrashFix");
+                if (!Game::Option("MPNikoCrashFix", "1"))
+                    return;
+                // The crash is the conditional jump itself: turning it into an
+                // unconditional short jump skips the freed-model dereference.
+                auto pattern = find_pattern("74 2B 57 E8 ? ? ? ? 8B BE A8 0E 00 00");
+                if (pattern.size() == 0)
+                    return;
+                injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(), opp::ops::kJmpRel8, true);
+            };
+        }
+    } mPNikoCrashFix;
+
+    class OutOfCommissionFix
+    {
+    public:
+        OutOfCommissionFix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishOutOfCommissionFix");
+                if (!Game::Option("OutOfCommissionFix", "1") || !IsFinaleBuild(Game::Get().build))
+                    return;
+                // The branch body resumes at match+0x11.
+                PublishSlot({kOocBranchSite, 17}, zpatch_ooc_resume);
+                auto pattern = find_pattern(kOocWrapperSite);
+                if (pattern.size() == 0)
+                    return;
+                // The match is the first E8; the logger is the call whose rel32 operand
+                // sits 50 bytes before it (next at -46), and the original call target is
+                // the match's own operand (at +1, next at +5).
+                zpatch_ooc_logger = MatchTarget(pattern, -50, -46);
+                zpatch_ooc_orig = MatchTarget(pattern, 1, 5);
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallOutOfCommissionFix");
+                if (!Game::Option("OutOfCommissionFix", "1") || !IsFinaleBuild(Game::Get().build))
+                    return;
+                InstallBody({kOocBranchSite, 7, OPP_BODY(abi_ooc_branch)});
+                CallBody({kOocWrapperSite, 0, OPP_BODY(abi_ooc_wrap)});
+            };
+        }
+    } outOfCommissionFix;
+
+    class PathNodeCrashFix
+    {
+    public:
+        PathNodeCrashFix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishPathNodeCrashFix");
+                if (!Game::Option("PathNodeCrashFix", "1"))
+                    return;
+                auto pattern = find_pattern(kPathNodeSite);
+                if (pattern.size() == 0)
+                    return;
+                zpatch_path_node_resume_ok = MatchAddress(pattern);
+                zpatch_path_node_resume_fail = MatchAddress(pattern, 59);
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallPathNodeCrashFix");
+                if (!Game::Option("PathNodeCrashFix", "1"))
+                    return;
+                // The shim replaces the `mov dl, [eax+0x1F]` 53 bytes into the match.
+                InstallBody({kPathNodeSite, 53, OPP_BODY(abi_path_node_shim)});
+            };
+        }
+    } pathNodeCrashFix;
+
+    class PedModelsInCutscenesFix
+    {
+    public:
+        PedModelsInCutscenesFix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishPedModelsInCutscenesFix");
+                if (Game::Option("PedModelsInCutscenesFix", "1"))
+                    PublishSlot({kModelLookupSite, 0}, zpatch_model_lookup);
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallPedModelsInCutscenesFix");
+                if (!Game::Option("PedModelsInCutscenesFix", "1"))
+                    return;
+                InstallBody({"56 8B F1 E8 ? ? ? ? 85 C0 74 0E 66 8B 40 2E", 0,
+                                  OPP_BODY(abi_ped_models_in_cutscenes_check)});
+            };
+        }
+    } pedModelsInCutscenesFix;
+
+    class PlaneCrashFix
+    {
+    public:
+        PlaneCrashFix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishPlaneCrashFix");
+                if (!Game::Option("PlaneCrashFix", "1"))
+                    return;
+                auto pattern = find_pattern(kPlaneCrashSite);
+                if (pattern.size() == 0)
+                    return;
+                zpatch_plane_crash_resume_b = MatchAddress(pattern, 14);
+                zpatch_plane_crash_resume_a = MatchAddress(pattern, -705);
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallPlaneCrashFix");
+                if (!Game::Option("PlaneCrashFix", "1"))
+                    return;
+                // The shim replaces the store 3 bytes into the match.
+                InstallBody({kPlaneCrashSite, 3, OPP_BODY(abi_plane_crash_shim)});
+            };
+        }
+    } planeCrashFix;
+
+    class PlayerAsPedComponentsFix
+    {
+    public:
+        PlayerAsPedComponentsFix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishPlayerAsPedComponentsFix");
+                if (!Game::Option("PlayerAsPedComponentsFix", "1"))
+                    return;
+                PublishSlot({kPlayerPedSite, 14}, zpatch_player_ped_resume);
+                PublishSlot({kModelLookupSite, 0}, zpatch_model_lookup);
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallPlayerAsPedComponentsFix");
+                if (!Game::Option("PlayerAsPedComponentsFix", "1"))
+                    return;
+                InstallBody({kPlayerPedSite, 5, OPP_BODY(abi_player_ped_components_shim)});
+            };
+        }
+    } playerAsPedComponentsFix;
+
+    class SMPA60Fix
+    {
+    public:
+        SMPA60Fix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishSMPA60Fix");
+                if (!Game::Option("SMPA60Fix", "1"))
+                    return;
+                if (find_pattern(kSmpa60GateSite).size() == 0)
+                    return;
+                auto pattern = find_pattern(kSmpa60ShimSite);
+                if (pattern.size() == 0)
+                    return;
+                zpatch_smpa60_resume_a = MatchAddress(pattern, 28);
+                zpatch_smpa60_resume_b = MatchAddress(pattern, 14);
+                auto gate = find_pattern(kSmpa60GateSite);
+                if (gate.size() > 0)
+                    zpatch_smpa60_resume_c = MatchAddress(gate, 136);
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallSMPA60Fix");
+                if (!Game::Option("SMPA60Fix", "1"))
+                    return;
+                if (find_pattern(kSmpa60GateSite).size() == 0)
+                    return;
+                auto site = find_pattern(kSmpa60GateSite);
+                if (site.size() > 0)
+                {
+                    auto* const match = site.get_first<uint8_t>();
+                    // The A60 tail sits 123 bytes after the anchor; the branch the fix
+                    // widens is 38 bytes before it.
+                    injector::MakeJMP(site.get_first<uint8_t>(123), OPP_BODY(abi_smpa60_tail_shim), true);
+                    injector::WriteMemory<uint8_t>(match - 38, opp::ops::kJmpRel8, true);
+                }
+                InstallBody({kSmpa60ShimSite, 0, OPP_BODY(abi_smpa60_shim)});
+            };
+        }
+    } sMPA60Fix;
+
+    class SpeedupBugFix
+    {
+    public:
+        SpeedupBugFix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishSpeedupBugFix");
+                if (!Game::Option("SpeedupBugFix", "1"))
+                    return;
+                auto pattern = find_pattern(kSpeedupSite);
+                if (pattern.size() == 0)
+                    return;
+                struct SpeedupSlot final
+                {
+                    uint32_t* slot;
+                    ptrdiff_t operand;
+                };
+                // The eight timing-constant operands inside the function kSpeedupSite
+                // matches, one per published pointer, in the recovered instruction order.
+                const SpeedupSlot slots[] = {
+                    {&zpatch_speedup_t50, 26},  {&zpatch_speedup_t64, 165},
+                    {&zpatch_speedup_t60, 188}, {&zpatch_speedup_t5c, 226},
+                    {&zpatch_speedup_t68, 234}, {&zpatch_speedup_t4c, 249},
+                    {&zpatch_speedup_t54, 264}, {&zpatch_speedup_t58, 276},
+                };
+                static_assert(std::size(slots) == 8);
+                for (const SpeedupSlot& slot : slots)
+                    *slot.slot = *pattern.get_first<uint32_t>(slot.operand);
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallSpeedupBugFix");
+                if (!Game::Option("SpeedupBugFix", "1"))
+                    return;
+                // The body replaces the 21-byte prologue before the match.
+                InstallBody({kSpeedupSite, -21, OPP_BODY(abi_speedup_body)});
+            };
+        }
+    } speedupBugFix;
+
+    class SuperLODFix
+    {
+    public:
+        SuperLODFix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishSuperLODFix");
+                if (!Game::Option("SuperLODFix", "1"))
+                    return;
+                // The shim's three targets are derived from the arm's own site scan and the
+                // lookup function's entry scan: the fail/ok blocks sit a fixed distance past
+                // the site on both gated builds, and the lookup window is unique (proved
+                // with tools/opcep_sigcheck.py). The build gate keeps both scans on the
+                // build the original patched.
+                if (!BuildIs(Game::Get().build, {GameBuild::v1070, GameBuild::v1080}))
+                    return;
+                if (auto pattern = find_pattern(kSuperLodSite); pattern.size() > 0)
+                {
+                    const auto* const site = pattern.get_first<uint8_t>();
+                    // The fail/ok blocks sit 0x4E and 6 bytes past the site.
+                    zpatch_super_lod_fail = AddressOf(site + 78);
+                    zpatch_super_lod_ok = AddressOf(site + 6);
+                }
+                // The same model-lookup entry kModelLookupSite finds, read one byte past
+                // its first match (the scan the original SuperLOD handler used).
+                if (auto pattern = find_pattern("8B 44 24 04 89 44 24 04 66 A1 ?? ?? ?? ?? 66 85 C0 76 3E 8B");
+                    pattern.size() > 0)
+                    zpatch_super_lod_lookup = AddressOf(pattern.get_first<uint8_t>());
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallSuperLODFix");
+                if (!Game::Option("SuperLODFix", "1"))
+                    return;
+                // The recovered handler writes the same site on 1.0.7.0 (RVA 0x4A3CE9) and
+                // 1.0.8.0 (RVA 0x540E19); the scan is the instruction pair at the site and
+                // resolves on both, so the RVA table is gone. The build gate stays: the
+                // same bytes exist on other builds and the original only installed it on
+                // these two.
+                if (!BuildIs(Game::Get().build, {GameBuild::v1070, GameBuild::v1080}))
+                    return;
+        #if !defined(_WIN64)
+                // The shim tail-jumps through the three published slots. If any of them
+                // missed (a relocated absolute in the lookup window, or a different
+                // build), installing the shim would jump through a null slot; skip the arm
+                // instead.
+                if (zpatch_failsafe_skip("SuperLODFix targets", zpatch_super_lod_lookup == 0u ||
+                                                                      zpatch_super_lod_fail == 0u ||
+                                                                      zpatch_super_lod_ok == 0u))
+                    return;
+        #endif
+                InstallBody({kSuperLodSite, 0, OPP_BODY(abi_super_lod_fix_shim)});
+            };
+        }
+    } superLODFix;
+
+    class TryToSkipAllErrors
+    {
+    public:
+        TryToSkipAllErrors()
+        {
+            InstallEvent() += []
+            {
+                TraceArm("InstallTryToSkipAllErrors");
+                if (!Game::Option("TryToSkipAllErrors", "1"))
+                    return;
+                // The arm replaces the function's first byte with a `ret`.
+                auto pattern = find_pattern("81 EC 40 08 00 00 53 55 8B AC 24 4C 08 00 00");
+                if (pattern.size() == 0)
+                    return;
+                injector::WriteMemory<uint8_t>(pattern.get_first<uint8_t>(), 195, true);  // ret
+            };
+        }
+    } tryToSkipAllErrors;
+
+    class WantedLevelCrashFix
+    {
+    public:
+        WantedLevelCrashFix()
+        {
+            PublishEvent() += []
+            {
+                TraceArm("PublishWantedLevelCrashFix");
+                if (Game::Option("WantedLevelCrashFix", "1"))
+                    PublishSlot({kWantedSite, 12}, zpatch_wanted_level_resume);
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallWantedLevelCrashFix");
+                if (!Game::Option("WantedLevelCrashFix", "1"))
+                    return;
+                InstallBody({kWantedSite, 0, OPP_BODY(abi_wanted_level_shim)});
+            };
+        }
+    } wantedLevelCrashFix;
+
 }  // namespace opp::features
 
 // ---- hook bodies ----
@@ -1496,14 +1561,13 @@ extern "C"
 int32_t abi_player_ped_helper() noexcept
 {
     int32_t index = -1;
-    const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
-        static_cast<uintptr_t>(zpatch_model_lookup));
+    const auto lookup =
+        opp::Rebased<int(__cdecl*)(uint32_t, int32_t*)>(zpatch_model_lookup);
     // 0x1003D960 `call dword_10159C0C` is unguarded, so a null lookup faults.
     zpatch_player_ped_computed = 0;  // original writes 0 before the lookup
     if (!zpatch_failsafe_skip("PlayerAsPedComponentsFix model lookup", lookup == nullptr))
         lookup(GameHash("player"), &index);
-    const auto* object = reinterpret_cast<const uint8_t*>(
-        static_cast<uintptr_t>(zpatch_player_ped_object));
+    const auto* object = opp::Rebased<const uint8_t*>(zpatch_player_ped_object);
     // The object is the argument the shim stashed; a clean skip keeps the
     // original's "no match" answer (model -1) instead of dereferencing null.
     const int16_t model =

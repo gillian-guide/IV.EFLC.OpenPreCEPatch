@@ -46,13 +46,14 @@ the code that actually reads them; the generated TSV cannot. The shipped INI is
 the user-facing surface, and `loader_defaults.tsv` is the recovered-loader
 answer. `opp.config` carries this decision in the `Config::Option` comment.
 
-## Install-time failsafes (default on)
+## Arm writes
 
-`opp.patch` funnels every arm write through `SiteWritable`,
-`ModuleSiteWritable`, `JumpTo`, `CallTo`, `NopAt`, `WriteValue` and `WriteRaw`.
-A site outside the game image, a write that would leave it, or a branch whose
-body did not resolve is a logged skip instead of a fault. On a healthy image
-every check passes, so the write set is byte-identical to the unchecked form.
+Arm writes are direct `injector::MakeJMP` / `MakeCALL` / `MakeNOP` / `WriteMemory`
+calls, as in FusionFix: there is no wrapper between an arm and the injector. A
+missing signature is the arm's own clean skip (the original's behaviour), and the
+run-time body guards (`zpatch_failsafe_skip`, the `OPCEP_IMPROVEMENTS` group) keep
+a body from jumping or calling through an unpublished slot. The 96-cell matrix
+proves the write set is unchanged.
 
 ## ImprovedShaderStreaming and NewMemorySystem
 
@@ -145,26 +146,24 @@ match of its literal (`for_each_result`) and patches each one, so the hit count 
 image data, not a recovered per-build constant. All guards are verified by the
 96-cell matrix and the 18 crossbuild write sets, which are unchanged.
 
-## The install tiers and their deterministic order
+## The install tiers
 
-`opp.common` owns the FusionFix-style `Event<PatchContext&>` list and its three tiers
+`opp.common` owns FusionFix's `Event<Args...>` (a mutex-guarded `std::function` list
+whose `operator+=` returns the unsubscribe token) and the three `Event<>` tiers
 (`PublishEvent`, `InstallEvent`, `PostEvent`); `opp.game` runs them from `PatchGame`.
-Each feature module subscribes its arms at static-init time and the install pass
-runs the tiers in order; the publish tier is load-bearing (a site's original bytes
-and resume are read before any install overwrites them). There is no `Phase` enum,
-per-arm schedule table or dependency graph.
+Each feature is a class whose constructor only subscribes its body to a tier, and a
+file-scope instance performs the subscription. Handlers take no arguments: they read
+the `Game` singleton (`Game::Get()` for the image/build, `Game::Option(...)` for the
+INI), which `PatchGame` initializes once. There is no `Phase` enum, per-arm schedule
+table or dependency graph.
 
-Inside a tier the arms run in **name** order. Subscription order is the
-executable's static-init/link order, which differs between the ASI, the dump and
-the tests; name order is identical in every binary and keeps two arms that patch
-the same site independent of the link. The 96-cell matrix (96 cells / 4004
-writes) and the 18 crossbuild write sets are byte-identical to the old shipping
-schedule. The only visible difference is attribution: `MovingPlaneParts` and
-`MovingSteeringWheelSupport` both write the same five VEHICLES bytes with the same
-value, and the refresh credits the one that now runs first (`MovingPlaneParts`);
-`tests/parity/matrix.json` was regenerated for that cell only (the write count and
-hash are unchanged; the dropped `delta_sha256` change is the arm label inside the
-delta file).
+The publish tier is load-bearing (a site's original bytes and resume are read before
+any install overwrites them). Inside a tier the handlers run in subscription order,
+which is the executable's static-init/link order; the 96-cell matrix proves that
+order is write-equivalent. Attribution is `TraceArm`: the arm names every handler at
+its start (`InstallX` / `PublishX`, the original loader's names) and the write
+observer brackets the arm's bytes, so `tests/parity/matrix.json` keeps its per-arm
+counts.
 
 ## Hook-body fidelity after the TU split
 

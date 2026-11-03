@@ -54,7 +54,7 @@ namespace
     constexpr size_t kSparePage = 0x1000;
 
     bool MapPeImage(const char* path, std::vector<uint8_t>& image, uint32_t& imageBase,
-                    uint32_t& sizeOfImage)
+                    uint32_t& sizeOfImage, uint32_t& relocRva, uint32_t& relocSize)
     {
         std::ifstream in(path, std::ios::binary);
         if (!in)
@@ -85,6 +85,10 @@ namespace
         imageBase = rd32(optional + 28);
         sizeOfImage = rd32(optional + 56);
         const uint32_t sizeOfHeaders = rd32(optional + 60);
+        // PE32 data directory 5 (base relocations): optional header + 96 bytes
+        // of standard/Windows fields + five preceding directories.
+        relocRva = rd32(optional + 96 + 5 * 8);
+        relocSize = rd32(optional + 96 + 5 * 8 + 4);
         if (sizeOfImage == 0 || sizeOfImage > kMaxImageSize)
             return false;
 
@@ -109,6 +113,47 @@ namespace
         return true;
     }
 
+    // PE32 is mapped at an arbitrary base when its preferred one is occupied,
+    // so apply the image's own HIGHLOW relocations. Absolute-code and data
+    // pointers then stay valid; RVAs and signatures do not change.
+    bool RelocateImage(uint8_t* image, uint32_t oldBase, uint32_t newBase, uint32_t relocRva,
+                       uint32_t relocSize, uint32_t sizeOfImage)
+    {
+        if (relocRva == 0 || relocSize == 0 || relocRva + relocSize > sizeOfImage)
+            return false;
+        const uint32_t delta = newBase - oldBase;
+        size_t offset = 0;
+        while (offset + 8 <= relocSize)
+        {
+            uint32_t blockRva = 0;
+            uint32_t blockSize = 0;
+            std::memcpy(&blockRva, image + relocRva + offset, 4);
+            std::memcpy(&blockSize, image + relocRva + offset + 4, 4);
+            if (blockSize < 8 || offset + blockSize > relocSize)
+                return false;
+            for (size_t entry = offset + 8; entry < offset + blockSize; entry += 2)
+            {
+                uint16_t value = 0;
+                std::memcpy(&value, image + relocRva + entry, 2);
+                const uint16_t type = static_cast<uint16_t>(value >> 12);
+                const uint16_t field = static_cast<uint16_t>(value & 0xFFFu);
+                if (type == 0)
+                    continue;
+                if (type != 3)  // IMAGE_REL_BASED_HIGHLOW (PE32)
+                    return false;
+                const size_t at = blockRva + field;
+                if (at + 4 > sizeOfImage)
+                    return false;
+                uint32_t pointer = 0;
+                std::memcpy(&pointer, image + at, 4);
+                pointer += delta;
+                std::memcpy(image + at, &pointer, 4);
+            }
+            offset += blockSize;
+        }
+        return true;
+    }
+
     // Per-arm attribution. `before` always mirrors the live image, so each arm
     // records only the bytes that arm left changed (the net write set of that
     // arm, not every transient store). Records are kept in memory so the
@@ -128,6 +173,51 @@ namespace
         std::vector<uint8_t> before;
         std::vector<WriteRecord> records;
     };
+
+    // Translate relocated image pointers back to the preferred-base values the
+    // committed matrix records, after the installers have run. Only addresses
+    // the PE marks as HIGHLOW are touched, so code/data bytes are untouched.
+    void CanonicaliseGamePointers(Attribution& state, std::vector<uint8_t>& pristine,
+                                  uint8_t* image, uint32_t mappedBase, uint32_t size,
+                                  uint32_t relocRva, uint32_t relocSize, uint32_t preferredBase)
+    {
+        if (relocRva == 0 || relocSize == 0 || relocRva + relocSize > size)
+            return;
+        const uint32_t delta = mappedBase - preferredBase;
+        size_t offset = 0;
+        while (offset + 8 <= relocSize)
+        {
+            uint32_t blockRva = 0;
+            uint32_t blockSize = 0;
+            std::memcpy(&blockRva, image + relocRva + offset, 4);
+            std::memcpy(&blockSize, image + relocRva + offset + 4, 4);
+            if (blockSize < 8 || offset + blockSize > relocSize)
+                return;
+            for (size_t entry = offset + 8; entry < offset + blockSize; entry += 2)
+            {
+                uint16_t value = 0;
+                std::memcpy(&value, image + relocRva + entry, 2);
+                if (static_cast<uint16_t>(value >> 12) != 3)
+                    continue;
+                const size_t at = blockRva + (value & 0xFFFu);
+                if (at + 4 > size)
+                    continue;
+                uint32_t pointer = 0;
+                std::memcpy(&pointer, image + at, 4);
+                if (pointer < mappedBase || pointer >= mappedBase + size)
+                    continue;
+                pointer -= delta;
+                std::memcpy(image + at, &pointer, 4);
+                std::memcpy(pristine.data() + at, &pointer, 4);
+            }
+            offset += blockSize;
+        }
+        for (WriteRecord& record : state.records)
+        {
+            record.oldValue = pristine[record.rva];
+            record.newValue = image[record.rva];
+        }
+    }
 
     void AttributionEnd(void* user, const char* arm)
     {
@@ -273,37 +363,12 @@ int main(int argc, char** argv)
     if (argc == 4 && std::strcmp(argv[1], "--import-legacy") == 0)
         return ImportLegacy(argv[2], argv[3]);
 
-    // Print the effective install order, one name per line, tier by tier, in the
-    // same name order PatchGame runs them. The order golden in
-    // tests/order_golden.txt is the per-tier arm set captured with this mode.
-    if (argc == 2 && std::strcmp(argv[1], "--order") == 0)
-    {
-        for (const opp::Event<opp::PatchContext&>* event : {&opp::PublishEvent(),
-                                                           &opp::InstallEvent(),
-                                                           &opp::PostEvent()})
-        {
-            std::vector<const char*> names;
-            for (size_t i = 0; i < event->size(); ++i)
-            {
-                if (const char* name = event->name(i))
-                    names.push_back(name);
-            }
-            std::sort(names.begin(), names.end(), [](const char* a, const char* b) {
-                return std::strcmp(a, b) < 0;
-            });
-            for (const char* name : names)
-                std::printf("%s\n", name);
-        }
-        return 0;
-    }
-
     if (argc < 3)
     {
         std::fprintf(stderr,
                      "usage: opcep_dump <game.exe> <ini> <out.txt> "
                      "[--attribution <arm.txt>]\n"
-                     "       opcep_dump --import-legacy <legacy.ini> <out.ini>\n"
-                     "       opcep_dump --order\n");
+                     "       opcep_dump --import-legacy <legacy.ini> <out.ini>\n");
         return 1;
     }
 
@@ -320,36 +385,49 @@ int main(int argc, char** argv)
     std::vector<uint8_t> file_image;
     uint32_t imageBase = 0;
     uint32_t size = 0;
-    if (!MapPeImage(argv[1], file_image, imageBase, size))
+    uint32_t relocRva = 0;
+    uint32_t relocSize = 0;
+    if (!MapPeImage(argv[1], file_image, imageBase, size, relocRva, relocSize))
     {
         std::fprintf(stderr, "opcep_dump: cannot map %s\n", argv[1]);
         return 2;
     }
 
+    const uint32_t preferredBase = imageBase;
     auto* image = static_cast<uint8_t*>(
         VirtualAlloc(reinterpret_cast<void*>(static_cast<uintptr_t>(imageBase)),
                      size + kSparePage, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
-    // A 32-bit host cannot always reserve the game's 0x400000 base. The write
-    // set is still address-independent: rows use RVA + this mapped base.
+    bool relocated = false;
     if (!image)
     {
-        MEMORY_BASIC_INFORMATION mbi{};
-        VirtualQuery(reinterpret_cast<void*>(static_cast<uintptr_t>(imageBase)), &mbi,
-                     sizeof(mbi));
-        std::fprintf(stderr,
-                     "opcep_dump: preferred base 0x%X unavailable (err=%lu state=0x%lX type=0x%lX "
-                     "region=%p size=0x%zX)\n",
-                     imageBase, GetLastError(), mbi.State, mbi.Type, mbi.BaseAddress,
-                     mbi.RegionSize);
+        // The preferred base is commonly occupied by this 32-bit process's heap
+        // or a DLL. Map anywhere and apply the image's own HIGHLOW relocations;
+        // the arms read absolute pointers out of the image, so they must point
+        // at the new mapping rather than the original base.
         image = static_cast<uint8_t*>(
-            VirtualAlloc(nullptr, size + kSparePage, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
-    }
-    if (!image)
-    {
-        std::fprintf(stderr, "opcep_dump: cannot map image (err=%lu)\n", GetLastError());
-        return 3;
+            VirtualAlloc(nullptr, size + kSparePage, MEM_COMMIT | MEM_RESERVE,
+                         PAGE_READWRITE));
+        if (!image)
+        {
+            std::fprintf(stderr, "opcep_dump: cannot allocate 0x%X bytes\n", size);
+            return 3;
+        }
+        relocated = true;
     }
     std::memcpy(image, file_image.data(), size);
+    if (relocated)
+    {
+        std::fprintf(stderr, "opcep_dump: relocated from 0x%X\n", imageBase);
+        const uint32_t newBase = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(image));
+        if (!RelocateImage(image, imageBase, newBase, relocRva, relocSize, size))
+        {
+            std::fprintf(stderr,
+                         "opcep_dump: image at 0x%X has no usable relocations (dir 0x%X/0x%X)\n",
+                         imageBase, relocRva, relocSize);
+            return 3;
+        }
+        imageBase = newBase;
+    }
 
     opp::Config config(argv[2]);
     if (!config.present())
@@ -390,6 +468,8 @@ int main(int argc, char** argv)
 
     CanonicaliseModulePointers(attribution, pristine,
                                reinterpret_cast<uintptr_t>(image), size);
+    CanonicaliseGamePointers(attribution, pristine, image, imageBase, size, relocRva, relocSize,
+                             preferredBase);
 
     std::FILE* out = std::fopen(argv[3], "wb");
     if (!out)

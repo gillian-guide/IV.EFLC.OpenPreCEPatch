@@ -491,8 +491,8 @@ namespace
 
     void TestPatternScan()
     {
-        // Two copies of the signature in .text and one in .data. Pattern() must
-        // stop at the first .text copy; PatternAll() must return both .text
+        // Two copies of the signature in .text and one in .data. FindPattern must
+        // stop at the first .text copy; FindAllPatterns must return both .text
         // copies and never the .data one.
         std::vector<uint8_t> image;
         BuildSyntheticPe(image);
@@ -501,20 +501,22 @@ namespace
         std::memcpy(image.data() + 0x1500, signature, sizeof(signature));
         std::memcpy(image.data() + 0x2100, signature, sizeof(signature));
 
-        const opp::GameImage pe{image.data(), image.size()};
-        auto first = opp::Pattern(pe, "AA BB CC DD");
-        CHECK(first.size() == 1);
-        CHECK(first.get(0).get<uint8_t>() == image.data() + 0x1100);
+        const opp::ModuleView pe = opp::ExecutableView({image.data(), image.size()});
+        opp::Match first;
+        CHECK(opp::FindPattern(pe, "AA BB CC DD", first));
+        CHECK(first.address == image.data() + 0x1100);
 
-        auto all = opp::PatternAll(pe, "AA BB CC DD");
-        CHECK(all.size() == 2);
-        CHECK(all.get(0).get<uint8_t>() == image.data() + 0x1100);
-        CHECK(all.get(1).get<uint8_t>() == image.data() + 0x1500);
+        std::vector<const uint8_t*> all;
+        CHECK(opp::FindAllPatterns(pe, "AA BB CC DD", all) == 2);
+        CHECK(all[0] == image.data() + 0x1100);
+        CHECK(all[1] == image.data() + 0x1500);
 
-        // A miss is an empty pattern either way.
-        CHECK(opp::Pattern(pe, "11 22 33 44").size() == 0);
-        CHECK(opp::PatternAll(pe, "11 22 33 44").size() == 0);
+        // A miss is an empty result either way.
+        opp::Match miss;
+        CHECK(!opp::FindPattern(pe, "11 22 33 44", miss));
+        CHECK(opp::FindAllPatterns(pe, "11 22 33 44", all) == 0);
     }
+
 
     void TestGame()
     {
@@ -689,205 +691,51 @@ namespace
         CHECK(opp::ZMenuVersionGuard(version) == opp::ZMenuGuardResult::module_absent);
     }
 
-    void TestFeatureOrder()
-    {
-        // The golden lists each tier's arms (sorted, one per line, `# tier`
-        // header). The subscription *sequence* inside a tier is the executable's
-        // static-init order, which differs between the ASI, the dump and the
-        // tests; the contract is the tier assignment and the arm set. The
-        // integer-ordered write set is proven separately (matrix/crossbuild):
-        // reordering a tier must not change a byte.
-        struct Expected
-        {
-            std::string tier;
-            std::string name;
-        };
-        std::vector<Expected> golden;
 
-        std::FILE* file = std::fopen(OPCEP_SOURCE_DIR "/tests/order_golden.txt", "rb");
-        CHECK(file != nullptr);
-        if (file)
-        {
-            char line[256];
-            std::string tier;
-            while (std::fgets(line, sizeof(line), file))
-            {
-                std::string text(line);
-                while (!text.empty() && (text.back() == '\n' || text.back() == '\r'))
-                    text.pop_back();
-                if (text.empty())
-                    continue;
-                if (text.front() == '#')
-                {
-                    tier = text.substr(1);
-                    while (!tier.empty() && tier.front() == ' ')
-                        tier.erase(tier.begin());
-                    continue;
-                }
-                golden.push_back({tier, text});
-            }
-            std::fclose(file);
-        }
-
-        std::vector<Expected> actual;
-        const std::pair<const char*, opp::Event<opp::PatchContext&>*> tiers[] = {
-            {"publish", &opp::PublishEvent()},
-            {"install", &opp::InstallEvent()},
-            {"post", &opp::PostEvent()},
-        };
-        for (const auto& [tier, event] : tiers)
-        {
-            for (size_t i = 0; i < event->size(); ++i)
-            {
-                const char* name = event->name(i);
-                CHECK(name != nullptr);
-                if (name != nullptr)
-                    actual.push_back({tier, name});
-            }
-        }
-
-        const auto less = [](const Expected& left, const Expected& right) {
-            if (left.tier != right.tier)
-                return left.tier < right.tier;
-            return left.name < right.name;
-        };
-        std::sort(golden.begin(), golden.end(), less);
-        std::sort(actual.begin(), actual.end(), less);
-
-        CHECK(actual.size() == golden.size());
-        for (size_t i = 0; i < golden.size() && i < actual.size(); ++i)
-        {
-            if (golden[i].tier == actual[i].tier && golden[i].name == actual[i].name)
-                continue;
-            std::fprintf(stderr, "order: #%zu expected [%s] %s, got [%s] %s\n", i,
-                         golden[i].tier.c_str(), golden[i].name.c_str(),
-                         actual[i].tier.c_str(), actual[i].name.c_str());
-            ++failures;
-            break;
-        }
-
-        // No arm is subscribed twice, and a publish is never in the install tier.
-        for (size_t i = 1; i < actual.size(); ++i)
-        {
-            if (actual[i].tier == actual[i - 1].tier && actual[i].name == actual[i - 1].name)
-            {
-                std::fprintf(stderr, "order: duplicate arm %s\n", actual[i].name.c_str());
-                ++failures;
-                break;
-            }
-        }
-    }
 
     void TestTierEdges()
     {
-        // A tier is a named std::function list: Add appends, += appends unnamed,
-        // a null callback is ignored, and Execute runs in name order with unnamed
-        // handlers last. The install driver's own tiers are not touched.
+        // A tier is FusionFix's Event: += appends a handler and returns the token
+        // that unsubscribes it, and executeAll runs a snapshot in subscription
+        // order. The install driver's own tiers are not touched.
         opp::Event<> event;
         std::string order;
-        event.Add([&order] { order += 'b'; }, "second");
+        auto remove_b = event += [&order] { order += 'b'; };
         event += [&order] { order += 'c'; };
-        event.Add([&order] { order += 'a'; }, "first");
-        event.Add(nullptr, "ignored");
-        CHECK(event.size() == 3);
-        CHECK(std::strcmp(event.name(0), "second") == 0);
-        CHECK(event.name(1) == nullptr);
-        CHECK(std::strcmp(event.name(2), "first") == 0);
-        event.Execute();
-        CHECK(order == "abc");
+        event += [&order] { order += 'a'; };
+        event.executeAll();
+        CHECK(order == "bca");
+
+        remove_b();
+        order.clear();
+        event.executeAll();
+        CHECK(order == "ca");
     }
 
-    void TestArmFailsafes()
+
+    void TestScanMiss()
     {
-        // A synthetic 4 KiB image of 0xCC: no signature can match it, and every
-        // RVA-based arm points past its end. The checked write helpers must
-        // accept an in-image write, refuse one that would leave the image, and
-        // refuse a branch whose body did not resolve - all without touching a
-        // byte and without a fault.
+        // A synthetic 4 KiB image of 0xCC matches no signature. find_pattern reads
+        // the Game image, an empty result is a logged skip, and the whole option
+        // pass leaves the image byte-identical (no arm writes a bare RVA).
         std::vector<uint8_t> buffer(0x1000, 0xCC);
         const opp::GameImage image{buffer.data(), buffer.size()};
         const opp::Config config{"opcep_failsafe_no_such_file.ini"};
-        opp::PatchContext ctx{image, reinterpret_cast<uintptr_t>(buffer.data()),
-                              opp::GameBuild::v1080, config};
 
-        CHECK(opp::SiteWritable(ctx, buffer.data(), 5));
-        CHECK(opp::SiteWritable(ctx, buffer.data() + buffer.size() - 5, 5));
-        CHECK(!opp::SiteWritable(ctx, buffer.data() + buffer.size() - 2, 5));
-        CHECK(!opp::SiteWritable(ctx, buffer.data() - 1, 1));
-        CHECK(!opp::SiteWritable(ctx, reinterpret_cast<const void*>(0x10), 1));
-        // A module-scoped write (the GFWL option into xlive.dll) is accepted only
-        // inside that module's own allocation.
-        const auto* const self = reinterpret_cast<const uint8_t*>(GetModuleHandleA(nullptr));
-        CHECK(opp::ModuleSiteWritable(self, self, 4));
-        CHECK(!opp::ModuleSiteWritable(self, buffer.data(), 4));
-        CHECK(!opp::ModuleSiteWritable(self, self + 0x40000000, 4));
-        CHECK(!opp::SiteWritable(ctx, nullptr, 1));
+        opp::Game::Initialize(image, opp::GameBuild::v1080, config);
+        opp::TraceArm("TestScanMiss");
+        CHECK(std::strcmp(opp::CurrentArm(), "TestScanMiss") == 0);
+        CHECK(opp::find_pattern("DE AD BE EF").size() == 0);
+        CHECK(opp::find_pattern<0>("DE AD BE EF").size() == 0);
+        opp::EndArmTrace();
 
-        // A refused write is counted and leaves the image untouched.
-        const size_t skipped = opp::ArmWritesSkipped();
-        opp::NopAt(ctx, buffer.data() + buffer.size() - 2, 5);
-        CHECK(buffer[buffer.size() - 1] == 0xCC);
-        CHECK(opp::ArmWritesSkipped() == skipped + 1);
-
-        // An accepted write reaches the image and is byte-identical to the
-        // unchecked injector call it replaced.
-        std::vector<uint8_t> reference(buffer.size(), 0xCC);
-        injector::MakeNOP(reference.data(), 4, true);
-        injector::WriteMemory<uint16_t>(reference.data() + 8, 0xBEEFu, true);
-        opp::NopAt(ctx, buffer.data(), 4);
-        opp::WriteValue<uint16_t>(ctx, buffer.data() + 8, 0xBEEFu);
-        CHECK(std::memcmp(buffer.data(), reference.data(), 10) == 0);
-
-        // A missing body is a no-op, not a jump to 0.
-        std::vector<uint8_t> before(buffer);
-        opp::JumpTo(ctx, buffer.data() + 16, nullptr);
-        CHECK(std::memcmp(buffer.data() + 16, before.data() + 16, 5) == 0);
-        CHECK(opp::ArmWritesSkipped() == skipped + 2);
-
-        // ... and a null destination is refused the same way.
-        opp::CallTo(ctx, buffer.data() + 16, nullptr);
-        CHECK(std::memcmp(buffer.data() + 16, before.data() + 16, 5) == 0);
-
-        // A body address writes the same five-byte branch the arm wrote before:
-        // opcode + rel32 to the body, encoded from the site. Any body address
-        // proves the encoder; use the externally linked OOC self-test body.
-        void* const body = reinterpret_cast<void*>(&zpatch_ooc_selftest);
-        CHECK(body != nullptr);
-        opp::JumpTo(ctx, buffer.data() + 32, body);
-        CHECK(buffer[32] == 0xE9);
-        int32_t jump_rel = 0;
-        std::memcpy(&jump_rel, buffer.data() + 33, sizeof(jump_rel));
-        CHECK(reinterpret_cast<uint8_t*>(buffer.data() + 32 + 5 + jump_rel) ==
-              reinterpret_cast<uint8_t*>(body));
-        opp::CallTo(ctx, buffer.data() + 40, body);
-        CHECK(buffer[40] == 0xE8);
-        int32_t call_rel = 0;
-        std::memcpy(&call_rel, buffer.data() + 41, sizeof(call_rel));
-        CHECK(reinterpret_cast<uint8_t*>(buffer.data() + 40 + 5 + call_rel) ==
-              reinterpret_cast<uint8_t*>(body));
-
-        // A missing signature is one logged skip, and the arm is named.
-        opp::TraceArm("TestArmFailsafes");
-        CHECK(std::strcmp(opp::CurrentArm(), "TestArmFailsafes") == 0);
-        auto pattern = opp::Pattern(image, "DE AD BE EF");
-        CHECK(pattern.size() == 0);
-        CHECK(opp::PatternAll(image, "DE AD BE EF").size() == 0);
-
-        // End to end: the whole option pass over that image installs nothing.
-        // Every arm is a signature scan now (no arm writes a bare RVA), so a
-        // synthetic image matches nothing and no write is even attempted; the
-        // image must be byte-identical and no write may reach it.
         std::vector<uint8_t> clean(buffer.size(), 0xCC);
         const std::vector<uint8_t> untouched(clean.size(), 0xCC);
         const opp::GameImage clean_image{clean.data(), clean.size()};
-        opp::PatchContext clean_ctx{clean_image,
-                                    reinterpret_cast<uintptr_t>(clean.data()),
-                                    opp::GameBuild::v1080, config};
-        const size_t applied_before_pass = opp::ArmWritesApplied();
         opp::PatchGame(opp::GameBuild::v1080, clean_image, config);
         CHECK(std::memcmp(clean.data(), untouched.data(), clean.size()) == 0);
-        CHECK(opp::ArmWritesApplied() == applied_before_pass);
     }
+
 
     void TestLauncherNamePatch()
     {
@@ -904,10 +752,8 @@ namespace
         WriteFile(ini, "[Options]\nLaunchWithPlayGTAIV = 1\n");
         const opp::Config config(ini);
         opp::SetLauncherProbeOverride(true);
-        opp::PatchContext ctx{{image.data(), image.size()},
-                              reinterpret_cast<uintptr_t>(image.data()),
-                              opp::GameBuild::v1080, config};
-        opp::ApplyLaunchWithPlayGTAIV(ctx);
+        opp::Game::Initialize({image.data(), image.size()}, opp::GameBuild::v1080, config);
+        opp::ApplyLaunchWithPlayGTAIV();
         opp::SetLauncherProbeOverride(false);
         for (const size_t offset : {0x1100u, 0x2100u})
         {
@@ -923,10 +769,8 @@ namespace
         BuildSyntheticPe(other);
         std::memcpy(other.data() + 0x2100, launch_name, sizeof(launch_name));
         opp::SetLauncherProbeOverride(true);
-        opp::PatchContext other_ctx{{other.data(), other.size()},
-                                    reinterpret_cast<uintptr_t>(other.data()),
-                                    opp::GameBuild::v1110, config};
-        opp::ApplyLaunchWithPlayGTAIV(other_ctx);
+        opp::Game::Initialize({other.data(), other.size()}, opp::GameBuild::v1110, config);
+        opp::ApplyLaunchWithPlayGTAIV();
         opp::SetLauncherProbeOverride(false);
         CHECK(std::memcmp(other.data() + 0x2100, launch_name, sizeof(launch_name)) == 0);
 
@@ -939,10 +783,9 @@ namespace
             for (const size_t offset : slots)
                 std::memcpy(candidate.data() + offset, launch_name, sizeof(launch_name));
             opp::SetLauncherProbeOverride(true);
-            opp::PatchContext candidate_ctx{{candidate.data(), candidate.size()},
-                                            reinterpret_cast<uintptr_t>(candidate.data()),
-                                            opp::GameBuild::v1080, config};
-            opp::ApplyLaunchWithPlayGTAIV(candidate_ctx);
+            opp::Game::Initialize({candidate.data(), candidate.size()},
+                                  opp::GameBuild::v1080, config);
+            opp::ApplyLaunchWithPlayGTAIV();
             opp::SetLauncherProbeOverride(false);
             for (const size_t offset : slots)
             {
@@ -957,6 +800,7 @@ namespace
         CHECK(untouched_with_slots({0x1100u, 0x2100u, 0x3100u}));    // 3 hits
         std::filesystem::remove(ini);
     }
+
 
     void TestRelocateCalls()
     {
@@ -1095,9 +939,8 @@ int main()
     TestNewSavesScan();
     TestVehicleLights();
     TestMenu();
-    TestFeatureOrder();
     TestTierEdges();
-    TestArmFailsafes();
+    TestScanMiss();
     TestLauncherNamePatch();
     TestRelocateCalls();
     TestMakeReturn();

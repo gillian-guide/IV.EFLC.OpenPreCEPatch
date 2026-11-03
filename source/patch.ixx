@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// opp.patch - signature scanning, the guarded arm writes and the body ABI.
+// opp.patch - signature scanning, the scan/address helpers and the body ABI.
 //
-// The FusionFix-minimal patch module: signature normalisation and scanning, the guarded
-// writes every arm uses (SiteWritable, JumpTo, CallTo, NopAt, WriteValue, WriteRaw and
-// their no-read variants), the Pattern wrappers, the arm trace and counters, the shared
-// body helpers, and the resolver the x64 parity dump uses for OPP_BODY.
+// The arm writes themselves are plain injector calls (FusionFix's shape); this module
+// keeps only what the arms and the offline dump genuinely share: signature
+// normalisation and scanning, the match/address readers, the branch encoder, the arm
+// trace helpers' scan diagnostics, and the resolver the x64 parity dump uses for
+// OPP_BODY.
 
 module;
 
@@ -34,15 +35,6 @@ import opp.log;
 
 export namespace opp
 {
-    std::string NormalizeSignature(std::string_view signature);
-
-    // The range the original's hook::pattern(str) scans: module base up to the end
-    // of the last executable section. The installers used to hand Hooking.Patterns
-    // the whole SizeOfImage, which scans .rdata/.data/.rsrc too (2.6x more bytes on
-    // 1.0.8.0) and can match outside code. Falls back to the whole image when the
-    // view is not a readable PE32 image, so synthetic test buffers keep working.
-    ModuleView ExecutableView(ModuleView image) noexcept;
-
     bool FindPattern(ModuleView module, std::string_view signature, Match& output) noexcept;
 
     size_t FindAllPatterns(ModuleView module, std::string_view signature,
@@ -71,53 +63,6 @@ export namespace opp
     inline constexpr size_t kBranchLength = 5; // E8/E9 <rel32>
     inline constexpr uint8_t kCallOpcode = 0xE8;
 
-    // The original's hook::pattern, over the image the drivers hand in. The
-    // original scans module base..end of the last executable section and the arms
-    // only read the first match, so the scan is limited to that range and stops
-    // at the first hit. Arms that also patch match 1 use PatternAll below.
-    //
-    // A scan with no hit is the normal way an option declines to install on a
-    // build it does not fit; it is logged once (with the arm that asked) so a
-    // partially-matching image is diagnosable instead of silent.
-    void LogPatternMiss(std::string_view signature) noexcept;
-
-    inline hook::pattern Pattern(const GameImage& image, std::string_view signature)
-    {
-        const std::string normalized = NormalizeSignature(signature);
-        if (normalized.empty())
-        {
-            LogPatternMiss(signature);
-            return hook::pattern{};
-        }
-        const ModuleView view = ExecutableView({image.base, image.size});
-        const uintptr_t begin = reinterpret_cast<uintptr_t>(view.base);
-        auto pattern =
-            hook::make_range_pattern(begin, begin + view.size, normalized).count_hint(1);
-        if (pattern.size() == 0)
-            LogPatternMiss(signature);
-        return pattern;
-    }
-
-    // Every match in the executable range. The original's multi-hit arms
-    // (BuildingDynamicShadows' hash pair, NoImpostorHeightCutoff, BenchmarkFix,
-    // EpisodicVehicleSupport's two-match NOPs and StartupTimeFix's literal loop)
-    // read match 1 or iterate all matches.
-    inline hook::pattern PatternAll(const GameImage& image, std::string_view signature)
-    {
-        const std::string normalized = NormalizeSignature(signature);
-        if (normalized.empty())
-        {
-            LogPatternMiss(signature);
-            return hook::pattern{};
-        }
-        const ModuleView view = ExecutableView({image.base, image.size});
-        const uintptr_t begin = reinterpret_cast<uintptr_t>(view.base);
-        auto pattern = hook::make_range_pattern(begin, begin + view.size, normalized);
-        if (pattern.size() == 0)
-            LogPatternMiss(signature);
-        return pattern;
-    }
-
     // A multi-match arm whose original read or patched a fixed number of sites
     // (FusionFix's P13): a different count is a view mismatch, so the arm logs it
     // and installs nothing rather than patching a partial set. Call it only after
@@ -129,7 +74,7 @@ export namespace opp
     inline uint32_t MatchAddress(hook::pattern& pattern, ptrdiff_t offset = 0)
     {
         return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(
-            pattern.get(0).get<uint8_t>(offset)));
+            pattern.get_first<uint8_t>(offset)));
     }
 
     // A rel32 target inside the current match: the displacement at
@@ -138,7 +83,7 @@ export namespace opp
                                      ptrdiff_t nextOffset)
     {
         return MatchAddress(pattern, nextOffset) +
-               *pattern.get(0).get<uint32_t>(displacementOffset);
+               *pattern.get_first<uint32_t>(displacementOffset);
     }
 
     inline uint32_t ReadDword(const uint8_t* address)
@@ -156,7 +101,7 @@ export namespace opp
     inline uint8_t* MatchPointer(hook::pattern& pattern, ptrdiff_t offset)
     {
         return reinterpret_cast<uint8_t*>(static_cast<uintptr_t>(
-            *pattern.get(0).get<uint32_t>(offset)));
+            *pattern.get_first<uint32_t>(offset)));
     }
 
     inline uint32_t AddressOf(const void* pointer)
@@ -213,109 +158,6 @@ export namespace opp
     // The FusionFix compatibility gate lives in opp.game with the other module
     // probes.
     bool NewFilesConflictModulesPresent();
-
-    // Name of the arm currently installing, for the skip log below. Set by
-    // TraceArm, which every Install*/Publish* arm calls first.
-    const char* CurrentArm() noexcept;
-
-    // Install trace. Records the arm name for CurrentArm() and, with install
-    // tracing on, writes one log line before the arm runs.
-    void TraceArm(const char* name);
-
-    // Arm failsafes: every arm write goes through one of these instead of calling
-    // injector:: directly. Before touching the image each checks that the site and every
-    // byte it would overwrite is inside the game image (or, for an option that patches
-    // another module such as xlive.dll, inside one committed allocation) and that the
-    // destination body resolved. A failed check writes one log line naming the arm and
-    // leaves the image untouched - the original loader's own signature-miss behaviour, so
-    // an unhealthy image degrades to a clean skip, never a fault, and a healthy image
-    // produces a byte-identical write set. The arm's option and build gate stays in the
-    // arm; these helpers only make the write itself safe.
-    bool SiteWritable(const PatchContext& ctx, const void* site, size_t length) noexcept;
-
-    // A site inside another loaded module (the GFWL option patches xlive.dll).
-    // The write is only accepted when the site lies inside that module's own
-    // allocation; everything else still goes through SiteWritable's image check.
-    bool ModuleSiteWritable(const void* moduleBase, const void* site,
-                            size_t length) noexcept;
-
-    template <typename T>
-    inline void WriteModuleValue(PatchContext& ctx, const void* moduleBase,
-                                 const void* site, T value)
-    {
-        (void)ctx;
-        if (!ModuleSiteWritable(moduleBase, site, sizeof(T)))
-            return;
-        injector::WriteMemory<T>(injector::raw_ptr(const_cast<void*>(site)), value, true);
-    }
-
-    // One skip line for a write that never reached the image.
-    void SkipArmWrite(const char* reason) noexcept;
-
-    inline void JumpTo(PatchContext& ctx, const void* site, void* target)
-    {
-        if (target == nullptr)
-        {
-            SkipArmWrite("null branch destination");
-            return;
-        }
-        if (!SiteWritable(ctx, site, kBranchLength))
-            return;
-        injector::MakeJMP(injector::raw_ptr(const_cast<void*>(site)), injector::raw_ptr(target),
-                          true);
-    }
-
-    inline void CallTo(PatchContext& ctx, const void* site, void* target)
-    {
-        if (target == nullptr)
-        {
-            SkipArmWrite("null call destination");
-            return;
-        }
-        if (!SiteWritable(ctx, site, kBranchLength))
-            return;
-        injector::MakeCALL(injector::raw_ptr(const_cast<void*>(site)), injector::raw_ptr(target),
-                           true);
-    }
-
-    inline void NopAt(PatchContext& ctx, const void* site, size_t length)
-    {
-        if (!SiteWritable(ctx, site, length))
-            return;
-        injector::MakeNOP(injector::raw_ptr(const_cast<void*>(site)), length, true);
-    }
-
-    // A `ret` (C3) or `ret N` (C2 imm16) through the same guarded write as the
-    // other helpers. injector::MakeRET stores the opcode and the immediate at
-    // their exact widths, so the encoded instruction is one or three bytes.
-    inline void MakeReturn(PatchContext& ctx, const void* site, uint16_t pop = 0)
-    {
-        if (!SiteWritable(ctx, site, pop ? 3u : 1u))
-            return;
-        injector::MakeRET(injector::raw_ptr(const_cast<void*>(site)), pop, true);
-    }
-
-    inline void WriteRaw(PatchContext& ctx, const void* site, const void* data, size_t length)
-    {
-        if (!SiteWritable(ctx, site, length))
-            return;
-        injector::WriteMemoryRaw(injector::raw_ptr(const_cast<void*>(site)),
-                                     const_cast<void*>(data), length, true);
-    }
-
-    template <typename T>
-    inline void WriteValue(PatchContext& ctx, const void* site, T value)
-    {
-        if (!SiteWritable(ctx, site, sizeof(T)))
-            return;
-        injector::WriteMemory<T>(injector::raw_ptr(const_cast<void*>(site)), value, true);
-    }
-
-    // Counters for the install summary line: writes applied and writes skipped
-    // by the checks above. Both include publish arms; bodies that run later do
-    // not count.
-    size_t ArmWritesApplied() noexcept;
-    size_t ArmWritesSkipped() noexcept;
 
     // Copy `size` bytes of `source` to `destination` and re-point every `call
     // rel32` whose E8 opcode sits at one of `callOffsets` at the absolute target
@@ -443,60 +285,6 @@ namespace opp
         }
     } // namespace
 
-    std::string NormalizeSignature(std::string_view signature)
-    {
-        std::string normalized;
-        return Normalize(signature, normalized) ? normalized : std::string{};
-    }
-
-    ModuleView ExecutableView(ModuleView image) noexcept
-    {
-        const ModuleView whole{image.base, image.size};
-        if (!image.base || image.size < sizeof(IMAGE_DOS_HEADER))
-            return whole;
-
-        const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(image.base);
-        if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0)
-            return whole;
-
-        const size_t nt_offset = static_cast<size_t>(dos->e_lfanew);
-        if (nt_offset + sizeof(IMAGE_NT_HEADERS) > image.size)
-            return whole;
-
-        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(image.base + nt_offset);
-        if (nt->Signature != IMAGE_NT_SIGNATURE ||
-            nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC)
-            return whole;
-
-        const size_t section_table = static_cast<size_t>(
-            reinterpret_cast<uintptr_t>(IMAGE_FIRST_SECTION(nt)) -
-            reinterpret_cast<uintptr_t>(image.base));
-        const size_t section_count = nt->FileHeader.NumberOfSections;
-        if (section_count == 0 || section_table < nt_offset ||
-            section_table + section_count * sizeof(IMAGE_SECTION_HEADER) > image.size)
-            return whole;
-
-        const auto* sections =
-            reinterpret_cast<const IMAGE_SECTION_HEADER*>(image.base + section_table);
-        size_t end = 0;
-        for (size_t i = 0; i < section_count; ++i)
-        {
-            const IMAGE_SECTION_HEADER& section = sections[i];
-            if ((section.Characteristics & IMAGE_SCN_MEM_EXECUTE) == 0)
-                continue;
-            const size_t section_end = static_cast<size_t>(section.VirtualAddress) +
-                                       section.Misc.VirtualSize;
-            if (section_end > end)
-                end = section_end;
-        }
-
-        // No executable section, or headers that point outside the mapped image:
-        // keep the old whole-image behaviour rather than silently scanning less.
-        if (end == 0 || end > image.size)
-            return whole;
-        return {image.base, end};
-    }
-
     bool FindPattern(ModuleView module, std::string_view signature, Match& output) noexcept
     {
         output = {};
@@ -512,13 +300,14 @@ namespace opp
         if (PatternLength(normalized) > module.size)
             return false;
 
-        const uintptr_t begin = reinterpret_cast<uintptr_t>(module.base);
-        auto pattern = hook::make_range_pattern(begin, begin + module.size, normalized);
+        const ModuleView view = module;
+        const uintptr_t begin = reinterpret_cast<uintptr_t>(view.base);
+        auto pattern = hook::make_range_pattern(begin, begin + view.size, normalized);
         pattern.count_hint(1);
         if (pattern.size() == 0)
             return false;
 
-        output.address = static_cast<const uint8_t*>(pattern.get(0).get<uint8_t>());
+        output.address = static_cast<const uint8_t*>(pattern.get_first<uint8_t>());
         return true;
     }
 
@@ -535,8 +324,9 @@ namespace opp
         if (PatternLength(normalized) > module.size)
             return 0;
 
-        const uintptr_t begin = reinterpret_cast<uintptr_t>(module.base);
-        auto pattern = hook::make_range_pattern(begin, begin + module.size, normalized);
+        const ModuleView view = module;
+        const uintptr_t begin = reinterpret_cast<uintptr_t>(view.base);
+        auto pattern = hook::make_range_pattern(begin, begin + view.size, normalized);
         const size_t count = pattern.size();
         output.reserve(count);
         for (size_t i = 0; i < count; ++i)
@@ -549,140 +339,20 @@ namespace opp
         const auto base = reinterpret_cast<uintptr_t>(image.base);
         return address >= base && address + sizeof(uint32_t) <= base + image.size;
     }
-} // namespace opp
-
-namespace opp
-{
-    namespace
-    {
-        // The arm whose write is being guarded. The install pass is one
-        // synchronous thread, so a plain global is enough and allocates
-        // nothing inside DllMain.
-        const char* g_currentArm = "startup";
-        size_t g_writesApplied = 0;
-        size_t g_writesSkipped = 0;
-
-        void LogSkippedWrite(const void* site, const char* reason) noexcept
-        {
-            ++g_writesSkipped;
-            Log("arm %s: skip write at %p: %s", g_currentArm, site, reason);
-        }
-    } // namespace
-
-    void LogPatternMiss(std::string_view signature) noexcept
-    {
-        // One line per miss: arm, then the signature it asked for. The string
-        // view points at a literal in the arm, so nothing is built at runtime.
-        Log("arm %s: no match for signature [%.*s]", g_currentArm,
-            static_cast<int>(signature.size()), signature.data());
-    }
 
     bool ExpectMatchCount(hook::pattern& pattern, size_t expected, const char* what) noexcept
     {
         if (pattern.size() == expected)
             return true;
-        Log("arm %s: %s: %zu match(es), expected %zu: skipped", g_currentArm,
+        Log("arm %s: %s: %zu match(es), expected %zu: skipped", CurrentArm(),
             what != nullptr ? what : "multi-match scans", pattern.size(), expected);
         return false;
-    }
-
-    const char* CurrentArm() noexcept
-    {
-        return g_currentArm;
-    }
-
-    size_t ArmWritesApplied() noexcept
-    {
-        return g_writesApplied;
-    }
-
-    size_t ArmWritesSkipped() noexcept
-    {
-        return g_writesSkipped;
-    }
-
-    bool SiteWritable(const PatchContext& ctx, const void* site, size_t length) noexcept
-    {
-        const auto base = reinterpret_cast<uintptr_t>(ctx.image.base);
-        const auto address = reinterpret_cast<uintptr_t>(site);
-        if (base == 0 || ctx.image.size == 0 || length == 0)
-        {
-            LogSkippedWrite(site, "no writable game image");
-            return false;
-        }
-        if (address < base || address - base >= ctx.image.size)
-        {
-            // Options that patch another loaded module (xlive.dll) go through
-            // ModuleSiteWritable instead; a bare foreign address is a bug.
-            LogSkippedWrite(site, "site outside the game image");
-            return false;
-        }
-        if (length > ctx.image.size - (address - base))
-        {
-            LogSkippedWrite(site, "write crosses the end of the game image");
-            return false;
-        }
-        ++g_writesApplied;
-        return true;
-    }
-
-    bool ModuleSiteWritable(const void* moduleBase, const void* site,
-                            size_t length) noexcept
-    {
-        const auto reject = [site](const char* reason) {
-            LogSkippedWrite(site, reason);
-            return false;
-        };
-        if (moduleBase == nullptr || site == nullptr || length == 0)
-            return reject("no module base or empty write");
-        MEMORY_BASIC_INFORMATION info{};
-        if (VirtualQuery(site, &info, sizeof(info)) == 0)
-            return reject("site is not a mapped address");
-        if (info.State != MEM_COMMIT)
-            return reject("site is not committed");
-        if ((info.Protect & (PAGE_GUARD | PAGE_NOACCESS)) != 0)
-            return reject("site is a guard/no-access page");
-        // One module image is one allocation, so the allocation base identifies
-        // the module and RegionSize bounds the write.
-        if (info.AllocationBase != moduleBase)
-            return reject("site is outside the module");
-        const auto address = reinterpret_cast<uintptr_t>(site);
-        const auto region_end =
-            reinterpret_cast<uintptr_t>(info.BaseAddress) + info.RegionSize;
-        if (address + length > region_end)
-            return reject("write crosses the module end");
-        return true;
-    }
-
-    void SkipArmWrite(const char* reason) noexcept
-    {
-        LogSkippedWrite(nullptr, reason);
     }
 
     bool NewFilesConflictModulesPresent()
     {
         return GetModuleHandleA("GTAC.dll") != nullptr ||
                GetModuleHandleA("JacksIVFixes.asi") != nullptr;
-    }
-
-    void TraceArm(const char* name)
-    {
-        g_currentArm = name != nullptr ? name : "?";
-        // The log names every arm before it runs, so a crash during the install
-        // pass leaves the last arm visible.
-        Log("arm %s", name);
-#if defined(OPCEP_TRACE_INSTALLS)
-        // The trace file is owned and append-only; a function-local static keeps
-        // it open for the whole install pass.
-        static std::ofstream trace("IV.EFLC.OpenPreCEPatch.trace.log", std::ios::app);
-        if (trace)
-        {
-            trace << "arm " << (name != nullptr ? name : "?") << '\n';
-            trace.flush();
-        }
-#else
-        (void)name;
-#endif
     }
 } // namespace opp
 
@@ -785,8 +455,8 @@ struct zpatch_native_block final
 
 extern "C" char zpatch_script_call_by_hash(uint32_t hash, void* block) noexcept
 {
-    const auto handler = reinterpret_cast<void(__cdecl*)(void*)>(
-        static_cast<uintptr_t>(zpatch_script_resolve_with_block(hash, block)));
+    const auto handler =
+        opp::Rebased<void(__cdecl*)(void*)>(zpatch_script_resolve_with_block(hash, block));
     if (handler) handler(block);
     return 1;
 }
@@ -800,7 +470,6 @@ extern "C" uint32_t zpatch_script_call(uint32_t hash, uint32_t nargs,
     zpatch_native_block block;
     // The original clears the block up to (not including) the last argument:
     // 0xA0 is offsetof(args[16]) and sizeof(block) is 0xA4.
-    static_assert(offsetof(zpatch_native_block, args[16]) == 0xA0);
     static_assert(sizeof(zpatch_native_block) == 0xA4);
     std::memset(&block, 0, offsetof(zpatch_native_block, args[16]));
     for (auto& record : block.m_records)

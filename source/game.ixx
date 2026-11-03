@@ -85,8 +85,8 @@ export namespace opp
     // The pid of PlayGTAIV.exe, or 0.
     uint32_t FindGameProcess() noexcept;
 
-    // Applies every subscribed arm for `build`, tier by tier. When `observer` is
-    // set, its hooks bracket every arm, in install order.
+    // Initializes the Game singleton and applies every subscribed arm, tier by
+    // tier. When `observer` is set, its hooks bracket every arm, in install order.
     void PatchGame(GameBuild build, GameImage image, const Config& config,
                    const PatchObserver& observer = {});
 
@@ -110,9 +110,8 @@ export namespace opp
     void SetLauncherProbeOverride(bool forced) noexcept;
 
     // LaunchWithPlayGTAIV: rewrites the game's two "LaunchGTAIV.exe" name slots
-    // to the PlayGTAIV launcher name. Runs after every arm, through the same
-    // guarded writes as the arms.
-    void ApplyLaunchWithPlayGTAIV(PatchContext& ctx);
+    // to the PlayGTAIV launcher name. Runs after every arm.
+    void ApplyLaunchWithPlayGTAIV();
 
     // The mapped extent of a loaded module (its PE SizeOfImage), so a probe can
     // bound its reads; a zero view when the headers are unreadable.
@@ -429,10 +428,6 @@ namespace opp
             uint32_t build_flags;  // +kBuildFlagsOffset
         };
 #pragma pack(pop)
-        static_assert(offsetof(FusionFixVersionProbe, build_hash) ==
-                      FusionFixVersionProbe::kBuildHashOffset);
-        static_assert(offsetof(FusionFixVersionProbe, build_flags) ==
-                      FusionFixVersionProbe::kBuildFlagsOffset);
         static_assert(sizeof(FusionFixVersionProbe) ==
                       FusionFixVersionProbe::kBuildFlagsOffset + sizeof(uint32_t));
     } // namespace
@@ -1161,17 +1156,17 @@ namespace opp
     void PatchGame(GameBuild build, GameImage image, const Config& config,
                    const PatchObserver& observer)
     {
-        PatchContext ctx{image, reinterpret_cast<uintptr_t>(image.base), build, config};
+        Game::Initialize(image, build, config);
+        SetPatchObserver(observer);
 
-        const auto run = [&](Event<PatchContext&>& event, const char* tier) {
-            Log("tier %s: %zu arms", tier, event.size());
-            const size_t applied = ArmWritesApplied();
-            const size_t skipped = ArmWritesSkipped();
-            event.SetObserver(observer, tier);
-            event.Execute(ctx);
-            event.SetObserver({});
-            Log("tier %s: %zu applied, %zu skipped", tier, ArmWritesApplied() - applied,
-                ArmWritesSkipped() - skipped);
+        // FusionFix's tier driver: every handler reads Game, and the trace
+        // helpers bracket each arm for the write observer. The publish tier is
+        // load-bearing (a site's original bytes are read before an install
+        // overwrites them), so the tiers run in this order.
+        const auto run = [](Event<>& event, const char* tier) {
+            Log("tier %s", tier);
+            event.executeAll();
+            EndArmTrace();
         };
 
         run(PublishEvent(), "publish");
@@ -1180,16 +1175,10 @@ namespace opp
 
         // The launcher write is gated by a process probe, not by an arm, so it
         // runs after the tiers but is still bracketed for the dump.
-        if (observer.begin != nullptr)
-            observer.begin(observer.user, "ApplyLaunchWithPlayGTAIV");
-        ApplyLaunchWithPlayGTAIV(ctx);
-        if (observer.end != nullptr)
-            observer.end(observer.user, "ApplyLaunchWithPlayGTAIV");
-
-        // One line for the whole pass: the number of writes that reached the
-        // image and the number the arm failsafes refused (missing body, site
-        // outside the image). A healthy install reports 0 skipped.
-        Log("install: %zu writes applied, %zu skipped", ArmWritesApplied(), ArmWritesSkipped());
+        TraceArm("ApplyLaunchWithPlayGTAIV");
+        ApplyLaunchWithPlayGTAIV();
+        EndArmTrace();
+        SetPatchObserver({});
     }
 } // namespace opp
 
@@ -1223,15 +1212,16 @@ namespace opp
 #endif
     }
 
-    void ApplyLaunchWithPlayGTAIV(PatchContext& ctx)
+    void ApplyLaunchWithPlayGTAIV()
     {
         // The original handler installs this on five builds only; the string
         // exists twice on each of them (and once on the EFLC builds, which the
         // original never patched, so the gate stays).
-        if (!ctx.Option("LaunchWithPlayGTAIV", "0"))
+        if (!Game::Option("LaunchWithPlayGTAIV", "0"))
             return;
-        if (!BuildIs(ctx.build, {GameBuild::v1000, GameBuild::v1040, GameBuild::v1060,
-                                 GameBuild::v1070, GameBuild::v1080}))
+        if (!BuildIs(Game::Get().build, {GameBuild::v1000, GameBuild::v1040,
+                                         GameBuild::v1060, GameBuild::v1070,
+                                         GameBuild::v1080}))
             return;
         if (!LauncherProbe())
             return;
@@ -1251,7 +1241,8 @@ namespace opp
         constexpr size_t kLauncherSlotCount = 2;
 
         std::vector<const uint8_t*> matches;
-        FindAllPatterns({ctx.image.base, ctx.image.size}, kLaunchNameSignature, matches);
+        FindAllPatterns({Game::Get().image.base, Game::Get().image.size},
+                        kLaunchNameSignature, matches);
         if (matches.size() != kLauncherSlotCount)
         {
             Log("launcher: %zu LaunchGTAIV name slot(s), expected %zu: skipped",
@@ -1259,7 +1250,9 @@ namespace opp
             return;
         }
         for (const uint8_t* site : matches)
-            WriteRaw(ctx, site, kLauncherNamePatch, sizeof(kLauncherNamePatch));
+            injector::WriteMemoryRaw(injector::raw_ptr(const_cast<uint8_t*>(site)),
+                                     const_cast<char*>(kLauncherNamePatch),
+                                     sizeof(kLauncherNamePatch), true);
         Log("launcher: %zu PlayGTAIV name slot(s) patched", matches.size());
     }
 } // namespace opp
@@ -1459,9 +1452,7 @@ void zpatch_local_settings_step() noexcept
     constexpr size_t kSettingsPathCapacity = 0x200u;
 
     const int episode = zpatch_local_episode_ptr
-                            ? *reinterpret_cast<const int*>(
-                                  static_cast<uintptr_t>(
-                                      zpatch_local_episode_ptr))
+                            ? *opp::Rebased<const int*>(zpatch_local_episode_ptr)
                             : 0;
     const char* ansi_name = "GTA IV";
     const wchar_t* wide_name = L"GTA IV";
@@ -1484,20 +1475,16 @@ void zpatch_local_settings_step() noexcept
     zpatch_build_ansi_path(ansi_episode, ansi_name);
     zpatch_build_wide_path(wide_episode, wide_name);
     if (zpatch_local_path_18)
-        zpatch_copy_path(reinterpret_cast<char*>(static_cast<uintptr_t>(
-                             zpatch_local_path_18)),
+        zpatch_copy_path(opp::Rebased<char*>(zpatch_local_path_18),
                          kSettingsPathCapacity, ansi_iv);
     if (zpatch_local_path_08)
-        zpatch_copy_path(reinterpret_cast<char*>(static_cast<uintptr_t>(
-                             zpatch_local_path_08)),
+        zpatch_copy_path(opp::Rebased<char*>(zpatch_local_path_08),
                          kSettingsPathCapacity, ansi_episode);
     if (zpatch_local_path_1c)
-        zpatch_copy_wpath(reinterpret_cast<wchar_t*>(static_cast<uintptr_t>(
-                              zpatch_local_path_1c)),
+        zpatch_copy_wpath(opp::Rebased<wchar_t*>(zpatch_local_path_1c),
                           kSettingsPathCapacity, wide_episode);
     if (zpatch_local_path_10)
-        zpatch_copy_wpath(reinterpret_cast<wchar_t*>(static_cast<uintptr_t>(
-                              zpatch_local_path_10)),
+        zpatch_copy_wpath(opp::Rebased<wchar_t*>(zpatch_local_path_10),
                           kSettingsPathCapacity, wide_episode);
     zpatch_cookie_tail();
 }

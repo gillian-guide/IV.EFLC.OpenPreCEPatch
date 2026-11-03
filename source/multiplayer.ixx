@@ -137,248 +137,227 @@ namespace opp::features
 
     // BetterMPSync
 
-    void InstallBetterMPSync(PatchContext& ctx)
+    class BetterMPSync
     {
-
-        TraceArm("BetterMPSync");
-
-        // BetterMPSync: 1 siginstall
-        if (ctx.Option("BetterMPSync", "0"))
+    public:
+        BetterMPSync()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "8B 90 E8 00 00 00 55 8B CE FF"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                // The five bytes at +6 (push ebp; mov ecx,esi; call edx) become
-                // the direct call to the no-op body.
-                CallTo(ctx, pattern.get(0).get<uint8_t>(6), OPP_BODY(abi_better_mp_sync));
-            }
+                TraceArm("InstallBetterMPSync");
+
+                // BetterMPSync: 1 siginstall
+                if (Game::Option("BetterMPSync", "0"))
+                {
+                    if (auto pattern = find_pattern("8B 90 E8 00 00 00 55 8B CE FF"); pattern.size() > 0)
+                    {
+                        // The five bytes at +6 (push ebp; mov ecx,esi; call edx) become
+                        // the direct call to the no-op body.
+                        injector::MakeCALL(pattern.get_first<uint8_t>(6), OPP_BODY(abi_better_mp_sync), true);
+                    }
+                }
+            };
         }
-
-    }
-
-
-    // publish FreezeCarFix
-
-    void PublishFreezeCarFix(PatchContext& ctx)
-    {
-
-        TraceArm("publish FreezeCarFix");
-
-        // FreezeCarFix: 12 slots
-        if (!ctx.Option("FreezeCarFix", "1"))
-            return;
-
-        const GameImage& image = ctx.image;
-
-        // The two spawner calls' rel32 operands (the E8s at +7 and +11 of the
-        // probe match). The probe site is also this arm's gate: no probe, no
-        // publish, as in the original.
-        auto probeSites = Pattern(image, kSpawnProbePattern);
-        if (probeSites.size() == 0)
-            return;
-
-        zpatch_spawns_orig_a = BranchDestination(probeSites.get(0).get<uint8_t>(), 8);
-
-        if (auto pattern = Pattern(image, kSpawnGuardPattern); pattern.size() > 0)
-        {
-            zpatch_spawns_orig_b = BranchDestination(pattern.get(0).get<uint8_t>(), 12);
-        }
-
-        if (auto pattern = Pattern(image, kSpawnDispatchPattern); pattern.size() > 0)
-        {
-            // The dispatch jump table's rel32 entries, one row per case. The
-            // original writes the ten resume slots in the order (9, 6, 1, 2, 4, 7,
-            // 3, 5, 8, 0), not ascending: that order is part of the transcription.
-            constexpr size_t kPublishOrder[] = {9, 6, 1, 2, 4, 7, 3, 5, 8, 0};
-            for (const size_t index : kPublishOrder)
-            {
-                const SpawnCase& spawn = SpawnCases()[index];
-                *spawn.resume =
-                    MatchTarget(pattern, spawn.dispatch + 1, spawn.dispatch + 5);
-            }
-        }
-
-    }
+    } betterMPSync;
 
 
     // FreezeCarFix
 
-    void InstallFreezeCarFix(PatchContext& ctx)
+    class FreezeCarFix
     {
-
-        TraceArm("FreezeCarFix");
-
-        // FreezeCarFix: 7 siginstalls
-        if (!ctx.Option("FreezeCarFix", "1"))
-            return;
-
-        const GameImage& image = ctx.image;
-
-        // The E8 opcodes the original placed at each spawner call.
-        constexpr ptrdiff_t kProbeCallOffset = 7;
-
-        auto probeSites = Pattern(image, kSpawnProbePattern);
-        if (probeSites.size() == 0)
-            return;
-
-        CallTo(ctx, probeSites.get(0).get<uint8_t>() + kProbeCallOffset,
-               OPP_BODY(abi_spawns_probe));
-
-        if (auto pattern = Pattern(image, kSpawnGuardPattern); pattern.size() > 0)
+    public:
+        FreezeCarFix()
         {
-            CallTo(ctx, pattern.get(0).get<uint8_t>(11), OPP_BODY(abi_spawns_guard));
-        }
-
-        if (auto pattern = Pattern(image, kSpawnDispatchPattern); pattern.size() > 0)
-        {
-            auto* match = pattern.get(0).get<uint8_t>();
-
-            for (const SpawnCase& spawn : SpawnCases())
-                CallTo(ctx, match + spawn.dispatch, spawn.body);
-        }
-
-        if (auto pattern = Pattern(image, "88 87 40 01 00 00 E8"); pattern.size() > 0)
-        {
-            // The call after the six-byte `mov [edi+0x140], al`.
-            CallTo(ctx, pattern.get(0).get<uint8_t>(6), OPP_BODY(abi_spawns_probe));
-        }
-
-        if (auto pattern = Pattern(image, "88 5C 24 1F 8B 54 24 28 52 E8"); pattern.size() > 0)
-        {
-            // The two spawn probes in the function (the first at +9, the
-            // second 245 bytes later).
-            CallTo(ctx, pattern.get(0).get<uint8_t>(9), OPP_BODY(abi_spawns_probe));
-            CallTo(ctx, pattern.get(0).get<uint8_t>(254), OPP_BODY(abi_spawns_probe));
-        }
-
-        if (auto pattern = Pattern(image, "38 98 8C 00 00 00 75 2D 57 E8"); pattern.size() > 0)
-        {
-            CallTo(ctx, pattern.get(0).get<uint8_t>(9), OPP_BODY(abi_spawns_probe));
-        }
-
-        // The probe site's prefix, without its `8B F0` tail.
-        if (auto pattern = Pattern(image, "32 DB 8B 54 24 24 52 E8"); pattern.size() > 0)
-        {
-            auto* match = pattern.get(0).get<uint8_t>();
-
-            CallTo(ctx, match + kProbeCallOffset, OPP_BODY(abi_spawns_probe));
-        }
-
-    }
-
-
-    // publish FreezeGunFix
-
-    void PublishFreezeGunFix(PatchContext& ctx)
-    {
-
-        TraceArm("publish FreezeGunFix");
-
-        // FreezeGunFix: 1 slot
-        if (ctx.Option("FreezeGunFix", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, kFreezeGunPattern); pattern.size() > 0)
+            PublishEvent() += []
             {
-                // The shim resumes at the instruction 12 bytes before the match
-                // (the body it replaces sits at match-21 and is 9 bytes long).
-                zpatch_freeze_gun_resume = MatchAddress(pattern, -12);
-            }
-        }
+                TraceArm("PublishFreezeCarFix");
 
-    }
+                // FreezeCarFix: 12 slots
+                if (!Game::Option("FreezeCarFix", "1"))
+                    return;
+                // The two spawner calls' rel32 operands (the E8s at +7 and +11 of the
+                // probe match). The probe site is also this arm's gate: no probe, no
+                // publish, as in the original.
+                auto probeSites = find_pattern(kSpawnProbePattern);
+                if (probeSites.size() == 0)
+                    return;
+
+                zpatch_spawns_orig_a = BranchDestination(probeSites.get_first<uint8_t>(), 8);
+
+                if (auto pattern = find_pattern(kSpawnGuardPattern); pattern.size() > 0)
+                {
+                    zpatch_spawns_orig_b = BranchDestination(pattern.get_first<uint8_t>(), 12);
+                }
+
+                if (auto pattern = find_pattern(kSpawnDispatchPattern); pattern.size() > 0)
+                {
+                    // The dispatch jump table's rel32 entries, one row per case. The
+                    // original writes the ten resume slots in the order (9, 6, 1, 2, 4, 7,
+                    // 3, 5, 8, 0), not ascending: that order is part of the transcription.
+                    constexpr size_t kPublishOrder[] = {9, 6, 1, 2, 4, 7, 3, 5, 8, 0};
+                    for (const size_t index : kPublishOrder)
+                    {
+                        const SpawnCase& spawn = SpawnCases()[index];
+                        *spawn.resume =
+                            MatchTarget(pattern, spawn.dispatch + 1, spawn.dispatch + 5);
+                    }
+                }
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallFreezeCarFix");
+
+                // FreezeCarFix: 7 siginstalls
+                if (!Game::Option("FreezeCarFix", "1"))
+                    return;
+                // The E8 opcodes the original placed at each spawner call.
+                constexpr ptrdiff_t kProbeCallOffset = 7;
+
+                auto probeSites = find_pattern(kSpawnProbePattern);
+                if (probeSites.size() == 0)
+                    return;
+
+                injector::MakeCALL(probeSites.get_first<uint8_t>() + kProbeCallOffset, OPP_BODY(abi_spawns_probe), true);
+
+                if (auto pattern = find_pattern(kSpawnGuardPattern); pattern.size() > 0)
+                {
+                    injector::MakeCALL(pattern.get_first<uint8_t>(11), OPP_BODY(abi_spawns_guard), true);
+                }
+
+                if (auto pattern = find_pattern(kSpawnDispatchPattern); pattern.size() > 0)
+                {
+                    auto* match = pattern.get_first<uint8_t>();
+
+                    for (const SpawnCase& spawn : SpawnCases())
+                        injector::MakeCALL(match + spawn.dispatch, spawn.body, true);
+                }
+
+                if (auto pattern = find_pattern("88 87 40 01 00 00 E8"); pattern.size() > 0)
+                {
+                    // The call after the six-byte `mov [edi+0x140], al`.
+                    injector::MakeCALL(pattern.get_first<uint8_t>(6), OPP_BODY(abi_spawns_probe), true);
+                }
+
+                if (auto pattern = find_pattern("88 5C 24 1F 8B 54 24 28 52 E8"); pattern.size() > 0)
+                {
+                    // The two spawn probes in the function (the first at +9, the
+                    // second 245 bytes later).
+                    injector::MakeCALL(pattern.get_first<uint8_t>(9), OPP_BODY(abi_spawns_probe), true);
+                    injector::MakeCALL(pattern.get_first<uint8_t>(254), OPP_BODY(abi_spawns_probe), true);
+                }
+
+                if (auto pattern = find_pattern("38 98 8C 00 00 00 75 2D 57 E8"); pattern.size() > 0)
+                {
+                    injector::MakeCALL(pattern.get_first<uint8_t>(9), OPP_BODY(abi_spawns_probe), true);
+                }
+
+                // The probe site's prefix, without its `8B F0` tail.
+                if (auto pattern = find_pattern("32 DB 8B 54 24 24 52 E8"); pattern.size() > 0)
+                {
+                    auto* match = pattern.get_first<uint8_t>();
+
+                    injector::MakeCALL(match + kProbeCallOffset, OPP_BODY(abi_spawns_probe), true);
+                }
+            };
+        }
+    } freezeCarFix;
 
 
     // FreezeGunFix
 
-    void InstallFreezeGunFix(PatchContext& ctx)
+    class FreezeGunFix
     {
-
-        TraceArm("FreezeGunFix");
-
-        // FreezeGunFix: 1 siginstall
-        if (ctx.Option("FreezeGunFix", "1"))
+    public:
+        FreezeGunFix()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, kFreezeGunPattern); pattern.size() > 0)
+            PublishEvent() += []
             {
-                auto* match = pattern.get(0).get<uint8_t>();
+                TraceArm("PublishFreezeGunFix");
 
-                // The shim replaces the nine bytes at match-21 that end where
-                // the resume starts.
-                JumpTo(ctx, match - 21, OPP_BODY(abi_freeze_gun_shim));
-            }
+                // FreezeGunFix: 1 slot
+                if (Game::Option("FreezeGunFix", "1"))
+                {
+                    if (auto pattern = find_pattern(kFreezeGunPattern); pattern.size() > 0)
+                    {
+                        // The shim resumes at the instruction 12 bytes before the match
+                        // (the body it replaces sits at match-21 and is 9 bytes long).
+                        zpatch_freeze_gun_resume = MatchAddress(pattern, -12);
+                    }
+                }
+            };
+            InstallEvent() += []
+            {
+                TraceArm("InstallFreezeGunFix");
+
+                // FreezeGunFix: 1 siginstall
+                if (Game::Option("FreezeGunFix", "1"))
+                {
+                    if (auto pattern = find_pattern(kFreezeGunPattern); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        // The shim replaces the nine bytes at match-21 that end where
+                        // the resume starts.
+                        injector::MakeJMP(match - 21, OPP_BODY(abi_freeze_gun_shim), true);
+                    }
+                }
+            };
         }
-
-    }
+    } freezeGunFix;
 
 
     // RemoveAllWeaponsProtection
 
-    void InstallRemoveAllWeaponsProtection(PatchContext& ctx)
+    class RemoveAllWeaponsProtection
     {
-
-        TraceArm("RemoveAllWeaponsProtection");
-
-        // RemoveAllWeaponsProtection: 1 literal
-        if (ctx.Option("RemoveAllWeaponsProtection", "1"))
+    public:
+        RemoveAllWeaponsProtection()
         {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "E9 ? ? ? ? 57 8D 8F ? ? 00 00"); pattern.size() > 0)
+            InstallEvent() += []
             {
-                // The five-byte jump is followed by the twelve-byte call the
-                // original NOPs out.
-                NopAt(ctx, pattern.get(0).get<uint8_t>(5), 12);
-            }
-        }
+                TraceArm("InstallRemoveAllWeaponsProtection");
 
-    }
+                // RemoveAllWeaponsProtection: 1 literal
+                if (Game::Option("RemoveAllWeaponsProtection", "1"))
+                {
+                    if (auto pattern = find_pattern("E9 ? ? ? ? 57 8D 8F ? ? 00 00"); pattern.size() > 0)
+                    {
+                        // The five-byte jump is followed by the twelve-byte call the
+                        // original NOPs out.
+                        injector::MakeNOP(pattern.get_first<uint8_t>(5), 12, true);
+                    }
+                }
+            };
+        }
+    } removeAllWeaponsProtection;
 
 
     // TeleportProtection
 
-    void InstallTeleportProtection(PatchContext& ctx)
-    {
-
-        TraceArm("TeleportProtection");
-
-        // TeleportProtection: 1 literal
-        if (ctx.Option("TeleportProtection", "1"))
-        {
-            const GameImage& image = ctx.image;
-
-            if (auto pattern = Pattern(image, "55 8B EC 83 E4 F8 51 53 8B 5D 08 56 57 6A 08 8D 44 24 10 8B F1 8D 7B 04 50 8B CF C7 44 24 14 00"); pattern.size() > 0)
-            {
-                auto* match = pattern.get(0).get<uint8_t>();
-
-                // `ret 8`: C2 08 00, through the guarded helper.
-                MakeReturn(ctx, match, 8);
-            }
-        }
-
-    }
-
-namespace
-{
-    class MultiplayerFeatures
+    class TeleportProtection
     {
     public:
-        MultiplayerFeatures()
+        TeleportProtection()
         {
-            PublishEvent().Add(&PublishFreezeGunFix, "PublishFreezeGunFix");
-            PublishEvent().Add(&PublishFreezeCarFix, "PublishFreezeCarFix");
-            InstallEvent().Add(&InstallBetterMPSync, "InstallBetterMPSync");
-            InstallEvent().Add(&InstallFreezeGunFix, "InstallFreezeGunFix");
-            InstallEvent().Add(&InstallRemoveAllWeaponsProtection, "InstallRemoveAllWeaponsProtection");
-            InstallEvent().Add(&InstallTeleportProtection, "InstallTeleportProtection");
-            InstallEvent().Add(&InstallFreezeCarFix, "InstallFreezeCarFix");
+            InstallEvent() += []
+            {
+                TraceArm("InstallTeleportProtection");
+
+                // TeleportProtection: 1 literal
+                if (Game::Option("TeleportProtection", "1"))
+                {
+                    if (auto pattern = find_pattern("55 8B EC 83 E4 F8 51 53 8B 5D 08 56 57 6A 08 8D 44 24 10 8B F1 8D 7B 04 50 8B CF C7 44 24 14 00"); pattern.size() > 0)
+                    {
+                        auto* match = pattern.get_first<uint8_t>();
+
+                        // `ret 8`: C2 08 00, through the guarded helper.
+                        injector::MakeRET(match, 8, true);
+                    }
+                }
+            };
         }
-    } multiplayerFeatures;
-} // namespace
+    } teleportProtection;
+
 
 } // namespace opp::features
 
@@ -533,8 +512,7 @@ static const char* zpatch_spawns_who_c(uint32_t id) noexcept
 {
     // The original reads the native hash from [0x101580C8] (zpatch_salt_c8); the
     // loader's probe-miss fallback rewrites that slot on 1000/1010/1040.
-    return reinterpret_cast<const char*>(static_cast<uintptr_t>(
-        zpatch_script_call(zpatch_salt_c8, 1, &id)));
+    return opp::Rebased<const char*>(zpatch_script_call(zpatch_salt_c8, 1, &id));
 }
 static __declspec(naked) const char* zpatch_spawns_who_edx()
 {
