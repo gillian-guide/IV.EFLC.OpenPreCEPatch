@@ -35,14 +35,6 @@ const char* ReadIniString(const ConfigDocument& config, const char* key) noexcep
 
 namespace
 {
-// The parser index cannot address more than this many entries (slot = entry+1).
-constexpr std::size_t kMaxIndexEntries = 0xFFFFFFF0u;
-// FNV-1a over section+key needs it, so ("a","bc") and ("ab","c") differ.
-constexpr std::uint64_t kSectionKeySeparator = 0xFFu;
-}  // namespace
-
-namespace
-{
 std::uint64_t ConfigKeyHash(std::string_view section, std::string_view key) noexcept
 {
 	// FNV-1a 64: the standard offset basis and prime.
@@ -54,7 +46,9 @@ std::uint64_t ConfigKeyHash(std::string_view section, std::string_view key) noex
 		hash ^= static_cast<unsigned char>(c);
 		hash *= kFnvPrime;
 	}
-	hash ^= kSectionKeySeparator;
+	// why: section and key are hashed back to back, so the 0xFF byte keeps
+	// ("a","bc") and ("ab","c") distinct.
+	hash ^= 0xFFu;
 	hash *= kFnvPrime;
 	for (const char c : key)
 	{
@@ -71,7 +65,8 @@ void ConfigDocument::BuildIndex() noexcept
 	indexed = 0;
 	try
 	{
-		if (entries.empty() || entries.size() > kMaxIndexEntries)
+		// why: the index stores entry+1 in a dword, so this many entries is the cap.
+		if (entries.empty() || entries.size() > 0xFFFFFFF0u)
 			return;
 		std::size_t cells = 16;
 		while (cells < entries.size() * 2)

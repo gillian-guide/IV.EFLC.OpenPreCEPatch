@@ -110,8 +110,7 @@ struct SkipLauncherCollectedTarget final
 struct SkipLauncherCollectedInstall final
 {
 	std::string_view collector;
-	const SkipLauncherCollectedTarget* targets;
-	std::size_t targetCount;
+	std::span<const SkipLauncherCollectedTarget> targets;
 };
 
 // Table accessors: the recovered rows as read-only spans.

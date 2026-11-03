@@ -171,57 +171,59 @@ constexpr SkipLauncherWrite kEntry24Writes[] = {
 };
 
 // In the original's order. Entry 1 is the only row with no edits: entry 9's E9
-// jumps to its match, so the handler keeps its address and writes nothing.
+// jumps to its match, so the handler keeps its address and writes nothing. The
+// role and build range in each comment are the source mirror's own annotations
+// for that row (launcher versions, not GTA IV game builds).
 constexpr SkipLauncherEntry kSkipLauncherEntries[] = {
-    // 0: `test bl,bl; jne` launcher check; two EB hook sites
+    // 0: `test bl,bl; jne` launcher check; two branch bytes forced to `jmp`
     {"84 DB 0F 85 43 01 00 00 8D 4C 24 28 8B C1", kEntry0Writes},
-    // 1: target of entry 9's jump; no edits of its own
+    // 1: the EFC check's entry and target of entry 9's jump; no edits of its own
     {"68 ? ? ? ? 89 35 ? ? ? ? E8 ? ? ? ? 83 C4 04 84 C0 0F 84", {}},
-    // 2: `74 EC` / `74 E7` conditional launcher jumps
+    // 2: RGSC initialization check [v1000 - v1001]: NOP the two `jz`
     {"74 EC 38 5E 06 74 E7 68", kEntry2Writes},
-    // 3: `74 C4` leading conditional jump
+    // 3: RGSC initialization check [v1002 - v1004]: NOP the leading `jz`
     {"74 C4 8B 07 3B 46 18 75 BD 68", kEntry3Writes},
-    // 4: `cmp edx,[esi+18]; jne rel32`
+    // 4: last RGSC init check [v1002 - v1004]: NOP the `jne rel32`
     {"3B 56 18 0F 85", kEntry4Writes},
-    // 5: `cmp ecx,[esi+18]; jne rel32`
+    // 5: last RGSC init check [v1005]
     {"3B 4E 18 0F 85", kEntry5Writes},
-    // 6: leading `jne rel32` of an epilogue sequence
+    // 6: last RGSC init check [v1006 - v1008]
     {"0F 85 ? ? ? ? 8B 8C 24 ? ? ? ? 5F 5E 5B 33 CC C6", kEntry6Writes},
-    // 7: `cmp eax,[esi+18]; jne -0x43` and a following store
+    // 7: RGSC initialization check [v1002 - v1004]: `xor eax,eax` + `nop; mov`
     {"3B 46 18 75 BD", kEntry7Writes},
-    // 8: `push edi; push ecx` + three `C7 44 24` immediate stores
+    // 8: EFC20 [v1003 - v1004]: wipe the 0x1BF bytes
     {"57 51 C7 44 24 ? ? ? ? ? C7 44 24 ? ? ? ? ? C7 44 24", kEntry8Writes},
-    // 9: `mov edx,[esi+1C]; cmp edx,[esi+20]` -> xor eax,eax; jmp entry 1
+    // 9: skip RGSC connect and EFC checks [v1005 - v1008]: xor + jmp entry 1
     {"8B 56 1C 3B 56 20 ? ? 6A 00 6A 00", kEntry9Writes},
-    // 10: `mov [imm32],esi; call; add esp,4; test al,al`
+    // 10: NOP; MOV [g_rgsc], eax [v1000 - v1008]
     {"89 35 ? ? ? ? E8 ? ? ? ? 83 C4 04 84 C0", kEntry10Writes},
-    // 11: `mov edx,[eax+2C]; cmp edx,[eax+30]` -> eax = 0
+    // 11: skip missing tests [v1005]: `mov edx,[eax+2C]; cmp edx,[eax+30]` -> 0
     {"8B 50 2C 3B 50 30", kEntry11Writes},
-    // 12: `mov ecx,[eax+2C]; sub esp,0x78` + body tail
+    // 12: skip missing tests [v1005]: `mov ecx,[eax+2C]; sub esp,0x78`
     {"8B 48 2C 83 EC 78", kEntry12Writes},
-    // 13: the same with `sub esp,0x74`
+    // 13: skip missing tests [v1005]: the same with `sub esp,0x74`
     {"8B 48 2C 83 EC 74", kEntry13Writes},
-    // 14: `mov ecx,[eax+2C]; cmp ecx,[eax+30]; jz +3`
+    // 14: skip missing tests [v1005]: `... cmp ecx,[eax+30]; jz +3`
     {"8B 48 2C 3B 48 30 74 03", kEntry14Writes},
-    // 15: the same compare followed by `push ebx`
+    // 15: skip missing tests [v1005]: the same compare followed by `push ebx`
     {"8B 48 2C 3B 48 30 53", kEntry15Writes},
-    // 16: the same compare followed by `jz +0x11`
+    // 16: skip missing tests [v1005]: the same compare followed by `jz +0x11`
     {"8B 48 2C 3B 48 30 74 11", kEntry16Writes},
-    // 17: `... jne -0x24; lea edx,[esp+18]`
+    // 17: skip missing tests [v1005]: `... jne -0x24; lea edx,[esp+18]`
     {"8B 48 2C 3B 48 30 75 DC 8D 54 24 18", kEntry17Writes},
-    // 18: `... jne -0x24; lea edx,[esp+1C]`
+    // 18: skip missing tests [v1005]: `... jne -0x24; lea edx,[esp+1C]`
     {"8B 48 2C 3B 48 30 75 DC 8D 54 24 1C", kEntry18Writes},
-    // 19: `mov ecx,[imm32]; mov edx,[ecx+2C]`
+    // 19: skip missing tests [v1005]: `mov ecx,[imm32]; mov edx,[ecx+2C]`
     {"8B 0D ? ? ? ? 8B 51 2C", kEntry19Writes},
-    // 20: prologue pushes + `mov edi,[imm32]; mov eax,[edi+2C]`
+    // 20: skip missing tests [v1003 - v1005]: the whole function becomes `ret`
     {"51 53 55 56 57 8B 3D ? ? ? ? 8B 47 2C", kEntry20Writes},
-    // 21: `cmp eax,edi; jne rel32; test eax,eax`
+    // 21: skip missing tests [v1005 - v1008]: `cmp eax,edi; jne rel32; test eax`
     {"3B C7 0F 85 ? ? ? ? 85 C0", kEntry21Writes},
-    // 22: `jne rel32; test eax,eax; je rel32; call rel32; test edx,edx`
+    // 22: skip missing tests [v1005 - v1008]: `jne; je; call; test edx`
     {"0F 85 ? ? ? ? 85 C0 0F 84 ? ? ? ? E8 ? ? ? ? 85 D2", kEntry22Writes},
-    // 23: `sub esp,0x24; mov eax,[imm32]; mov ecx,[eax+14]; push ...`
+    // 23: skip missing tests [v1006 - v1007]: `sub esp,0x24; mov eax,[imm32]`
     {"83 EC 24 A1 ? ? ? ? 8B 48 14 53 55 56 57", kEntry23Writes},
-    // 24: `sub esp,8; mov ecx,[imm32]; mov edx,[ecx+14]; lea eax,[esp]`
+    // 24: skip missing tests [v1006 - v1007]: `sub esp,8; mov ecx,[imm32]`
     {"83 EC 08 8B 0D ? ? ? ? 8B 51 14 8D 04 24 50 6A 00 52", kEntry24Writes},
 };
 static_assert(std::size(kSkipLauncherEntries) == 25);
@@ -263,14 +265,13 @@ constexpr SkipLauncherInstall kSkipLauncherRomInstalls[] = {
 
 // The collector's two jump targets: index 0 of the first pattern, index 1 of the
 // second.
-constexpr SkipLauncherCollectedTarget kDfaCollectedTargets_0[] = {
+constexpr SkipLauncherCollectedTarget kDfaCollectedTargets[] = {
 	{"80 BC 24 ? ? ? ? ? 6A 00", 0},
 	{"6A 00 68 80 00 00 00 6A 03 6A 00 6A 01 68 00 00 00 80 57", 1},
 };
 
 constexpr SkipLauncherCollectedInstall kSkipLauncherDfaCollected[] = {
-	{"A1 ? ? ? ? B9 A7 FA DC 5C F7 E1 8B 0D ? ? ? ? 33 F6", kDfaCollectedTargets_0,
-		std::size(kDfaCollectedTargets_0)},
+	{"A1 ? ? ? ? B9 A7 FA DC 5C F7 E1 8B 0D ? ? ? ? 33 F6", kDfaCollectedTargets},
 };
 
 // A signature scan over the caller-owned image, in the original's hook::pattern
@@ -494,9 +495,8 @@ PatchResult ApplySkipLauncher(GameImage image, SkipHookResolver resolve, void* r
 			for (const SkipLauncherCollectedInstall& install : collected)
 			{
 				hook::pattern hits = ScanPattern(image, install.collector);
-				for (std::size_t t = 0; t < install.targetCount; ++t)
+				for (const SkipLauncherCollectedTarget& target : install.targets)
 				{
-					const SkipLauncherCollectedTarget& target = install.targets[t];
 					if (target.index >= hits.size())
 						continue;
 					hook::pattern targetPattern = ScanPattern(image, target.targetSignature);
@@ -544,10 +544,16 @@ constexpr std::uint32_t kRomTable[16] = {
 	8, 11, 241, 1, 240, 2, 7, 12, 3, 243, 9, 6, 10, 5, 4, 242,
 };
 
-// WM_ROM carries a word array: [4] is the action, [5] and [6] are its operands.
-constexpr std::size_t kRomPayloadAction = 4;
-constexpr std::size_t kRomPayloadArg0 = 5;
-constexpr std::size_t kRomPayloadArg1 = 6;
+// The WM_ROM message carries this word array: [4] is the action and [5]/[6] its
+// operands.
+struct RomPayload final
+{
+	std::uint32_t reserved[4];
+	std::uint32_t action;
+	std::uint32_t arg0;
+	std::uint32_t arg1;
+};
+static_assert(sizeof(RomPayload) == 7 * sizeof(std::uint32_t));
 
 // The WM_ROM actions the service implements; the values are the original's.
 enum class RomAction : std::uint32_t
@@ -557,15 +563,18 @@ enum class RomAction : std::uint32_t
 	set = 100,
 };
 
-// SkipRomReset's object layout: [1] is the window handle, [4] the WM_ROM id;
-// [0], [2], [3] and [5..18] are cleared first.
-constexpr std::size_t kRomObjectWindow = 1;
-constexpr std::size_t kRomObjectMessage = 4;
-constexpr std::size_t kRomObjectClearFirst = 5;
-constexpr std::size_t kRomObjectClearLast = 18;
-
-constexpr int kRomReadyPollLimit = 200;
-constexpr DWORD kRomReadyPollMs = 1;
+// SkipRomReset's object layout: [1] is the window handle and [4] the WM_ROM id;
+// the reset clears [0], [2], [3] and [5..18] first.
+struct RomContext final
+{
+	std::uint32_t cleared0;
+	std::uint32_t window;
+	std::uint32_t cleared2;
+	std::uint32_t cleared3;
+	std::uint32_t message;
+	std::uint32_t cleared[14]; // [5..18]
+};
+static_assert(sizeof(RomContext) == 19 * sizeof(std::uint32_t));
 
 std::atomic<std::uint32_t> gCreateFileSlot{0};
 std::atomic<HWND> gRomWindow{nullptr};
@@ -590,19 +599,19 @@ LRESULT CALLBACK RomWindowProc(HWND window, UINT message, WPARAM wparam, LPARAM 
 	}
 	else if (message == kRomMessage)
 	{
-		auto* payload = reinterpret_cast<std::uint32_t*>(lparam);
-		switch (static_cast<RomAction>(payload[kRomPayloadAction]))
+		const auto* payload = reinterpret_cast<const RomPayload*>(lparam);
+		switch (static_cast<RomAction>(payload->action))
 		{
 		case RomAction::copyTable:
 			std::memcpy(reinterpret_cast<void*>(
-			                static_cast<std::uintptr_t>(payload[kRomPayloadArg1])),
+			                static_cast<std::uintptr_t>(payload->arg1)),
 			            kRomTable, sizeof(kRomTable));
 			return 0;
 		case RomAction::add:
-			return static_cast<LRESULT>(payload[kRomPayloadArg0] + payload[kRomPayloadArg1]);
+			return static_cast<LRESULT>(payload->arg0 + payload->arg1);
 		case RomAction::set:
 			*reinterpret_cast<std::uint32_t*>(
-			    static_cast<std::uintptr_t>(payload[kRomPayloadArg0])) = 1;
+			    static_cast<std::uintptr_t>(payload->arg0)) = 1;
 			return 0;
 		default:
 			return 0;
@@ -638,7 +647,8 @@ DWORD WINAPI RomThread(LPVOID)
 	return 0;
 }
 
-// 0x100043D0: start the ROM service once and wait until the window exists.
+// 0x100043D0: start the ROM service once and wait until the window exists (the
+// original polls 200 times at 1 ms).
 void StartRomService()
 {
 	if (gRomStarted.exchange(true))
@@ -646,8 +656,8 @@ void StartRomService()
 	const HANDLE thread = CreateThread(nullptr, 0, &RomThread, nullptr, 0, nullptr);
 	if (thread)
 		CloseHandle(thread);
-	for (int i = 0; i < kRomReadyPollLimit && !gRomReady.load(); ++i)
-		Sleep(kRomReadyPollMs);
+	for (int i = 0; i < 200 && !gRomReady.load(); ++i)
+		Sleep(1);
 }
 
 // 0x10004780: replaces the DFA init call so it reports success.
@@ -718,15 +728,16 @@ int __cdecl SkipRomReset(std::uint32_t* object)
 	StartRomService();
 	if (!object)
 		return 0;
-	object[0] = 0;
-	object[2] = 0;
-	object[3] = 0;
-	for (std::size_t i = kRomObjectClearFirst; i <= kRomObjectClearLast; ++i)
-		object[i] = 0;
-	object[kRomObjectWindow] =
+	auto* context = reinterpret_cast<RomContext*>(object);
+	context->cleared0 = 0;
+	context->cleared2 = 0;
+	context->cleared3 = 0;
+	for (std::uint32_t& slot : context->cleared)
+		slot = 0;
+	context->window =
 	    static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(gRomWindow.load()));
-	object[kRomObjectMessage] = kRomMessage;
-	return static_cast<int>(object[kRomObjectWindow]);
+	context->message = kRomMessage;
+	return static_cast<int>(context->window);
 }
 
 // 0x10004610: the object arrives in ESI (the patched site keeps it there) and

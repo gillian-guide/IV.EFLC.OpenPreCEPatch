@@ -5,6 +5,7 @@ module;
 #include "common.hxx"
 #include "common.h"
 #include "patches.h"
+#include "patterns.h"
 #include "hooks.h"
 #include "rebased.h"
 #include "hook_bodies.h"
@@ -72,10 +73,13 @@ void PublishBlackscreenFix(const PatchContext& ctx)
 
 		if (auto pattern = Pattern(image, "75 54 8B 48 28 8B 40 2C"); pattern.size() > 0)
 		{
-			zpatch_blackscreen_resume = MatchTarget(pattern, 82, 86);
-			const auto address = static_cast<std::uintptr_t>(MatchTarget(pattern, 82, 87));
-			if (InImage(image, address))
-				zpatch_blackscreen_value_ptr = *reinterpret_cast<const std::uint32_t*>(address);
+			// match+82 is the rel32 of the `jmp` at match+81; the original publishes
+			// that target and the dword its first instruction loads (at target+1).
+			const std::uint32_t resume = MatchTarget(pattern, 82, 86);
+			zpatch_blackscreen_resume = resume;
+			const auto valueAddress = static_cast<std::uintptr_t>(resume) + 1;
+			if (InImage(image, valueAddress))
+				zpatch_blackscreen_value_ptr = *reinterpret_cast<const std::uint32_t*>(valueAddress);
 		}
 	}
 }
@@ -188,7 +192,7 @@ void PublishPlayerAsPedComponentsFix(const PatchContext& ctx)
 			zpatch_player_ped_resume = MatchAddress(pattern, 14);
 		}
 
-		if (auto pattern = Pattern(image, "8B 44 24 04 89 44 24 04 66 A1 ? ? ? ? 66 85 C0 76 3E"); pattern.size() > 0)
+		if (auto pattern = Pattern(image, kPedModelLookupSignature); pattern.size() > 0)
 		{
 			zpatch_model_lookup = MatchAddress(pattern);
 		}
@@ -240,10 +244,12 @@ void PublishCrashMsgFix(const PatchContext& ctx)
 
 		if (auto pattern = Pattern(image, "68 6A 10 4E 31"); pattern.size() > 0)
 		{
-			const auto site = static_cast<std::uintptr_t>(*pattern.get(0).get<std::uint32_t>(-4));
-			if (InImage(image, site))
-				zpatch_crash_msg_getter = static_cast<std::uint32_t>(
-				            site + ReadDword(reinterpret_cast<const std::uint8_t*>(site) + 1) + 5);
+			// match-4 holds the VA of the `jmp rel32` the arm replaces; the original
+			// resolves that E9's target (rel32 at +1, next instruction at +5).
+			const auto* site = reinterpret_cast<const std::uint8_t*>(
+			    static_cast<std::uintptr_t>(*pattern.get(0).get<std::uint32_t>(-4)));
+			if (InImage(image, reinterpret_cast<std::uintptr_t>(site)))
+				zpatch_crash_msg_getter = static_cast<std::uint32_t>(BranchTarget(site, -1));
 		}
 	}
 }
@@ -394,16 +400,24 @@ void ApplyHighFPSSpeedupFix(const PatchContext& ctx)
 	{
 		const GameImage& image = ctx.image;
 
-		// The nine sites the original patches in the timing function: one byte
-		// becomes a short jump, the rest are two-byte NOPs.
+		// The nine sites the original patches inside CTimer::Update (1.0.8.0
+		// 0x7CBF00, match 0x7CBFE9): the cutscene frame-time clamps. +224 becomes a
+		// `jmp` (skipping the following short jump), the other eight are NOPs.
 		struct SpeedupSite final
 		{
 			std::ptrdiff_t offset;
 			bool shortJump;
 		};
 		constexpr SpeedupSite kSites[] = {
-		    {-7, false},  {3, false},   {224, true}, {231, false}, {367, false},
-		    {377, false}, {607, false}, {614, false}, {764, false},
+		    {-7, false},  // 0x7CBFE2: `jbe` of the frame-time clamp
+		    {3, false},   // 0x7CBFEC: the paired `jbe`
+		    {224, true},  // 0x7CC0C9: `ja` after hasCutsceneFinished -> `jmp`
+		    {231, false}, // 0x7CC0D0: `jbe` of the non-cutscene clamp
+		    {367, false}, // 0x7CC158: `jbe` of the second clamp block
+		    {377, false}, // 0x7CC162: its paired `jbe`
+		    {607, false}, // 0x7CC248: `ja` after hasCutsceneFinished
+		    {614, false}, // 0x7CC24F: `jbe` of the third block's clamp
+		    {764, false}, // 0x7CC2E5: `jbe` of the fourth block's clamp
 		};
 		if (auto pattern = Pattern(image, "0F 2F C1 76 03 0F 28 C8 F3 0F 10 15");
 		    pattern.size() > 0)
@@ -420,7 +434,6 @@ void ApplyHighFPSSpeedupFix(const PatchContext& ctx)
 		}
 	}
 }
-
 
 void ApplyMPNikoCrashFix(const PatchContext& ctx)
 {

@@ -58,13 +58,24 @@ TraceLog& TraceFile() noexcept
 	return log;
 }
 
-// The 8-digit upper-case hex the old fprintf printed; one value per stream
-// expression (the buffer is trace-only scratch).
-const char* Hex(std::uint32_t value) noexcept
+// The 8-digit upper-case hex the old fprintf printed. The buffer is a value, not
+// hidden static state: the first-fault handler can run on any thread.
+struct HexText final
 {
-	static char text[9];
-	std::snprintf(text, sizeof(text), "%08lX", static_cast<unsigned long>(value));
+	std::array<char, 9> digits{};
+};
+
+HexText Hex(std::uint32_t value) noexcept
+{
+	HexText text;
+	std::snprintf(text.digits.data(), text.digits.size(), "%08lX",
+	              static_cast<unsigned long>(value));
 	return text;
+}
+
+std::ostream& operator<<(std::ostream& out, const HexText& text)
+{
+	return out << text.digits.data();
 }
 
 const char* HeapState() noexcept

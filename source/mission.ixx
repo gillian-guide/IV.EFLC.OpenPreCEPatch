@@ -5,6 +5,7 @@ module;
 #include "common.hxx"
 #include "common.h"
 #include "patches.h"
+#include "patterns.h"
 #include "hooks.h"
 #include "rebased.h"
 #include "hook_bodies.h"
@@ -33,7 +34,7 @@ void PublishPedModelsInCutscenesFix(const PatchContext& ctx)
 	{
 		const GameImage& image = ctx.image;
 
-		if (auto pattern = Pattern(image, "8B 44 24 04 89 44 24 04 66 A1 ? ? ? ? 66 85 C0 76 3E"); pattern.size() > 0)
+		if (auto pattern = Pattern(image, kPedModelLookupSignature); pattern.size() > 0)
 		{
 			zpatch_model_lookup = MatchAddress(pattern);
 		}
@@ -136,7 +137,6 @@ void ApplyPoliceEpisodicWeaponSupport(const PatchContext& ctx)
 		             GameBuild::v1061, GameBuild::v1100, GameBuild::v1110, GameBuild::v1120,
 		             GameBuild::v1130, GameBuild::v12043}))
 		{
-
 			if (auto pattern = Pattern(image, "39 2D ? ? ? ? 75 3E"); pattern.size() > 0)
 			{
 				auto* match = pattern.get(0).get<std::uint8_t>();
@@ -159,7 +159,6 @@ void ApplyTBoGTHeliHeightLimit(const PatchContext& ctx)
 		             GameBuild::v1061, GameBuild::v1100, GameBuild::v1110, GameBuild::v1120,
 		             GameBuild::v1130, GameBuild::v12043}))
 		{
-
 			if (auto pattern = Pattern(image, "83 3D ? ? ? ? 02 7C 0A F3 0F"); pattern.size() > 0)
 			{
 				auto* match = pattern.get(0).get<std::uint8_t>();

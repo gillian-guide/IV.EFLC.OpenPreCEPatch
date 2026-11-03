@@ -315,17 +315,16 @@ void WriteCallNoRead(std::uint8_t* site, void* destination)
 	WriteBranchNoRead(site, kCallOpcode, destination);
 }
 
-// The FusionFix compatibility probe. ModuleLacksSignature reads the two dwords
-// at 0x20D3/0x20D7, so the image must be at least 0x20DB bytes to be probed.
-constexpr std::uint32_t kFusionFixProbeImageSize = 0x20D7u + 4u;
-
+// The FusionFix compatibility probe (the original probes GTAIV.EFLC.FusionFix.asi).
 bool FusionFixGateClosed()
 {
 	const HMODULE module = GetModuleHandleW(L"GTAIV.EFLC.FusionFix.asi");
 	if (module == nullptr)
 		return false;
 	const auto* image = reinterpret_cast<const std::uint8_t*>(module);
-	return ModuleLacksSignature(image, kFusionFixProbeImageSize);
+	// why: the probe compares the dwords at 0x20D3 and 0x20D7, so the image must
+	// be at least 0x20DB bytes.
+	return ModuleLacksSignature(image, 0x20D7u + 4u);
 }
 
 bool NewFilesConflictModulesPresent()

@@ -5,6 +5,7 @@ module;
 #include "common.hxx"
 #include "common.h"
 #include "patches.h"
+#include "patterns.h"
 #include "hooks.h"
 #include "rebased.h"
 #include "hook_bodies.h"
@@ -41,9 +42,68 @@ void ApplyPatch4RemoveModChecks(const PatchContext& ctx);
 constexpr GameRva kModChecksEntryJmp_1060{0x003A09u};
 constexpr GameRva kModChecksMidJmp_1070{0x0038AEu};
 constexpr GameRva kModChecksCaseJmp_1070{0x0039E9u};
-constexpr std::uint32_t kTrueValue = 1u;                    // mov eax,1
-constexpr std::uint8_t kMiscJmpDispC9 = 0xC9u;          // jmp +0xC9
-constexpr std::uint8_t kMiscJmpDisp0D = 0x0Du;          // jmp +0x0D
+
+// One site of the two arms: the byte the handler leaves at the match, or the
+// target it writes a five-byte jump to. Every candidate has exactly one hit at
+// its site on its build.
+enum class ModCheckWrite : std::uint8_t
+{
+	zero,      // clear the stub byte
+	jmpOpcode, // `jmp rel8` (the branch operand already there stays)
+	jump,      // `jmp rel32` to `target`
+	nopSeven,  // wipe the mod enabler native's seven bytes
+};
+struct ModCheckSite final
+{
+	std::string_view signature;
+	ModCheckWrite kind;
+	GameRva target{}; // jump only
+};
+
+// sub_10044710's write order, per build (1.0.6.0 and 1.0.7.0 are the only gated
+// builds; the handler's own `lea edi,[eax+<site>]` rows agree).
+constexpr ModCheckSite kModChecks1060[] = {
+    {"01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74", ModCheckWrite::zero,
+     {}}, // 0x0038AC
+    {"74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? 83 C4 ?? 68",
+     ModCheckWrite::jmpOpcode, {}}, // 0x00392E
+    {"01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8", ModCheckWrite::zero,
+     {}}, // 0x00397E
+    {"75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8", ModCheckWrite::jump,
+     kModChecksEntryJmp_1060}, // 0x003982
+    {"74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F",
+     ModCheckWrite::jmpOpcode, {}}, // 0x003A14
+    {"C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8",
+     ModCheckWrite::nopSeven, {}}, // 0x0042E7..0x0042ED
+};
+
+constexpr ModCheckSite kModChecks1070[] = {
+    {"01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74", ModCheckWrite::zero,
+     {}}, // 0x00388C
+    {"75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D", ModCheckWrite::jump,
+     kModChecksMidJmp_1070}, // 0x00389C
+    {"74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? ?? ?? ?? 68",
+     ModCheckWrite::jmpOpcode, {}}, // 0x00390E
+    {"01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8", ModCheckWrite::zero,
+     {}}, // 0x00395E
+    {"75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8", ModCheckWrite::jump,
+     kModChecksCaseJmp_1070}, // 0x003962
+    {"74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F",
+     ModCheckWrite::jmpOpcode, {}}, // 0x0039F4
+    {"C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8",
+     ModCheckWrite::nopSeven, {}}, // 0x0042C7..0x0042CD
+};
+
+// The build gate: a build without a row writes nothing.
+struct ModCheckBuildSites final
+{
+	GameBuild build;
+	std::span<const ModCheckSite> sites;
+};
+constexpr ModCheckBuildSites kModChecksSites[] = {
+    {GameBuild::v1060, kModChecks1060},
+    {GameBuild::v1070, kModChecks1070},
+};
 
 void PublishCopSirensFlag(const PatchContext& ctx)
 {
@@ -62,7 +122,7 @@ void PublishCopSirensFlag(const PatchContext& ctx)
 			zpatch_copsirens_resume_b = MatchAddress(pattern, 28);
 		}
 
-		if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
+		if (auto pattern = Pattern(image, kIdeHookSlotSignature); pattern.size() > 0)
 		{
 			zpatch_ide_hook_slot = MatchAddress(pattern, -1);
 		}
@@ -82,7 +142,7 @@ void PublishPopupHeadlightsFlag(const PatchContext& ctx)
 			zpatch_popup_resume_a = MatchAddress(pattern, 12);
 		}
 
-		if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
+		if (auto pattern = Pattern(image, kIdeHookSlotSignature); pattern.size() > 0)
 		{
 			zpatch_ide_hook_slot = MatchAddress(pattern, -1);
 		}
@@ -104,14 +164,29 @@ void PublishSpeedupBugFix(const PatchContext& ctx)
 
 		if (auto pattern = Pattern(image, "50 64 89 25 00 00 00 00 83 EC 34"); pattern.size() > 0)
 		{
-			zpatch_speedup_t50 = RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(26));
-			zpatch_speedup_t64 = RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(165));
-			zpatch_speedup_t60 = RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(188));
-			zpatch_speedup_t5c = RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(226));
-			zpatch_speedup_t68 = RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(234));
-			zpatch_speedup_t4c = RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(249));
-			zpatch_speedup_t54 = RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(264));
-			zpatch_speedup_t58 = RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(276));
+			// 1.0.8.0 sub_4571B0 (the game timer init): each operand is the absolute
+			// VA of one of the timing floats it computes, in the handler's read
+			// order. The last four repeat the first four for the episode path.
+			struct TimingOperand final
+			{
+				std::ptrdiff_t offset;
+				float** slot;
+			};
+			constexpr TimingOperand kTimingOperands[] = {
+			    {26, &zpatch_speedup_t50},  // dword_18CAE9C: seconds per tick
+			    {165, &zpatch_speedup_t64}, // flt_18CAEA0: milliseconds per tick
+			    {188, &zpatch_speedup_t60}, // dword_18CAEA4: milliseconds * dword_FF2014
+			    {226, &zpatch_speedup_t5c}, // dword_1752078: 1 / milliseconds per tick
+			    {234, &zpatch_speedup_t68}, // dword_18CAEAC: copy of flt_18CAEA0
+			    {249, &zpatch_speedup_t4c}, // dword_18CAEB0: copy of dword_18CAEA4
+			    {264, &zpatch_speedup_t54}, // dword_18CAEA8: copy of dword_18CAE9C
+			    {276, &zpatch_speedup_t58}, // dword_1752074: copy of dword_1752078
+			};
+			for (const TimingOperand& operand : kTimingOperands)
+			{
+				*operand.slot =
+				    RebasedPointer<float>(*pattern.get(0).get<std::uint32_t>(operand.offset));
+			}
 		}
 	}
 }
@@ -177,7 +252,7 @@ void ApplyCopSirensFlag(const PatchContext& ctx)
 			injector::MakeJMP(match + 22, reinterpret_cast<void*>(&abi_copsirens_b), true); //jmp
 		}
 
-		if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
+		if (auto pattern = Pattern(image, kIdeHookSlotSignature); pattern.size() > 0)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
@@ -193,8 +268,10 @@ void ApplyMiscFixes(const PatchContext& ctx)
 	{
 		const GameImage& image = ctx.image;
 
-		// The twelve recovered patches, in the handler's order. `kind` selects the
-		// write shape; `value` is the byte written (the second jump byte for jmp2).
+		// The handler's eleven literals in its write order (sub_10023DD0); the DFA
+		// stage it calls between them is a loader arm here, so its hooks are not in
+		// this table. `kind` selects the write shape; `value` is the byte written
+		// (the second jump byte for jmp2, the mov eax immediate for movEax).
 		enum class MiscWriteKind : std::uint8_t
 		{
 			byte,
@@ -207,24 +284,34 @@ void ApplyMiscFixes(const PatchContext& ctx)
 			std::string_view signature;
 			MiscWriteKind kind;
 			std::ptrdiff_t offset;
-			std::uint8_t value;
+			std::uint8_t value{};
 		};
 		constexpr MiscFixSite kSites[] = {
-		    {"74 05 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 83 C4 04 B9", MiscWriteKind::byte, 0,
-		     kShortJmpOpcode},
+		    // data integrity checks VDS102 [v1002 - v1004]
+		    {"C7 06 ? ? ? ? 74 19", MiscWriteKind::byte, 6, kShortJmpOpcode},
+		    // data integrity checks VDS102 [v1005 - v1008]
+		    {"83 C4 ? 3B 46 20", MiscWriteKind::byte, 12, kShortJmpOpcode},
+		    // data integrity checks VDS100 [v1006 - v1008]
 		    {"75 28 6A 00 6A 00 68 ? ? ? ? E8 ? ? ? ? 83 C4 0C", MiscWriteKind::byte, 0,
 		     kShortJmpOpcode},
+		    // token activation [v1006 - v1007]: `jmp +0xC9`
+		    {"8B 54 24 04 52 A3", MiscWriteKind::jmp2, 0, 0xC9},
+		    // token activation [v1006 - v1007]: mov eax,1
+		    {"83 F8 01 75 30 A3", MiscWriteKind::movEax, 0, 1},
+		    // skip first-time play ask [v1006 - v1008]: `jmp +0x0D`
+		    {"C7 05 ? ? ? ? 03 00 00 00 33 C0 5E 59 C3 C7", MiscWriteKind::jmp2, 0, 0x0D},
+		    // InternetGetConnectedState [v1000 - v1001]
+		    {"FF 15 ? ? ? ? 85 C0 75 18", MiscWriteKind::nop2, 8},
+		    // InternetGetConnectedState [v1002 - v1005]
+		    {"FF 15 ? ? ? ? 85 C0 75 04 32", MiscWriteKind::nop2, 8},
+		    // InternetGetConnectedState [v1006 - v1008]
+		    {"FF 15 ? ? ? ? 85 C0 75 07 A0", MiscWriteKind::nop2, 8},
+		    // health check [v1003 - v1008]
 		    {"81 EC ? ? ? ? A1 ? ? ? ? 33 C4 89 84 24 ? ? ? ? 53 ? 6A 3C 33 DB 8D 44 24 ? 53 50 E8",
 		     MiscWriteKind::byte, 0, kRetOpcode},
-		    {"83 C4 ? 3B 46 20", MiscWriteKind::byte, 12, kShortJmpOpcode},
-		    {"83 F8 01 75 30 A3", MiscWriteKind::movEax, 0, kTrueValue},
-		    {"8B 54 24 04 52 A3", MiscWriteKind::jmp2, 0, kMiscJmpDispC9},
-		    {"C7 05 ? ? ? ? 03 00 00 00 33 C0 5E 59 C3 C7", MiscWriteKind::jmp2, 0,
-		     kMiscJmpDisp0D},
-		    {"C7 06 ? ? ? ? 74 19", MiscWriteKind::byte, 6, kShortJmpOpcode},
-		    {"FF 15 ? ? ? ? 85 C0 75 04 32", MiscWriteKind::nop2, 8, 0},
-		    {"FF 15 ? ? ? ? 85 C0 75 07 A0", MiscWriteKind::nop2, 8, 0},
-		    {"FF 15 ? ? ? ? 85 C0 75 18", MiscWriteKind::nop2, 8, 0},
+		    // the handler's last write, after its DFA call: force a short jump
+		    {"74 05 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 83 C4 04 B9", MiscWriteKind::byte, 0,
+		     kShortJmpOpcode},
 		};
 		for (const MiscFixSite& site : kSites)
 		{
@@ -259,7 +346,6 @@ void ApplyMiscFixes(const PatchContext& ctx)
 	}
 }
 
-
 void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 {
 	Trace("Patch6and7RemoveModChecks");
@@ -267,86 +353,38 @@ void ApplyPatch6and7RemoveModChecks(const PatchContext& ctx)
 	{
 		const GameImage& image = ctx.image;
 
-		if (ctx.build == GameBuild::v1060)
+		for (const ModCheckBuildSites& row : kModChecksSites)
 		{
-			// Recovered candidate: exactly one hit at its site on this build.
-			if (auto pattern = Pattern(image, "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74"); pattern.size() > 0)
+			if (ctx.build != row.build)
+				continue;
+			for (const ModCheckSite& site : row.sites)
 			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x0038AC
-				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); // stub byte -> 0
-			}
-			if (auto pattern = Pattern(image, "74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? 83 C4 ?? 68"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00392E
-				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true); //jmp
-			}
-			if (auto pattern = Pattern(image, "01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00397E
-				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); // stub byte -> 0
-			}
-			if (auto pattern = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x003982
-				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksEntryJmp_1060.site(ctx.gameBase)), true); //jmp
-			}
-			if (auto pattern = Pattern(image, "74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x003A14
-				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true); //jmp
-			}
-			// The original NOPs the seven bytes at 0x42E7..0x42ED; one scan at the instruction
-			// plus match+0..+6 is equivalent and order-independent (per-byte windows relied on
-			// the ascending write order).
-			if (auto pattern = Pattern(image, "C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x0042E7..0x0042ED
-				injector::MakeNOP(site, 7, true); //nop x7
+				if (auto pattern = Pattern(image, site.signature); pattern.size() > 0)
+				{
+					auto* match = pattern.get(0).get<std::uint8_t>();
+					switch (site.kind)
+					{
+					case ModCheckWrite::zero:
+						injector::WriteMemory<std::uint8_t>(match, kZeroByte,
+						                                    true); // stub byte -> 0
+						break;
+					case ModCheckWrite::jmpOpcode:
+						injector::WriteMemory<std::uint8_t>(match, kShortJmpOpcode, true); //jmp
+						break;
+					case ModCheckWrite::jump:
+						injector::MakeJMP(
+						    match, reinterpret_cast<void*>(site.target.site(ctx.gameBase)),
+						    true); //jmp
+						break;
+					case ModCheckWrite::nopSeven:
+						// The handler NOPs the seven bytes at the match; the per-byte
+						// windows it used relied on their ascending write order.
+						injector::MakeNOP(match, 7, true); //nop x7
+						break;
+					}
+				}
 			}
 		}
-
-		if (ctx.build == GameBuild::v1070)
-		{
-			// Recovered candidate: exactly one hit at its site on this build.
-			if (auto pattern = Pattern(image, "01 00 00 00 51 89 5C 24 ?? E8 ?? ?? ?? ?? 85 C0 75 ?? 39 44 24 ?? 74"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00388C
-				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); // stub byte -> 0
-			}
-			if (auto pattern = Pattern(image, "75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00389C
-				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksMidJmp_1070.site(ctx.gameBase)), true); //jmp
-			}
-			if (auto pattern = Pattern(image, "74 ?? 8B 45 ?? 53 6A ?? 50 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? ?? ?? ?? 68"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00390E
-				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true); //jmp
-			}
-			if (auto pattern = Pattern(image, "01 00 00 00 75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C ?? ?? E8"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00395E
-				injector::WriteMemory<std::uint8_t>(site, kZeroByte, true); // stub byte -> 0
-			}
-			if (auto pattern = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x003962
-				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksCaseJmp_1070.site(ctx.gameBase)), true); //jmp
-			}
-			if (auto pattern = Pattern(image, "74 ?? 8B 4D ?? 57 6A ?? 51 E8 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ?? 0F"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x0039F4
-				injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true); //jmp
-			}
-			// The original NOPs the seven bytes at 0x42C7..0x42CD; one scan replaces the seven
-			// per-byte windows.
-			if (auto pattern = Pattern(image, "C6 05 ?? ?? ?? ?? ?? 74 ?? 8B 40 ?? 56 6A ?? 6A ?? 50 83 CE ?? E8"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x0042C7..0x0042CD
-				injector::MakeNOP(site, 7, true); //nop x7
-			}
-		}
-
 	}
 }
 
@@ -367,7 +405,7 @@ void ApplyPopupHeadlightsFlag(const PatchContext& ctx)
 			                                    true); // fld operand -> our angle
 		}
 
-		if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
+		if (auto pattern = Pattern(image, kIdeHookSlotSignature); pattern.size() > 0)
 		{
 			auto* match = pattern.get(0).get<std::uint8_t>();
 
@@ -409,30 +447,22 @@ void ApplyPatch7RemoveModChecks(const PatchContext& ctx)
 	{
 		const GameImage& image = ctx.image;
 
-		if (ctx.build == GameBuild::v1060)
+		// The handler writes these rows by RVA. This arm re-finds only the jump
+		// rows, in the table's order, so no site is read after being overwritten.
+		for (const ModCheckBuildSites& row : kModChecksSites)
 		{
-			// Written by RVA in the original; each candidate has exactly one hit at its site.
-			// Scans run in ascending address order, so no site is read after being overwritten.
-			if (auto pattern = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); pattern.size() > 0)
+			if (ctx.build != row.build)
+				continue;
+			for (const ModCheckSite& site : row.sites)
 			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x003982
-				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksEntryJmp_1060.site(ctx.gameBase)), true); //jmp
-			}
-		}
-
-		if (ctx.build == GameBuild::v1070)
-		{
-			// Written by RVA in the original; each candidate has exactly one hit at its site.
-			// Scans run in ascending address order, so no site is read after being overwritten.
-			if (auto pattern = Pattern(image, "75 ?? 39 44 24 ?? 74 ?? 8A C3 5F 5E 5D 5B 83 C4 ?? C3 8D 54 24 ?? 52 8D"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x00389C
-				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksMidJmp_1070.site(ctx.gameBase)), true); //jmp
-			}
-			if (auto pattern = Pattern(image, "75 ?? 8B 4E ?? 8D 44 24 ?? 50 6A ?? 51 89 7C 24 ?? E8"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x003962
-				injector::MakeJMP(site, reinterpret_cast<void*>(kModChecksCaseJmp_1070.site(ctx.gameBase)), true); //jmp
+				if (site.kind != ModCheckWrite::jump)
+					continue;
+				if (auto pattern = Pattern(image, site.signature); pattern.size() > 0)
+				{
+					auto* match = pattern.get(0).get<std::uint8_t>();
+					injector::MakeJMP(match, reinterpret_cast<void*>(site.target.site(ctx.gameBase)),
+					                  true); //jmp
+				}
 			}
 		}
 	}
