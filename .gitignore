@@ -1,29 +1,45 @@
 # Build output
-build/*
-!build/build_msvc.cmd
-!build/build_mingw.md
+build/
+build*/
+bin/
+release/
+dist/
 out/
-__pycache__/
-*.pyc
+obj/
+*.zip
 *.obj
-*.lib
-*.exp
 *.pdb
 *.ilk
+*.exp
+*.lib
 *.map
 *.asi
 *.dll
-*.exe
 
-# Local game files and logs
-*.log
-GTAIV.exe
-EFLC.exe
-crashdump*.dmp
-
-# Editors / OS
+# IDE
 .vs/
-.vscode/
 *.user
-Thumbs.db
-.DS_Store
+*.suo
+*.sln
+*.slnx
+*.vcxproj
+*.vcxproj.filters
+CMakeUserPresets.json
+
+# Logs and local config
+opcep_legacy_log/
+*.log
+.env
+data/plugins/IV.EFLC.OpenPreCEPatch.local.ini
+
+# Python
+__pycache__/
+*.pyc
+
+# Session scratch
+.scratch/
+
+# Companion XLivelessAddon checkout lives in its own repository
+xlivelessaddon/
+companion/
+companion-build/

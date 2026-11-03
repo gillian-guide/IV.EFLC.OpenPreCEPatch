@@ -1,0 +1,5 @@
+00632620 E9 InstallAimProjectileCrashFix
+00632621 6B InstallAimProjectileCrashFix
+00632622 2F InstallAimProjectileCrashFix
+00632623 5D InstallAimProjectileCrashFix
+00632624 0F InstallAimProjectileCrashFix

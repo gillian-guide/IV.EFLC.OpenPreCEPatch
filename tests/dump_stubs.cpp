@@ -1,0 +1,59 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The write-set dump does not execute hook bodies. It installs a resolver that
+// maps a body name to the ORIGINAL destination VA the reference build used,
+// which is exactly what an installer's rel32 must point at for a byte-for-byte
+// comparison. The 32-bit registry (opp.patch) is empty in this host because the
+// feature modules compile their bodies out under _WIN64, so the resolver is the
+// only name source; installing it from a static initializer needs no call from
+// dump_main (the resolver is only consulted when PatchGame runs).
+
+#include <cstdint>
+#include <cstring>
+
+import opp.patch;
+
+namespace
+{
+    struct DumpAbi
+    {
+        const char* name;
+        uintptr_t va;
+    };
+
+    constexpr DumpAbi kDumpAbi[] = {
+#include "dump_abi.inc"
+    };
+
+    // Bodies that exist only behind an opt-in key have no original destination
+    // VA. Give them a fixed out-of-image address so the dump records a real
+    // rel32 install (and the matrix can attribute its 4 bytes) instead of a
+    // null target.
+    constexpr DumpAbi kDumpOnlyAbi[] = {
+        // Prologue body (GarageModelFix site A): a new entry point with no
+        // original destination VA, so the dump records a real rel32 install.
+        {"abi_garage_entry_a", 0x0F000001u},
+    };
+
+    void* DumpResolve(const char* name) noexcept
+    {
+        if (name == nullptr)
+            return nullptr;
+        for (const DumpAbi& row : kDumpAbi)
+        {
+            if (std::strcmp(row.name, name) == 0)
+                return reinterpret_cast<void*>(row.va);
+        }
+        for (const DumpAbi& row : kDumpOnlyAbi)
+        {
+            if (std::strcmp(row.name, name) == 0)
+                return reinterpret_cast<void*>(row.va);
+        }
+        return nullptr;
+    }
+
+    struct DumpAbiResolver
+    {
+        DumpAbiResolver() noexcept { opp::SetAbiResolver(&DumpResolve); }
+    } g_dumpAbiResolver;
+} // namespace

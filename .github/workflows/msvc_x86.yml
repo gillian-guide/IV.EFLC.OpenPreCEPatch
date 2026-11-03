@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.txt"
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  x86:
+    name: x86
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Checkout XLivelessAddon companion
+        uses: actions/checkout@v7
+        with:
+          repository: gillian-guide/XLivelessAddon
+          path: companion/XLivelessAddon
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+
+      - name: Add MSBuild
+        uses: microsoft/setup-msbuild@v3
+
+      - name: Check generated INI template
+        run: python tools/gen_ini_template.py --check
+
+      - name: Configure
+        run: cmake --preset x86
+
+      - name: Build
+        run: cmake --build --preset x86-release -- /m
+
+      - name: Test
+        run: ctest --preset x86-release
+
+      - name: Build XLivelessAddon companion
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $companion = 'companion/XLivelessAddon'
+          Write-Host "XLivelessAddon commit: $(git -C $companion rev-parse --short HEAD)"
+
+          if (Test-Path "$companion/CMakeLists.txt") {
+            # The fork build. Configuring directly (instead of using its preset)
+            # keeps the workflow independent of the installed VS generator.
+            cmake -S $companion -B companion-build -A Win32
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            cmake --build companion-build --config Release -- /m
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } else {
+            # Legacy XLivelessAddon layout (Visual Studio solution only).
+            msbuild "$companion/XLivelessAddon.sln" /m `
+              /p:Configuration=Release /p:Platform=x86 /p:PlatformToolset=v143
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Stage release files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = 'dist'
+          New-Item -ItemType Directory -Force $dist | Out-Null
+
+          Copy-Item 'bin/IV.EFLC.OpenPreCEPatch.asi' $dist
+          Copy-Item 'bin/IV.EFLC.OpenPreCEPatch.ini' $dist
+
+          $asi = Get-ChildItem -Path 'companion-build', 'companion/XLivelessAddon' `
+            -Recurse -Filter 'XLivelessAddon.asi' -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $asi) { throw 'XLivelessAddon.asi was not produced by the companion build' }
+          Copy-Item $asi.FullName (Join-Path $dist 'XLivelessAddon.asi')
+
+          $ini = Get-ChildItem -Path 'companion-build', 'companion/XLivelessAddon' `
+            -Recurse -Filter 'XLivelessAddon.ini' -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $ini) { throw 'XLivelessAddon.ini was not found in the companion repository' }
+          Copy-Item $ini.FullName (Join-Path $dist 'XLivelessAddon.ini')
+
+          $expected = @(
+            'IV.EFLC.OpenPreCEPatch.asi',
+            'IV.EFLC.OpenPreCEPatch.ini',
+            'XLivelessAddon.asi',
+            'XLivelessAddon.ini')
+          $actual = @(Get-ChildItem $dist -File | Select-Object -ExpandProperty Name | Sort-Object)
+          if (Compare-Object -ReferenceObject ($expected | Sort-Object) -DifferenceObject $actual) {
+            throw "release folder contains unexpected files: $($actual -join ', ')"
+          }
+
+      - name: Upload release
+        uses: actions/upload-artifact@v7
+        with:
+          name: OpenPreCEPatch
+          path: dist/*
+          if-no-files-found: error
+
+  x64:
+    name: parity check
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Configure
+        run: cmake --preset x64
+
+      - name: Build
+        run: cmake --build --preset x64-release -- /m

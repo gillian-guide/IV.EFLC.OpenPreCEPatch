@@ -1,0 +1,17 @@
+003CBFE2 90 InstallHighFPSSpeedupFix
+003CBFE3 90 InstallHighFPSSpeedupFix
+003CBFEC 90 InstallHighFPSSpeedupFix
+003CBFED 90 InstallHighFPSSpeedupFix
+003CC0C9 EB InstallHighFPSSpeedupFix
+003CC0D0 90 InstallHighFPSSpeedupFix
+003CC0D1 90 InstallHighFPSSpeedupFix
+003CC158 90 InstallHighFPSSpeedupFix
+003CC159 90 InstallHighFPSSpeedupFix
+003CC162 90 InstallHighFPSSpeedupFix
+003CC163 90 InstallHighFPSSpeedupFix
+003CC248 90 InstallHighFPSSpeedupFix
+003CC249 90 InstallHighFPSSpeedupFix
+003CC24F 90 InstallHighFPSSpeedupFix
+003CC250 90 InstallHighFPSSpeedupFix
+003CC2E5 90 InstallHighFPSSpeedupFix
+003CC2E6 90 InstallHighFPSSpeedupFix

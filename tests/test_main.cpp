@@ -1,598 +1,1114 @@
-#include "pch.h"
-// Native tests for the parts of the mod that do not need the game.
-// INI parsing/defaults, build classification and masks, the model catalogue,
-// the vehicle-light tables, the menu probes, the ZMenuIV threshold and the
-// table shapes. No game files are read.
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Native tests for everything that does not need the game: INI parsing and the
+// grouped/legacy lookup, build classification, the model catalogue, the vehicle
+// light tables, the menu probes and the ZMenu guard.
 
+#include "common.hxx"
+#include "hooks.h"
+
+#include <algorithm>
 #include <cmath>
-#include <cstddef>
-#include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
-#include <stdexcept>
 #include <string>
-#include <string_view>
+#include <utility>
 #include <vector>
 
-#include "common.h"
+import opp.common;
+import opp.config;
+import opp.game;
+import opp.log;
+import opp.multiplayer;
+import opp.patch;
+import opp.vehicles;
+import opp.warnings;
 
-#include "injector/injector.hpp"
-#include "patches.h"
-import zp.useless_checks;
-import zp.catalogue;
-import zp.launcher;
-#include "xlive/xliveless.h"
 
 namespace
 {
-// PE32 layout the write-set dump reads; the tests never parse the shipped PE.
-constexpr std::size_t kDosLfanewOffset = 0x3C;
-constexpr std::size_t kPeSignatureSize = 4;
-constexpr std::size_t kCoffHeaderSize = 20;
-constexpr std::size_t kSectionHeaderSize = 40;
-constexpr std::size_t kMinPeSize = 0x100;
-constexpr std::size_t kMinNtHeadersSize = 0x60;  // COFF + optional header prefix
-// A buffer above the largest RVA any scan may report.
-constexpr std::size_t kScanProbeSize = 0x1000000u;
-constexpr std::uint8_t kByteMask = 0xFFu;
-constexpr std::uint64_t kFnvPrime = 0x100000001b3ull;
-// Recovered GameHash vectors, with the input beside each expectation.
-constexpr std::uint32_t kPoliceHash = 0x79fbb0c5u;   // "police"
-constexpr std::uint32_t kLiteralHash = 0x1234u;      // "hash:0x1234"
-constexpr std::uint32_t kWrappedHash = 0xffffffffu;  // "hash:  -1tail"
-constexpr std::uint32_t kZeroHash = 0xf4856ffeu;     // "hash:0"
-// ret 8's three bytes and the site byte the 4-byte MakeRET store must not
-// touch (the audit's O-1).
-constexpr std::uint8_t kRetImm16Opcode = 0xC2u;
-constexpr std::uint8_t kRet8Pop = 0x08u;
-constexpr std::uint8_t kZeroByte = 0x00u;
-constexpr std::uint8_t kUntouched83 = 0x83u;
-constexpr std::uint16_t kRet8Word = 0x08C2u;
-constexpr std::uint32_t kZMenuRejectFlag = 1u << 4;
-constexpr std::uint32_t kMaxImageSize = 0x10000000u;
-} // namespace
-
-// Write-set dump (development aid): maps a PE32 file into a contiguous image so a
-// patch pass can be applied to the bytes the loader would see and compared with the
-// reference implementation's output. Run: zp_tests --dump-writes <out> [ini]
-static bool MapPeImage(const char* path, std::vector<std::uint8_t>& image,
-                       std::uint32_t& imageBase, std::uint32_t& sizeOfImage)
-{
-	std::ifstream in(path, std::ios::binary);
-	if (!in)
-		return false;
-	const std::vector<char> raw{std::istreambuf_iterator<char>(in),
-	                            std::istreambuf_iterator<char>()};
-	std::vector<std::uint8_t> file(raw.size());
-	for (std::size_t i = 0; i < raw.size(); ++i)
-		file[i] = static_cast<std::uint8_t>(raw[i]);
-
-	if (file.size() < kMinPeSize)
-		return false;
-	const auto rd16 = [&](std::size_t off) {
-		return static_cast<std::uint16_t>(file[off] | (file[off + 1] << 8));
-	};
-	const auto rd32 = [&](std::size_t off) {
-		return static_cast<std::uint32_t>(file[off] | (file[off + 1] << 8) |
-		                                  (file[off + 2] << 16) | (file[off + 3] << 24));
-	};
-	if (file[0] != 'M' || file[1] != 'Z')
-		return false;
-
-	const std::size_t e_lfanew = rd32(kDosLfanewOffset);
-	if (e_lfanew + kMinNtHeadersSize > file.size())
-		return false;
-	const std::size_t coff = e_lfanew + kPeSignatureSize;
-	const std::size_t optional = coff + kCoffHeaderSize;
-	imageBase = rd32(optional + 28);
-	sizeOfImage = rd32(optional + 56);
-	const std::uint32_t sizeOfHeaders = rd32(optional + 60);
-	if (sizeOfImage == 0 || sizeOfImage > kMaxImageSize)
-		return false;
-
-	image.assign(sizeOfImage, 0);
-	std::memcpy(image.data(), file.data(),
-	            sizeOfHeaders < file.size() ? sizeOfHeaders : file.size());
-	// IMAGE_SECTION_HEADERs follow COFF + SizeOfOptionalHeader, 40 bytes each.
-	const std::size_t sectionTable = optional + rd16(coff + 16);
-	for (std::size_t sh = sectionTable,
-	                 end = sectionTable + rd16(coff + 2) * kSectionHeaderSize;
-	     sh < end; sh += kSectionHeaderSize)
-	{
-		if (sh + kSectionHeaderSize > file.size())
-			return false;
-		const std::uint32_t vsize = rd32(sh + 8);
-		const std::uint32_t vaddr = rd32(sh + 12);
-		const std::uint32_t rsize = rd32(sh + 16);
-		const std::uint32_t rptr = rd32(sh + 20);
-		const std::uint32_t count = rsize < vsize ? rsize : vsize;
-		if (count && vaddr + count <= sizeOfImage && rptr + count <= file.size())
-			std::memcpy(image.data() + vaddr, file.data() + rptr, count);
-	}
-	return true;
-}
-
-static int DumpWrites(const char* outPath, const char* iniPath)
-{
-	std::vector<std::uint8_t> file_image;
-	std::uint32_t imageBase = 0;
-	std::uint32_t size = 0;
-	if (!MapPeImage("game_refs/GTAIV.exe", file_image, imageBase, size) &&
-	    !MapPeImage("../game_refs/GTAIV.exe", file_image, imageBase, size) &&
-	    !MapPeImage("../../game_refs/GTAIV.exe", file_image, imageBase, size))
-	{
-		std::fprintf(stderr, "dump-writes: GTAIV.exe not found\n");
-		return 2;
-	}
-
-	// The image must sit at its preferred base: several rows store and consume
-	// absolute module addresses.
-	auto* image = static_cast<std::uint8_t*>(
-		VirtualAlloc(reinterpret_cast<void*>(static_cast<std::uintptr_t>(imageBase)),
-	             size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
-	if (!image)
-	{
-		std::fprintf(stderr, "dump-writes: cannot map at 0x%X (err=%lu, size=0x%X)\n", imageBase,
-		             ::GetLastError(), size);
-		return 5;
-	}
-	std::memcpy(image, file_image.data(), size);
-	file_image.clear();
-
-	ConfigDocument config;
-	if (!LoadConfig(iniPath, config) && !LoadConfig("../game_refs/ZolikaPatch.ini", config) &&
-	    !LoadConfig("game_refs/ZolikaPatch.ini", config))
-	{
-		std::fprintf(stderr, "dump-writes: cannot read %s\n", iniPath);
-		return 3;
-	}
-
-	std::vector<std::uint8_t> pristine(image, image + size);
-	PatchGame(GameBuild::v1080, GameImage{image, size}, config);
-
-	std::FILE* out = std::fopen(outPath, "wb");
-	if (!out)
-		return 4;
-	std::size_t changed = 0;
-	for (std::size_t i = 0; i < size; ++i)
-	{
-		if (image[i] == pristine[i])
-			continue;
-		std::fprintf(out, "%08zX %02X\n", i, image[i]);
-		++changed;
-	}
-	std::fclose(out);
-	std::fprintf(stderr, "dump-writes: %zu bytes changed\n", changed);
-	return 0;
-}
+    int failures = 0;
 
 #define CHECK(x)                                                                                   \
-  do                                                                                               \
-  {                                                                                                \
-    if (!(x))                                                                                      \
+    do                                                                                             \
     {                                                                                              \
-      std::fprintf(stderr, "check failed: %s:%d: %s\n", __FILE__, __LINE__, #x);                   \
-      return 1;                                                                                    \
-    }                                                                                              \
-  } while (false)
+        if (!(x))                                                                                  \
+        {                                                                                          \
+            std::fprintf(stderr, "check failed: %s:%d: %s\n", __FILE__, __LINE__, #x);              \
+            ++failures;                                                                            \
+        }                                                                                          \
+    } while (false)
 
-extern "C" std::uintptr_t zpatch_nms_vtable[24];
-extern "C" std::uint32_t zpatch_nms_object;
-extern "C" void __cdecl abi_nms_noop_ret0();
-extern "C" bool __stdcall abi_nms_reject_ptr(void*);
-extern "C" void* __fastcall abi_nms_self(void*, void*, void*);
-extern "C" void* __fastcall abi_nms_zero_ptr(void*, void*, void*);
-extern "C" void __stdcall abi_nms_noop_pair(void*, void*);
-extern "C" bool __cdecl abi_nms_reject();
-extern "C" void __stdcall abi_nms_noop_arg(void*);
-extern "C" void __cdecl abi_nms_apply();
-extern "C" bool zpatch_ooc_selftest() noexcept;
+    void WriteFile(const std::filesystem::path& path, const char* text)
+    {
+        std::FILE* file = std::fopen(path.string().c_str(), "wb");
+        CHECK(file != nullptr);
+        if (file)
+        {
+            std::fputs(text, file);
+            std::fclose(file);
+        }
+    }
 
-namespace
-{
+    void TestConfig()
+    {
+        const std::filesystem::path path = "opcep_test.ini";
+        WriteFile(path,
+                  "[MAIN]\nComment = test\n\n[STABILITY]\nAimProjectileCrashFix = 1\n"
+                  "BlackscreenFix = 2\n\n[GRAPHICS]\nCarDynamicShadowFix = 0\n");
+        opp::Config config(path);
+        CHECK(config.present());
+        CHECK(config.Option("AimProjectileCrashFix", "0"));
+        CHECK(!config.Option("BlackscreenFix", "1")); // only exactly 1 enables
+        CHECK(!config.Option("CarDynamicShadowFix", "1"));
+        CHECK(config.Option("SkipIntro", "1")); // absent -> arm default
+        CHECK(!config.Option("VSyncFix", "0"));
+        CHECK(config.Has("STABILITY", "AimProjectileCrashFix"));
+        CHECK(!config.Has("STABILITY", "MissingKey"));
+        CHECK(config.String("MAIN", "Comment", "") == "test");
+        std::filesystem::remove(path);
 
-int Run()
-{
-	// The converted NewMemorySystem stubs keep their original ABI.
-	{
-		std::uintptr_t slot = 0;
-		zpatch_nms_object = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&slot));
-		abi_nms_apply();
-		CHECK(slot == reinterpret_cast<std::uintptr_t>(zpatch_nms_vtable));
-		zpatch_nms_object = 0;
-		abi_nms_apply();
-		CHECK(slot == reinterpret_cast<std::uintptr_t>(zpatch_nms_vtable));
+        // Old flat layout: the same key is found through [Options].
+        const std::filesystem::path legacy = "opcep_test_legacy.ini";
+        WriteFile(legacy, "[Options]\nMouseFix=1\nMiscFixes=0\n");
+        opp::Config old(legacy);
+        CHECK(old.Option("MouseFix", "0"));
+        CHECK(old.Has("Options", "MiscFixes"));
+        CHECK(!old.Option("MiscFixes", "1"));
+        std::filesystem::remove(legacy);
+    }
 
-		int object = 7;
-		CHECK(abi_nms_self(&object, nullptr, nullptr) == &object);
-		CHECK(abi_nms_zero_ptr(&object, nullptr, nullptr) == nullptr);
-		CHECK(!abi_nms_reject_ptr(&object));
-		CHECK(!abi_nms_reject());
-		abi_nms_noop_ret0();
-		abi_nms_noop_pair(&object, &object);
-		abi_nms_noop_arg(&object);
-	}
+    void TestIntPrefix()
+    {
+        // std::stoi's base-10 grammar, without the throw.
+        CHECK(opp::ParseIntPrefix("1").status == opp::IntStatus::ok);
+        CHECK(opp::ParseIntPrefix("1").value == 1);
+        CHECK(opp::ParseIntPrefix("1abc").value == 1);      // prefix accepted
+        CHECK(opp::ParseIntPrefix("  +2").value == 2);
+        CHECK(opp::ParseIntPrefix("-3").value == -3);
+        CHECK(opp::ParseIntPrefix("0x2").value == 0);       // base 10 stops at 'x'
+        CHECK(opp::ParseIntPrefix("").status == opp::IntStatus::empty);
+        CHECK(opp::ParseIntPrefix("   ").status == opp::IntStatus::empty);
+        CHECK(opp::ParseIntPrefix("abc").status == opp::IntStatus::not_a_number);
+        CHECK(opp::ParseIntPrefix("").status != opp::IntStatus::ok);
+        CHECK(opp::FlagExactlyOne("1"));
+        CHECK(!opp::FlagExactlyOne("2"));
+        CHECK(!opp::FlagExactlyOne("0"));
+        CHECK(!opp::FlagExactlyOne(""));
+        CHECK(!opp::FlagExactlyOne("abc"));
+        // A value far outside int range is not "1" and must not throw.
+        CHECK(!opp::FlagExactlyOne("999999999999999999999"));
+    }
 
-	// The old-style INI wrapper must select [Options] and find its keys.
-	{
-		const char* path = "readable_test.ini";
-		std::FILE* file = std::fopen(path, "wb");
-		CHECK(file != nullptr);
-		std::fputs("[Options]\nMouseFix=1\n", file);
-		std::fclose(file);
-		INI<> ini(path, true);
-		ini.select("Options");
-		CHECK(ini.loaded());
-		CHECK(std::strcmp(ini.get("MouseFix", "0"), "1") == 0);
-		CHECK(std::strcmp(ini.get("Missing", "7"), "7") == 0);
-		std::remove(path);
-	}
+    void TestConfigSemantics()
+    {
+        const std::filesystem::path path = "opcep_semantics.ini";
+        WriteFile(path,
+                  "\xEF\xBB\xBF"  // UTF-8 BOM: the first section must still parse
+                  "[Options]\n"
+                  "Dup = 1\n"
+                  "Dup = 0\n"                 // last duplicate wins
+                  "Prec = 2\n"                // [Options] is searched before [STABILITY]
+                  "Inline = 1 // note\n"      // space-preceded comment is stripped
+                  "NoSpace = 1//note\n"       // not space-preceded: part of the value
+                  "Quoted = \"1\"\n"
+                  "Empty =\n"                 // present, unparseable
+                  "Bad = abc\n"               // present, unparseable
+                  "Escaped\\=Key = 1\n"
+                  "; whole-line comment\n"
+                  "# another\n"
+                  "// slash comment\n"
+                  "[STABILITY]\n"
+                  "Prec = 1\n"                // loses to [Options]
+                  "OnlySecond = 1\n"
+                  "[Options]\n"               // a second block merges, last value wins
+                  "Merged = 1\n");
 
-	// The generated OOC payload decodes to the expected table and archive.
-	CHECK(zpatch_ooc_selftest());
+        opp::Config config(path);
+        CHECK(config.present());
+        CHECK(!config.Option("Dup", "1"));                 // 0 wins over 1
+        CHECK(!config.Option("Prec", "0"));                // [Options] order, not file order
+        CHECK(config.Option("Inline", "0"));
+        CHECK(config.Option("NoSpace", "0"));              // "1//note" -> prefix 1
+        CHECK(config.Option("Quoted", "0"));
+        CHECK(config.Option("Empty", "1"));                // invalid -> arm default
+        CHECK(!config.Option("Empty", "0"));
+        CHECK(config.Option("Bad", "1"));                  // no throw, default used
+        CHECK(config.Option("Escaped=Key", "0"));          // `\=` is restored in the key
+        CHECK(config.Has("STABILITY", "OnlySecond"));
+        CHECK(config.Option("OnlySecond", "0"));
+        CHECK(config.Has("Options", "Merged"));            // duplicate block merges
 
-	// Tables: RemoveUselessChecks is five RVA arrays + 23 singles. Drive both write phases
-	// over a blank image and compare with the 7,489-row table it replaced - same positions,
-	// same bytes, nothing on the other builds. The hash is FNV-1a 64 over (rva LE32, byte)
-	// for every changed position in ascending RVA order.
-	{
-		struct Expected
-		{
-			GameBuild build;
-			std::size_t positions;
-			std::uint64_t hash;
-		};
-		constexpr std::array<Expected, 3> expected{{
-		    {GameBuild::v1040, 12406u, 0xCDD7889E5733E709ull},
-		    {GameBuild::v1070, 11516u, 0x34C4403380C387CAull},
-		    {GameBuild::v1080, 11839u, 0x4220A6D0FAD4C6C9ull},
-		}};
-		for (const Expected& want : expected)
-		{
-			std::vector<std::uint8_t> buffer(kScanProbeSize, 0); // above the largest RVA
-			const GameImage image{buffer.data(), buffer.size()};
-			zp::ApplyRemoveUselessChecks(want.build, image);
+        // Sort order and case sensitivity are the reader's, as before.
+        CHECK(!config.Has("stability", "OnlySecond"));
+        CHECK(!config.Has("STABILITY", "onlysecond"));
+        CHECK(config.InvalidValues() >= 2);                 // Empty + Bad
+        std::filesystem::remove(path);
 
-			std::size_t positions = 0;
-			std::uint64_t hash = 0xcbf29ce484222325ull;
-			for (std::size_t i = 0; i < buffer.size(); ++i)
-			{
-				if (buffer[i] == 0)
-					continue;
-				++positions;
-				const auto rva = static_cast<std::uint32_t>(i);
-				for (unsigned shift = 0; shift < 32; shift += 8)
-					hash = (hash ^ ((rva >> shift) & kByteMask)) * kFnvPrime;
-				hash = (hash ^ buffer[i]) * kFnvPrime;
-			}
-			CHECK(positions == want.positions);
-			CHECK(hash == want.hash);
-		}
+        // CRLF: the bundled reader drops the CR, so the values stay clean.
+        const std::filesystem::path crlf = "opcep_semantics_crlf.ini";
+        WriteFile(crlf, "[Options]\r\nCrlf = 1\r\nText = a b\r\n");
+        opp::Config windows(crlf);
+        CHECK(windows.present());
+        CHECK(windows.Option("Crlf", "0"));
+        CHECK(windows.String("Options", "Text", "") == "a b");
+        std::filesystem::remove(crlf);
 
-		constexpr std::array<GameBuild, 10> other{
-		    GameBuild::unknown, GameBuild::v1000, GameBuild::v1004, GameBuild::v1060,
-		    GameBuild::v1061,  GameBuild::v1100, GameBuild::v1110, GameBuild::v1120,
-		    GameBuild::v1130,  GameBuild::v12043,
-		};
-		for (GameBuild build : other)
-		{
-			std::vector<std::uint8_t> buffer(kScanProbeSize, 0);
-			const GameImage image{buffer.data(), buffer.size()};
-			zp::ApplyRemoveUselessChecks(build, image);
-			for (std::uint8_t byte : buffer)
-				CHECK(byte == 0);
-		}
-	}
+        // mINI's inline comment rule: a space-preceded `;`, `//` or `#` starts a
+        // comment and is stripped after the first `=`; without the space it is
+        // part of the value (TestConfig's NoSpace case).
+        const std::filesystem::path comments = "opcep_semantics_comments.ini";
+        WriteFile(comments,
+                  "[Options]\n"
+                  "Hash = 1 # note\n"
+                  "Semi = 1 ; note\n"
+                  "Slash = 1 // note\n"
+                  "// whole-line slash\n"
+                  "# whole-line hash\n"
+                  "; whole-line semi\n");
+        opp::Config commented(comments);
+        CHECK(commented.present());
+        CHECK(commented.Option("Hash", "0"));
+        CHECK(commented.Option("Semi", "0"));
+        CHECK(commented.Option("Slash", "0"));
+        CHECK(!commented.Has("Options", "// whole-line slash"));
+        std::filesystem::remove(comments);
 
-	// ---- game hash and build classification --------------------------------
-	CHECK(GameHash("police") == kPoliceHash);
-	CHECK(GameHash("POLICE") == GameHash("police"));
-	CHECK(GameHash("a\\b") == GameHash("a/b"));
-	CHECK(GameHash("\"POLICE\"ignored") == GameHash("police"));
-	CHECK(GameHash("") == 2u);
-	CHECK(GameHash("hash:0x1234") == kLiteralHash);
-	CHECK(GameHash("HASH:123trailing") == 123u);
-	CHECK(GameHash("hash:  -1tail") == kWrappedHash);
-	CHECK(GameHash("hash:077") == 63u);
-	CHECK(GameHash("hash:0") == kZeroHash);
+        // A missing file loads nothing and every option keeps its default.
+        opp::Config missing("opcep_semantics_missing.ini");
+        CHECK(!missing.present());
+        CHECK(!missing.Has("Options", "Dup"));
+        CHECK(missing.Option("Dup", "1"));
+        CHECK(!missing.Option("Dup", "0"));
+        CHECK(missing.String("", "OverrideGTADatPathTo", "common:/data/gta.dat") ==
+              "common:/data/gta.dat");
 
-	CHECK(ClassifyGameBuild(1000) == GameBuild::v1000);
-	CHECK(ClassifyGameBuild(1004) == GameBuild::v1004);
-	CHECK(ClassifyGameBuild(1040) == GameBuild::v1040);
-	CHECK(ClassifyGameBuild(1060) == GameBuild::v1060);
-	CHECK(ClassifyGameBuild(1061) == GameBuild::v1061);
-	CHECK(ClassifyGameBuild(1070) == GameBuild::v1070);
-	CHECK(ClassifyGameBuild(1080) == GameBuild::v1080);
-	CHECK(ClassifyGameBuild(1100) == GameBuild::v1100);
-	CHECK(ClassifyGameBuild(1110) == GameBuild::v1110);
-	CHECK(ClassifyGameBuild(1120) == GameBuild::v1120);
-	CHECK(ClassifyGameBuild(1130) == GameBuild::v1130);
-	CHECK(ClassifyGameBuild(12043) == GameBuild::v12043);
-	CHECK(ClassifyGameBuild(9999) == GameBuild::unknown);
+        // The section policy is data: [Options] first, then the subsystem groups.
+        const auto sections = opp::OptionSections();
+        CHECK(sections.size() == 15);
+        CHECK(sections.front() == "Options");
+        CHECK(sections.back() == "DEBUG");
+    }
 
-	// injector::MakeRET is NOT a three-byte store: its header writes the opcode
-	// through a 4-byte int, so `ret 8` also zeroes the byte after the immediate.
-	// The TeleportProtection site must leave that byte alone and therefore stores
-	// C2 08 and 00 itself; pin both shapes so the difference cannot be lost.
-	{
-		std::uint8_t api[6] = {0x83, 0x83, 0x83, 0x83, 0x83, 0x83};
-		injector::MakeRET(api, 8, false);
-		CHECK(api[0] == kRetImm16Opcode && api[1] == kRet8Pop && api[2] == kZeroByte &&
-      api[3] == kZeroByte);
+    void TestShippedTemplate()
+    {
+        // The flat option lookup is only correct while a key is unique across
+        // the searched sections; this census pins that invariant (research 05
+        // S9/T16) and that the shipped defaults are parseable flags.
+        const std::filesystem::path templatePath =
+            std::filesystem::path(OPCEP_DATA_DIR) / "IV.EFLC.OpenPreCEPatch.ini";
+        opp::Config config(templatePath);
+        CHECK(config.present());
 
-		std::uint8_t site[4] = {0x83, 0x83, 0x83, 0x83};
-		injector::WriteMemory<std::uint16_t>(site, kRet8Word, false);
-		injector::WriteMemory<std::uint8_t>(site + 2, kZeroByte, false);
-		CHECK(site[0] == kRetImm16Opcode && site[1] == kRet8Pop && site[2] == kZeroByte &&
-      site[3] == kUntouched83);
-	}
+        // Walk the file's own sections: every key may occur in one section only.
+        std::FILE* file = std::fopen(templatePath.string().c_str(), "rb");
+        CHECK(file != nullptr);
+        if (file)
+        {
+            const auto sections = opp::OptionSections();
+            std::string current;
+            std::vector<std::pair<std::string, std::string>> seen;
+            char line[512];
+            while (std::fgets(line, sizeof(line), file))
+            {
+                std::string text(line);
+                while (!text.empty() && (text.back() == '\n' || text.back() == '\r'))
+                    text.pop_back();
+                if (text.empty() || text[0] == ';')
+                    continue;
+                if (text[0] == '[')
+                {
+                    const size_t close = text.find(']');
+                    if (close != std::string::npos)
+                        current = text.substr(1, close - 1);
+                    continue;
+                }
+                const size_t equals = text.find('=');
+                if (equals == std::string::npos)
+                    continue;
+                std::string key = text.substr(0, equals);
+                while (!key.empty() && key.back() == ' ')
+                    key.pop_back();
 
-	std::uint32_t compact = 0;
-	CHECK(ComposeGameVersion(1, 0, 8, 0, compact) && compact == 1080);
-	CHECK(ComposeGameVersion(1, 0, 0, 0, compact) && compact == 1000);
+                bool searched = false;
+                for (const std::string_view section : sections)
+                    searched = searched || current == section;
+                if (!searched)
+                    continue;  // the two vehicle tables are read section-qualified
 
-	// ---- INI parsing and defaults -----------------------------------------
-	{
-		ConfigDocument config;
-		CHECK(ParseConfig("\xEF\xBB\xBF; comment\r\n[Options]\r\n MouseFix = 1 \r\nMouseFix=2\n"
-		                  "[Other]\nKey=value\n",
-		                  config));
-		CHECK(config.find("Options", "MouseFix") != nullptr);
-		CHECK(config.find("Options", "MouseFix")->value == "2"); // last value wins
-		CHECK(config.find("Other", "Key")->value == "value");
-		CHECK(ReadIniString(config, "Options", "MouseFix") != nullptr);
-		CHECK(ReadIniString(config, "Other", "Key") != nullptr);
-		CHECK(ReadIniString(config, "Missing", "Key") == nullptr);
-	}
-	{
-		// An arm's INI gate: a present value must parse to exactly 1, and an absent
-		// key uses the default that arm passes.
-		ConfigDocument absent;
-		CHECK(ParseConfig("[Options]\nMouseFix=1\n", absent));
-		const PatchContext ctx{GameImage{nullptr, 0}, 0u, GameBuild::unknown, absent};
-		CHECK(ctx.Option("MouseFix", "0"));
-		CHECK(ctx.Option("SkipIntro", "1"));  // absent -> the arm's default
-		CHECK(!ctx.Option("VSyncFix", "0"));  // absent -> the arm's default
-		CHECK(!ctx.Option("RemoveRGSCLoginRequirement", "0"));
+                for (const auto& entry : seen)
+                    CHECK(!(entry.first == key && entry.second != current));
+                seen.emplace_back(key, current);
+            }
+            std::fclose(file);
+        }
 
-		ConfigDocument two;
-		CHECK(ParseConfig("[Options]\nMouseFix=2\nVSyncFix=2\n", two));
-		const PatchContext ctxTwo{GameImage{nullptr, 0}, 0u, GameBuild::unknown, two};
-		CHECK(!ctxTwo.Option("MouseFix", "1"));  // only exactly 1 enables
-		CHECK(!ctxTwo.Option("VSyncFix", "1"));
+        // Shipped defaults, read through the same accessor the installers use.
+        CHECK(config.Option("LoadDLCs", "0"));
+        CHECK(config.Option("RemoveModChecks", "0"));
+        CHECK(!config.Option("SkipIntro", "0"));  // not in the grouped template
+    }
 
-		ConfigDocument one;
-		CHECK(ParseConfig("[Options]\nVSyncFix=1\n", one));
-		const PatchContext ctxOne{GameImage{nullptr, 0}, 0u, GameBuild::unknown, one};
-		CHECK(ctxOne.Option("VSyncFix", "0"));
-	}
-	{
-		ConfigDocument bad;
-		CHECK(!ParseConfig("[Options\nMouseFix=1\n", bad));
-		CHECK(!ParseConfig("[Options]\nMouseFix\n", bad));
-		CHECK(ParseConfig("", bad));
-	}
-	{
-		// Lookup rules the reader shares with the shipped one: last value wins,
-		// duplicate section blocks merge, section/key case matters, values are
-		// trimmed but quotes are not stripped, and an empty value is stored.
-		ConfigDocument config;
-		CHECK(ParseConfig("[Options]\r\nA=1\r\nA=2\r\nA=3\r\n[Other]\r\nA=9\r\n"
-		                  "[Options]\r\nB=4\r\nC=\r\n D = 5 \r\ncasekey=1\r\nCaseKey=2\r\n"
-		                  "Q=\"text\"\r\n# comment\r\n; comment\r\n",
-		                  config));
-		CHECK(config.find("Options", "A")->value == "3");
-		CHECK(config.find("Other", "A")->value == "9");
-		CHECK(config.find("Options", "B")->value == "4"); // second block merged
-		CHECK(config.find("Options", "C") != nullptr);    // empty value is stored
-		CHECK(config.find("Options", "C")->value.empty());
-		CHECK(config.find("Options", "D")->value == "5"); // both sides trimmed
-		CHECK(config.find("Options", "casekey")->value == "1");
-		CHECK(config.find("Options", "CaseKey")->value == "2");
-		CHECK(config.find("Options", "Q")->value == "\"text\""); // quotes kept verbatim
-		CHECK(config.find("options", "A") == nullptr);           // section case matters
-		CHECK(config.find("Options", "Missing") == nullptr);
+    void TestIniImport()
+    {
+        const std::filesystem::path dir = "opcep_import_test";
+        std::filesystem::remove_all(dir);
+        std::filesystem::create_directories(dir);
+        WriteFile(dir / "ZolikaPatch.ini",
+                  "[Options]\nMouseFix=0\nMiscFixes=0\n"
+                  "OverrideGTADatPathTo=common:/data/custom.dat\n"
+                  "[PopupLightAngles]\nCar1Name=police\nCar1Angle=90\n");
 
-		// A line that is not a comment and has no '=' rejects the whole file: the
-		// reader's strict grammar (the original dropped unknown lines instead).
-		ConfigDocument slash;
-		CHECK(!ParseConfig("[Options]\n// c\nA=1\n", slash));
+        const std::filesystem::path created = opp::EnsureConfigFile(dir);
+        CHECK(created == dir / "IV.EFLC.OpenPreCEPatch.ini");
+        CHECK(std::filesystem::exists(created));
 
-		// Missing file: not loaded, so the loader skips every install.
-		std::remove("readable_missing.ini");
-		ConfigDocument missing;
-		CHECK(!LoadConfig("readable_missing.ini", missing));
-		CHECK(missing.entries.empty());
-		INI<> generic("readable_missing.ini");
-		CHECK(!generic.loaded());
-	}
-	{
-		// The O(1) index must answer exactly like the reverse scan it replaced,
-		// including duplicate keys, and appended entries must still shadow the
-		// file (the per-option isolation and Patch7 compatibility paths append).
-		std::string text = "[Options]\n";
-		for (int i = 0; i < 2000; ++i)
-			text += "Key" + std::to_string(i % 700) + "=" + std::to_string(i) + "\n";
-		text += "[Tables]\n";
-		for (int i = 0; i < 500; ++i)
-			text += "Row" + std::to_string(i) + "=v" + std::to_string(i) + "\n";
-		ConfigDocument config;
-		CHECK(ParseConfig(text, config));
-		CHECK(config.indexed == config.entries.size());
+        opp::Config config(created);
+        CHECK(!config.Option("MouseFix", "1")); // old value 0
+        CHECK(config.Option("CombinedRadioFreezeFix", "1")); // template default
+        CHECK(config.String("MISC", "OverrideGTADatPathTo", "") ==
+              "common:/data/custom.dat");
+        CHECK(config.String("PopupLightAngles", "Car1Name", "") == "police");
+        std::filesystem::remove_all(dir);
 
-		const auto reference = [&config](std::string_view section, std::string_view key) {
-			for (std::size_t i = config.entries.size(); i > 0; --i)
-			{
-				if (config.entries[i - 1].section == section && config.entries[i - 1].key == key)
-					return static_cast<const ConfigEntry*>(&config.entries[i - 1]);
-			}
-			return static_cast<const ConfigEntry*>(nullptr);
-		};
-		for (int i = 0; i < 700; ++i)
-		{
-			const std::string key = "Key" + std::to_string(i);
-			const ConfigEntry* want = reference("Options", key);
-			CHECK(want != nullptr);
-			CHECK(config.find("Options", key) == want); // same (last) entry
-		}
-		CHECK(config.find("Options", "Missing") == nullptr);
-		CHECK(config.find("Tables", "Row499")->value == "v499");
-		CHECK(ReadIniString(config, "Tables", "Row0") != nullptr);
+        const std::filesystem::path fresh = "opcep_import_fresh";
+        std::filesystem::remove_all(fresh);
+        std::filesystem::create_directories(fresh);
+        const std::filesystem::path defaultIni = opp::EnsureConfigFile(fresh);
+        CHECK(defaultIni == fresh / "IV.EFLC.OpenPreCEPatch.ini");
+        opp::Config defaults(defaultIni);
+        CHECK(defaults.Option("CombinedRadioFreezeFix", "0"));
+        std::filesystem::remove_all(fresh);
+    }
 
-		config.entries.push_back({"Options", "Key1", "forced"});
-		CHECK(config.find("Options", "Key1")->value == "forced");
-		ConfigDocument copy = config; // the dump's per-option isolation copies
-		CHECK(copy.find("Options", "Key1")->value == "forced");
-		CHECK(copy.find("Tables", "Row499")->value == "v499");
-	}
+    void TestLegacyImportFromGameDirectory()
+    {
+        // ASI in plugins\: the old ZolikaPatch.ini is imported from the game
+        // folder, but the grouped INI is created next to the ASI.
+        const std::filesystem::path moduleDirectory = "opcep_legacy_module";
+        const std::filesystem::path gameDirectory = "opcep_legacy_game";
+        std::filesystem::remove_all(moduleDirectory);
+        std::filesystem::remove_all(gameDirectory);
+        std::filesystem::create_directories(moduleDirectory);
+        std::filesystem::create_directories(gameDirectory / "plugins");
+        // The old file is in a loader folder, not next to the executable.
+        WriteFile(gameDirectory / "plugins" / "ZolikaPatch.ini", "[Options]\nMouseFix=0\n");
 
-	// ---- catalogue ---------------------------------------------------------
-	CHECK(zp::ModelCatalogSize() == 38455);
-	CHECK(zp::ModelCatalogName(0) == "01_wires_mh1");
-	CHECK(zp::ModelCatalogName(38454) == "ztype");
-	CHECK(zp::ModelCatalogName(38455) == "**UNKNOWN**");
-	CHECK(zp::ModelNameFromHash(GameHash("police")) == "police");
-	CHECK(zp::ModelNameFromHash(GameHash("ztype")) == "ztype");
-	CHECK(zp::ModelNameFromHash(0) == "**UNKNOWN**");
+        const std::filesystem::path created =
+            opp::EnsureConfigFile(moduleDirectory, nullptr, gameDirectory);
+        CHECK(created == moduleDirectory / "IV.EFLC.OpenPreCEPatch.ini");
+        CHECK(std::filesystem::exists(created));
+        CHECK(!std::filesystem::exists(gameDirectory / "IV.EFLC.OpenPreCEPatch.ini"));
 
-	// The launch-slot rewrite must write the original's capital-P bytes exactly.
-	{
-		const std::string_view expected{"PlayGTAIV.exe\0e\0", 16};
-		CHECK(zp::kLauncherNamePatch.size() == expected.size());
-		CHECK(std::string_view(zp::kLauncherNamePatch.data(),
-		                       zp::kLauncherNamePatch.size()) == expected);
-		CHECK(zp::kLauncherSlotSignature == "4C 61 75 6E 63 68 47 54 41 49 56 2E 65 78 65 00");
-	}
+        opp::Config config(created);
+        CHECK(!config.Option("MouseFix", "1")); // imported from the loader folder
+        std::filesystem::remove_all(moduleDirectory);
+        std::filesystem::remove_all(gameDirectory);
+    }
 
-	// ---- vehicle-light tables ---------------------------------------------
-	{
-		ConfigDocument lights;
-		CHECK(ParseConfig(
-		    "[PopupLightAngles]\nCar1Name=police\nCar1Angle=90\nCar512Name=hash:123\n"
-		    "Car512Angle=-180suffix\n[HeadlightConeOffsets]\nCar2Name=POLICE\nCar2Offset=3.5\n",
-		    lights));
-		VehicleLightTables tables;
-		CHECK(LoadVehicleLightTables(lights, tables));
-		CHECK(tables.popupAngles[0].modelHash == GameHash("police"));
-		CHECK(std::fabs(tables.popupAngles[0].value - 1.57079633f) < 0.00001f);
-		CHECK(tables.popupAngles[511].modelHash == 123);
-		CHECK(!tables.popupAngles[1].populated);
-		CHECK(tables.headlightOffsets[1].value == 3.5f);
+    void TestLegacyUnsupportedKeys()
+    {
+        // The legacy import is a text transform over the template, so a key the
+        // template has no row for cannot be carried over. It must be reported
+        // and logged instead of disappearing (missed-findings audit).
+        const std::filesystem::path dir = "opcep_legacy_unsupported";
+        std::filesystem::remove_all(dir);
+        std::filesystem::create_directories(dir);
+        WriteFile(dir / "ZolikaPatch.ini",
+                  "[Options]\nMouseFix=0\nRemoveUselessChecks=1\nNoPhysicsSleep=1\n"
+                  "SkipLauncher=1\nUnknownOldKey=1\n"
+                  "[PopupLightAngles]\nCar1Name=police\nCar1Angle=90\n");
 
-		// A name whose value is missing or unparseable faults: the original calls
-		// std::stof and lets the exception escape uncaught (sub_100523C0: strtof at
-		// 0x10052763, the endptr/errno checks at 0x10052772/0x1005277E, then
-		// _Xinvalid_argument 0x10063120 / _Xout_of_range 0x10063124 with the
-		// messages below). Skipping the row instead would be a fault-avoidance
-		// divergence, so the loader must throw here.
-		auto loadThrows = [](const ConfigDocument& document) -> std::string_view
-		{
-			VehicleLightTables out;
-			try
-			{
-				(void)LoadVehicleLightTables(document, out);
-			}
-			catch (const std::invalid_argument& error)
-			{
-				return error.what();
-			}
-			catch (const std::out_of_range& error)
-			{
-				return error.what();
-			}
-			return {};
-		};
-		ConfigDocument broken;
-		CHECK(ParseConfig("[PopupLightAngles]\nCar1Name=police\nCar1Angle=invalid\n", broken));
-		CHECK(loadThrows(broken) == "invalid stof argument");
-		ConfigDocument missingValue;
-		CHECK(ParseConfig("[PopupLightAngles]\nCar2Name=police\n", missingValue));
-		CHECK(loadThrows(missingValue) == "invalid stof argument");
-		ConfigDocument outOfRange;
-		CHECK(ParseConfig("[PopupLightAngles]\nCar1Name=police\nCar1Angle=1e999\n", outOfRange));
-		CHECK(loadThrows(outOfRange) == "stof argument out of range");
+        opp::LegacyImportReport report;
+        const std::filesystem::path created = opp::EnsureConfigFile(dir, &report);
+        CHECK(created == dir / "IV.EFLC.OpenPreCEPatch.ini");
 
-		// An *empty* name is not a row: the original's std::string compare
-		// (0x1005AF10, skip branch 0x10052638) treats a missing key and an empty
-		// value the same, so the slot is skipped and nothing is stored - even
-		// though its value key is present and parseable.
-		ConfigDocument emptyName;
-		CHECK(ParseConfig("[PopupLightAngles]\nCar2Name=\nCar2Angle=45\n", emptyName));
-		VehicleLightTables emptyNameTables;
-		CHECK(LoadVehicleLightTables(emptyName, emptyNameTables));
-		CHECK(!emptyNameTables.popupAngles[1].populated);
-		CHECK(emptyNameTables.popupAngles[1].modelHash == 0u);
-		CHECK(emptyNameTables.popupAngles[1].value == 0.0f);
-		CHECK(!emptyNameTables.headlightOffsets[1].populated);
-	}
+        const auto dropped = [&report](const char* key) -> const char* {
+            for (const auto& entry : report.dropped)
+            {
+                if (entry.key == key)
+                    return entry.reason.c_str();
+            }
+            return nullptr;
+        };
+        CHECK(dropped("RemoveUselessChecks") != nullptr);
+        CHECK(std::strcmp(dropped("RemoveUselessChecks"), "not implemented in OpenPreCEPatch") == 0);
+        CHECK(std::strcmp(dropped("NoPhysicsSleep"), "not implemented in OpenPreCEPatch") == 0);
+        CHECK(std::strcmp(dropped("SkipLauncher"), "provided by the XLivelessAddon companion") == 0);
+        CHECK(std::strcmp(dropped("UnknownOldKey"), "no row in the grouped INI") == 0);
+        // Handled: the option is carried over, the vehicle table row is ported.
+        CHECK(dropped("MouseFix") == nullptr);
+        CHECK(dropped("Car1Name") == nullptr);
 
-	// ---- pattern parser ----------------------------------------------------
-	{
-		constexpr std::array<std::uint8_t, 6> bytes{0x90, 0x85, 0xdb, 0x7e, 0x41, 0x55};
-		Match match;
-		// "485" is parsed with strtoul semantics and compared as one byte (0x85).
-		CHECK(FindPattern({bytes.data(), bytes.size()}, "485 DB ? 41", match));
-		CHECK(match.address == bytes.data() + 1);
-		std::vector<const std::uint8_t*> all;
-		CHECK(FindAllPatterns({bytes.data(), bytes.size()}, "? DB 7E", all) == 1);
-		CHECK(all[0] == bytes.data() + 1);
-		CHECK(!FindPattern({bytes.data(), bytes.size()}, "DE AD BE EF", match));
-	}
+        opp::Config config(created);
+        CHECK(!config.Has("Options", "RemoveUselessChecks"));
+        CHECK(!config.Option("MouseFix", "1"));  // the old value, 0
+        CHECK(config.String("PopupLightAngles", "Car1Name", "") == "police");
 
-	// ---- menu probes (IVMenuAPI, separate from the ZMenuIV guard) ----------
-	CHECK(ProbeMenuApi(false, false, false, true) == MenuProbeResult::disabled);
-	CHECK(ProbeMenuApi(true, true, false, false) == MenuProbeResult::already_loaded);
-	CHECK(ProbeMenuApi(true, false, false, true) == MenuProbeResult::loaded);
-	CHECK(ProbeMenuApi(true, false, true, true) == MenuProbeResult::unavailable);
-	{
-		MenuIntegrationState state;
-		CHECK(MenuIntegrationProbe(state, false) == MenuProbeResult::unavailable);
-		CHECK(state.attemptMade && state.loadAttempts == 1);
-		CHECK(MenuIntegrationProbe(state, true) == MenuProbeResult::unavailable);
-		CHECK(state.loadAttempts == 1); // DAT_101a843c prevents a retry
-	}
-	{
-		const auto registrations = MenuRegistrations();
-		CHECK(registrations.size() == 2);
-		CHECK(std::strcmp(registrations[0].family, "PREF_DEATHMUSIC") == 0);
-		CHECK(std::strcmp(registrations[1].family, "PREF_FOCUSLOSS") == 0);
-	}
+        CHECK(opp::UnsupportedLegacyKeys().size() == 7);
+        CHECK(opp::CompanionLegacyKeys().size() == 7);
+        std::filesystem::remove_all(dir);
+    }
 
-	// ---- ZMenuIV guard -----------------------------------------------------
-	CHECK(!ZMenuVersionAccepted(kZMenuMinVersion - 1));
-	CHECK(ZMenuVersionAccepted(kZMenuMinVersion));
-	CHECK(ZMenuVersionAccepted(kZMenuMinVersion + 1));
-	CHECK(std::strcmp(kZMenuModuleName, "ZMenuIV.asi") == 0);
-	CHECK(std::strcmp(kZMenuProcName, "GetZMenuVersion") == 0);
-	CHECK(kZMenuRejectFlags == kZMenuRejectFlag);
-	CHECK(kZMenuTerminateExitCode == 0u);
-	{
-		// Harness cell: the guard fills it only when the export is found.
-		std::uint32_t version{};
-		CHECK(ZMenuVersionGuard(version) == ZMenuGuardResult::module_absent);
-	}
+    void TestRemoveGFWLUpdatePopupSites()
+    {
+        // The four xlive.dll dwords the original's RemoveGFWLUpdatePopup handler
+        // zeroes (0x10005421) must stay at the recovered RVAs. A previous rename
+        // used 0x6B5B50/0x6B5B70 (wrong by 0x580) and the game-image write-set
+        // tools could not see it because xlive.dll is not the game image.
+        CHECK(::kXliveUpdateFlag0Rva == 6748016u);
+        CHECK(::kXliveUpdateFlag1Rva == 6748020u);
+        CHECK(::kXliveUpdateFlag2Rva == 7034320u);
+        CHECK(::kXliveUpdateFlag3Rva == 7034352u);
+        CHECK(::kXliveUpdateFlag0Rva == 0x66F770u);
+        CHECK(::kXliveUpdateFlag1Rva == ::kXliveUpdateFlag0Rva + 4u);
+        CHECK(::kXliveUpdateFlag2Rva == 0x6B55D0u);
+        CHECK(::kXliveUpdateFlag3Rva == ::kXliveUpdateFlag2Rva + 0x20u);
+    }
 
-	// ---- SkipLauncher tables ----------------------------------------------
-	{
-		CHECK(SkipLauncherEntries().size() == 25);
-		CHECK(SkipLauncherCollectors().size() == 2);
-		CHECK(SkipLauncherDfaInstalls().size() == 6);
-		CHECK(SkipLauncherRomInstalls().size() == 2);
-		CHECK(SkipLauncherDfaCollected().size() == 1);
-	}
+    void TestLegacyUnsupportedLogged()
+    {
+        // The production load path calls EnsureConfigFile without a report; the
+        // dropped-key line must still reach the log (a previous version logged
+        // only when the test asked for a report).
+        const std::filesystem::path dir = "opcep_legacy_log";
+        std::filesystem::remove_all(dir);
+        std::filesystem::create_directories(dir);
+        WriteFile(dir / "ZolikaPatch.ini",
+                  "[Options]\nMouseFix=0\nRemoveUselessChecks=1\nNoPhysicsSleep=1\n");
 
-	std::printf("readable tests: PASS\n");
-	return 0;
-}
+        const std::filesystem::path log = dir / "opcep_test.log";
+        opp::OpenLog(log);
+        const std::filesystem::path created = opp::EnsureConfigFile(dir);
+        CHECK(created == dir / "IV.EFLC.OpenPreCEPatch.ini");
 
+        std::ifstream input(log, std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(input)),
+                               std::istreambuf_iterator<char>());
+        CHECK(text.find("legacy key RemoveUselessChecks not imported") != std::string::npos);
+        CHECK(text.find("legacy key NoPhysicsSleep not imported") != std::string::npos);
+        CHECK(text.find("MouseFix") == std::string::npos);  // carried over, not logged
+
+        std::error_code ignored;
+        std::filesystem::remove_all(dir, ignored);
+    }
+
+    void TestFusionFixGate()
+    {
+        const std::filesystem::path path = "opcep_gate.ini";
+        WriteFile(path, "[FIXES]\nVSyncFix = 1\n[STABILITY]\nAimProjectileCrashFix = 1\n");
+        opp::Config config(path);
+
+        opp::SetFusionFixPresent(false);
+        CHECK(config.Option("VSyncFix", "1"));
+
+        opp::SetFusionFixPresent(true);
+        CHECK(!config.Option("VSyncFix", "1"));
+        CHECK(config.RawOption("VSyncFix", "0")); // notice still sees the INI value
+        CHECK(config.Option("AimProjectileCrashFix", "1")); // not a FusionFix overlap
+        CHECK(opp::IsFusionFixGated("VSyncFix"));
+        CHECK(opp::FusionFixGateReason("VSyncFix") != nullptr);
+
+        opp::SetFusionFixPresent(false);
+        CHECK(config.Option("VSyncFix", "1"));
+        std::filesystem::remove(path);
+
+        const std::filesystem::path dir = "opcep_ff_test";
+        std::filesystem::remove_all(dir);
+        std::filesystem::create_directories(dir);
+        WriteFile(dir / "GTAIV.EFLC.FusionFix.asi", "");
+        CHECK(opp::DetectFusionFix(dir));
+        CHECK(opp::FusionFixPresent());
+        opp::SetFusionFixPresent(false);
+        std::filesystem::remove_all(dir);
+    }
+
+    void BuildSyntheticPe(std::vector<uint8_t>& image)
+    {
+        image.assign(0x4000, 0x90);
+        auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(image.data());
+        dos->e_magic = IMAGE_DOS_SIGNATURE;
+        dos->e_lfanew = 0x40;
+        auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(image.data() + dos->e_lfanew);
+        nt->Signature = IMAGE_NT_SIGNATURE;
+        nt->FileHeader.Machine = IMAGE_FILE_MACHINE_I386;
+        nt->FileHeader.NumberOfSections = 2;
+        nt->FileHeader.SizeOfOptionalHeader = sizeof(IMAGE_OPTIONAL_HEADER32);
+        nt->OptionalHeader.Magic = IMAGE_NT_OPTIONAL_HDR32_MAGIC;
+        nt->OptionalHeader.SizeOfImage = static_cast<DWORD>(image.size());
+        auto* sections = IMAGE_FIRST_SECTION(nt);
+        std::memcpy(sections[0].Name, ".text", 5);
+        sections[0].VirtualAddress = 0x1000;
+        sections[0].Misc.VirtualSize = 0x1000;
+        sections[0].Characteristics = IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ;
+        std::memcpy(sections[1].Name, ".data", 5);
+        sections[1].VirtualAddress = 0x2000;
+        sections[1].Misc.VirtualSize = 0x1000;
+        sections[1].Characteristics = IMAGE_SCN_MEM_READ;
+    }
+
+    void TestExecutableView()
+    {
+        // A synthetic PE32 with one executable and one read-only section: the
+        // scanner must stop at the end of the executable section, like the
+        // original hook::pattern(module) call did.
+        std::vector<uint8_t> image;
+        BuildSyntheticPe(image);
+        auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
+            image.data() + reinterpret_cast<IMAGE_DOS_HEADER*>(image.data())->e_lfanew);
+        auto* sections = IMAGE_FIRST_SECTION(nt);
+
+        const opp::ModuleView pe{image.data(), image.size()};
+        const opp::ModuleView view = opp::ExecutableView(pe);
+        CHECK(view.base == image.data());
+        CHECK(view.size == 0x2000);
+
+        // A non-PE buffer falls back to the whole view (the scanners are also
+        // used on synthetic buffers in tests and tools).
+        std::vector<uint8_t> raw(64, 0x90);
+        const opp::ModuleView fallback = opp::ExecutableView({raw.data(), raw.size()});
+        CHECK(fallback.base == raw.data());
+        CHECK(fallback.size == raw.size());
+
+        // Header claims a section past the mapped image: keep the whole view
+        // instead of scanning a range that is not mapped.
+        sections[0].VirtualAddress = 0x3000;
+        sections[0].Misc.VirtualSize = 0x4000;
+        const opp::ModuleView invalid = opp::ExecutableView(pe);
+        CHECK(invalid.base == image.data());
+        CHECK(invalid.size == image.size());
+
+        // No executable section at all: same whole-image fallback.
+        sections[0].Characteristics = IMAGE_SCN_MEM_READ;
+        sections[0].VirtualAddress = 0x1000;
+        sections[0].Misc.VirtualSize = 0x1000;
+        const opp::ModuleView no_text = opp::ExecutableView(pe);
+        CHECK(no_text.size == image.size());
+    }
+
+    void TestPatternScan()
+    {
+        // Two copies of the signature in .text and one in .data. Pattern() must
+        // stop at the first .text copy; PatternAll() must return both .text
+        // copies and never the .data one.
+        std::vector<uint8_t> image;
+        BuildSyntheticPe(image);
+        const uint8_t signature[4] = {0xAA, 0xBB, 0xCC, 0xDD};
+        std::memcpy(image.data() + 0x1100, signature, sizeof(signature));
+        std::memcpy(image.data() + 0x1500, signature, sizeof(signature));
+        std::memcpy(image.data() + 0x2100, signature, sizeof(signature));
+
+        const opp::GameImage pe{image.data(), image.size()};
+        auto first = opp::Pattern(pe, "AA BB CC DD");
+        CHECK(first.size() == 1);
+        CHECK(first.get(0).get<uint8_t>() == image.data() + 0x1100);
+
+        auto all = opp::PatternAll(pe, "AA BB CC DD");
+        CHECK(all.size() == 2);
+        CHECK(all.get(0).get<uint8_t>() == image.data() + 0x1100);
+        CHECK(all.get(1).get<uint8_t>() == image.data() + 0x1500);
+
+        // A miss is an empty pattern either way.
+        CHECK(opp::Pattern(pe, "11 22 33 44").size() == 0);
+        CHECK(opp::PatternAll(pe, "11 22 33 44").size() == 0);
+    }
+
+    void TestGame()
+    {
+        CHECK(opp::GameHash("police") == 0x79fbb0c5u);
+        CHECK(opp::GameHash("POLICE") == opp::GameHash("police"));
+        CHECK(opp::GameHash("a\\b") == opp::GameHash("a/b"));
+        CHECK(opp::GameHash("\"POLICE\"ignored") == opp::GameHash("police"));
+        CHECK(opp::GameHash("") == 2u);
+        CHECK(opp::GameHash("hash:0x1234") == 0x1234u);
+        CHECK(opp::GameHash("HASH:123trailing") == 123u);
+        CHECK(opp::GameHash("hash:  -1tail") == 0xffffffffu);
+        CHECK(opp::GameHash("hash:077") == 63u);
+        CHECK(opp::GameHash("hash:0") == 0xf4856ffeu);
+
+        CHECK(opp::ClassifyGameBuild(1000) == opp::GameBuild::v1000);
+        CHECK(opp::ClassifyGameBuild(1080) == opp::GameBuild::v1080);
+        CHECK(opp::ClassifyGameBuild(1130) == opp::GameBuild::v1130);
+        CHECK(opp::ClassifyGameBuild(9999) == opp::GameBuild::unknown);
+
+        uint32_t compact = 0;
+        CHECK(opp::ComposeGameVersion(1, 0, 8, 0, compact) && compact == 1080);
+        CHECK(opp::BuildIs(opp::GameBuild::v1080,
+                           {opp::GameBuild::v1070, opp::GameBuild::v1080}));
+    }
+
+    void TestCatalogue()
+    {
+        CHECK(opp::ModelCatalogSize() == 38455);
+        CHECK(opp::ModelCatalogName(0) == "01_wires_mh1");
+        CHECK(opp::ModelCatalogName(38454) == "ztype");
+        CHECK(opp::ModelCatalogName(38455) == "**UNKNOWN**");
+        CHECK(opp::ModelNameFromHash(opp::GameHash("police")) == "police");
+        CHECK(opp::ModelNameFromHash(0) == "**UNKNOWN**");
+
+        // ModelNameIndex: the one-time hash index must answer identically.
+        CHECK(opp::ModelNameFromHash(opp::GameHash("police")) == "police");
+        CHECK(opp::ModelNameFromHash(opp::GameHash("INFERNUS")) == "infernus");
+        CHECK(opp::ModelNameFromHash(opp::GameHash("01_wires_mh1")) == "01_wires_mh1");
+        CHECK(opp::ModelNameFromHash(0x1234567u) == "**UNKNOWN**");
+    }
+
+    void WriteNewSaveChunk(std::FILE* file, uint32_t size)
+    {
+        uint8_t header[9] = {};
+        std::memcpy(header + 5, &size, 4);
+        std::fwrite(header, 1, sizeof(header), file);
+        for (uint32_t i = 9; i < size; ++i)
+            std::fputc(static_cast<int>(i & 0xFFu), file);
+    }
+
+    void WriteNewSaveFile(const std::filesystem::path& path, bool truncate, bool badSize)
+    {
+        std::FILE* file = std::fopen(path.string().c_str(), "wb");
+        CHECK(file != nullptr);
+        if (!file)
+            return;
+        uint8_t header[0x110] = {};
+        std::memcpy(header + 0x0C, "SAVE", 4);
+        std::fwrite(header, 1, sizeof(header), file);
+        for (int i = 0; i < 18; ++i)
+        {
+            if (truncate && i == 6)
+                break;
+            uint32_t size = 50;
+            if (badSize && i == 3)
+                size = 4;
+            else if (i == 9)
+                size = 19525;
+            else if (i == 13)
+                size = 5953;
+            else if (i == 16)
+                size = 3703;
+            WriteNewSaveChunk(file, size);
+        }
+        std::fclose(file);
+    }
+
+    void TestNewSavesScan()
+    {
+        const std::filesystem::path path = "opcep_new_saves_test.bin";
+
+        WriteNewSaveFile(path, false, false);
+        for (int validate = 0; validate <= 1; ++validate)
+        {
+            for (int skip = 0; skip <= 1; ++skip)
+            {
+                std::FILE* file = std::fopen(path.string().c_str(), "rb");
+                CHECK(file != nullptr);
+                if (!file)
+                    continue;
+                const opp::SaveScanResult scan = zpatch_new_saves_scan(
+                    file, {validate != 0, skip != 0});
+                std::fclose(file);
+                CHECK(scan.ok);
+                CHECK(scan.probes.chunk9_new);
+                CHECK(scan.probes.chunk16_new);
+                CHECK(scan.probes.chunk13_new);
+            }
+        }
+
+        WriteNewSaveFile(path, true, false);
+        std::FILE* file = std::fopen(path.string().c_str(), "rb");
+        CHECK(file != nullptr);
+        if (file)
+        {
+            CHECK(!zpatch_new_saves_scan(file, {true, false}).ok);
+            std::fclose(file);
+        }
+
+        WriteNewSaveFile(path, false, true);
+        file = std::fopen(path.string().c_str(), "rb");
+        CHECK(file != nullptr);
+        if (file)
+        {
+            CHECK(!zpatch_new_saves_scan(file, {true, false}).ok);
+            std::fclose(file);
+        }
+
+        // Header-only chunks (size == 9) are valid and must not be rejected by
+        // the malloc(0) guard.
+        file = std::fopen(path.string().c_str(), "wb");
+        CHECK(file != nullptr);
+        if (file)
+        {
+            uint8_t header[0x110] = {};
+            std::memcpy(header + 0x0C, "SAVE", 4);
+            std::fwrite(header, 1, sizeof(header), file);
+            for (int i = 0; i < 18; ++i)
+                WriteNewSaveChunk(file, 9);
+            std::fclose(file);
+            file = std::fopen(path.string().c_str(), "rb");
+            CHECK(file != nullptr);
+            if (file)
+            {
+                CHECK(zpatch_new_saves_scan(file, {true, false}).ok);
+                std::fclose(file);
+                file = std::fopen(path.string().c_str(), "rb");
+                CHECK(file != nullptr);
+                if (file)
+                {
+                    CHECK(zpatch_new_saves_scan(file, {true, true}).ok);
+                    std::fclose(file);
+                }
+            }
+        }
+        std::filesystem::remove(path);
+    }
+
+    void TestVehicleLights()
+    {
+        const std::filesystem::path path = "opcep_lights.ini";
+        WriteFile(path,
+                  "[PopupLightAngles]\nCar1Name=police\nCar1Angle=90\n"
+                  "Car512Name=hash:123\nCar512Angle=-180suffix\n"
+                  "[HeadlightConeOffsets]\nCar2Name=POLICE\nCar2Offset=3.5\n");
+        opp::Config config(path);
+        opp::VehicleLightTables tables;
+        CHECK(opp::LoadVehicleLightTables(config, tables));
+        CHECK(tables.popupAngles[0].modelHash == opp::GameHash("police"));
+        CHECK(std::fabs(tables.popupAngles[0].value - 1.57079633f) < 0.00001f);
+        CHECK(tables.popupAngles[511].modelHash == 123);
+        CHECK(!tables.popupAngles[1].populated);
+        CHECK(tables.headlightOffsets[1].value == 3.5f);
+        std::filesystem::remove(path);
+    }
+
+    void TestMenu()
+    {
+        CHECK(!opp::ZMenuVersionAccepted(0x35DD0u));
+        CHECK(opp::ZMenuVersionAccepted(0x35DD1u));
+        uint32_t version = 0;
+        CHECK(opp::ZMenuVersionGuard(version) == opp::ZMenuGuardResult::module_absent);
+    }
+
+    void TestFeatureOrder()
+    {
+        // The golden lists each tier's arms (sorted, one per line, `# tier`
+        // header). The subscription *sequence* inside a tier is the executable's
+        // static-init order, which differs between the ASI, the dump and the
+        // tests; the contract is the tier assignment and the arm set. The
+        // integer-ordered write set is proven separately (matrix/crossbuild):
+        // reordering a tier must not change a byte.
+        struct Expected
+        {
+            std::string tier;
+            std::string name;
+        };
+        std::vector<Expected> golden;
+
+        std::FILE* file = std::fopen(OPCEP_SOURCE_DIR "/tests/order_golden.txt", "rb");
+        CHECK(file != nullptr);
+        if (file)
+        {
+            char line[256];
+            std::string tier;
+            while (std::fgets(line, sizeof(line), file))
+            {
+                std::string text(line);
+                while (!text.empty() && (text.back() == '\n' || text.back() == '\r'))
+                    text.pop_back();
+                if (text.empty())
+                    continue;
+                if (text.front() == '#')
+                {
+                    tier = text.substr(1);
+                    while (!tier.empty() && tier.front() == ' ')
+                        tier.erase(tier.begin());
+                    continue;
+                }
+                golden.push_back({tier, text});
+            }
+            std::fclose(file);
+        }
+
+        std::vector<Expected> actual;
+        const std::pair<const char*, opp::Event<opp::PatchContext&>*> tiers[] = {
+            {"publish", &opp::PublishEvent()},
+            {"install", &opp::InstallEvent()},
+            {"post", &opp::PostEvent()},
+        };
+        for (const auto& [tier, event] : tiers)
+        {
+            for (size_t i = 0; i < event->size(); ++i)
+            {
+                const char* name = event->name(i);
+                CHECK(name != nullptr);
+                if (name != nullptr)
+                    actual.push_back({tier, name});
+            }
+        }
+
+        const auto less = [](const Expected& left, const Expected& right) {
+            if (left.tier != right.tier)
+                return left.tier < right.tier;
+            return left.name < right.name;
+        };
+        std::sort(golden.begin(), golden.end(), less);
+        std::sort(actual.begin(), actual.end(), less);
+
+        CHECK(actual.size() == golden.size());
+        for (size_t i = 0; i < golden.size() && i < actual.size(); ++i)
+        {
+            if (golden[i].tier == actual[i].tier && golden[i].name == actual[i].name)
+                continue;
+            std::fprintf(stderr, "order: #%zu expected [%s] %s, got [%s] %s\n", i,
+                         golden[i].tier.c_str(), golden[i].name.c_str(),
+                         actual[i].tier.c_str(), actual[i].name.c_str());
+            ++failures;
+            break;
+        }
+
+        // No arm is subscribed twice, and a publish is never in the install tier.
+        for (size_t i = 1; i < actual.size(); ++i)
+        {
+            if (actual[i].tier == actual[i - 1].tier && actual[i].name == actual[i - 1].name)
+            {
+                std::fprintf(stderr, "order: duplicate arm %s\n", actual[i].name.c_str());
+                ++failures;
+                break;
+            }
+        }
+    }
+
+    void TestTierEdges()
+    {
+        // A tier is a named std::function list: Add appends, += appends unnamed,
+        // a null callback is ignored, and Execute runs in name order with unnamed
+        // handlers last. The install driver's own tiers are not touched.
+        opp::Event<> event;
+        std::string order;
+        event.Add([&order] { order += 'b'; }, "second");
+        event += [&order] { order += 'c'; };
+        event.Add([&order] { order += 'a'; }, "first");
+        event.Add(nullptr, "ignored");
+        CHECK(event.size() == 3);
+        CHECK(std::strcmp(event.name(0), "second") == 0);
+        CHECK(event.name(1) == nullptr);
+        CHECK(std::strcmp(event.name(2), "first") == 0);
+        event.Execute();
+        CHECK(order == "abc");
+    }
+
+    void TestArmFailsafes()
+    {
+        // A synthetic 4 KiB image of 0xCC: no signature can match it, and every
+        // RVA-based arm points past its end. The checked write helpers must
+        // accept an in-image write, refuse one that would leave the image, and
+        // refuse a branch whose body did not resolve - all without touching a
+        // byte and without a fault.
+        std::vector<uint8_t> buffer(0x1000, 0xCC);
+        const opp::GameImage image{buffer.data(), buffer.size()};
+        const opp::Config config{"opcep_failsafe_no_such_file.ini"};
+        opp::PatchContext ctx{image, reinterpret_cast<uintptr_t>(buffer.data()),
+                              opp::GameBuild::v1080, config};
+
+        CHECK(opp::SiteWritable(ctx, buffer.data(), 5));
+        CHECK(opp::SiteWritable(ctx, buffer.data() + buffer.size() - 5, 5));
+        CHECK(!opp::SiteWritable(ctx, buffer.data() + buffer.size() - 2, 5));
+        CHECK(!opp::SiteWritable(ctx, buffer.data() - 1, 1));
+        CHECK(!opp::SiteWritable(ctx, reinterpret_cast<const void*>(0x10), 1));
+        // A module-scoped write (the GFWL option into xlive.dll) is accepted only
+        // inside that module's own allocation.
+        const auto* const self = reinterpret_cast<const uint8_t*>(GetModuleHandleA(nullptr));
+        CHECK(opp::ModuleSiteWritable(self, self, 4));
+        CHECK(!opp::ModuleSiteWritable(self, buffer.data(), 4));
+        CHECK(!opp::ModuleSiteWritable(self, self + 0x40000000, 4));
+        CHECK(!opp::SiteWritable(ctx, nullptr, 1));
+
+        // A refused write is counted and leaves the image untouched.
+        const size_t skipped = opp::ArmWritesSkipped();
+        opp::NopAt(ctx, buffer.data() + buffer.size() - 2, 5);
+        CHECK(buffer[buffer.size() - 1] == 0xCC);
+        CHECK(opp::ArmWritesSkipped() == skipped + 1);
+
+        // An accepted write reaches the image and is byte-identical to the
+        // unchecked injector call it replaced.
+        std::vector<uint8_t> reference(buffer.size(), 0xCC);
+        injector::MakeNOP(reference.data(), 4, true);
+        injector::WriteMemory<uint16_t>(reference.data() + 8, 0xBEEFu, true);
+        opp::NopAt(ctx, buffer.data(), 4);
+        opp::WriteValue<uint16_t>(ctx, buffer.data() + 8, 0xBEEFu);
+        CHECK(std::memcmp(buffer.data(), reference.data(), 10) == 0);
+
+        // A missing body is a no-op, not a jump to 0.
+        std::vector<uint8_t> before(buffer);
+        opp::JumpTo(ctx, buffer.data() + 16, nullptr);
+        CHECK(std::memcmp(buffer.data() + 16, before.data() + 16, 5) == 0);
+        CHECK(opp::ArmWritesSkipped() == skipped + 2);
+
+        // ... and a null destination is refused the same way.
+        opp::CallTo(ctx, buffer.data() + 16, nullptr);
+        CHECK(std::memcmp(buffer.data() + 16, before.data() + 16, 5) == 0);
+
+        // A body address writes the same five-byte branch the arm wrote before:
+        // opcode + rel32 to the body, encoded from the site. Any body address
+        // proves the encoder; use the externally linked OOC self-test body.
+        void* const body = reinterpret_cast<void*>(&zpatch_ooc_selftest);
+        CHECK(body != nullptr);
+        opp::JumpTo(ctx, buffer.data() + 32, body);
+        CHECK(buffer[32] == 0xE9);
+        int32_t jump_rel = 0;
+        std::memcpy(&jump_rel, buffer.data() + 33, sizeof(jump_rel));
+        CHECK(reinterpret_cast<uint8_t*>(buffer.data() + 32 + 5 + jump_rel) ==
+              reinterpret_cast<uint8_t*>(body));
+        opp::CallTo(ctx, buffer.data() + 40, body);
+        CHECK(buffer[40] == 0xE8);
+        int32_t call_rel = 0;
+        std::memcpy(&call_rel, buffer.data() + 41, sizeof(call_rel));
+        CHECK(reinterpret_cast<uint8_t*>(buffer.data() + 40 + 5 + call_rel) ==
+              reinterpret_cast<uint8_t*>(body));
+
+        // A missing signature is one logged skip, and the arm is named.
+        opp::TraceArm("TestArmFailsafes");
+        CHECK(std::strcmp(opp::CurrentArm(), "TestArmFailsafes") == 0);
+        auto pattern = opp::Pattern(image, "DE AD BE EF");
+        CHECK(pattern.size() == 0);
+        CHECK(opp::PatternAll(image, "DE AD BE EF").size() == 0);
+
+        // End to end: the whole option pass over that image installs nothing.
+        // Every arm is a signature scan now (no arm writes a bare RVA), so a
+        // synthetic image matches nothing and no write is even attempted; the
+        // image must be byte-identical and no write may reach it.
+        std::vector<uint8_t> clean(buffer.size(), 0xCC);
+        const std::vector<uint8_t> untouched(clean.size(), 0xCC);
+        const opp::GameImage clean_image{clean.data(), clean.size()};
+        opp::PatchContext clean_ctx{clean_image,
+                                    reinterpret_cast<uintptr_t>(clean.data()),
+                                    opp::GameBuild::v1080, config};
+        const size_t applied_before_pass = opp::ArmWritesApplied();
+        opp::PatchGame(opp::GameBuild::v1080, clean_image, config);
+        CHECK(std::memcmp(clean.data(), untouched.data(), clean.size()) == 0);
+        CHECK(opp::ArmWritesApplied() == applied_before_pass);
+    }
+
+    void TestLauncherNamePatch()
+    {
+        // LaunchWithPlayGTAIV rewrites the game's two "LaunchGTAIV.exe" name
+        // slots to the 16 bytes the original's strcpy_s leaves there:
+        // "PlayGTAIV.exe\0" followed by the old name's surviving "e\0".
+        std::vector<uint8_t> image;
+        BuildSyntheticPe(image);
+        const char launch_name[] = "LaunchGTAIV.exe";
+        std::memcpy(image.data() + 0x1100, launch_name, sizeof(launch_name));
+        std::memcpy(image.data() + 0x2100, launch_name, sizeof(launch_name));
+
+        const std::filesystem::path ini = "opcep_launcher.ini";
+        WriteFile(ini, "[Options]\nLaunchWithPlayGTAIV = 1\n");
+        const opp::Config config(ini);
+        opp::SetLauncherProbeOverride(true);
+        opp::PatchContext ctx{{image.data(), image.size()},
+                              reinterpret_cast<uintptr_t>(image.data()),
+                              opp::GameBuild::v1080, config};
+        opp::ApplyLaunchWithPlayGTAIV(ctx);
+        opp::SetLauncherProbeOverride(false);
+        for (const size_t offset : {0x1100u, 0x2100u})
+        {
+            const uint8_t* slot = image.data() + offset;
+            CHECK(std::memcmp(slot, "PlayGTAIV.exe", 13) == 0);
+            CHECK(slot[13] == 0);
+            CHECK(slot[14] == 'e');
+            CHECK(slot[15] == 0);
+        }
+
+        // Wrong build: the gate keeps both slots untouched.
+        std::vector<uint8_t> other;
+        BuildSyntheticPe(other);
+        std::memcpy(other.data() + 0x2100, launch_name, sizeof(launch_name));
+        opp::SetLauncherProbeOverride(true);
+        opp::PatchContext other_ctx{{other.data(), other.size()},
+                                    reinterpret_cast<uintptr_t>(other.data()),
+                                    opp::GameBuild::v1110, config};
+        opp::ApplyLaunchWithPlayGTAIV(other_ctx);
+        opp::SetLauncherProbeOverride(false);
+        CHECK(std::memcmp(other.data() + 0x2100, launch_name, sizeof(launch_name)) == 0);
+
+        // The original writes exactly its two slots. An image with 0, 1 or 3
+        // name strings must be left alone (a third slot is not the original's).
+        const auto untouched_with_slots = [&config, &launch_name](
+                                              std::initializer_list<size_t> slots) {
+            std::vector<uint8_t> candidate;
+            BuildSyntheticPe(candidate);
+            for (const size_t offset : slots)
+                std::memcpy(candidate.data() + offset, launch_name, sizeof(launch_name));
+            opp::SetLauncherProbeOverride(true);
+            opp::PatchContext candidate_ctx{{candidate.data(), candidate.size()},
+                                            reinterpret_cast<uintptr_t>(candidate.data()),
+                                            opp::GameBuild::v1080, config};
+            opp::ApplyLaunchWithPlayGTAIV(candidate_ctx);
+            opp::SetLauncherProbeOverride(false);
+            for (const size_t offset : slots)
+            {
+                if (std::memcmp(candidate.data() + offset, launch_name,
+                                sizeof(launch_name)) != 0)
+                    return false;
+            }
+            return true;
+        };
+        CHECK(untouched_with_slots({}));                             // 0 hits
+        CHECK(untouched_with_slots({0x2100u}));                      // 1 hit
+        CHECK(untouched_with_slots({0x1100u, 0x2100u, 0x3100u}));    // 3 hits
+        std::filesystem::remove(ini);
+    }
+
+    void TestRelocateCalls()
+    {
+        // A tiny "function" with two call rel32 instructions to fix up.
+        static uint8_t target_a[1] = {0xC3};
+        static uint8_t target_b[1] = {0xC3};
+        uint8_t source[16] = {};
+        constexpr uint32_t offset_a = 1;
+        constexpr uint32_t offset_b = 7;
+        source[offset_a] = 0xE8;
+        source[offset_b] = 0xE8;
+        const auto rel_a = static_cast<int32_t>(
+            reinterpret_cast<uint8_t*>(target_a) - (source + offset_a + 5));
+        const auto rel_b = static_cast<int32_t>(
+            reinterpret_cast<uint8_t*>(target_b) - (source + offset_b + 5));
+        std::memcpy(source + offset_a + 1, &rel_a, sizeof(rel_a));
+        std::memcpy(source + offset_b + 1, &rel_b, sizeof(rel_b));
+
+        const uint32_t offsets[2] = {offset_a, offset_b};
+        uint8_t copy[16] = {};
+        CHECK(opp::zpatch_relocate_calls(copy, source, offsets));
+        CHECK(std::memcmp(copy, source, sizeof(source)) != 0);
+        int32_t new_a = 0;
+        int32_t new_b = 0;
+        std::memcpy(&new_a, copy + offset_a + 1, sizeof(new_a));
+        std::memcpy(&new_b, copy + offset_b + 1, sizeof(new_b));
+        CHECK(reinterpret_cast<uint8_t*>(copy + offset_a + 5 + new_a) == target_a);
+        CHECK(reinterpret_cast<uint8_t*>(copy + offset_b + 5 + new_b) == target_b);
+
+        // A listed offset that does not hold an E8 fails the whole copy.
+        uint8_t bad[16] = {};
+        const uint32_t not_e8 = 3;  // source[3] is 0, not a call opcode
+        const std::array<uint32_t, 1> one_not_e8 = {not_e8};
+        CHECK(!opp::zpatch_relocate_calls(bad, source, one_not_e8));
+
+        // An offset outside the range fails too. (`far` is a Windows macro.)
+        const uint32_t out_of_range = 0x100;
+        const std::array<uint32_t, 1> one_out_of_range = {out_of_range};
+        CHECK(!opp::zpatch_relocate_calls(bad, source, one_out_of_range));
+    }
+
+    void TestMakeReturn()
+    {
+        // injector::MakeRET must write exactly the instruction: one byte for
+        // `ret`, three for `ret N`. It used to pass the opcode as an int, which
+        // stored four bytes and clobbered the bytes after the site.
+        uint8_t buffer[8];
+        std::memset(buffer, 0xCC, sizeof(buffer));
+        injector::MakeRET(buffer, 0, true);
+        CHECK(buffer[0] == 0xC3);
+        CHECK(buffer[1] == 0xCC);
+        CHECK(buffer[2] == 0xCC);
+
+        std::memset(buffer, 0xCC, sizeof(buffer));
+        injector::MakeRET(buffer, 8, true);
+        CHECK(buffer[0] == 0xC2);
+        CHECK(buffer[1] == 0x08);
+        CHECK(buffer[2] == 0x00);
+        CHECK(buffer[3] == 0xCC);
+        CHECK(buffer[4] == 0xCC);
+    }
+
+    void TestHooks()
+    {
+        // The body bodies live in the feature modules now; these two expose an
+        // offline self-test, which is what the native suite can reach without a
+        // game image.
+        CHECK(zpatch_ooc_selftest());
+        CHECK(zpatch_nms_registry_selftest());
+    }
+
+    void TestWarnings()
+    {
+        // The 1.2.x range is refused, except the Complete Edition build this tree
+        // has recovered gates for (1.2.0.43).
+        CHECK(!opp::IsUnsupportedGameVersion(1080));
+        CHECK(!opp::IsUnsupportedGameVersion(1120));
+        CHECK(!opp::IsUnsupportedGameVersion(12043));
+        CHECK(opp::IsUnsupportedGameVersion(1201));
+        CHECK(opp::IsUnsupportedGameVersion(12059));
+        CHECK(opp::IsUnsupportedGameVersion(12999));
+        CHECK(!opp::IsUnsupportedGameVersion(1200));
+        CHECK(!opp::IsUnsupportedGameVersion(13000));
+
+        // Ultimate ASI Loader 6.9.0 is the first release exporting the
+        // IsUltimateASILoader marker; the loader warning enforces that minimum.
+        CHECK(opp::AsiLoaderVersionAccepted(0x00060009, 0));
+        CHECK(opp::AsiLoaderVersionAccepted(0x00090007, 0x00040000));
+        CHECK(!opp::AsiLoaderVersionAccepted(0x00060008, 0x0000FFFF));
+        CHECK(!opp::AsiLoaderVersionAccepted(0x00050000, 0));
+
+        // The FusionFix notice is rewritten on every launch: the current list
+        // replaces the previous one, and nothing is appended.
+        const std::filesystem::path notice =
+            std::filesystem::current_path() / L"opcep-fusionfix-notice-test.txt";
+        const std::vector<std::wstring> gated{L"NoLoadingSleep - FusionFix loadingdelays.ixx"};
+        CHECK(opp::WriteFusionFixNotice(notice, L"IV.EFLC.OpenPreCEPatch.ini", gated));
+
+        std::ifstream file(notice, std::ios::binary);
+        std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        CHECK(text.find("NoLoadingSleep - FusionFix loadingdelays.ixx") != std::string::npos);
+        CHECK(text.find("IV.EFLC.OpenPreCEPatch.ini") != std::string::npos);
+
+        const std::vector<std::wstring> replaced{L"SkipIntro - FusionFix skipintro.ixx"};
+        CHECK(opp::WriteFusionFixNotice(notice, L"IV.EFLC.OpenPreCEPatch.ini", replaced));
+        std::ifstream second(notice, std::ios::binary);
+        text.assign(std::istreambuf_iterator<char>(second), std::istreambuf_iterator<char>());
+        CHECK(text.find("SkipIntro - FusionFix skipintro.ixx") != std::string::npos);
+        CHECK(text.find("NoLoadingSleep") == std::string::npos);
+
+        // Windows refuses to delete a file with an open handle; close first.
+        second.close();
+        file.close();
+        std::error_code removeError;
+        std::filesystem::remove(notice, removeError);
+        CHECK(!removeError);
+    }
 } // namespace
 
-int main(int argc, char** argv)
+int main()
 {
-	if (argc >= 3 && std::strcmp(argv[1], "--dump-writes") == 0)
-		return DumpWrites(argv[2], argc >= 4 ? argv[3] : "game_refs/ZolikaPatch.ini");
+    TestConfig();
+    TestIntPrefix();
+    TestConfigSemantics();
+    TestShippedTemplate();
+    TestIniImport();
+    TestLegacyImportFromGameDirectory();
+    TestLegacyUnsupportedKeys();
+    TestLegacyUnsupportedLogged();
+    TestFusionFixGate();
+    TestRemoveGFWLUpdatePopupSites();
+    TestExecutableView();
+    TestPatternScan();
+    TestGame();
+    TestCatalogue();
+    TestNewSavesScan();
+    TestVehicleLights();
+    TestMenu();
+    TestFeatureOrder();
+    TestTierEdges();
+    TestArmFailsafes();
+    TestLauncherNamePatch();
+    TestRelocateCalls();
+    TestMakeReturn();
+    TestHooks();
+    TestWarnings();
 
-	return Run();
+    if (failures != 0)
+    {
+        std::fprintf(stderr, "opcep tests: %d failure(s)\n", failures);
+        return 1;
+    }
+    std::printf("opcep tests: PASS\n");
+    return 0;
 }

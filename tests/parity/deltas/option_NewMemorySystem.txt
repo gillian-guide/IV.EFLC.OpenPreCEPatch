@@ -1,0 +1,8 @@
+0000107B F1 InstallNewMemorySystem
+0000107C 75 InstallNewMemorySystem
+0000107D C3 InstallNewMemorySystem
+0000107E 0F InstallNewMemorySystem
+0000107F E9 InstallNewMemorySystem
+00001080 08 InstallNewMemorySystem
+00001081 00 InstallNewMemorySystem
+00001082 00 InstallNewMemorySystem

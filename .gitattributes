@@ -1,0 +1,15 @@
+# Normalize text files, keep Windows batch files CRLF and binaries untouched.
+* text=auto
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.zip binary
+*.asi binary
+*.dll binary
+*.lib binary
+*.exp binary
+*.pdb binary
+*.map binary
+*.obj binary
+*.png binary
+*.ico binary
+*.ico binary

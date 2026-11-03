@@ -1,0 +1,70 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 31,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "x86",
+      "displayName": "OpenPreCEPatch x86 (shipped ASI)",
+      "description": "Win32 Release/Debug build used for IV.EFLC.OpenPreCEPatch.asi",
+      "inherits": "base",
+      "architecture": {
+        "value": "Win32",
+        "strategy": "set"
+      }
+    },
+    {
+      "name": "x64",
+      "displayName": "OpenPreCEPatch x64 (parity dump)",
+      "description": "Win64 build of opcep_parity_dump only; the ASI itself is 32-bit",
+      "inherits": "base",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "x86-release",
+      "displayName": "Build x86 Release",
+      "configurePreset": "x86",
+      "configuration": "Release"
+    },
+    {
+      "name": "x86-debug",
+      "displayName": "Build x86 Debug",
+      "configurePreset": "x86",
+      "configuration": "Debug"
+    },
+    {
+      "name": "x64-release",
+      "displayName": "Build x64 Release",
+      "configurePreset": "x64",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "x86-release",
+      "displayName": "Test x86 Release",
+      "configurePreset": "x86",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

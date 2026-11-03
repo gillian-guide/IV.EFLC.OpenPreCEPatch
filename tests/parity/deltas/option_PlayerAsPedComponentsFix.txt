@@ -1,0 +1,5 @@
+00740809 E9 InstallPlayerAsPedComponentsFix
+0074080A 92 InstallPlayerAsPedComponentsFix
+0074080B D1 InstallPlayerAsPedComponentsFix
+0074080C 4F InstallPlayerAsPedComponentsFix
+0074080D 0F InstallPlayerAsPedComponentsFix

@@ -1,805 +1,1173 @@
-// zp.loading - DLC, new files, saves, the launcher stages and the load-time fixes.
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// loading
+//
+// One function per INI arm, in the original loader order; the bodies are the
+// readable reconstruction's verified arms, the wrapper and the arm trace ours.
 
 module;
 
 #include "common.hxx"
-#include "common.h"
-#include "patches.h"
 #include "hooks.h"
 #include "rebased.h"
-#include "hook_bodies.h"
-#include "xlive/xliveless.h"
 
-export module zp.loading;
+#include <new>
+#include <memory>
+#include <optional>
+#include <span>
+#include <shlwapi.h>
+export module opp.loading;
 
-import zp.common;
-import zp.game;
+import opp.patch;
+import opp.game;
+import opp.common;
+import opp.config;
+import opp.log;
 
-export
+// Hook bodies: the machine-level entry points loading installs. Each keeps the original
+// site's calling convention and register contract (its comment names the destination VA);
+// 32-bit only - the x64 parity dump resolves names to the original VAs.
+#if !defined(_WIN64)
+
+using namespace opp;
+
+#include "body_helpers.inc"
+
+// NewSavesCompatibility's two LoadData hooks: both are compiled C reconstructions
+// of functions the original ASI keeps at 0x10051A90 (read hook) and 0x10051AD0
+// (p3 hook); neither carries an @exact contract. Their contract is the LoadData
+// ABI they wrap: cdecl, a buffer and a byte count, returning LoadData's own
+// result.
+using LoadFn = int32_t(__cdecl*)(void*, uint32_t);
+using OrigFn = int32_t(__cdecl*)();
+
+namespace
 {
-void PublishLoadDLCs(const PatchContext& ctx);
-void PublishLocalSettingsPath(const PatchContext& ctx);
-void PublishNewFilesCompatibility(const PatchContext& ctx);
-void PublishNewMemorySystem(const PatchContext& ctx);
-void PublishNewSavesCompatibility(const PatchContext& ctx);
-void PublishSkipIntro(const PatchContext& ctx);
-void PublishSkipMenu(const PatchContext& ctx);
-void PublishBenchmarkFix(const PatchContext& ctx);
-void PublishRemoveGFWLUpdatePopup(const PatchContext& ctx);
-void ApplyLoadDLCs(const PatchContext& ctx);
-void ApplyLocalSettingsPath(const PatchContext& ctx);
-void ApplyNewFilesCompatibility(const PatchContext& ctx);
-void ApplyNewMemorySystem(const PatchContext& ctx);
-void ApplyNewSavesCompatibility(const PatchContext& ctx);
-void ApplyRemoveRGSCLoginRequirement(const PatchContext& ctx);
-void ApplySavegameFix(const PatchContext& ctx);
-void ApplySkipIntro(const PatchContext& ctx);
-void ApplySkipLauncherOption(const PatchContext& ctx);
-void ApplySkipMenu(const PatchContext& ctx);
-void ApplyBenchmarkFix(const PatchContext& ctx);
-void ApplyRemoveGFWLUpdatePopup(const PatchContext& ctx);
-void ApplyFastLoading(const PatchContext& ctx);
-void ApplyStartupTimeFix(const PatchContext& ctx);
-void ApplyNoLoadingSleep(const PatchContext& ctx);
-void ApplyOverrideGTADatPath(const PatchContext& ctx);
-void ApplyVSyncFix(const PatchContext& ctx);
-}  // export
-
-// LoadDLCs (original handler sub_100234E0): per build, the loader callback the
-// handler stores in dword_1015BDDC and the two DLC entry points it puts in
-// dword_1015804C (register) and dword_101580D0 (apply). The suffix is the game
-// version the row belongs to; the handler's own `lea edi,[eax+<rva>]` rows agree.
-constexpr GameRva kDlcLoadCallback_1060{0x414560u};
-constexpr GameRva kDlcRegister_1060{0x4136E0u};
-constexpr GameRva kDlcApply_1060{0x414080u};
-constexpr GameRva kDlcLoadCallback_1070{0x414300u};
-constexpr GameRva kDlcRegister_1070{0x413480u};
-constexpr GameRva kDlcApply_1070{0x413E20u};
-constexpr GameRva kDlcLoadCallback_1080{0x490460u};
-constexpr GameRva kDlcRegister_1080{0x48F440u};
-constexpr GameRva kDlcApply_1080{0x48FE00u};
-// The LoadDLCs rail: the call/jump targets the handler writes after patching the
-// loader (target = site + 5 + rel32; the sites are the scans in ApplyLoadDLCs).
-constexpr GameRva kLoadDlcsJmpA_1060{0x4144B8u};   // 0x4144B8: jmp target
-constexpr GameRva kLoadDlcsJmpB_1060{0x41452Cu};   // 0x41452C: jmp target
-constexpr GameRva kLoadDlcsCall_1060{0x413E30u};   // 0x413E30: call target
-constexpr GameRva kLoadDlcsJmpA_1070{0x414258u};   // 0x414258: jmp target
-constexpr GameRva kLoadDlcsJmpB_1070{0x4142CCu};   // 0x4142CC: jmp target
-constexpr GameRva kLoadDlcsCall_1070{0x413BD0u};   // 0x413BD0: call target
-constexpr GameRva kLoadDlcsJmpA_1080{0x4903B8u};   // 0x4903B8: jmp target
-constexpr GameRva kLoadDlcsJmpB_1080{0x49042Cu};   // 0x49042C: jmp target
-constexpr GameRva kLoadDlcsCall_1080{0x48FBB0u};   // 0x48FBB0: call target
-
-// The per-build published slots (callback / register / apply); the build column
-// is the gate, and a build without a row publishes nothing.
-struct DlcPublish final
+// The game's LoadData entry the P2/P3 sites call (original dword_1015AD94) and
+// the handler the p3 hook wraps (original dword_1015AD8C). Both are captured by
+// the install arm, so they are 32-bit VAs behind rebased globals, not typed
+// pointers; GameFunction is the one conversion back to a callable.
+LoadFn LoadData() noexcept
 {
-	GameBuild build;
-	GameRva callback;
-	GameRva registerRva;
-	GameRva applyRva;
+    return GameFunction<LoadFn>(static_cast<uintptr_t>(zpatch_new_saves_loaddata));
+}
+OrigFn OriginalP3Handler() noexcept
+{
+    return GameFunction<OrigFn>(static_cast<uintptr_t>(zpatch_new_saves_orig_handler));
+}
+}  // namespace
+
+// The original p3 hook (sub_10051AD0) keeps a fixed 12-byte local and reads the
+// new-format block into it before and after the wrapped handler; the block is a
+// sink (its contents are never observed).
+constexpr size_t kSaveBufferSize = 12u;
+
+extern "C"
+{
+// The P2 LoadData replacement (original sub_10051A90): load into the fixed
+// scratch instead of the game's destination and return LoadData's result. The
+// original returns the full EAX; this rebuild declares uint8_t, so callers see
+// AL exactly as they did before.
+//
+// The scratch is the original's frame: `sub esp, 0xE7C` with a 3704-byte (0xE78)
+// buffer under the /GS cookie. 3704 is the original's literal, and the largest
+// request the P2 site passes is the new-format read (3694), which fits. `size` is
+// passed through to LoadData; the buffer is never sized from it.
+extern "C" uint8_t abi_new_saves_read_hook(void*, uint32_t size) noexcept
+{
+    std::array<uint8_t, 3704u> scratch;
+    if (zpatch_new_saves_loaddata == 0) return 0;
+    return static_cast<uint8_t>(LoadData()(scratch.data(), size));
+}
+
+// The P3 LoadData replacement (original sub_10051AD0): for a new-format save
+// (chunk 13 has the new size, original byte_1015AD99) it consumes the 12-byte
+// block, runs the original handler, then consumes a second 12-byte block and
+// returns that read's result. The pre/post reads are the original's own
+// behaviour, not a duplicate introduced by this rebuild.
+extern "C" int32_t abi_new_saves_p3_hook() noexcept
+{
+    std::array<uint8_t, kSaveBufferSize> buffer;
+    const LoadFn load = LoadData();
+    if (zpatch_new_saves_chunk13_new != 0 && load)
+        static_cast<void>(load(buffer.data(), kSaveBufferSize));
+    const int32_t result = OriginalP3Handler()();
+    if (zpatch_new_saves_chunk13_new != 0 && load)
+        return load(buffer.data(), kSaveBufferSize);
+    return result;
+}
+
+}  // extern "C"
+
+// The save-format scanner: the converter reads the game's save through a cursor,
+// so the byte-level steps have names (the 0x110-byte header, the 9-byte chunk
+// headers, the per-chunk payload step, the 18-chunk walk). The game hands the
+// scan a std::FILE*, so the cursor wraps it rather than replacing it with an
+// ifstream - the fread/fseek conventions and the unchecked-malloc fault are the
+// original's.
+//
+// The three new-format probes are its only output: chunk 13 gates the p3 hook,
+// chunk 16 selects the 3694-byte P2 read, chunk 9 gates P1.
+namespace
+{
+// The header each of the 18 save chunks starts with.
+constexpr size_t kSaveChunkHeaderSize = 9;
+
+// The game-owned std::FILE*: one named operation per original libc call.
+class FileCursor final
+{
+public:
+    explicit FileCursor(std::FILE* file) noexcept : file_(file) {}
+
+    [[nodiscard]] bool Valid() const noexcept { return file_ != nullptr; }
+
+    // fread(item, 1): the header/chunk read, which asks for one whole item. Only
+    // the unchecked policy ignores the answer.
+    [[nodiscard]] bool ReadItem(std::span<std::byte> item) noexcept
+    {
+        return item.empty() || std::fread(item.data(), item.size(), 1, file_) == 1;
+    }
+
+    // fread(ptr, 1, n): the payload read, whose partial result the unchecked
+    // policy ignores.
+    [[nodiscard]] size_t ReadBytes(std::span<std::byte> bytes) noexcept
+    {
+        return std::fread(bytes.data(), 1, bytes.size(), file_);
+    }
+
+    [[nodiscard]] bool Seek(long offset) noexcept
+    {
+        return std::fseek(file_, offset, SEEK_CUR) == 0;
+    }
+
+    // The raw handle, used only for the original's null-payload fault path.
+    [[nodiscard]] std::FILE* Handle() const noexcept { return file_; }
+
+private:
+    std::FILE* file_;
 };
-constexpr DlcPublish kDlcPublish[] = {
-    {GameBuild::v1060, kDlcLoadCallback_1060, kDlcRegister_1060, kDlcApply_1060},
-    {GameBuild::v1070, kDlcLoadCallback_1070, kDlcRegister_1070, kDlcApply_1070},
-    {GameBuild::v1080, kDlcLoadCallback_1080, kDlcRegister_1080, kDlcApply_1080},
-};
 
-void PublishLoadDLCs(const PatchContext& ctx)
+// Reads a little-endian dword out of a byte buffer (the save file's own order).
+[[nodiscard]] uint32_t LoadDword(const std::byte* bytes) noexcept
 {
-	Trace("publish LoadDLCs");
-	if (ctx.Option("LoadDLCs", "1"))
-	{
-		for (const DlcPublish& row : kDlcPublish)
-		{
-			if (ctx.build != row.build)
-				continue;
-			zpatch_dlc_load_callback =
-			    static_cast<std::uint32_t>(row.callback.site(ctx.gameBase));
-			DlcRegisterRva() = row.registerRva.value;
-			DlcApplyRva() = row.applyRva.value;
-			break;
-		}
-	}
+    uint32_t value = 0;
+    std::memcpy(&value, bytes, sizeof(value));
+    return value;
+}
+
+// Reads the 0x110-byte header and checks the "SAVE" magic. The unchecked policy
+// ignores a short read and still inspects the buffer, exactly like the original.
+[[nodiscard]] bool ReadSaveHeader(FileCursor& file, opp::SaveScanPolicy policy) noexcept
+{
+    std::array<std::byte, 272> header{};
+    const bool read = file.ReadItem(header);
+    if (policy.validate && !read)
+        return false;
+    return LoadDword(header.data() + 12) == 0x45564153u;  // "SAVE" at +0xC
+}
+
+// Reads one 9-byte chunk header and returns its total size (the dword at +5). A
+// size below the header is the original's allocation-count underflow; only the
+// validating policy rejects it.
+[[nodiscard]] std::optional<uint32_t> ReadChunkHeader(FileCursor& file,
+                                                      opp::SaveScanPolicy policy) noexcept
+{
+    std::array<std::byte, kSaveChunkHeaderSize> header{};
+    const bool read = file.ReadItem(header);
+    if (policy.validate && !read)
+        return std::nullopt;
+    const uint32_t size = LoadDword(header.data() + 5);
+    if (policy.validate && size < kSaveChunkHeaderSize)
+        return std::nullopt;
+    return size;
+}
+
+// The per-chunk payload step: seek over the payload when asked (the 9-byte
+// headers are all the scan needs), skip a header-only chunk, or read it into the
+// original's unchecked malloc buffer. The buffer frees through std::free; on
+// allocation failure the validating policy stops and the original policy passes
+// the null pointer to fread, which is the fault the 1:1 path keeps.
+[[nodiscard]] bool SkipPayload(FileCursor& file, uint32_t chunk_size,
+                               opp::SaveScanPolicy policy) noexcept
+{
+    // fseek takes a long; the element count is only seekable when it fits one.
+    const uint32_t element_count = chunk_size - kSaveChunkHeaderSize;
+    if (policy.skip_payload && chunk_size >= kSaveChunkHeaderSize &&
+        element_count <= 0x7FFFFFFFu)
+    {
+        if (file.Seek(static_cast<long>(element_count)))
+            return true;
+    }
+    if (element_count == 0u && (policy.validate || policy.skip_payload))
+        return true;  // a header-only chunk: malloc(0) == nullptr is not a failure
+
+    void* const raw = std::malloc(element_count);
+    const std::unique_ptr<void, opp::FreeDeleter> payload(raw);
+    if (policy.validate && raw == nullptr)
+        return false;
+    if (raw == nullptr)
+        return std::fread(raw, 1, element_count, file.Handle()) == element_count;
+    const auto bytes = std::span<std::byte>(static_cast<std::byte*>(raw), element_count);
+    const size_t read = file.ReadBytes(bytes);
+    return !policy.validate || read == element_count;
+}
+
+// Walks the 18 chunks in file order, publishing the chunk-length/element-count
+// globals on each iteration (the original's converter state) and recording the
+// three format probes.
+[[nodiscard]] std::optional<opp::SaveChunkProbes> ScanChunks(
+    FileCursor& file, opp::SaveScanPolicy policy) noexcept
+{
+    opp::SaveChunkProbes probes{};
+    for (size_t index = 0; index < 18; ++index)
+    {
+        const std::optional<uint32_t> size = ReadChunkHeader(file, policy);
+        if (!size)
+            return std::nullopt;
+        zpatch_new_saves_chunk_len = *size;                             // dword_1015AD90
+        zpatch_new_saves_element_count = *size - kSaveChunkHeaderSize;  // dword_1015ADA0
+        if (!SkipPayload(file, *size, policy))
+            return std::nullopt;
+        // The three chunk sizes that tell the formats apart (the original's
+        // recovered indices); each is the new format's chunk total.
+        if (index == 9u)
+            probes.chunk9_new = *size == 19525u;
+        if (index == 16u)
+            probes.chunk16_new = *size == 3703u;
+        if (index == 13u)
+            probes.chunk13_new = *size == 5953u;
+    }
+    return probes;
+}
+
+// The whole scan: header, then the 18 chunks.
+[[nodiscard]] std::optional<opp::SaveChunkProbes> ScanSaveFile(
+    FileCursor& file, opp::SaveScanPolicy policy) noexcept
+{
+    if (!file.Valid())
+        return std::nullopt;
+    if (!ReadSaveHeader(file, policy))
+        return std::nullopt;
+    return ScanChunks(file, policy);
+}
+}  // namespace
+
+// Native-test/inspection seam: one typed result instead of three out-pointers.
+// The game-facing hook bodies above keep their ABI; only this test entry (and
+// hook.h's declaration) changed.
+extern "C" opp::SaveScanResult zpatch_new_saves_scan(
+    void* handle, opp::SaveScanPolicy policy) noexcept
+{
+    FileCursor file(static_cast<std::FILE*>(handle));
+    if (const std::optional<opp::SaveChunkProbes> probes = ScanSaveFile(file, policy))
+        return {true, *probes};
+    return {};
+}
+
+// The three patchers of the converter's game sites; abi_new_saves_convert scans
+// each window on first use and keeps the hit.
+namespace
+{
+// P1: force the 0x3C-byte read path for new saves by flipping its `jz` to `jmp`.
+void PatchP1(const uint8_t* site) noexcept
+{
+    wp_byte(const_cast<uint8_t*>(site),
+            zpatch_new_saves_chunk9_new != 0 ? opp::ops::kJmpRel8 : opp::ops::kJzRel8);
+}
+
+// P2: route the oversized read through the plugin's scratch buffer, resize the
+// read and force/NOP the skip branch per the save format.
+void PatchP2(const uint8_t* site) noexcept
+{
+    // The E8 call sits at site+6 (rel32 operand at site+7), the `push imm32`
+    // carrying the load size at site+1, and the `jnz rel8` five bytes before it.
+    constexpr ptrdiff_t kLoadDataCallOffset = 6;
+    constexpr ptrdiff_t kBranchOperandOffset = 7;
+    constexpr ptrdiff_t kSkipLoadBranchOffset = -5;
+
+    auto* const target = const_cast<uint8_t*>(site);
+    const uint32_t original_target = BranchDestination(target, kBranchOperandOffset);
+    // The call already is E8+rel32; MakeCALL writes the same five bytes and keeps
+    // the original's read of the old destination first.
+    injector::MakeCALL(injector::raw_ptr(target + kLoadDataCallOffset),
+                       injector::raw_ptr(&abi_new_saves_read_hook), true);
+    if (zpatch_new_saves_loaddata == 0)
+        zpatch_new_saves_loaddata = original_target;
+
+    // The two sizes the P2 install writes into its `push imm32`: an old-format
+    // save reads 3262 bytes, a new-format one 3694.
+    wp_dword(target + 1, zpatch_new_saves_chunk16_new != 0 ? 3694u : 3262u);
+
+    // The short branch is `75 26` (jnz +0x26); the new save replaces it with a
+    // two-byte NOP and the old save restores the same two bytes.
+    if (zpatch_new_saves_chunk16_new != 0)
+        injector::MakeNOP(injector::raw_ptr(target + kSkipLoadBranchOffset), 2, true);
+    else
+        wp_word(target + kSkipLoadBranchOffset, 0x2675u);
+}
+
+// P3: route the second LoadData call through the plugin body that consumes the
+// extra 12-byte block for new saves, and repoint the shared LoadData slot at the
+// function's own later call target.
+void PatchP3(const uint8_t* site) noexcept
+{
+    // The replaced call is the second E8 (site+6, rel32 operand at site+7); the
+    // third call's operand at site+30 names the shared LoadData slot.
+    constexpr ptrdiff_t kLoadDataCallOffset = 6;
+    constexpr ptrdiff_t kBranchOperandOffset = 7;
+
+    auto* const target = const_cast<uint8_t*>(site);
+    const uint32_t original_target = BranchDestination(target, kBranchOperandOffset);
+    injector::MakeCALL(injector::raw_ptr(target + kLoadDataCallOffset),
+                       injector::raw_ptr(&abi_new_saves_p3_hook), true);
+    if (zpatch_new_saves_orig_handler == 0)
+        zpatch_new_saves_orig_handler = original_target;
+    zpatch_new_saves_loaddata = BranchDestination(target, 30);
+}
+}  // namespace
+
+extern "C"
+{
+
+// The NewSavesCompatibility converter (original sub_10051B30): parse the save's
+// 0x110-byte header (magic "SAVE" at +0xC), walk 18 chunks of 9-byte header +
+// payload, record the new-format chunk sizes, then patch three game sites.
+extern "C" void abi_new_saves_convert(const char* path) noexcept
+{
+    // The converter's shipped scan policy: validate every read/size and seek over
+    // payloads. All-false would be the original loop: every fread result ignored,
+    // the size underflow passing and the payload malloc unchecked. The pair is a
+    // named policy so a caller cannot swap the two booleans' meaning.
+    const std::unique_ptr<std::FILE, opp::FileCloser> file(std::fopen(path, "rb"));
+    if (!file)
+        return;
+    FileCursor cursor(file.get());
+    const std::optional<SaveChunkProbes> probes = ScanSaveFile(cursor, opp::SaveScanPolicy{true, true});
+    if (!probes)
+        return;  // including the original wrong-magic early return
+    zpatch_new_saves_chunk9_new = probes->chunk9_new ? 1u : 0u;
+    zpatch_new_saves_chunk16_new = probes->chunk16_new ? 1u : 0u;
+    zpatch_new_saves_chunk13_new = probes->chunk13_new ? 1u : 0u;
+
+    // Each site is scanned on first use and the hit kept; the three blocks run in
+    // the original's order. The 1.0.8.0 VA each window was recovered at trails it
+    // as the review cross-check; the VAs differ on 1.0.6.0/1.0.6.1/1.0.7.0, so the
+    // scan is the anchor.
+    static const uint8_t* p1 = nullptr;
+    if (p1 == nullptr)
+        p1 = scan_game("74 37 80 3D ? ? ? ? 00 75 2E 8D 84 ? ? ? ? 00 6A 1E");  // 0x872185
+    if (p1 != nullptr)
+        PatchP1(p1);
+
+    static const uint8_t* p2 = nullptr;
+    if (p2 == nullptr) p2 = scan_game("68 BE 0C 00 00 50 E8");  // 0x7D8C50
+    if (p2 != nullptr)
+        PatchP2(p2);
+
+    static const uint8_t* p3 = nullptr;
+    if (p3 == nullptr)
+        p3 = scan_game("56 E8 ? ? ? ? E8 ? ? ? ? A1 ? ? ? ? 8D 0C 85 00 00 00 00");  // 0x8DA090
+    if (p3 != nullptr)
+        PatchP3(p3);
+}
+
+// The prepare step of the tramp (original sub_10051FD0): if the handler
+// captured the game's save-name buffer, resolve the game's save-directory getter
+// (scan) and convert "<dir>\\<save name>".
+extern "C" void abi_new_saves_prepare() noexcept
+{
+    // The getter (sub_61E7D0, VA 0x61E7D0 on 1.0.8.0) fills `directory` and
+    // writes a trailing byte through its third argument; 312 and 560 are the
+    // original's recovered stack capacities for the directory and the joined
+    // directory + save-name path.
+    using GetSaveDirectoryFn = uint8_t(__cdecl*)(int episode, char* directory,
+                                                 char* trailing_byte);
+    const auto* name = reinterpret_cast<const char*>(
+        static_cast<uintptr_t>(zpatch_new_saves_src));
+    if (name == nullptr) return;
+    static const uint8_t* get_dir = nullptr;
+    if (get_dir == nullptr)
+        get_dir = scan_game("55 8B EC 83 E4 F8 83 EC 4C 56 33 C0 8D 4C 24 28");
+    if (get_dir == nullptr) return;
+    const auto get_directory = GameFunction<GetSaveDirectoryFn>(
+        reinterpret_cast<uintptr_t>(get_dir));
+    char directory[312]{};
+    char suffix = 0;
+    if (get_directory(0, directory, &suffix) == 0)
+        return;
+    char path[560];
+    std::snprintf(path, sizeof(path), "%s\\%s", directory, name);
+    abi_new_saves_convert(path);
+}
+
+// The two game functions the DLC discovery routine calls, published as RVAs by
+// the LoadDLCs handler (dword_1015804C register, dword_101580D0 apply).
+using DlcRegisterFn = void(__stdcall*)(int id, char* request, int flag);
+using DlcApplyFn = void(__thiscall*)(void* object, char* request);
+
+// @exact 0x10023480 LoadDLCs: __stdcall, two arguments, mov al,1 / ret 8. The
+// original sets only AL, so the upper 24 bits of EAX are preserved and a plain
+// `return 1` (mov eax,1) is observable.
+static __declspec(naked) int __stdcall abi_load_dlcs_dummy(int, int)
+{
+    __asm {
+        mov al, 1
+        ret 8
+    }
+}
+
+// @exact 0x100521E0 NewSavesCompatibility tramp: the handler E9s the savegame-
+// load entry at "89 84 24 E0 01 00 00 8B 45 08 53 33 DB" (game 0x85B093) so this
+// runs the converter first, then replicates the overwritten instruction (the
+// stack-cookie store) and the next two, and tail-jumps to match+13. Entry is by
+// JMP, so the [esp+0x1E0] store targets the same game frame slot as the original.
+static __declspec(naked) void abi_new_saves_compat()
+{
+    __asm {
+        pushad
+        call abi_new_saves_prepare
+        popad
+        mov  dword ptr [esp + 1E0h], eax
+        mov  eax, dword ptr [ebp + 8]
+        push ebx
+        xor  ebx, ebx
+        jmp  dword ptr [zpatch_new_saves_resume]
+    }
+}
+
+// NewFilesCompatibility: body 0x10051600 registers a callback with the game's
+// file-registration function; bodies 0x10051890 / 0x100518D0 are the per-file
+// update hooks (E8 sites) that resolve the asset object, hash the name and
+// register it. Helpers mirror sub_100515D0 / sub_100515E0 / sub_10051730 /
+// sub_10051610 / sub_100517E0.
+extern "C" void* abi_newfiles_cb(void** a1)  // 0x100515D0
+{
+    void* const result = *a1;
+    *reinterpret_cast<int*>(*a1) = 1;
+    return result;
+}
+// 0x100515E0 is five instructions: push callback, push hash, call the
+// published register function, add esp,8, ret. The flags at the resume come
+// from that add esp,8, so abi_newfiles_register_body keeps the naked stack
+// shape around this C helper.
+extern "C" void __cdecl abi_newfiles_register()
+{
+    // The slot is a cdecl two-argument registrar; the original cleans both
+    // arguments after the call.
+    using RegisterFileFn = void(__cdecl*)(uint32_t, void*);
+    const auto register_file =
+        GameFunction<RegisterFileFn>(static_cast<uintptr_t>(zpatch_newfiles_register_slot));
+    // The script-handler hash the original registers the callback under
+    // (sub_10051600's `register_file` argument).
+    register_file(0x2C89A1F9u, reinterpret_cast<void*>(&abi_newfiles_cb));
 }
 
 namespace
 {
-// The captured operand is the game VA (32-bit) of a path buffer or the episode
-// counter.
-template <typename T>
-T* CaptureGamePointer(hook::pattern& pattern, std::ptrdiff_t offset) noexcept
+// The runtime windows the newfiles bodies scan are generic hash->dictionary
+// idioms, so a look-alike in another function satisfies one: the first hit is
+// what the body uses. newfiles_find returns a bare address, so these scans cannot
+// carry an expected-count guard. On 1.0.8.0 the lookup window hits twice
+// (0x43A490, the grcTexture instantiation, and 0xA31B30) and the add window twice
+// (0x85DF54, inside CSprite2d::SetTexture, and 0xA98269).
+
+// A runtime window scanned on first use: the game never reloads its code, so the
+// scan runs once and a hit is kept for the process (the original's one-time
+// guard, in named fields).
+struct ScannedWindow final
 {
-	return RebasedPointer<T>(*pattern.get(0).get<std::uint32_t>(offset));
+    bool      resolved = false;
+    uintptr_t address = 0;
+};
+
+uintptr_t ScanOnce(ScannedWindow& window, std::initializer_list<std::string_view> candidates)
+{
+    if (!window.resolved)
+    {
+        window.resolved = true;
+        for (const std::string_view candidate : candidates)
+        {
+            window.address = newfiles_find(candidate);
+            if (window.address != 0)
+                break;
+        }
+    }
+    return window.address;
 }
 }  // namespace
 
-void PublishLocalSettingsPath(const PatchContext& ctx)
+extern "C" void* abi_newfiles_find_obj()  // 0x10051730
 {
-	Trace("publish LocalSettingsPath");
-	if (ctx.Option("LocalSettingsPath", "0"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D6 5F 5E 5B C3"); pattern.size() > 0)
-		{
-			// The path-initializer epilogue (1.0.8.0 match 0x856ED8 in
-			// _initalizePaths 0x856BF0): each operand pushes one game path buffer,
-			// or loads the episode counter.
-			zpatch_local_path_1c = CaptureGamePointer<wchar_t>(pattern, -178);  // wszPathLocalAppdataW
-			zpatch_local_path_10 = CaptureGamePointer<wchar_t>(pattern, -190);  // wszPathLocalAppdataW_EP
-			zpatch_local_episode_ptr = CaptureGamePointer<const int>(pattern, -151);  // __dwCurrentEpisode
-			zpatch_local_path_18 = CaptureGamePointer<char>(pattern, -444);  // szPathLocalAppdata_EP
-			zpatch_local_path_08 = CaptureGamePointer<char>(pattern, -432);  // szPathLocalAppdata
-		}
-
-		if (auto pattern = Pattern(image, "7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D7 5F C3"); pattern.size() > 0)
-		{
-			// The alternate epilogue (not present on 1.0.8.0) stores the same two
-			// LocalAppdata buffers the wide pattern captures.
-			zpatch_local_path_18 = CaptureGamePointer<char>(pattern, -160);  // path_18
-			zpatch_local_path_1c = CaptureGamePointer<wchar_t>(pattern, -55);  // path_1c
-		}
-	}
+    // The original re-dereferences the container global on EVERY call
+    // (`mov esi, [match+2]`), so it is picked up again whenever the game
+    // rebuilds its registry; caching the container itself left a stale one that
+    // faulted in the game's container search (0x43a490).
+    static ScannedWindow container;
+    const uintptr_t match = ScanOnce(
+        container,
+        {"8B 35 ? ? ? ? 6A 00 50 E8 ? ? ? ? 83 C4 08 50 8B CE E8 ? ? ? ? 85 C0 89 07 5E 74 05"});
+    if (match == 0) return nullptr;
+    // The container global the window loads (`mov esi, dword_19CE510`): its operand
+    // is at +2 and the game re-creates the dictionary, so it is re-read.
+    const uint32_t global = Field(reinterpret_cast<const uint8_t*>(match), 2);
+    return global ? reinterpret_cast<void*>(
+                        *reinterpret_cast<const uint32_t*>(reinterpret_cast<const void*>(global)))
+                  : nullptr;
+}
+extern "C" int abi_newfiles_call_obj(void* obj, uint32_t hash)  // 0x10051610
+{
+    using Fn = int(__fastcall*)(void* self, int, uint32_t);
+    static ScannedWindow lookup;
+    const uintptr_t target = ScanOnce(
+        lookup,
+        {"85 C9 53 55 56 57 74 40 8B 6C 24 14 8D 64 24 00", "53 55 8B 6C 24 0C 56 57 EB 06"});
+    if (target == 0) return 0;
+    return GameFunction<Fn>(target)(obj, 0, hash);
+}
+extern "C" int abi_newfiles_call_add(void* self, void* str)  // 0x100517E0
+{
+    using Fn = int(__fastcall*)(void* self, int, void*);
+    static ScannedWindow add;
+    const uintptr_t match =
+        ScanOnce(add, {"8B 0F 85 C9 74 ? 0F B7 41 0A 66 85 C0"});
+    if (match == 0) return 0;
+    // The add window matches 20 bytes into the intended function, so the write
+    // body keeps pointing at its entry. On 1.0.8.0 the first hit is the SetTexture
+    // occurrence, which is where the 20 comes from.
+    return GameFunction<Fn>(match - 20)(self, 0, str);
+}
+// @exact 0x10051600
+static __declspec(naked) void abi_newfiles_register_body()  // 0x10051600
+{
+    __asm {
+        pushad
+        call abi_newfiles_register
+        popad
+        ret
+    }
 }
 
-void PublishNewFilesCompatibility(const PatchContext& ctx)
+namespace
 {
-	Trace("publish NewFilesCompatibility");
-	if (ctx.Option("NewFilesCompatibility", "1") && !NewFilesConflictModulesPresent())
-	{
-		const GameImage& image = ctx.image;
+// The update object both E8 hooks share: the two original bodies differ only in
+// the asset-name offset and the callback's second argument (see the two hooks).
+char __fastcall NewFilesUpdate(void* self, size_t name_offset, ptrdiff_t arg_offset)
+{
+    auto* const base = static_cast<unsigned char*>(self);
+    if (base[name_offset] == 0)
+        return 0;
+    if (abi_newfiles_call_obj(abi_newfiles_find_obj(),
+                              GameHash(reinterpret_cast<const char*>(base + name_offset))))
+        abi_newfiles_call_add(base + arg_offset, base + name_offset);
+    return 1;
+}
+}  // namespace
 
-		if (auto pattern = Pattern(image, "68 64 28 C8 67 E8"); pattern.size() > 0)
-		{
-			zpatch_newfiles_register_slot = MatchTarget(pattern, 6, 10);
-		}
-	}
+// The asset name sits at +0x10 (version A) / +0x10F (version B) and the
+// callback's second argument at +8 / +4.
+extern "C" char __fastcall abi_newfiles_update_a(void* self, int)  // 0x10051890
+{
+    constexpr size_t kNewFilesNameOffset = 0x10;
+    constexpr ptrdiff_t kNewFilesArgOffset = 8;
+    return NewFilesUpdate(self, kNewFilesNameOffset, kNewFilesArgOffset);
+}
+extern "C" char __fastcall abi_newfiles_update_b(void* self, int)  // 0x100518D0
+{
+    constexpr size_t kNewFilesNameOffset = 0x10F;
+    constexpr ptrdiff_t kNewFilesArgOffset = 4;
+    return NewFilesUpdate(self, kNewFilesNameOffset, kNewFilesArgOffset);
 }
 
-void PublishNewMemorySystem(const PatchContext& ctx)
+// DLC discovery post step (sub_10023150): enumerate \dlc\tlad\content\ / \TLAD\,
+// \dlc\TBoGT\content\ / \TBoGT\ and \EpisodeN\ next to the executable and
+// register each through the two published game RVAs. The original writes the
+// module base + RVA into the struct and hands it to the register/apply functions.
+//
+// Naked only to capture EDX: the apply function returns its second value in EDX
+// and the caller's resume reads it. Contract: __cdecl, four dword arguments
+// (object, request, apply function, out-EDX); no return value; the caller cleans
+// the stack.
+static __declspec(naked) void __cdecl zpatch_dlc_apply_capture_edx(
+    void*, char*, DlcApplyFn, uint32_t*)
 {
-	Trace("publish NewMemorySystem");
-	if (ctx.Option("NewMemorySystem", "0"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "6A 01 B9 00 00 40 06"); pattern.size() > 0)
-		{
-			zpatch_nms_object = *pattern.get(0).get<std::uint32_t>(8);
-		}
-	}
+    __asm {
+        push ebp
+        mov  ebp, esp
+        mov  ecx, dword ptr [ebp + 8]
+        push dword ptr [ebp + 0Ch]
+        call dword ptr [ebp + 10h]
+        mov  eax, dword ptr [ebp + 14h]
+        mov  dword ptr [eax], edx
+        mov  esp, ebp
+        pop  ebp
+        ret
+    }
 }
 
-void PublishNewSavesCompatibility(const PatchContext& ctx)
+// The 0x104-byte buffers the discovery builds: the module path and each DLC
+// folder path.
+constexpr size_t kDlcPathCapacity = 0x104u;
+
+// The per-folder request struct sub_10023150 hands to the game's register
+// function: 360 bytes, with the module path first and the two fields the
+// discovery sets in its tail.
+constexpr size_t kDlcRequestFlagOffset = 0x158;
+constexpr size_t kDlcRequestModeOffset = 0x166;
+constexpr size_t kDlcRequestSize = 360;
+constexpr uint8_t kDlcRequestRegistered = 1u;
+
+struct DlcRegisterRequest final
 {
-	Trace("publish NewSavesCompatibility");
-	// The recovered gate is keyed on the first
-	// pattern, so one scan both gates and captures the pushed name pointer.
-	if (ctx.Option("NewSavesCompatibility", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto primary = Pattern(image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08");
-		    primary.size() > 0)
-		{
-			zpatch_new_saves_src = *primary.get(0).get<std::uint32_t>(1);
-
-			if (auto pattern = Pattern(image, "89 84 24 E0 01 00 00 8B 45 08 53 33 DB");
-			    pattern.size() > 0)
-			{
-				zpatch_new_saves_resume = MatchAddress(pattern, 13);
-			}
-		}
-	}
-}
-
-void PublishSkipIntro(const PatchContext& ctx)
-{
-	Trace("publish SkipIntro");
-	if (ctx.Option("SkipIntro", "1") && !FusionFixGateClosed())
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "89 91 ? ? ? ? 8D 44 24 ? 68 ? ? ? ? 50"); pattern.size() > 0)
-		{
-			zpatch_skip_intro_match = MatchAddress(pattern);
-		}
-	}
-}
-
-void PublishSkipMenu(const PatchContext& ctx)
-{
-	Trace("publish SkipMenu");
-	if (ctx.Option("SkipMenu", "0") && !FusionFixGateClosed())
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "83 F8 03 75 ? A1 ? ? ? ? 80 88 ? ? ? ? ? 84 DB 74 0A 6A 00 E8 ? ? ? ? 83 C4 04 5F 5E"); pattern.size() > 0)
-		{
-			zpatch_skip_menu_resume = MatchTarget(pattern, 24, 28);
-		}
-
-		if (auto pattern = Pattern(image, "6A 00 E8 ? ? ? ? 83 C4 04 8B 8C 24 ? ? ? ? 5F 5E 5D 5B 33 CC E8 ? ? ? ? 81 C4 ? ? ? ? C3"); pattern.size() > 0)
-		{
-			zpatch_skip_menu_resume = MatchTarget(pattern, 3, 7);
-		}
-
-		if (auto pattern = Pattern(image, "6A 00 E8 ? ? ? ? 83 C4 04 8B 8C 24 ? ? ? ? 5F 5E 5B 33 CC E8 ? ? ? ? 8B E5 5D C3"); pattern.size() > 0)
-		{
-			zpatch_skip_menu_resume = MatchTarget(pattern, 3, 7);
-		}
-	}
-}
-
-void PublishBenchmarkFix(const PatchContext& ctx)
-{
-	Trace("publish BenchmarkFix");
-	// The handler compares the build id before it reads
-	// the INI (cmp 9 / cmp 0Dh), so 1.0.8.0 and 1.1.3.0 publish nothing either.
-	if (ctx.Option("BenchmarkFix", "1") &&
-	    !BuildIs(ctx.build, {GameBuild::v1080, GameBuild::v1130}))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20"); pattern.size() > 0)
-		{
-			// Both resumes are read (the two tail jumps in abi_benchmark_a/_b), so
-			// the same value is published twice from one read.
-			const std::uint32_t resume = MatchAddress(pattern, 13);
-			zpatch_benchmark_resume_a = resume;
-			zpatch_benchmark_resume_b = resume;
-		}
-	}
-}
-
-void PublishRemoveGFWLUpdatePopup(const PatchContext& ctx)
-{
-	Trace("publish RemoveGFWLUpdatePopup");
-	if (ctx.Option("RemoveGFWLUpdatePopup", "0"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "2B C1 1B D6 89 44 24 0C 89 54 24 10 DF 6C 24 0C D8 0D ? ? ? ? D9 5C 24 08"); pattern.size() > 0)
-		{
-			zpatch_gfwl_resume = MatchAddress(pattern, 12);
-		}
-	}
-}
-
-// ApplyLoadDLCs' per-build site rows (original handler sub_100234E0). `kind` says
-// which write a row performs (call_body is abi_load_dlcs_dummy, jump_body is
-// abi_load_dlcs_struct_fixup), `rva` is the game target for the rva kinds, and
-// `twice` keeps the original's duplicated write. Rows are in the handler's scan
-// order (ascending addresses on each build).
-enum class DlcSiteKind : std::uint8_t
-{
-	call_body,
-	jump_body,
-	jump_rva,
-	call_rva,
-	nop_tail,
+    char     path[kDlcPathCapacity];                                   // +0x000
+    uint8_t  reserved[kDlcRequestFlagOffset - kDlcPathCapacity];       // +0x104
+    uint32_t flag;                                                     // +0x158
+    uint8_t  reserved2[kDlcRequestModeOffset -
+                       (kDlcRequestFlagOffset + sizeof(uint32_t))];    // +0x15C
+    uint8_t  mode;                                                     // +0x166
+    uint8_t  tail[kDlcRequestSize -
+                  (kDlcRequestModeOffset + sizeof(uint8_t))];          // +0x167
 };
+static_assert(offsetof(DlcRegisterRequest, flag) == kDlcRequestFlagOffset);
+static_assert(offsetof(DlcRegisterRequest, mode) == kDlcRequestModeOffset);
+static_assert(sizeof(DlcRegisterRequest) == kDlcRequestSize);
 
-struct DlcSite final
+void* dlc_discovery_post(void* object)
 {
-	std::string_view signature;
-	DlcSiteKind kind;
-	GameRva rva;
-	bool twice;
+    // The original allocates with a throwing operator new and ignores both its
+    // result and GetModuleFileNameA's: a failed allocation or a failed module
+    // path then builds every DLC path from uninitialized bytes. The failsafe
+    // leaves the episode list untouched instead, which is the LoadDLCs=0 state.
+    auto* const module_path =
+        static_cast<char*>(::operator new(kDlcPathCapacity, std::nothrow));
+    if (zpatch_failsafe_skip("LoadDLCs path buffer", module_path == nullptr))
+        return object;
+    const DWORD module_length = GetModuleFileNameA(nullptr, module_path, kDlcPathCapacity);
+    if (zpatch_failsafe_skip("LoadDLCs module path",
+                             module_length == 0 || module_length >= kDlcPathCapacity))
+        return object;
+    // The discovery calls the two published helper RVAs. If the publish pattern
+    // missed (a relocated absolute or a different build), a zero RVA would add
+    // the image base and call the PE header; the failsafe leaves the episode
+    // list untouched instead of faulting.
+    if (zpatch_failsafe_skip("LoadDLCs helper RVAs",
+                             DlcRegisterRva() == 0u || DlcApplyRva() == 0u))
+        return object;
+    PathRemoveFileSpecA(module_path);
+    uint32_t last_apply_edx = 0;
+    bool episode254_registered = false;
+
+    // The episode loop's recovered bounds and id formula ("\Episode3" ..
+    // "\Episode254"); episode 254 is the last apply producer the original tracks.
+    // The original formats "\EpisodeN\" into a 64-byte stack buffer.
+
+    // The original picks ONE path per group: the "content" layout if it exists,
+    // otherwise the legacy fallback; it never registers both.
+    const auto try_paths = [&](const char* primary, const char* fallback, int id)
+    {
+        char path[kDlcPathCapacity];
+        strcpy_s(path, kDlcPathCapacity, module_path);
+        strcat_s(path, kDlcPathCapacity, primary);
+        if (!PathFileExistsA(path))
+        {
+            if (std::strcmp(primary, fallback) == 0) return;
+            strcpy_s(path, kDlcPathCapacity, module_path);
+            strcat_s(path, kDlcPathCapacity, fallback);
+            if (!PathFileExistsA(path)) return;
+        }
+        DlcRegisterRequest request{};
+        // The request's own capacity, not the path buffer's: the two happen to be
+        // the same size today, and only `path` bounds this copy.
+        strcpy_s(request.path, sizeof(request.path), path);
+        request.mode = kDlcRequestRegistered;
+        request.flag = kDlcRequestRegistered;
+        const auto game_base = reinterpret_cast<uintptr_t>(GetModuleHandleA(nullptr));
+        const auto register_fn =
+            GameFunction<DlcRegisterFn>(game_base + DlcRegisterRva());
+        const auto apply_fn = GameFunction<DlcApplyFn>(game_base + DlcApplyRva());
+        register_fn(id, request.path, kDlcRequestRegistered);
+        zpatch_dlc_apply_capture_edx(object, request.path, apply_fn, &last_apply_edx);
+        if (id == 2 * 254) episode254_registered = true;
+    };
+
+    try_paths("\\dlc\\tlad\\content\\", "\\TLAD\\", 2);
+    try_paths("\\dlc\\TBoGT\\content\\", "\\TBoGT\\", 4);
+    for (int i = 3; i < 255; ++i)
+    {
+        char suffix[64];
+        zpatch_spawns_sprintf(suffix, sizeof(suffix), "\\Episode%d\\", i);
+        try_paths(suffix, suffix, 2 * i);
+    }
+    // The DLC entry's post-discovery state byte (+0x166, the original's literal
+    // 358), written on the same entry the struct-fixup body receives in ESI. That
+    // body's +0xA4 marker is a different field, so the two offsets are unrelated
+    // even though both recoveries name 358 for the request's mode byte and this one.
+    *reinterpret_cast<uint8_t*>(static_cast<uint8_t*>(object) + 358) = 2;
+    // sub_10023150's final sub_10001280 call leaves its 0x40 buffer size in EDX;
+    // PathFileExistsA preserves EDX and the caller's resume observes it. If
+    // Episode254 exists, its final apply call is the last EDX producer instead
+    // (captured by the asm helper above).
+    if (episode254_registered)
+    {
+        __asm { mov edx, last_apply_edx }
+    }
+    else
+    {
+        __asm { mov edx, 40h }
+    }
+    return object;
+}
+
+namespace
+{
+// The episode entry the fixup patches (ESI on entry). Opaque bytes: these are the
+// only fields the body touches, at the offsets the original's disassembly shows.
+// Five per-episode flag bytes sit at +0x00..+0x100 (stride 0x40); the post-step
+// marker at +0xA4 falls inside that block, which is why the entry stays a set of
+// named offsets rather than a struct with typed fields. The values are decimal so
+// the asm block reads as offsets, not as a hex dump; the recovered hex is on each.
+//
+// Enumerators, not constexpr objects: the inline assembler folds an enumerator to
+// its value but assembles a constexpr variable as its own address.
+enum : size_t
+{
+    kDlcEpisodeFlag0Offset = 0,
+    kDlcEpisodeFlagStride = 64,  // 0x40
+    kDlcEpisodeFlag1Offset = kDlcEpisodeFlag0Offset + kDlcEpisodeFlagStride,
+    kDlcEpisodeFlag2Offset = kDlcEpisodeFlag0Offset + 2 * kDlcEpisodeFlagStride,
+    kDlcEpisodeFlag3Offset = kDlcEpisodeFlag0Offset + 3 * kDlcEpisodeFlagStride,
+    kDlcEpisodeFlag4Offset = kDlcEpisodeFlag0Offset + 4 * kDlcEpisodeFlagStride,
+    kDlcAlreadyLoadedOffset = 359,  // +0x167, byte, tested
+    kDlcForcedOffset = 360,         // +0x168, byte, set to 1
+    kDlcPostStepOffset = 164,       // +0xA4, byte, set after the discovery
+    kDlcEpilogueStackBytes = 20,    // 0x14, add esp,0x14
 };
+static_assert(kDlcEpisodeFlag4Offset == 0x100);
+static_assert(kDlcEpisodeFlagStride == 0x40);
+}  // namespace
 
-// The 12-byte tail fill the handler writes at the end of each build's list.
-constexpr std::size_t kDlcTailNopLength = 12;
-
-constexpr DlcSite kLoadDlcs1060[] = {
-    {"E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52",
-     DlcSiteKind::call_body, {}, true},  // 0x4137CD, twice
-    {"E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24", DlcSiteKind::jump_rva,
-     kLoadDlcsJmpA_1060, false},  // 0x41445C
-    {"B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8",
-     DlcSiteKind::jump_body, {}, true},  // 0x4144D4, twice
-    {"80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E",
-     DlcSiteKind::jump_rva, kLoadDlcsJmpB_1060, false},  // 0x41450E
-    {"E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E", DlcSiteKind::call_rva,
-     kLoadDlcsCall_1060, false},  // 0x41453A
-    {"8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC",
-     DlcSiteKind::nop_tail, {}, false},  // 0x41453F
-};
-
-constexpr DlcSite kLoadDlcs1070[] = {
-    {"E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52",
-     DlcSiteKind::call_body, {}, true},  // 0x41356D, twice
-    {"E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24", DlcSiteKind::jump_rva,
-     kLoadDlcsJmpA_1070, false},  // 0x4141FC
-    {"B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E",
-     DlcSiteKind::jump_body, {}, true},  // 0x414274, twice
-    {"80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E",
-     DlcSiteKind::jump_rva, kLoadDlcsJmpB_1070, false},  // 0x4142AE
-    {"E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E", DlcSiteKind::call_rva,
-     kLoadDlcsCall_1070, false},  // 0x4142DA
-    {"8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC",
-     DlcSiteKind::nop_tail, {}, false},  // 0x4142DF
-};
-
-constexpr DlcSite kLoadDlcs1080[] = {
-    {"E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 4C 24 ?? 51 8D 94 24 ?? ?? ?? ?? 52",
-     DlcSiteKind::call_body, {}, true},  // 0x48F558, twice
-    {"E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24", DlcSiteKind::jump_rva,
-     kLoadDlcsJmpA_1080, false},  // 0x49035C
-    {"B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6", DlcSiteKind::jump_body,
-     {}, true},  // 0x4903D4, twice
-    {"80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E",
-     DlcSiteKind::jump_rva, kLoadDlcsJmpB_1080, false},  // 0x49040E
-    {"E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E", DlcSiteKind::call_rva,
-     kLoadDlcsCall_1080, false},  // 0x49043A
-    {"8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC",
-     DlcSiteKind::nop_tail, {}, false},  // 0x49043F
-};
-
-struct DlcBuildSites final
+// @exact 0x10023490 LoadDLCs struct fixup: the object arrives in ESI and the
+// epilogue pops esi/ebx and cleans 0x14 stack bytes; the original instruction
+// sequence is reproduced (with our own callback slot and post step).
+static __declspec(naked) void abi_load_dlcs_struct_fixup()
 {
-	GameBuild build;
-	std::span<const DlcSite> sites;
-};
-
-constexpr DlcBuildSites kLoadDlcsSites[] = {
-    {GameBuild::v1060, kLoadDlcs1060},
-    {GameBuild::v1070, kLoadDlcs1070},
-    {GameBuild::v1080, kLoadDlcs1080},
-};
-
-void ApplyLoadDLCs(const PatchContext& ctx)
-{
-	Trace("LoadDLCs");
-	if (ctx.Option("LoadDLCs", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		for (const DlcBuildSites& build : kLoadDlcsSites)
-		{
-			if (ctx.build != build.build)
-				continue;
-			for (const DlcSite& row : build.sites)
-			{
-				if (auto pattern = Pattern(image, row.signature); pattern.size() > 0)
-				{
-					auto* site = pattern.get(0).get<std::uint8_t>();
-					std::uintptr_t target = row.rva.site(ctx.gameBase);
-					if (row.kind == DlcSiteKind::call_body)
-						target = reinterpret_cast<std::uintptr_t>(&abi_load_dlcs_dummy);
-					else if (row.kind == DlcSiteKind::jump_body)
-						target = reinterpret_cast<std::uintptr_t>(&abi_load_dlcs_struct_fixup);
-					switch (row.kind)
-					{
-					case DlcSiteKind::call_body:
-					case DlcSiteKind::call_rva:
-						injector::MakeCALL(site, reinterpret_cast<void*>(target), true); //call
-						if (row.twice)
-							injector::MakeCALL(site, reinterpret_cast<void*>(target), true); //call
-						break;
-					case DlcSiteKind::jump_body:
-					case DlcSiteKind::jump_rva:
-						injector::MakeJMP(site, reinterpret_cast<void*>(target), true); //jmp
-						if (row.twice)
-							injector::MakeJMP(site, reinterpret_cast<void*>(target), true); //jmp
-						break;
-					case DlcSiteKind::nop_tail:
-						injector::MakeNOP(site, kDlcTailNopLength, true); //nop
-						break;
-					}
-				}
-			}
-			break;
-		}
-	}
+    __asm {
+        mov BYTE PTR [esi + kDlcEpisodeFlag0Offset], 0
+        mov BYTE PTR [esi + kDlcEpisodeFlag1Offset], 0
+        mov BYTE PTR [esi + kDlcEpisodeFlag2Offset], 0
+        mov BYTE PTR [esi + kDlcEpisodeFlag3Offset], 0
+        mov BYTE PTR [esi + kDlcEpisodeFlag4Offset], 0
+        cmp BYTE PTR [esi + kDlcAlreadyLoadedOffset], 0
+        je load
+        mov BYTE PTR [esi + kDlcForcedOffset], 1
+    exit_label:
+        pop esi
+        pop ebx
+        add esp, kDlcEpilogueStackBytes
+        ret
+    load:
+        mov ecx, esi
+        call DWORD PTR [zpatch_dlc_load_callback]
+        push esi
+        call dlc_discovery_post
+        pop esi
+        mov BYTE PTR [esi + kDlcPostStepOffset], 1
+        jmp exit_label
+    }
 }
+}  // extern "C"
 
-void ApplyLocalSettingsPath(const PatchContext& ctx)
+#endif  // !defined(_WIN64)
+
+namespace opp::features
 {
-	Trace("LocalSettingsPath");
-	if (ctx.Option("LocalSettingsPath", "0"))
-	{
-		const GameImage& image = ctx.image;
 
-		if (auto pattern = Pattern(image, "53 8B 5C 24 08 56 6A 00 6A 00"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+    // publish LoadDLCs
 
-			injector::WriteMemory<std::uint32_t>(match + 16, AddressOf(&zpatch_local_saves_slot),
-			                                    true); // call slot -> our thunk
-			injector::WriteMemory<std::uint32_t>(match + 32, AddressOf(&zpatch_local_iv_suffix),
-			                                    true); // "\GTA IV" push -> our suffix
-		}
+    namespace
+    {
+        // The per-gated-build windows: the struct-fixup site
+        // (CExtraContentManager::Init) and the dummy loader entry's call site.
+        // The helper call sits `helper_before` bytes before the site it is found
+        // from (the same distance on 1.0.6.0 and 1.0.7.0, longer on 1.0.8.0).
+        constexpr uintptr_t kHelperCallBefore = 0x70A;
+        struct DlcWindows final
+        {
+            GameBuild        build;
+            std::string_view fixup;
+            std::string_view dummy_call;
+            uintptr_t        helper_before;
+        };
+        constexpr DlcWindows kDlcWindows[] = {
+            {GameBuild::v1060,
+             "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? ?? E8",
+             "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52",
+             kHelperCallBefore},
+            {GameBuild::v1070,
+             "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6 ?? 83 E8 ?? 75 ?? 5E 5B",
+             "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 8C 24 ?? ?? ?? ?? ?? ?? ?? ?? ?? 52",
+             kHelperCallBefore},
+            {GameBuild::v1080,
+             "B8 ?? ?? ?? ?? 8D A4 24 ?? ?? ?? ?? 88 1E 83 C6",
+             "E8 ?? ?? ?? ?? 84 C0 74 ?? 53 8D 4C 24 ?? 51 8D 94 24 ?? ?? ?? ?? 52 E8",
+             2186},  // 0x88A, further from the helper call than the older builds
+        };
 
-		if (auto pattern = Pattern(image, "7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D6 5F 5E 5B C3"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+        const DlcWindows* FindDlcWindows(GameBuild build) noexcept
+        {
+            for (const DlcWindows& windows : kDlcWindows)
+            {
+                if (windows.build == build)
+                    return &windows;
+            }
+            return nullptr;
+        }
 
-			injector::MakeJMP(match + 14, reinterpret_cast<void*>(&abi_local_settings_detour), true); //jmp
-		}
+        // A site inside the game image, as the RVA the body rebases.
+        uint32_t AsRva(const PatchContext& ctx, const void* address) noexcept
+        {
+            return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(address) -
+                                         ctx.gameBase);
+        }
 
-		if (auto pattern = Pattern(image, "7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D7 5F C3"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+        // One scan of a recovered window; `nullptr` leaves the site alone (an
+        // image that is not the one the window was proved on).
+        uint8_t* FindSite(const GameImage& image, std::string_view window,
+                          const char* what)
+        {
+            if (window.empty())
+                return nullptr;
+            auto pattern = Pattern(image, window);
+            if (pattern.size() == 0 || !ExpectMatchCount(pattern, 1, what))
+                return nullptr;
+            return pattern.get(0).get<uint8_t>();
+        }
+    } // namespace
 
-			injector::MakeJMP(match - 13, reinterpret_cast<void*>(&abi_local_settings_fallback_detour), true); //jmp
-		}
-	}
-}
+    void PublishLoadDLCs(PatchContext& ctx)
+    {
 
-void ApplyNewFilesCompatibility(const PatchContext& ctx)
+        TraceArm("publish LoadDLCs");
+
+        // LoadDLCs. The two helpers the discovery loop calls
+        // (DlcRegisterRva/DlcApplyRva) are separate functions; the per-build RVAs
+        // come from each function's own unique window, proved on the on-disk
+        // builds by tools/opcep_sigcheck.py (tests/parity/address_sites.tsv).
+        if (ctx.Option("LoadDLCs", "1"))
+        {
+            const DlcWindows* const windows = FindDlcWindows(ctx.build);
+            if (windows == nullptr)
+                return;
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, windows->fixup);
+                pattern.size() > 0 && ExpectMatchCount(pattern, 1, "LoadDLCs struct fixup"))
+            {
+                // The loader callback entry sits 0x8C past the struct-fixup site on
+                // every gated build (1.0.6.0 0x4144D4->0x414560, 1.0.7.0
+                // 0x414274->0x414300, 1.0.8.0 0x4903D4->0x490460); the publish scans
+                // the same window the install does instead of carrying three RVAs.
+                zpatch_dlc_load_callback = static_cast<uint32_t>(
+                    MatchAddress(pattern) + 140);  // 0x8C
+            }
+            // The register helper (sub_88F440) is the stack-cookie prologue whose A1
+            // operand is an absolute VA: the game is relocated at load, so it stays a
+            // wildcard or the scan misses on every non-preferred base. The window ends
+            // before the fourth push, the only byte 1.0.8.0 changes (57 / 8B), so one
+            // window fits all gated builds.
+            if (auto pattern = Pattern(
+                    image,
+                    "81 EC 0C 02 00 00 A1 ?? ?? ?? ?? 33 C4 89 84 24 08 02 00 00 53 55 56");
+                pattern.size() > 0 && ExpectMatchCount(pattern, 1, "LoadDLCs register helper"))
+            {
+                DlcRegisterRva() = AsRva(ctx, pattern.get(0).get<uint8_t>());
+            }
+            // The apply helper (sub_88FE00) is identical on every gated build.
+            if (auto pattern = Pattern(
+                    image, "51 53 8B D9 0F B7 8B 50 01 00 00 55 56 33 ED 85");
+                pattern.size() > 0 && ExpectMatchCount(pattern, 1, "LoadDLCs apply helper"))
+            {
+                DlcApplyRva() = AsRva(ctx, pattern.get(0).get<uint8_t>());
+            }
+        }
+
+    }
+
+
+    // LoadDLCs
+
+    void InstallLoadDLCs(PatchContext& ctx)
+    {
+
+        TraceArm("LoadDLCs");
+
+        // LoadDLCs: 6 sites per build, each the pre-write instruction window at the
+        // recovered RVA.
+        if (ctx.Option("LoadDLCs", "1"))
+        {
+            const DlcWindows* const windows = FindDlcWindows(ctx.build);
+            if (windows == nullptr)
+                return;
+            // The struct-fixup body calls the callback slot before the discovery
+            // step. If the callback publish missed, installing the body would
+            // call a null slot; skip the arm instead.
+#if !defined(_WIN64)
+            if (zpatch_failsafe_skip("LoadDLCs callback", zpatch_dlc_load_callback == 0u))
+                return;
+#endif
+            const GameImage& image = ctx.image;
+
+            // The scans happen before the writes: the call site's window contains
+            // the twelve bytes the original NOPs after it. The fixup and dummy-call
+            // windows are per build; the other four are shared by every gated build.
+            uint8_t* const dummyCall = FindSite(image, windows->dummy_call, "LoadDLCs dummy call");
+            uint8_t* const earlyJump = FindSite(
+                image, "E8 ?? ?? ?? ?? 6A ?? 8D 44 24 ?? 50 53 56 8D 4C 24",
+                "LoadDLCs early jump");
+            uint8_t* const structFixup = FindSite(image, windows->fixup, "LoadDLCs struct fixup");
+            uint8_t* const skipFixupJump = FindSite(
+                image,
+                "80 BE ?? ?? ?? ?? ?? 74 ?? 8B 44 24 ?? 50 E8 ?? ?? ?? ?? 83 C4 ?? ?? ?? ?? ?? 5E",
+                "LoadDLCs skip-fixup jump");
+            uint8_t* const helperCall = FindSite(
+                image, "E8 ?? ?? ?? ?? 8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? ?? 5E",
+                "LoadDLCs helper call");
+            uint8_t* const tail = FindSite(
+                image, "8B CE E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 5E C2 ?? ?? CC CC CC CC",
+                "LoadDLCs tail");
+
+            // Destinations as deltas from the site: +0x5C jumps into the same block,
+            // +0x1E skips the fixup (identical on 1.0.6.0/1.0.7.0).
+            if (dummyCall != nullptr)
+                CallTo(ctx, dummyCall, OPP_BODY(abi_load_dlcs_dummy));
+            if (earlyJump != nullptr)
+                JumpTo(ctx, earlyJump, earlyJump + 92);  // 0x5C
+            if (structFixup != nullptr)
+                JumpTo(ctx, structFixup, OPP_BODY(abi_load_dlcs_struct_fixup));
+            if (skipFixupJump != nullptr)
+                JumpTo(ctx, skipFixupJump, skipFixupJump + 30);  // 0x1E
+            if (helperCall != nullptr)
+                CallTo(ctx, helperCall, helperCall - windows->helper_before);
+            // The call following the tail site has twelve bytes the original NOPs.
+            if (tail != nullptr)
+                NopAt(ctx, tail, 12);
+        }
+
+    }
+
+
+    // publish NewFilesCompatibility
+
+    namespace
+    {
+        // NewFilesCompatibility: the registrar window (published as the slot the
+        // register body calls). The two per-file update E8 hooks are 12-byte
+        // prefixes that differ only in the last jNZ displacement, so each must
+        // resolve once.
+        constexpr std::string_view kNewFilesRegistrarWindow = "68 64 28 C8 67 E8";
+    } // namespace
+
+    void PublishNewFilesCompatibility(PatchContext& ctx)
+    {
+
+        TraceArm("publish NewFilesCompatibility");
+
+        // NewFilesCompatibility: 1 slot
+        if (ctx.Option("NewFilesCompatibility", "1") && !NewFilesConflictModulesPresent())
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, kNewFilesRegistrarWindow); pattern.size() > 0)
+            {
+                // The E8 to the registrar: its rel32 operand is at +6.
+                zpatch_newfiles_register_slot = BranchDestination(
+                    pattern.get(0).get<uint8_t>(), 6);
+            }
+        }
+
+    }
+
+
+    // NewFilesCompatibility
+
+    void InstallNewFilesCompatibility(PatchContext& ctx)
+    {
+
+        TraceArm("NewFilesCompatibility");
+
+        // NewFilesCompatibility: 2 siginstalls, 1 sigjump
+        if (ctx.Option("NewFilesCompatibility", "1") && !NewFilesConflictModulesPresent())
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(
+                    image,
+                    "E8 ? ? ? ? 8B 36 85 F6 75 ED E8 ? ? ? ? 8B 3F 03 EB 85 FF 0F 85 7B FF FF FF");
+                pattern.size() > 0 && ExpectMatchCount(pattern, 1, "NewFiles update A"))
+            {
+                CallTo(ctx, pattern.get(0).get<uint8_t>(), OPP_BODY(abi_newfiles_update_a));
+            }
+
+            if (auto pattern = Pattern(
+                    image,
+                    "E8 ? ? ? ? 8B 36 85 F6 75 ED E8 ? ? ? ? 8B 3F 03 EB 85 FF 0F 85 6C FF FF FF");
+                pattern.size() > 0 && ExpectMatchCount(pattern, 1, "NewFiles update B"))
+            {
+                CallTo(ctx, pattern.get(0).get<uint8_t>(), OPP_BODY(abi_newfiles_update_b));
+            }
+
+            if (auto pattern = Pattern(image, kNewFilesRegistrarWindow); pattern.size() > 0)
+            {
+                // The registrar call itself is at +28 in this window.
+                JumpTo(ctx, pattern.get(0).get<uint8_t>() + 28,
+                       OPP_BODY(abi_newfiles_register_body));
+            }
+        }
+
+    }
+
+
+    // publish NewSavesCompatibility
+
+    namespace
+    {
+        // The tramp site (the savegame-load entry's prologue) and the save-name
+        // `push imm32` in the boot window; the resume is the instruction after
+        // the 13-byte prologue the tramp overwrites.
+        constexpr std::string_view kNewSavesBootWindow =
+            "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08";
+        constexpr std::string_view kNewSavesEntryWindow =
+            "89 84 24 E0 01 00 00 8B 45 08 53 33 DB";
+    } // namespace
+
+    void PublishNewSavesCompatibility(PatchContext& ctx)
+    {
+
+        TraceArm("publish NewSavesCompatibility");
+
+        // NewSavesCompatibility: 3 slots. The newer save format is 1060-1080
+        // only; gate the arm instead of relying on the pattern coincidentally
+        // missing on 1000/1004/1040 and EFLC.
+        if (ctx.Option("NewSavesCompatibility", "1") &&
+            BuildIs(ctx.build, {GameBuild::v1060, GameBuild::v1061, GameBuild::v1070,
+                                GameBuild::v1080}))
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto boot = Pattern(image, kNewSavesBootWindow); boot.size() > 0)
+            {
+                // The push imm32 operand is the save-name pointer.
+                zpatch_new_saves_src = *boot.get(0).get<uint32_t>(1);
+                if (auto pattern = Pattern(image, kNewSavesEntryWindow); pattern.size() > 0)
+                {
+                    zpatch_new_saves_resume = MatchAddress(pattern, 13);
+                }
+            }
+        }
+
+    }
+
+
+    // NewSavesCompatibility
+
+    void InstallNewSavesCompatibility(PatchContext& ctx)
+    {
+
+        TraceArm("NewSavesCompatibility");
+
+        // NewSavesCompatibility: 1 sigjump. The savegame-load entry is only
+        // redirected when both the tramp site and the entry window exist.
+        if (ctx.Option("NewSavesCompatibility", "1") &&
+            BuildIs(ctx.build, {GameBuild::v1060, GameBuild::v1061, GameBuild::v1070,
+                                GameBuild::v1080}))
+        {
+            const GameImage& image = ctx.image;
+
+            if (Pattern(image, kNewSavesBootWindow).size() > 0)
+            {
+                if (auto pattern = Pattern(image, kNewSavesEntryWindow); pattern.size() > 0)
+                {
+                    JumpTo(ctx, pattern.get(0).get<uint8_t>(),
+                           OPP_BODY(abi_new_saves_compat));
+                }
+            }
+        }
+
+    }
+
+
+    // OverrideGTADatPath
+
+    void InstallOverrideGTADatPath(PatchContext& ctx)
+    {
+
+        TraceArm("OverrideGTADatPath");
+
+        // OverrideGTADatPath: 1 literalstore
+        if (ctx.Option("OverrideGTADatPath", "0"))
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(
+                    image, "68 ? ? ? ? E8 ? ? ? ? 83 C4 04 E8 ? ? ? ? E8 ? ? ? ? E8");
+                pattern.size() > 0)
+            {
+                // The `push imm32` operand names the gta.dat path pointer the
+                // original pushes; the arm points it at the configured path.
+                WriteValue<uint32_t>(ctx, pattern.get(0).get<uint8_t>(1),
+                                     static_cast<uint32_t>(
+                                         FindGlobalValue("OverrideGTADatPath")));
+            }
+        }
+
+    }
+
+
+    // SCOSignatureFix
+
+    void InstallSCOSignatureFix(PatchContext& ctx)
+    {
+
+        TraceArm("SCOSignatureFix");
+
+        // SCOSignatureFix: 1 literal. The recovered op row anchors the write at
+        // offset 0 of its own signature. The old arm scanned a signature 32 bytes
+        // downstream and wrote at match-32, which is only correct while that
+        // distance holds; a build where it does not would flip an unrelated `jz`.
+        // This signature ends on the `jz` itself (`mov ds:X,edi; test ebp,ebp; jz`),
+        // unique on 1.0.8.0.
+        if (ctx.Option("SCOSignatureFix", "1"))
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, "89 3D ? ? ? ? 85 ED 74 1E");
+                pattern.size() > 0)
+            {
+                // `mov ds:X,edi` (6 bytes) + `test ebp,ebp` (2) put the `jz`
+                // opcode at +8; the original flips it to a `jmp`.
+                WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(8),
+                                    opp::ops::kJmpRel8);
+            }
+        }
+
+    }
+
+namespace
 {
-	Trace("NewFilesCompatibility");
-	if (ctx.Option("NewFilesCompatibility", "1") && !NewFilesConflictModulesPresent())
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "E8 ? ? ? ? 8B 36 85 F6 75 ED E8 ? ? ? ? 8B 3F 03 EB 85 FF 0F 85 7B FF FF FF"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeCALL(match, reinterpret_cast<void*>(&abi_newfiles_update_a), true); //call
-		}
-
-		if (auto pattern = Pattern(image, "E8 ? ? ? ? 8B 36 85 F6 75 ED E8 ? ? ? ? 8B 3F 03 EB 85 FF 0F 85 6C FF FF FF"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeCALL(match, reinterpret_cast<void*>(&abi_newfiles_update_b), true); //call
-		}
-
-		if (auto pattern = Pattern(image, "68 64 28 C8 67 E8"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match + 28, reinterpret_cast<void*>(&abi_newfiles_register_body), true); //jmp
-		}
-	}
-}
-
-void ApplyNewMemorySystem(const PatchContext& ctx)
-{
-	Trace("NewMemorySystem");
-	if (ctx.Option("NewMemorySystem", "0"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "3D 80 99 99 59 73 05"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeCALL(match - 34, reinterpret_cast<void*>(&abi_nms_apply), true); //call
-			injector::MakeJMP(match - 29, reinterpret_cast<void*>(match - 16), true); //jmp
-		}
-	}
-}
-
-void ApplyNewSavesCompatibility(const PatchContext& ctx)
-{
-	Trace("NewSavesCompatibility");
-	if (ctx.Option("NewSavesCompatibility", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto primary = Pattern(image, "68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08");
-		    primary.size() > 0)
-		{
-			if (auto pattern = Pattern(image, "89 84 24 E0 01 00 00 8B 45 08 53 33 DB");
-			    pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				injector::MakeJMP(match, reinterpret_cast<void*>(&abi_new_saves_compat), true); //jmp
-			}
-		}
-	}
-}
-
-void ApplyRemoveRGSCLoginRequirement(const PatchContext& ctx)
-{
-	Trace("RemoveRGSCLoginRequirement");
-	if (ctx.Option("RemoveRGSCLoginRequirement", "0"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (ctx.build == GameBuild::v1080)
-		{
-			// The original derives the site from 0x498460 and writes the jump twice (the
-			// duplicate is kept). The recovered signature is unique at that RVA on 1.0.8.0, so
-			// the scan finds the same site.
-			if (auto pattern = Pattern(image, "8B 44 24 ?? 85 C0 74 ?? F3 0F 7E 05 ?? ?? ?? ?? 66 0F D6 00"); pattern.size() > 0)
-			{
-				auto* site = pattern.get(0).get<std::uint8_t>(); // 0x498460
-				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_rgsc_login_removed), true); //jmp
-				// The original writes the same jump twice (duplicate-write rule).
-				injector::MakeJMP(site, reinterpret_cast<void*>(&abi_rgsc_login_removed), true); //jmp
-			}
-		}
-
-		if (auto pattern = Pattern(image, "83 EC 44 A1 ? ? ? ? 33 C4 89 44 24 40 53 8B 5C 24 4C 56 68 ? ? ? ? E8 ? ? ? ? 83 C4"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_rgsc_login_removed), true); //jmp
-		}
-	}
-}
-
-void ApplySavegameFix(const PatchContext& ctx)
-{
-	Trace("SavegameFix");
-	if (ctx.Option("SavegameFix", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "75 ? 83 C1 01 83 C0 01 83 F9 04"); pattern.size() > 0)
-		{
-			std::uint8_t* match = pattern.get(0).get<std::uint8_t>();
-			injector::MakeCALL(match - 73, reinterpret_cast<void*>(&abi_savegame_fix_close), true); //call
-			injector::MakeCALL(match - 143, reinterpret_cast<void*>(&abi_savegame_fix_copy), true); //call
-			injector::MakeCALL(match - 176, reinterpret_cast<void*>(&abi_savegame_fix_copy), true); //call
-			injector::MakeCALL(match - 280, reinterpret_cast<void*>(&abi_savegame_fix_mutex), true); //call
-			injector::MakeCALL(match - 240, reinterpret_cast<void*>(&abi_savegame_fix_null), true); //call
-			injector::MakeNOP(pattern.get(0).get<std::uint8_t>(), 2, true); //nop
-		}
-
-		if (auto pattern = Pattern(image, "8D 4C 24 18 51 6A 00 6A 0C 57"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeCALL(match - 86, reinterpret_cast<void*>(&abi_savegame_fix_mutex), true); //call
-			injector::MakeCALL(match - 47, reinterpret_cast<void*>(&abi_savegame_fix_null), true); //call
-			injector::MakeCALL(match + 10, reinterpret_cast<void*>(&abi_savegame_fix_copy), true); //call
-			injector::MakeCALL(match + 90, reinterpret_cast<void*>(&abi_savegame_fix_copy), true); //call
-			injector::MakeCALL(match + 128, reinterpret_cast<void*>(&abi_savegame_fix_close), true); //call
-		}
-	}
-}
-
-void ApplySkipIntro(const PatchContext& ctx)
-{
-	Trace("SkipIntro");
-	if (ctx.Option("SkipIntro", "1") && !FusionFixGateClosed())
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "89 91 ? ? ? ? 8D 44 24 ? 68 ? ? ? ? 50"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match - 6, reinterpret_cast<void*>(&abi_skip_intro_body), true); //jmp
-		}
-	}
-}
-
-void ApplySkipLauncherOption(const PatchContext& ctx)
-{
-	Trace("SkipLauncher");
-	if (ctx.Option("SkipLauncher", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "0F 85 ? ? ? ? 8B 8C 24 ? ? ? ? 5F 5E 5B 33 CC C6"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeNOP(match, 6, true); //nop
-		}
-
-		if (auto pattern = Pattern(image, "3B 4E 18 0F 85"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeNOP(match + 3, 6, true); //nop
-		}
-
-		if (auto pattern = Pattern(image, "3B 56 18 0F 85"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeNOP(match + 3, 6, true); //nop
-		}
-
-		if (auto pattern = Pattern(image, "74 C4 8B 07 3B 46 18 75 BD 68"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeNOP(match, 2, true); //nop
-		}
-
-		if (auto pattern = Pattern(image, "74 EC 38 5E 06 74 E7 68"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeNOP(match, 2, true); //nop
-		}
-
-		if (auto pattern = Pattern(image, "84 DB 0F 85 43 01 00 00 8D 4C 24 28 8B C1"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::WriteMemory<std::uint8_t>(match + 223, kShortJmpOpcode, true); //jmp
-		}
-
-		if (auto pattern = Pattern(image, "8B 56 1C 3B 56 20 ? ? 6A 00 6A 00"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::WriteMemory<std::uint8_t>(match, kXorEaxOpcode, true);       //xor
-			injector::WriteMemory<std::uint8_t>(match + 1, kXorEaxEaxModrm, true); // eax,eax
-		}
-	}
-}
-
-void ApplySkipMenu(const PatchContext& ctx)
-{
-	Trace("SkipMenu");
-	if (ctx.Option("SkipMenu", "0") && !FusionFixGateClosed())
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "83 F8 03 75 ? A1 ? ? ? ? 80 88 ? ? ? ? ? 84 DB 74 0A 6A 00 E8 ? ? ? ? 83 C4 04 5F 5E"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeCALL(match + 23, reinterpret_cast<void*>(&abi_skip_menu_body), true); //call
-		}
-
-		if (auto pattern = Pattern(image, "6A 00 E8 ? ? ? ? 83 C4 04 8B 8C 24 ? ? ? ? 5F 5E 5D 5B 33 CC E8 ? ? ? ? 81 C4 ? ? ? ? C3"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeCALL(match + 2, reinterpret_cast<void*>(&abi_skip_menu_body), true); //call
-		}
-
-		if (auto pattern = Pattern(image, "6A 00 E8 ? ? ? ? 83 C4 04 8B 8C 24 ? ? ? ? 5F 5E 5B 33 CC E8 ? ? ? ? 8B E5 5D C3"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeCALL(match + 2, reinterpret_cast<void*>(&abi_skip_menu_body), true); //call
-		}
-	}
-}
-
-void ApplyBenchmarkFix(const PatchContext& ctx)
-{
-	Trace("BenchmarkFix");
-	if (ctx.Option("BenchmarkFix", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (BuildIs(ctx.build,
-		            {GameBuild::v1000, GameBuild::v1040, GameBuild::v1004, GameBuild::v1060,
-		             GameBuild::v1070, GameBuild::v1061, GameBuild::v1100, GameBuild::v1110,
-		             GameBuild::v1120, GameBuild::v12043}))
-		{
-			if (auto pattern = Pattern(image, "E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20");
-			    pattern.size() > 0)
-			{
-				injector::MakeJMP(pattern.get(0).get<std::uint8_t>(8),
-					reinterpret_cast<void*>(&abi_benchmark_a), true); //jmp
-				if (pattern.size() > 1)
-					injector::MakeJMP(pattern.get(1).get<std::uint8_t>(8),
-						reinterpret_cast<void*>(&abi_benchmark_b), true); //jmp
-			}
-		}
-	}
-}
-
-void ApplyRemoveGFWLUpdatePopup(const PatchContext& ctx)
-{
-	Trace("RemoveGFWLUpdatePopup");
-	if (ctx.Option("RemoveGFWLUpdatePopup", "0"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "2B C1 1B D6 89 44 24 0C 89 54 24 10 DF 6C 24 0C D8 0D ? ? ? ? D9 5C 24 08"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_gfwl_stub), true); //jmp
-		}
-	}
-}
-
-void ApplyFastLoading(const PatchContext& ctx)
-{
-	Trace("FastLoading");
-	if (ctx.Option("FastLoading", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "6A 0A E8 ? ? ? ? 83 C7 0A 83 C4 04 81 FF E8 03 00 00 75 02 33 FF"); pattern.size() > 0)
-		{
-			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(1), kZeroByte,
-			                                    true); // sleep 10 -> 0
-		}
-	}
-}
-
-void ApplyStartupTimeFix(const PatchContext& ctx)
-{
-	Trace("StartupTimeFix");
-	if (ctx.Option("StartupTimeFix", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "68 00 C2 EC 80 68"); pattern.size() > 0)
-		{
-			for (std::size_t i = 0; i < pattern.size(); ++i)
-				injector::WriteMemory<std::uint32_t>(
-				    pattern.get(i).get<std::uint8_t>() + 6,
-				    static_cast<std::uint32_t>(FindGlobalValue("StartupTimeFix")), true); // push our startup-time dword
-		}
-	}
-}
-
-void ApplyNoLoadingSleep(const PatchContext& ctx)
-{
-	Trace("NoLoadingSleep");
-	if (ctx.Option("NoLoadingSleep", "0"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "68 88 13 00 00 FF 15"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::WriteMemory<std::uint32_t>(match + 1, 0u, true); // 5000 ms -> 0
-		}
-	}
-}
-
-void ApplyOverrideGTADatPath(const PatchContext& ctx)
-{
-	Trace("OverrideGTADatPath");
-	if (ctx.Option("OverrideGTADatPath", "0"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "68 ? ? ? ? E8 ? ? ? ? 83 C4 04 E8 ? ? ? ? E8 ? ? ? ? E8"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			// +1: the `68` push's imm32 path pointer.
-			injector::WriteMemory<std::uint32_t>(
-			    match + 1,
-			    static_cast<std::uint32_t>(FindGlobalValue("OverrideGTADatPath")), true); // push
-		}
-	}
-}
-
-void ApplyVSyncFix(const PatchContext& ctx)
-{
-	Trace("VSyncFix");
-	if (ctx.Option("VSyncFix", "0"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (BuildIs(ctx.build,
-		            {GameBuild::v1004, GameBuild::v1060, GameBuild::v1070, GameBuild::v1061,
-		             GameBuild::v1100, GameBuild::v1110, GameBuild::v1120, GameBuild::v12043}))
-		{
-			if (auto pattern = Pattern(image, "8B 08 8B 51 0C 6A 01 6A 00 6A 00 6A 00 6A 00 50 FF D2 8B F0 81 FE ? ? ? ? 74"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				// +30: the operand the second call shape loads the vsync flag from.
-				injector::WriteMemory<std::uint32_t>(
-				    match + 30,
-				    static_cast<std::uint32_t>(FindGlobalValue("VSyncFix")), true); // pointer
-			}
-
-			if (auto pattern = Pattern(image, "8B 10 50 8B 82 A8 00 00 00 FF D0 83"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
-
-				// +13: the operand the first call shape loads the vsync flag from.
-				injector::WriteMemory<std::uint32_t>(
-				    match + 13,
-				    static_cast<std::uint32_t>(FindGlobalValue("VSyncFix")), true); // pointer
-			}
-		}
-	}
-}
+    class LoadingFeatures
+    {
+    public:
+        LoadingFeatures()
+        {
+            PublishEvent().Add(&PublishLoadDLCs, "PublishLoadDLCs");
+            PublishEvent().Add(&PublishNewFilesCompatibility, "PublishNewFilesCompatibility");
+            PublishEvent().Add(&PublishNewSavesCompatibility, "PublishNewSavesCompatibility");
+            InstallEvent().Add(&InstallLoadDLCs, "InstallLoadDLCs");
+            InstallEvent().Add(&InstallNewFilesCompatibility, "InstallNewFilesCompatibility");
+            InstallEvent().Add(&InstallNewSavesCompatibility, "InstallNewSavesCompatibility");
+            InstallEvent().Add(&InstallSCOSignatureFix, "InstallSCOSignatureFix");
+            InstallEvent().Add(&InstallOverrideGTADatPath, "InstallOverrideGTADatPath");
+        }
+    } loadingFeatures;
+} // namespace
+
+} // namespace opp::features

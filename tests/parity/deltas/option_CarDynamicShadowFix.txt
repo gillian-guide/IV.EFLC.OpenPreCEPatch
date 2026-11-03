@@ -1,0 +1,17 @@
+0000C9F9 E9 InstallCarPartsShadowFix
+0000C9FA 82 InstallCarPartsShadowFix
+0000C9FB 9E InstallCarPartsShadowFix
+0000C9FC BF InstallCarPartsShadowFix
+0000C9FD 0F InstallCarPartsShadowFix
+004F719F E9 InstallCarDynamicShadowFix
+004F71A0 9F InstallCarDynamicShadowFix
+004F71A1 00 InstallCarDynamicShadowFix
+004F73EC 00 InstallCarDynamicShadowFix
+004F73ED 01 InstallCarDynamicShadowFix
+004F7422 00 InstallCarDynamicShadowFix
+0055A41E EB InstallCarDynamicShadowFix
+0055ADCF E9 InstallCarDynamicShadowFix
+0055ADD0 CC InstallCarDynamicShadowFix
+0055ADD1 BA InstallCarDynamicShadowFix
+0055ADD2 6A InstallCarDynamicShadowFix
+0055ADD3 0F InstallCarDynamicShadowFix

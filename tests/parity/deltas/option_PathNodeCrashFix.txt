@@ -1,0 +1,5 @@
+0066D2A5 E9 InstallPathNodeCrashFix
+0066D2A6 06 InstallPathNodeCrashFix
+0066D2A7 05 InstallPathNodeCrashFix
+0066D2A8 5D InstallPathNodeCrashFix
+0066D2A9 0F InstallPathNodeCrashFix

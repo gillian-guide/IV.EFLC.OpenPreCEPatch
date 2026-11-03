@@ -1,961 +1,1859 @@
-// zp.vehicles - Vehicle behaviour: steering, engine, plane parts, driveby, car shadows,
-// teleport, no-livery, the model/struct limits and the spawn probe.
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// vehicles
+//
+// One function per INI arm, in the original loader order; the bodies are the
+// readable reconstruction's verified arms, the wrapper and the arm trace ours.
 
 module;
 
 #include "common.hxx"
-#include "common.h"
-#include "patches.h"
 #include "hooks.h"
 #include "rebased.h"
-#include "hook_bodies.h"
-#include "xlive/xliveless.h"
 
-export module zp.vehicles;
+#include <bit>
+#include <cerrno>
+#include <numbers>
+export module opp.vehicles;
 
-import zp.common;
-import zp.game;
+import opp.config;
+import opp.patch;
+import opp.game;
+import opp.common;
+import opp.log;
 
-export
+export namespace opp
 {
-void PublishDualVehicleHeadlights(const PatchContext& ctx);
-void PublishHighFPSBikePhysicsFix(const PatchContext& ctx);
-void PublishNoLiveryLimit(const PatchContext& ctx);
-void PublishCarPartsShadowFix(const PatchContext& ctx);
-void PublishForceCarHeadlightShadows(const PatchContext& ctx);
-void PublishFreezeCarFix(const PatchContext& ctx);
-void PublishCarDynamicShadowFix(const PatchContext& ctx);
-void PublishGarageModelFix(const PatchContext& ctx);
-void PublishMovingSteeringWheelSupport(const PatchContext& ctx);
-void PublishShakingEngineBlock(const PatchContext& ctx);
-void PublishMovingPlaneParts(const PatchContext& ctx);
-void ApplyBikeFeetFix(const PatchContext& ctx);
-void ApplyBikePhoneAnimsFix(const PatchContext& ctx);
-void ApplyEpisodicVehicleSupport(const PatchContext& ctx);
-void ApplyHighFPSBikePhysicsFix(const PatchContext& ctx);
-void ApplyInfiniteCarBottomDistance(const PatchContext& ctx);
-void ApplyNoLiveryLimit(const PatchContext& ctx);
-void ApplyPipeBombDropIconSupport(const PatchContext& ctx);
-void ApplyReversingLightFix(const PatchContext& ctx);
-void ApplyTeleportProtection(const PatchContext& ctx);
-void ApplyCarPartsShadowFix(const PatchContext& ctx);
-void ApplyForceCarHeadlightShadows(const PatchContext& ctx);
-void ApplyFreezeCarFix(const PatchContext& ctx);
-void ApplyCarDynamicShadowFix(const PatchContext& ctx);
-void ApplyGarageModelFix(const PatchContext& ctx);
-void ApplyMovingSteeringWheelSupport(const PatchContext& ctx);
-void ApplyShakingEngineBlock(const PatchContext& ctx);
-void ApplyMovingPlaneParts(const PatchContext& ctx);
-void ApplyCarDecalsFix(const PatchContext& ctx);
-void ApplyCarDynamicShadowFixNoE(const PatchContext& ctx);
-void ApplyDualVehicleHeadlightsOld(const PatchContext& ctx);
-void ApplyDualVehicleHeadlightsNew(const PatchContext& ctx);
-void ApplyCarPartsShadowFixStandalone(const PatchContext& ctx);
-void ApplyIncreaseVehicleModelLimit(const PatchContext& ctx);
-void ApplyIncreaseVehicleStructLimit(const PatchContext& ctx);
-}  // export
-
-constexpr std::uint16_t kShadowPushA = 0x0504u;
-constexpr std::uint16_t kShadowPushB = 0x0104u;
-// One spawn-probe call site: the jump-table displacement inside the probe match
-// (the offset from the match to the `call` the arm writes) and the case body.
-struct SpawnCase final
-{
-	std::uint32_t dispatchOffset;
-	void (*body)();
-};
-constexpr SpawnCase kSpawnCases[] = {
-	{0x24u, &abi_spawns_case_0x24},
-	{0x3Du, &abi_spawns_case_0x3D},
-	{0x56u, &abi_spawns_case_0x56},
-	{0x6Fu, &abi_spawns_case_0x6F},
-	{0x88u, &abi_spawns_case_0x88},
-	{0x9Eu, &abi_spawns_case_0x9E},
-	{0xB4u, &abi_spawns_case_0xB4},
-	{0xCAu, &abi_spawns_case_0xCA},
-	{0xE0u, &abi_spawns_case_0xE0},
-	{0xF6u, &abi_spawns_case_0xF6},
-};
-
-void PublishDualVehicleHeadlights(const PatchContext& ctx)
-{
-	Trace("publish DualVehicleHeadlights");
-	if (ctx.Option("DualVehicleHeadlights", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		// The match is the CVehicle light-update call site (1.0.8.0 0x8F7CE5 in
-		// sub_8F7590: `mov edx,[edi]; mov eax,[edx+0x64]; call eax`). Each
-		// displacement lands on one instruction of that function:
-		//   +207 `push offset unk_1252D90` operand (the light-state global)
-		//   +140 `call CPlayer::getPlayerPed` operand, +144 its next instruction
-		//   +151 `call CVehicle::isDriver` operand,    +155 its next instruction
-		//   +331 `call sub_8F7080` operand,            +335 its next instruction
-		//   +338 the `pop edi` the body resumes at
-		if (auto pattern = Pattern(image, "8B 17 8B 42 64 8B CF FF D0 8B 54"); pattern.size() > 0)
-		{
-			zpatch_dual_bcc = *pattern.get(0).get<std::uint32_t>(207);
-			zpatch_dual_bd4 = MatchTarget(pattern, 331, 335);
-			zpatch_dual_bd0 = MatchTarget(pattern, 140, 144);
-			zpatch_dual_be4 = MatchTarget(pattern, 151, 155);
-			zpatch_dual_be0 = MatchAddress(pattern, 338);
-		}
-	}
+    // The model tables the popup, siren and wheel-angle arms fill, and the size
+    // the light-table API exposes them at.
+    inline constexpr size_t kModelTableSlots = 512;
 }
 
-void PublishHighFPSBikePhysicsFix(const PatchContext& ctx)
+namespace opp
 {
-	Trace("publish HighFPSBikePhysicsFix");
-	if (ctx.Option("HighFPSBikePhysicsFix", "1"))
-	{
-		const GameImage& image = ctx.image;
+    // The width of the direct-mapped memos below.
+    inline constexpr size_t kMemoSlots = 64;
 
-		if (auto pattern = Pattern(image, "D9 45 08 51 8B CE D9 1C 24 E8 ? ? ? ? 8A 86 90 14 00 00"); pattern.size() > 0)
-		{
-			zpatch_bike_resume = MatchAddress(pattern, 9);
-		}
-	}
-}
+    // GameHash("popuplights"): the one model hash the popup checker and the
+    // light-table selector both resolve before anything else.
+    inline constexpr uint32_t kPopupLightsModelHash = 0xEB9F21D3u;
 
-void PublishNoLiveryLimit(const PatchContext& ctx)
-{
-	Trace("publish NoLiveryLimit");
-	if (ctx.Option("NoLiveryLimit", "1"))
-	{
-		const GameImage& image = ctx.image;
+    // The light tables store degrees; the bodies and the selector consume radians.
+    constexpr float DegreesToRadians(double degrees) noexcept
+    {
+        return static_cast<float>(degrees * std::numbers::pi / 180.0);
+    }
+}  // namespace opp
 
-		if (auto pattern = Pattern(image, "74 52 8D B5 3C 01 00 00 83 FB 04"); pattern.size() > 0)
-		{
-			zpatch_nolivery_fn = MatchTarget(pattern, -6, -2);
-			zpatch_nolivery_resume_d = MatchAddress(pattern, 90);
-		}
+// 32-bit only: the hook bodies and the readable helpers they call. The x64 parity
+// dump resolves the body names to the original VAs instead of linking them.
+#if !defined(_WIN64)
 
-		if (auto pattern = Pattern(image, "8B 8C 83 3C 01 00 00 0F BF 53 48"); pattern.size() > 0)
-		{
-			zpatch_nolivery_resume = MatchAddress(pattern, 13);
-		}
+using namespace opp;
 
-		if (auto pattern = Pattern(image, "8D AF 3C 01 00 00 8D 54 24 20"); pattern.size() > 0)
-		{
-			zpatch_nolivery_fn = MatchTarget(pattern, -8, -4);
-			zpatch_nolivery_resume_d = MatchAddress(pattern, 84);
-		}
-	}
-}
-
-void PublishCarPartsShadowFix(const PatchContext& ctx)
-{
-	Trace("publish CarPartsShadowFix");
-	if (ctx.Option("CarPartsShadowFix", "1") || ctx.Option("CarDynamicShadowFix", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "85 DB 7E 41 55 EB 0A"); pattern.size() > 0)
-		{
-			zpatch_carparts_resume_if = MatchAddress(pattern, 2);
-			zpatch_carparts_resume_else = MatchAddress(pattern, 69);
-		}
-	}
-}
-
-void PublishForceCarHeadlightShadows(const PatchContext& ctx)
-{
-	Trace("publish ForceCarHeadlightShadows");
-	if (ctx.Option("ForceCarHeadlightShadows", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "55 8B EC 83 E4 F0 81 EC D4 00 00 00 8B 45 20 8B"); pattern.size() > 0)
-		{
-			zpatch_fchs_resume = MatchAddress(pattern, 12);
-		}
-	}
-}
-
-void PublishFreezeCarFix(const PatchContext& ctx)
-{
-	Trace("publish FreezeCarFix");
-	// The recovered gate is keyed on the first pattern, so
-	// one scan both gates and supplies its match.
-	if (ctx.Option("FreezeCarFix", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto primary = Pattern(image, "32 DB 8B 54 24 24 52 E8 ? ? ? ? 8B F0");
-		    primary.size() > 0)
-		{
-			zpatch_spawns_orig_a = MatchTarget(primary, 8, 12);
-
-			if (auto pattern = Pattern(image, "8B 4C 24 28 8B 54 24 24 50 51 52 E8 ? ? ? ? 5F 5E 5D 5B"); pattern.size() > 0)
-			{
-				zpatch_spawns_orig_b = MatchTarget(pattern, 12, 16);
-			}
-
-			if (auto pattern = Pattern(image, "E9 A1 02 00 00 83 FF 09 0F 87 F2 00 00 00");
-			    pattern.size() > 0)
-			{
-				// The probe's ten jump-table arms, in case order 0..9; each value is
-				// the arm's resume address in the probe's dispatch table.
-				zpatch_spawns_case0_resume = MatchTarget(pattern, 37, 41);
-				zpatch_spawns_case1_resume = MatchTarget(pattern, 62, 66);
-				zpatch_spawns_case2_resume = MatchTarget(pattern, 87, 91);
-				zpatch_spawns_case3_resume = MatchTarget(pattern, 112, 116);
-				zpatch_spawns_case4_resume = MatchTarget(pattern, 137, 141);
-				zpatch_spawns_case5_resume = MatchTarget(pattern, 159, 163);
-				zpatch_spawns_case6_resume = MatchTarget(pattern, 181, 185);
-				zpatch_spawns_case7_resume = MatchTarget(pattern, 203, 207);
-				zpatch_spawns_case8_resume = MatchTarget(pattern, 225, 229);
-				zpatch_spawns_case9_resume = MatchTarget(pattern, 247, 251);
-			}
-		}
-	}
-}
-
-void PublishCarDynamicShadowFix(const PatchContext& ctx)
-{
-	Trace("publish CarDynamicShadowFix");
-	if (ctx.Option("CarDynamicShadowFix", "0"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "56 6A 02 53 53 57 E8 ?? ?? ?? ?? 56 6A 02 6A 04 6A 05 57 E8"); pattern.size() > 0)
-		{
-			zpatch_carparts_resume_2 = MatchAddress(pattern, 11);
-			zpatch_carparts_shadow_fn = MatchTarget(pattern, 7, 11);
-		}
-
-		if (auto pattern = Pattern(image, "56 6A 02 6A 00 6A 00 57 E8 ? ? ? ? 56 6A 02 6A 04 6A 05 57 E8"); pattern.size() > 0)
-		{
-			zpatch_carparts_resume_2 = MatchAddress(pattern, 13);
-			zpatch_carparts_shadow_fn = MatchTarget(pattern, 9, 13);
-		}
-	}
-}
-
-void PublishGarageModelFix(const PatchContext& ctx)
-{
-	Trace("publish GarageModelFix");
-	if (ctx.Option("GarageModelFix", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "8B 57 20 D9 42 34 D9 5E 04 8B 47 20"); pattern.size() > 0)
-		{
-			zpatch_garage_resume_a = MatchAddress(pattern, 6);
-		}
-
-		if (auto pattern = Pattern(image, "0F B7 0E 50 51 E8"); pattern.size() > 0)
-		{
-			zpatch_garage_resume_b = MatchAddress(pattern, 5);
-		}
-	}
-}
+#include "body_helpers.inc"
 
 namespace
 {
-// The three steering/engine/plane options publish the same three slots and
-// install the same three sites (the shared sub_10004C70 consumer plus the two
-// detours); only their INI keys differ.
-void PublishSteerSlots(const PatchContext& ctx)
+    // ----- CVehicle / CHandlingData views ------------------------------------
+    // The CVehicle prefix these bodies read; 0x0E18 points at the handling block
+    // whose steerLock is the steering-lock divisor. The structs are views over
+    // live game memory and are never constructed; the offsets live in the
+    // padding, where the layout is declared.
+    struct VehicleHandling final
+    {
+        std::byte pad_0000[132];  // steerLock at 0x0084
+        float steerLock;  // 0x0084
+    };
+
+    struct VehicleView final
+    {
+        std::byte pad_0000[46];  // modelIndex at 0x002E
+        int16_t modelIndex;  // 0x002E
+        std::byte pad_0030[3560];  // handling at 0x0E18
+        VehicleHandling* handling;  // 0x0E18
+        std::byte pad_0E1C[328];  // kind at 0x0F64
+        uint32_t kind;  // 0x0F64: 5 = plane
+        std::byte pad_0F68[352];  // rpm at 0x10C8
+        float rpm;  // 0x10C8
+        std::byte pad_10CC[12];  // steerAngle at 0x10D8
+        float steerAngle;  // 0x10D8
+        std::byte pad_10DC[632];  // engineState at 0x1354
+        uint32_t engineState;  // 0x1354
+        std::byte pad_1358[2984];  // heave at 0x1F00
+        float heave;  // 0x1F00
+        float roll;   // 0x1F04
+        float pitch;  // 0x1F08
+        std::byte pad_1F0C[48];  // suspensionTravel at 0x1F3C
+        float suspensionTravel;  // 0x1F3C
+    };
+
+    // ----- MovingPlaneParts -------------------------------------------------
+    // The component ids the arm hands to the published setter; 96/97 are the
+    // pitch pair, 94/95 both negate roll, 93 is heave, and the travel surfaces
+    // are called 89, 91, 90, 92 in that order (the original's, not sorted).
+    enum : uint8_t
+    {
+        kPartTravelA = 89,
+        kPartTravelB = 91,
+        kPartTravelC = 90,
+        kPartTravelD = 92,
+        kPartHeave = 93,
+        kPartRollA = 94,
+        kPartRollB = 95,
+        kPartPitchUp = 96,
+        kPartPitchDown = 97,
+        kPartModeAttitude = 3,
+        kPartModeTravel = 4,
+        kPartModeHeave = 5,
+    };
+
+    // One row per call the arm makes. A travel row (attitude == nullptr) scales
+    // the script float by the suspension travel; an attitude row takes half the
+    // named body angle with the signed gain applied.
+    struct PlanePartCall final
+    {
+        uint8_t part;
+        uint8_t mode;
+        float VehicleView::* attitude;
+        double gain;
+        uint8_t flags;  // the setter's fifth argument: 0 for travel, 1 for attitude
+    };
+
+    constexpr PlanePartCall kPlanePartCalls[] = {
+        {kPartTravelA, kPartModeTravel, nullptr, 1.0, 0},
+        {kPartTravelB, kPartModeTravel, nullptr, 1.0, 0},
+        {kPartTravelC, kPartModeTravel, nullptr, 1.0, 0},
+        {kPartTravelD, kPartModeTravel, nullptr, 1.0, 0},
+        {kPartPitchUp, kPartModeAttitude, &VehicleView::pitch, +0.5, 1},
+        {kPartPitchDown, kPartModeAttitude, &VehicleView::pitch, -0.5, 1},
+        {kPartRollA, kPartModeAttitude, &VehicleView::roll, -0.5, 1},
+        {kPartRollB, kPartModeAttitude, &VehicleView::roll, -0.5, 1},
+        {kPartHeave, kPartModeHeave, &VehicleView::heave, +0.5, 1},
+    };
+
+    // ----- other named offsets ----------------------------------------------
+    // strnicmp(text, "wheelangle:", 11), then strtof(text + 11).
+    constexpr std::string_view kWheelAnglePrefix = "wheelangle:";
+
+    // ----- Memo -------------------------------------------------------------
+    // A direct-mapped memo of a pure key -> value function. The slot is
+    // (key * 2654435761) >> (32 - log2(Slots)), so a collision only costs a
+    // recomputation. Function-local instances of this type are
+    // constant-initialised, which keeps them free of CRT/TLS-backed static init.
+    template <typename Value, size_t Slots>
+    class Memo final
+    {
+    public:
+        bool Get(uint32_t key, Value& out) const noexcept
+        {
+            const Slot& slot = slots_[SlotFor(key)];
+            if (slot.valid == 0u || slot.key != key)
+                return false;
+            out = slot.value;
+            return true;
+        }
+
+        void Put(uint32_t key, const Value& value) noexcept
+        {
+            Slot& slot = slots_[SlotFor(key)];
+            slot.key = key;
+            slot.value = value;
+            slot.valid = 1u;
+        }
+
+    private:
+        static_assert(std::has_single_bit(Slots), "Memo needs a power-of-two slot count");
+        static constexpr size_t kShift = 32u - static_cast<size_t>(std::bit_width(Slots - 1));
+
+        struct Slot final
+        {
+            uint32_t key{};
+            Value value{};
+            uint8_t valid{};
+        };
+
+        static size_t SlotFor(uint32_t key) noexcept
+        {
+            // The Knuth 2^32/phi multiplier: the slot is the top kShift bits.
+            return static_cast<size_t>(key * 2654435761u) >> kShift;
+        }
+
+        std::array<Slot, Slots> slots_{};
+    };
+}  // namespace
+
+extern "C"
 {
-	const GameImage& image = ctx.image;
 
-	if (auto pattern = Pattern(image, "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"); pattern.size() > 0)
-	{
-		zpatch_steer_resume = MatchAddress(pattern, 16);
-		zpatch_steer_vtable_fn = MatchTarget(pattern, 423, 427);
-	}
+// Hook bodies: the machine-level entry points the arms below install. The
+// definitions are in the marked hook-body section at the end of this unit; they
+// are declared here because the arms take their addresses.
+void abi_popup_headlights();
+void abi_popup_headlights_edx();
+void abi_steer_detour_eax();
+void abi_steer_detour_edx();
+void abi_nolivery_a();
+void abi_nolivery_b();
+void abi_nolivery_c();
+void abi_nolivery_d();
+void abi_nolivery_e();
+void abi_copsirens_a();
+void abi_copsirens_b();
+void abi_copsirens_ide();
+void abi_bike_physics_detour();
 
-	if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
-	{
-		zpatch_steer_resume = MatchAddress(pattern, 16);
-		zpatch_steer_vtable_fn = MatchTarget(pattern, 140, 144);
-	}
+// HighFPSBikePhysicsFix helper (original sub_1001EF30): clamp zpatch_bike_value
+// below 0.006666666665 to 0x3BDA740E. SSE in the original.
+void abi_bike_physics_helper() noexcept
+{
+    float value = 0.0f;
+    std::memcpy(&value, &zpatch_bike_value, sizeof(value));
+    // The floor is the float 0.0066666667 (its bits live in opp.common); the
+    // recovered threshold is a double, so the comparison widens value.
+    if (0.006666666665 > static_cast<double>(value))
+        zpatch_bike_value = std::bit_cast<uint32_t>(kBikePhysicsFloor);
+}
 
-	if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
-	{
-		zpatch_ide_hook_slot = MatchAddress(pattern, -1);
-	}
+// PopupHeadlightsFlag checker (original sub_10044310), called between
+// pushad/popad: look up the popuplights hash, walk the +popuplights list, then
+// copy the last matching [PopupLightAngles] angle (starts at pi/2). A failed
+// lookup leaves -1, which matches a model of -1, as in the original.
+namespace
+{
+// PopupAngleFor: the [PopupLightAngles] table is loaded once at startup, so the
+// angle a matching model maps to is remembered instead of rescanning all 512
+// entries on every matching vehicle. The original takes the *last* matching
+// entry, which the forward scan below keeps.
+uint32_t PopupAngleFor(uint32_t hash) noexcept
+{
+    static Memo<uint32_t, kMemoSlots> angle_memo;
+    uint32_t bits = 0;
+    if (angle_memo.Get(hash, bits))
+        return bits;
+    bits = std::bit_cast<uint32_t>(kHalfPi);  // the caller's default
+    for (uint32_t i = 0; i < kModelTableSlots; ++i)
+    {
+        if (zpatch_popup_hashes[i] != 0u && zpatch_popup_hashes[i] == hash)
+            std::memcpy(&bits, &zpatch_popup_angles[i], sizeof(bits));
+    }
+    angle_memo.Put(hash, bits);
+    return bits;
 }
 }  // namespace
 
-void PublishMovingSteeringWheelSupport(const PatchContext& ctx)
+void abi_popup_check() noexcept
 {
-	Trace("publish MovingSteeringWheelSupport");
-	if (ctx.Option("MovingSteeringWheelSupport", "1"))
-		PublishSteerSlots(ctx);
+    const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
+        static_cast<uintptr_t>(zpatch_model_lookup));
+    zpatch_popup_angle = std::bit_cast<uint32_t>(kHalfPi);  // dword_101580CC
+    zpatch_popup_flag = 0;                                 // dword_1015BE24
+    if (lookup == nullptr)
+        return;  // a preamble miss is a clean skip
+    // PopupLookupCache: a model hash resolves to a model index once, because the
+    // registry is static after load. Direct-mapped; a collision re-resolves.
+    static Memo<int32_t, kModelTableSlots> resolve_memo;
+    const auto resolve = [&](uint32_t hash) -> int32_t
+    {
+        int32_t resolved = -1;
+        if (resolve_memo.Get(hash, resolved))
+            return resolved;
+        lookup(hash, &resolved);  // sub_10044310's call is unguarded by default
+        resolve_memo.Put(hash, resolved);
+        return resolved;
+    };
+    // The popuplights hash is the one the original resolves and compares first
+    // (FUN_1001ad20).
+    int32_t out = resolve(kPopupLightsModelHash);
+    zpatch_popup_index = static_cast<uint32_t>(out);  // dword_1015BE1C
+    if (out == static_cast<int32_t>(zpatch_popup_model))
+    {
+        zpatch_popup_flag = 1;
+        return;
+    }
+    for (uint32_t i = 0; i < kModelTableSlots; ++i)
+    {
+        const uint32_t hash = zpatch_popuplights_models[i];
+        if (hash == 0u) return;
+        out = resolve(hash);
+        if (out != static_cast<int32_t>(zpatch_popup_model)) continue;
+        zpatch_popup_flag = 1;
+        zpatch_popup_angle = PopupAngleFor(hash);
+        return;
+    }
 }
 
-void PublishShakingEngineBlock(const PatchContext& ctx)
+// MovingSteeringWheelSupport / ShakingEngineBlock / MovingPlaneParts.
+// abi_vehicle_component is the original sub_10003F40: a name lookup in the
+// model registry (entries at [registry], stride 0xE0, count +0x14, name +0,
+// bone id +0x14). abi_steer_body is the shared consumer (original
+// sub_10004C70), called between pushad/popad by the two detours.
+const void* abi_vehicle_component(const void* registry,
+                                  const char* name) noexcept
 {
-	Trace("publish ShakingEngineBlock");
-	if (ctx.Option("ShakingEngineBlock", "1"))
-		PublishSteerSlots(ctx);
+    // sub_10003F40 dereferences the registry and each candidate name unguarded;
+    // the default-on failsafes below keep a missing table out of the body.
+    if (registry == nullptr) return nullptr;
+    const auto* entries = *reinterpret_cast<const uint8_t* const*>(registry);
+    if (entries == nullptr) return nullptr;
+    // The registry's component count is its uint16 at +0x14.
+    const auto count = *reinterpret_cast<const uint16_t*>(
+        static_cast<const uint8_t*>(registry) + 20);
+    for (uint16_t i = 0; i < count; ++i)
+    {
+        // A component entry is 0xE0 bytes.
+        const auto* entry = entries + static_cast<size_t>(i) * 224;
+        const char* candidate = *reinterpret_cast<const char* const*>(entry);
+        if (candidate == nullptr) continue;
+        if (_stricmp(candidate, name) == 0) return entry;
+    }
+    return nullptr;
 }
 
-void PublishMovingPlaneParts(const PatchContext& ctx)
+uint32_t abi_steer_body() noexcept
 {
-	Trace("publish MovingPlaneParts");
-	if (ctx.Option("MovingPlaneParts", "1"))
-		PublishSteerSlots(ctx);
+    auto* const vehicle = reinterpret_cast<VehicleView*>(
+        static_cast<uintptr_t>(zpatch_steer_vehicle));
+    if (vehicle == nullptr) return 0;
+
+    using BoneFn = uint32_t*(__thiscall*)(void*, uint32_t);
+    using SetFn = void(__thiscall*)(uint32_t*, float);
+    using PartFn = void(__thiscall*)(void*, int, int, float, int, int, int);
+    const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
+        static_cast<uintptr_t>(zpatch_model_lookup));
+    const auto get_bone = GameFunction<BoneFn>(
+        static_cast<uintptr_t>(zpatch_pre_fn_59b88));
+    const auto set_a = GameFunction<SetFn>(
+        static_cast<uintptr_t>(zpatch_pre_fn_5d63c));
+    const auto set_b = GameFunction<SetFn>(
+        static_cast<uintptr_t>(zpatch_pre_fn_59cdc));
+    const auto part_call = GameFunction<PartFn>(
+        static_cast<uintptr_t>(zpatch_steer_vtable_fn));
+
+    // The moving-parts body calls four game functions and the model lookup; a
+    // missing preamble pointer or a vehicle whose vtable slot was not published
+    // would fault in the original. The clean skip returns 0, which the resume
+    // reads as "no component moved this frame".
+    if (zpatch_failsafe_skip("moving-parts model lookup", lookup == nullptr) ||
+        zpatch_failsafe_skip("moving-parts bone lookup", get_bone == nullptr) ||
+        zpatch_failsafe_skip("moving-parts setter A", set_a == nullptr) ||
+        zpatch_failsafe_skip("moving-parts setter B", set_b == nullptr) ||
+        zpatch_failsafe_skip("moving-parts component call", part_call == nullptr))
+        return 0;
+
+    // sub_10003980's script float: the context's +0x0E field holds the slot
+    // offset, the slot lives at ctx+offset+0x18 and the float at slot+8. It is
+    // resolved on every read as the original does. The slot itself is what the arm
+    // returns; an empty slot reads as 0 (the original dereferences it - the folded
+    // guard is this tree's failsafe).
+    constexpr size_t kScriptFloatOffset = 8;
+    const auto script_slot = [&]() -> const uint32_t*
+    {
+        const uint32_t ctx = zpatch_script_resolve(zpatch_salt_3c);
+        if (ctx == 0u) return nullptr;
+        const uint32_t offset = *reinterpret_cast<const uint32_t*>(
+            static_cast<uintptr_t>(ctx) + 14);
+        const uint32_t slot = *reinterpret_cast<const uint32_t*>(
+            static_cast<uintptr_t>(ctx) + offset + 24);
+        if (slot == 0u) return nullptr;
+        return reinterpret_cast<const uint32_t*>(static_cast<uintptr_t>(slot));
+    };
+    const auto script_float = [&]() -> float
+    {
+        const uint32_t* slot = script_slot();
+        if (slot == nullptr) return 0.0f;
+        return *reinterpret_cast<const float*>(
+            reinterpret_cast<uintptr_t>(slot) + kScriptFloatOffset);
+    };
+    // 4x4 identity: the three diagonal entries are the float 1.0.
+    constexpr uint32_t kIdentityOne = std::bit_cast<uint32_t>(1.0f);
+    static_assert(kIdentityOne == 0x3F800000u);
+    const auto identity = [](uint32_t* m)
+    {
+        m[0] = kIdentityOne;
+        m[1] = 0;
+        m[2] = 0;
+        m[4] = 0;
+        m[5] = kIdentityOne;
+        m[6] = 0;
+        m[8] = 0;
+        m[9] = 0;
+        m[10] = kIdentityOne;
+    };
+    const auto bone_matrix = [&](int16_t model, const char* name) -> uint32_t*
+    {
+        const auto base = static_cast<uintptr_t>(zpatch_pre_ped_array);
+        if ((base == 0u || model < 0)) return nullptr;
+        const uint32_t ped = *reinterpret_cast<const uint32_t*>(
+            base + 4u * static_cast<uint32_t>(model));
+        if (ped == 0u) return nullptr;
+        // The chain is ped -> [ped+0x8] -> [+0xB4] -> [+0xC]; each link is a
+        // pointer the original dereferences unguarded.
+        const uint32_t p1 = *reinterpret_cast<const uint32_t*>(
+            static_cast<uintptr_t>(ped) + 8);
+        if (p1 == 0u) return nullptr;
+        const uint32_t p2 = *reinterpret_cast<const uint32_t*>(
+            static_cast<uintptr_t>(p1) + 180);
+        if (p2 == 0u) return nullptr;
+        const uint32_t registry = *reinterpret_cast<const uint32_t*>(
+            static_cast<uintptr_t>(p2) + 12);
+        if (registry == 0u) return nullptr;
+        const auto* entry = static_cast<const uint8_t*>(abi_vehicle_component(
+            reinterpret_cast<const void*>(static_cast<uintptr_t>(registry)), name));
+        if (entry == nullptr) return nullptr;  // the original's own `if (v6)` check
+        // sub_10004C70 0x10004D4A calls get_bone unguarded (it is null only when
+        // the loader's preamble missed).
+        // The component entry's bone id is its uint16 at +0x14.
+        const uint32_t bone = *reinterpret_cast<const uint16_t*>(entry + 20);
+        return get_bone(vehicle, bone);
+    };
+
+    // The steering block reads the vehicle's handling block; the original
+    // dereferences it unguarded, so the default-on check skips the block while
+    // there is none. There is no selectable guard-off path in this tree.
+    const int16_t steer_model = vehicle->modelIndex;
+    const VehicleHandling* const handling = vehicle->handling;
+    if (zpatch_flag_steering && handling != nullptr)
+    {
+        const int16_t model = steer_model;
+        const float steering = vehicle->steerAngle;
+        const float lock = handling->steerLock;
+        const float turn = static_cast<float>(
+            static_cast<double>(steering / lock) * -std::numbers::pi);
+        // SteerLookupCache: the wheelangle table is static after startup, so a
+        // model's tilt is stable. Direct-mapped by model; a collision re-walks.
+        static Memo<float, kMemoSlots> tilt_memo;
+        float tilt = 0.0f;
+        const uint32_t tilt_key = static_cast<uint32_t>(static_cast<uint16_t>(model));
+        if (!tilt_memo.Get(tilt_key, tilt))
+        {
+            for (uint32_t i = 0; i < kModelTableSlots; ++i)
+            {
+                const uint32_t hash = zpatch_wheelangle_models[i];
+                if (hash == 0u) break;
+                int32_t resolved = -1;
+                lookup(hash, &resolved);  // sub_10004C70 0x10004CE7: unconditional
+                if (resolved == model)
+                {
+                    tilt = DegreesToRadians(zpatch_wheelangle_angles[i]);
+                    break;
+                }
+            }
+            tilt_memo.Put(tilt_key, tilt);
+        }
+        if (model != -1)
+        {
+            uint32_t* matrix = bone_matrix(model, "steeringwheel");
+            if (matrix != nullptr)
+            {
+                identity(matrix);
+                if (set_a) set_a(matrix, tilt);
+                if (set_b) set_b(matrix, turn);
+            }
+        }
+    }
+    if (zpatch_flag_engine)
+    {
+        // Engine-state bits: 3 is "started"; 4 is the original's "running" flag,
+        // which forces the block-shake scale to 1. The phase walks with a signed
+        // step and a direction deadband; the shake scales from the rpm.
+        constexpr double kEnginePhaseStep = 0.5;
+        constexpr double kEnginePhaseDeadband = 0.01;
+        if (zpatch_engine_last_timestep != script_float())
+        {
+            const double step =
+                zpatch_engine_descending ? -kEnginePhaseStep : kEnginePhaseStep;
+            const float phase = static_cast<float>(
+                static_cast<double>(script_float()) * step +
+                static_cast<double>(zpatch_engine_phase));
+            zpatch_engine_phase = phase;
+            uint8_t direction = zpatch_engine_descending;
+            if (static_cast<double>(phase) > kEnginePhaseDeadband) direction = 1;
+            if (static_cast<double>(phase) < -kEnginePhaseDeadband) direction = 0;
+            zpatch_engine_descending = direction;
+        }
+        const int16_t model = vehicle->modelIndex;
+        if (model != -1)
+        {
+            uint32_t* matrix = bone_matrix(model, "engineblock");
+            if (matrix != nullptr)
+            {
+                identity(matrix);
+                const uint32_t flags = vehicle->engineState;
+                float scale = 0.0f;
+                if ((flags & (1u << 3)) != 0u)
+                {
+                    scale = static_cast<float>(
+                        static_cast<double>(vehicle->rpm) * 0.75 + 0.25);
+                }
+                if ((flags & (1u << 4)) != 0u) scale = 1.0f;
+                if (set_b) set_b(matrix, scale * zpatch_engine_phase);
+            }
+        }
+    }
+    // MovingPlaneParts: one call per row, in the table's (original) order. The
+    // travel rows each resolve the script float; the attitude rows read their
+    // body angle when they run. The gate is the kind dword's plane value.
+    if (zpatch_flag_plane && vehicle->kind == 5 && part_call != nullptr)
+    {
+        const float travel = vehicle->suspensionTravel;
+        for (const PlanePartCall& part : kPlanePartCalls)
+        {
+            const float value =
+                part.attitude == nullptr
+                    ? script_float() * travel * 100.0f
+                    : static_cast<float>(
+                          static_cast<double>(vehicle->*(part.attitude)) * part.gain);
+            part_call(vehicle, part.part, part.mode, value, part.flags, 0, 0);
+        }
+    }
+    // Unconditional tail: snapshot the last script timestep and return its slot.
+    const uint32_t* slot = script_slot();
+    if (slot == nullptr)
+    {
+        zpatch_engine_last_timestep = 0.0f;
+        return 0;
+    }
+    const float last = *reinterpret_cast<const float*>(
+        reinterpret_cast<uintptr_t>(slot) + kScriptFloatOffset);
+    zpatch_engine_last_timestep = last;
+    return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(slot));
 }
 
-void ApplyBikeFeetFix(const PatchContext& ctx)
+// NoLiveryLimit helpers (sub_1003D220 / sub_1003D2F0 / sub_1003D270). The naked
+// shims stash their register inputs in globals, call a compiled helper, then
+// tail-jump to the handler-published resume. The count helper calls the
+// published function as `__thiscall(this, hash)`.
+extern "C" void abi_nolivery_hash_sign()  // sub_1003D220
 {
-	Trace("BikeFeetFix");
-	if (ctx.Option("BikeFeetFix", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "39 82 54 13 00 00 0F 85 94 04 00 00"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeNOP(match + 12, 12, true); //nop
-		}
-	}
+    char buffer[64];
+    // Original: sprintf(buffer, 0x40, "%s_sign_%d", name, index + 1).
+    zpatch_spawns_sprintf(
+        buffer, sizeof(buffer), "%s_sign_%d",
+        reinterpret_cast<const char*>(static_cast<uintptr_t>(zpatch_nolivery_name)),
+        static_cast<int>(zpatch_nolivery_index) + 1);
+    zpatch_nolivery_hash = GameHash(buffer);
+    zpatch_cookie_tail();
+}
+extern "C" void abi_nolivery_copy_name()  // sub_1003D2F0
+{
+    // push [bufptr]; push 0x10; push [dest]; call [strcpy_s]; add esp,0xc; ret.
+    // Reads both globals unguarded and has no /GS cookie tail (leaf).
+    char* const dst = reinterpret_cast<char*>(static_cast<uintptr_t>(zpatch_nolivery_dest));
+    const char* const src =
+        reinterpret_cast<const char*>(static_cast<uintptr_t>(zpatch_nolivery_bufptr));
+    // The original copies into a 16-byte name buffer (sub_1003D2F0 pushes 0x10
+    // as the strcpy_s destination size).
+    zpatch_secure_strcpy_s(dst, 16, src);
+}
+extern "C" void abi_nolivery_count_loop()  // sub_1003D270
+{
+    using LookupFn = int(__fastcall*)(void* self, int, uint32_t hash);
+    const auto fn = GameFunction<LookupFn>(static_cast<uintptr_t>(zpatch_nolivery_fn));
+    void* const self = reinterpret_cast<void*>(static_cast<uintptr_t>(zpatch_nolivery_arg));
+    const char* const name =
+        reinterpret_cast<const char*>(static_cast<uintptr_t>(zpatch_nolivery_bufptr));
+    zpatch_nolivery_count = 0;
+    for (uint32_t i = 1;; ++i)
+    {
+        char buffer[64];
+        zpatch_spawns_sprintf(buffer, sizeof(buffer), "%s_sign_%d", name,
+                              static_cast<int>(i));
+        const int result = fn ? fn(self, 0, GameHash(buffer)) : 0;
+        if (result == 0) break;
+        zpatch_nolivery_count = i;
+    }
+    zpatch_cookie_tail();
 }
 
-void ApplyBikePhoneAnimsFix(const PatchContext& ctx)
+// CopSirensFlag helpers (sub_10005F70 / sub_10006260) and the reimplemented IDE
+// parser (sub_10003FA0). The shims stash the model index, run the check and tail-
+// jump to the resume; the IDE hook fills the model-hash tables the checks read.
+extern "C" int abi_copsirens_check_a()  // sub_10005F70
 {
-	Trace("BikePhoneAnimsFix");
-	if (ctx.Option("BikePhoneAnimsFix", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "80 BE 18 02 00 00 00 0F 85 36 01 00 00 80 BE"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeNOP(match + 33, 6, true); //nop
-		}
-	}
+    static const char* const kPolice[] =
+    {
+            "police",     "police2",    "police3",  "police4",   "noose",      "pstockade",
+            "nstockade",  "polpatriot", "fbi",      "n_police",  "n_police2",  "n_polpatriot",
+            "n_pstockade", nullptr};
+    const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
+        static_cast<uintptr_t>(zpatch_model_lookup));
+    const int32_t index = static_cast<int32_t>(zpatch_copsirens_index);
+    zpatch_copsirens_flag = 0;
+    // sub_10005F70's `call dword_10159C0C` is unguarded. A missing lookup
+    // answers "not a police car", which leaves the siren decision un-patched.
+    if (zpatch_failsafe_skip("CopSirensFlag model lookup", lookup == nullptr))
+        return 0;
+    for (int i = 0; kPolice[i]; ++i)
+    {
+        int32_t out = -1;
+        lookup(GameHash(kPolice[i]), &out);
+        if (out == index)
+        {
+            zpatch_copsirens_flag = 1;
+            return 1;
+        }
+    }
+    // Original sub_10005F70 re-stores the flag before the models loop
+    // (mov eax,[0x10159B80]; ...; mov [0x10159B80],eax); keep the store.
+    {
+        volatile uint32_t* flag = &zpatch_copsirens_flag;
+        *flag = *flag;
+    }
+    for (uint32_t i = 0; i < kModelTableSlots && zpatch_copsirens_models[i]; ++i)
+    {
+        int32_t out = -1;
+        lookup(zpatch_copsirens_models[i], &out);
+        if (out == index)
+        {
+            zpatch_copsirens_flag = 1;
+            return 1;
+        }
+    }
+    return 0;
 }
-void ApplyEpisodicVehicleSupport(const PatchContext& ctx)
+extern "C" int abi_copsirens_check_b()  // sub_10006260
 {
-	Trace("EpisodicVehicleSupport");
-	if (ctx.Option("EpisodicVehicleSupport", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		// The original wrote these four slots by RVA (0x021500/0x7D91AE on 1.0.7.0,
-		// 0x095040/0x684ABE on 1.0.8.0); the recovered signatures are unique on every gated
-		// build, so scanning reaches the same site with the same bytes.
-		if (ctx.build == GameBuild::v1070)
-		{
-			if (auto pattern = Pattern(image, "44 80 0F ?? 02 75 ?? E8 ?? ?? ?? ?? 3B C3 74 ?? 8D"); pattern.size() > 0)
-			{
-				injector::WriteMemory<std::uint32_t>(pattern.get(0).get<std::uint8_t>(),
-				                                     AddressOf(&zpatch_episode_flag), true); // operand -> our flag
-			}
-			if (auto pattern = Pattern(image, "44 80 0F ?? 02 0F 85 94 00 ?? ?? ?? ?? 24 ?? 85 D2 0F 84 ?? ?? ?? ?? 8B"); pattern.size() > 0)
-			{
-				injector::WriteMemory<std::uint32_t>(pattern.get(0).get<std::uint8_t>(),
-				                                     AddressOf(&zpatch_episode_flag), true); // operand -> our flag
-			}
-		}
-
-		if (ctx.build == GameBuild::v1080)
-		{
-			if (auto pattern = Pattern(image, "54 D7 12 01 02 75 ?? E8 ?? ?? ?? ?? 3B C3 74 ?? 8D"); pattern.size() > 0)
-			{
-				injector::WriteMemory<std::uint32_t>(pattern.get(0).get<std::uint8_t>(),
-				                                     AddressOf(&zpatch_episode_flag), true); // operand -> our flag
-			}
-			if (auto pattern = Pattern(image, "54 D7 12 01 02 0F 85 94 00 ?? ?? ?? ?? 24 ?? 85 D2 0F 84 ?? ?? ?? ?? 8B"); pattern.size() > 0)
-			{
-				injector::WriteMemory<std::uint32_t>(pattern.get(0).get<std::uint8_t>(),
-				                                     AddressOf(&zpatch_episode_flag), true); // operand -> our flag
-			}
-		}
-
-		if (BuildIs(ctx.build,
-		            {GameBuild::v1004, GameBuild::v1060, GameBuild::v1070, GameBuild::v1080,
-		             GameBuild::v1061, GameBuild::v1100, GameBuild::v1110, GameBuild::v1120,
-		             GameBuild::v1130, GameBuild::v12043}))
-		{
-			// The recovered check sites: one NOP run per site, in the original's
-			// row order. The first two rows write every hit of a multi-hit scan.
-			struct EpisodicVehicleSite final
-			{
-				std::string_view signature;
-				std::ptrdiff_t offset;
-				std::size_t length;
-				bool allHits;
-				bool hasSecond;
-				std::ptrdiff_t secondOffset;
-				std::size_t secondLength;
-			};
-			constexpr EpisodicVehicleSite kSites[] = {
-			    {"7C 18 0F BF 4E 2E", -6, 8, true, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 75 17 F3 0F 10 44 24 08", 0, 9, true, false, 0, 0},
-			    {"39 35 ? ? ? ? 75 0E 80 3D", 6, 2, false, false, 0, 0},
-			    {"74 17 83 3D ? ? ? ? 02 75 0E F3 0F 10 05", 2, 9, false, false, 0, 0},
-			    {"7C 22 83 F8 28 75 1D", 0, 2, false, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 0F 8C 0E 05 00 00", 0, 13, false, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 75 08 3B 05", 0, 9, false, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 75 17 F3 0F 10 44 24 0C", 0, 9, false, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 75 1F 8B 44 24 04", 0, 9, false, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 75 21 8B 96 20 08 00 00", 0, 9, false, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 75 24 F6 87 6C 02 00 00 04", 0, 9, false, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 75 35 0F BF 46 2E", 0, 9, false, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 75 38 8B 16", 0, 9, false, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 7C 11 8B 4E", 7, 2, false, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 7C 1F 8B", 7, 2, false, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 7C 26 8B 85 40 0B 00 00", 0, 9, false, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 7C 35 0F BF 43 2E", 0, 9, false, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 7C 43", 7, 2, false, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 7C 4A 0F BF 46 2E", 0, 13, false, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 89 44 24 38", 11, 6, false, false, 0, 0},
-			    {"83 3D ? ? ? ? 02 8A 0D", 0, 7, false, true, 17, 2},
-			    {"83 3D ? ? ? ? 02 F3 0F 10 05 ? ? ? ? F3 0F 11 44 24 20 75 4C", 21, 2, false,
-			     false, 0, 0},
-			    {"8B 56 04 8B 4A 0C 89 4C 24 1C 7C 18", -15, 7, false, true, 10, 2},
-			};
-			for (const EpisodicVehicleSite& site : kSites)
-			{
-				if (auto pattern = Pattern(image, site.signature); pattern.size() > 0)
-				{
-					const std::size_t hits =
-					    site.allHits ? std::min<std::size_t>(pattern.size(), 2u) : 1u;
-					for (std::size_t hit = 0; hit < hits; ++hit)
-					{
-						auto* match = pattern.get(hit).get<std::uint8_t>();
-						injector::MakeNOP(match + site.offset, site.length, true); //nop
-						if (site.hasSecond)
-							injector::MakeNOP(match + site.secondOffset, site.secondLength,
-							                  true); //nop
-					}
-				}
-			}
-		}
-	}
+    const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
+        static_cast<uintptr_t>(zpatch_model_lookup));
+    const int32_t index = static_cast<int32_t>(zpatch_copsirens_index_b);
+    zpatch_copsirens_flag_b = 0;
+    int32_t out = -1;
+    // sub_10006260's `call dword_10159C0C` is unguarded.
+    if (zpatch_failsafe_skip("CopSirensFlag model lookup (B)", lookup == nullptr))
+        return 0;
+    lookup(GameHash("police2"), &out);
+    if (out != index)
+    {
+        if (!zpatch_copsirens_models[0]) return 0;
+        for (uint32_t i = 0; i < kModelTableSlots && zpatch_copsirens_models[i]; ++i)
+        {
+            out = -1;
+            lookup(zpatch_copsirens_models[i], &out);
+            if (out == index)
+            {
+                zpatch_copsirens_flag_b = 1;
+                return 1;
+            }
+        }
+        return 0;
+    }
+    zpatch_copsirens_flag_b = 1;
+    return 1;
+}
+// _strnicmp equivalent: the original's IDE parser takes the case-insensitive
+// prefix branch (strnicmp(v0, "wheelangle:", 0xB)); stops at a NUL like the CRT.
+bool prefix_ci(const char* text, const char* prefix, size_t length) noexcept
+{
+    for (size_t i = 0; i < length; ++i)
+    {
+        const unsigned char a = static_cast<unsigned char>(text[i]);
+        const unsigned char b = static_cast<unsigned char>(prefix[i]);
+        if (a == 0 || b == 0) return a == b;
+        const unsigned char lower_a =
+            (a >= 'A' && a <= 'Z') ? static_cast<unsigned char>(a + 32) : a;
+        const unsigned char lower_b =
+            (b >= 'A' && b <= 'Z') ? static_cast<unsigned char>(b + 32) : b;
+        if (lower_a != lower_b) return false;
+    }
+    return true;
 }
 
-
-void ApplyHighFPSBikePhysicsFix(const PatchContext& ctx)
+extern "C" void abi_ide_parse()  // sub_10003FA0
 {
-	Trace("HighFPSBikePhysicsFix");
-	if (ctx.Option("HighFPSBikePhysicsFix", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "D9 45 08 51 8B CE D9 1C 24 E8 ? ? ? ? 8A 86 90 14 00 00"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_bike_physics_detour), true); //jmp
-		}
-	}
+    // The original tests the string unguarded; a null zpatch_ide_string faults.
+    const char* const str =
+        reinterpret_cast<const char*>(static_cast<uintptr_t>(zpatch_ide_string));
+    // The IDE entry's model index is the dword at +0x3C (not the entity's int16
+    // at +0x2E, hooks.h kModelIndexOffset).
+    const uint32_t model = *reinterpret_cast<const uint32_t*>(
+        reinterpret_cast<const void*>(static_cast<uintptr_t>(zpatch_ide_model) + 60));
+    const auto append = [](uint32_t* array, uint32_t value)
+    {
+        for (uint32_t i = 0; i < kModelTableSlots; ++i)
+        {
+            if (array[i] == value) return;
+            if (array[i] == 0)
+            {
+                array[i] = value;
+                return;
+            }
+        }
+    };
+    // The original's arms are independent `if`s on the same string (the
+    // popuplights block falls through to the siren check), not else-if.
+    if (std::strcmp(str, "popuplights") == 0)
+    {
+        append(zpatch_popuplights_models, model);
+    }
+    if (std::strcmp(str, "siren") == 0)
+    {
+        append(zpatch_copsirens_models, model);
+    }
+    if (prefix_ci(str, kWheelAnglePrefix.data(), kWheelAnglePrefix.size()))
+    {
+        // sub_10003FA0's third arm: strnicmp(...,11) then strtof(text + 11). An
+        // existing model entry is left untouched (the original's scan only breaks
+        // out); the angle is stored only on append.
+        const float angle = std::strtof(str + kWheelAnglePrefix.size(), nullptr);
+        uint32_t bits = 0;
+        std::memcpy(&bits, &angle, sizeof(bits));
+        for (uint32_t i = 0; i < kModelTableSlots; ++i)
+        {
+            if (zpatch_wheelangle_models[i] == model) return;
+            if (zpatch_wheelangle_models[i] == 0)
+            {
+                zpatch_wheelangle_models[i] = model;
+                zpatch_wheelangle_angles[i] = bits;
+                return;
+            }
+        }
+    }
 }
 
-void ApplyInfiniteCarBottomDistance(const PatchContext& ctx)
+}  // extern "C"
+
+#endif  // !defined(_WIN64)
+
+namespace opp::features
 {
-	Trace("InfiniteCarBottomDistance");
-	if (ctx.Option("InfiniteCarBottomDistance", "1"))
-	{
-		const GameImage& image = ctx.image;
+    namespace
+    {
+        // ----- one literal per recovered site ---------------------------------
+        // MovingSteeringWheelSupport / ShakingEngineBlock / MovingPlaneParts all
+        // hook the same two steering calls, and PopupHeadlightsFlag / CopSirensFlag
+        // share the IDE parser slot, so each signature is spelled once.
+        constexpr const char* kSteerEaxPattern =
+            "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0";
+        constexpr const char* kSteerEdxPattern =
+            "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2";
+        constexpr const char* kIdeHookPattern = "0C 83 88 94 00 00 00 04";
+        // The shared IDE parser hook slot is the byte before the match; the arms
+        // that install abi_copsirens_ide jump in ten bytes before it.
+        constexpr ptrdiff_t kIdeHookSlotOffset = -1;
+        constexpr ptrdiff_t kIdeHookInstallOffset = -10;
+        constexpr const char* kPopupEaxPattern = "0F BF 46 2E 3B 05 ? ? ? ? 75 ? A1";
+        constexpr const char* kPopupEdxPattern = "0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1";
+        constexpr const char* kCopSirensCallPattern = "E8 ? ? ? ? C0 E0 ? 32 86 6F 0F 00";
+        constexpr const char* kCopSirensModelPattern = "0F BF 41 2E 39 05";
 
-		if (auto pattern = Pattern(image, "0F 2F D0 76 25 0F 28 C2"); pattern.size() > 0)
-		{
-			// `jmp +0x2A` written as its two bytes (there is no short-jump API).
-			constexpr std::uint8_t kJumpDisplacement = 0x2Au;  // jmp +0x2A
-			auto* site = pattern.get(0).get<std::uint8_t>(3);
-			injector::WriteMemory<std::uint8_t>(site, kShortJmpOpcode, true);     //jmp
-			injector::WriteMemory<std::uint8_t>(site + 1, kJumpDisplacement, true); // +0x2A
-		}
-	}
-}
+        // ----- NOP sites ------------------------------------------------------
+        // One NOP the original installs at a recovered site: `offset` is relative
+        // to the match, `length` the number of bytes.
+        struct NopByteRange final
+        {
+            ptrdiff_t offset;
+            size_t length;
+        };
 
-void ApplyNoLiveryLimit(const PatchContext& ctx)
-{
-	Trace("NoLiveryLimit");
-	if (ctx.Option("NoLiveryLimit", "1"))
-	{
-		const GameImage& image = ctx.image;
+        // One recovered NOP site. `expected` 0 patches the first match; N means
+        // PatternAll + ExpectMatchCount(N) (the P13 rule), so a view with a
+        // different site count installs nothing. `secondary` is {0, 0} when one
+        // NOP is enough, and `countLabel` names a multi-match row in the log.
+        struct NopSite final
+        {
+            const char* signature;
+            NopByteRange primary;
+            NopByteRange secondary;
+            unsigned expected;
+            const char* countLabel;
+        };
 
-		if (auto pattern = Pattern(image, "8B 8C 83 3C 01 00 00 0F BF 53 48"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+        template <size_t Count>
+        void ApplyNopSites(PatchContext& ctx, const NopSite (&sites)[Count])
+        {
+            for (const NopSite& site : sites)
+            {
+                if (site.expected != 0u)
+                {
+                    if (auto pattern = PatternAll(ctx.image, site.signature);
+                        pattern.size() > 0 &&
+                        ExpectMatchCount(pattern, site.expected, site.countLabel))
+                    {
+                        for (size_t match = 0; match < site.expected; ++match)
+                        {
+                            NopAt(ctx,
+                                  pattern.get(match).get<uint8_t>() + site.primary.offset,
+                                  site.primary.length);
+                        }
+                    }
+                    continue;
+                }
+                if (auto pattern = Pattern(ctx.image, site.signature); pattern.size() > 0)
+                {
+                    auto* match = pattern.get(0).get<uint8_t>();
+                    NopAt(ctx, match + site.primary.offset, site.primary.length);
+                    if (site.secondary.length != 0u)
+                        NopAt(ctx, match + site.secondary.offset, site.secondary.length);
+                }
+            }
+        }
 
-			injector::MakeJMP(match - 237, reinterpret_cast<void*>(&abi_nolivery_b), true); //jmp
-			injector::MakeJMP(match - 199, reinterpret_cast<void*>(&abi_nolivery_c), true); //jmp
-			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_nolivery_a), true); //jmp
-		}
+        // Every build except 1.0.0.0 and 1.0.4.0: the episodic arms' recovered gate.
+        constexpr GameBuild kEpisodicBuilds[] = {
+            GameBuild::v1004, GameBuild::v1060, GameBuild::v1070, GameBuild::v1080,
+            GameBuild::v1061, GameBuild::v1100, GameBuild::v1110, GameBuild::v1120,
+            GameBuild::v1130, GameBuild::v12043,
+        };
 
-		if (auto pattern = Pattern(image, "74 52 8D B5 3C 01 00 00 83 FB 04"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+        bool IsEpisodicBuild(GameBuild build) noexcept
+        {
+            for (const GameBuild candidate : kEpisodicBuilds)
+            {
+                if (candidate == build) return true;
+            }
+            return false;
+        }
 
-			injector::MakeJMP(match + 2, reinterpret_cast<void*>(&abi_nolivery_d), true); //jmp
-		}
+        // The episodes' `cmp [zpatch_episode_flag], 2` pointer stores. Each site was
+        // a per-build RVA (0x021500/0x7D91AE on 1.0.7.0, 0x095040/0x684ABE on
+        // 1.0.8.0) and is now its pre-store instruction sequence. The build gate
+        // stays: both signatures also resolve on builds where the original did not
+        // install this option.
+        struct FlagStoreSite final
+        {
+            GameBuild build;
+            const char* signature;
+        };
 
-		if (auto pattern = Pattern(image, "8D AF 3C 01 00 00 8D 54 24 20"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+        constexpr FlagStoreSite kEpisodeFlagSites[] = {
+            {GameBuild::v1070, "44 80 0F ?? 02 75 ?? E8 ?? ?? ?? ?? 3B C3 74 ?? 8D"},
+            {GameBuild::v1070,
+             "44 80 0F ?? 02 0F 85 94 00 ?? ?? ?? ?? 24 ?? 85 D2 0F 84 ?? ?? ?? ?? 8B"},
+            {GameBuild::v1080, "54 D7 12 01 02 75 ?? E8 ?? ?? ?? ?? 3B C3 74 ?? 8D"},
+            {GameBuild::v1080,
+             "54 D7 12 01 02 0F 85 94 00 ?? ?? ?? ?? 24 ?? 85 D2 0F 84 ?? ?? ?? ?? 8B"},
+        };
 
-			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_nolivery_e), true); //jmp
-		}
-	}
-}
+        // ----- the arms' NOP tables -------------------------------------------
+        // One row per recovered site, in the order its arm installs it.
+        constexpr NopSite kBikeFeetFixSites[] = {
+            // The `jne` after the engine-state compare. `54 13 00 00` in the
+            // signature is CVehicle::engineState (0x1354); a pattern string cannot
+            // spell an offset by name.
+            {"39 82 54 13 00 00 0F 85 94 04 00 00", {12, 12}, {0, 0}, 0, nullptr},
+        };
 
-void ApplyPipeBombDropIconSupport(const PatchContext& ctx)
-{
-	Trace("PipeBombDropIconSupport");
-	if (ctx.Option("PipeBombDropIconSupport", "1"))
-	{
-		const GameImage& image = ctx.image;
+        constexpr NopSite kBikePhoneAnimsFixSites[] = {
+            {"80 BE 18 02 00 00 00 0F 85 36 01 00 00 80 BE", {33, 6}, {0, 0}, 0, nullptr},
+        };
 
-		if (BuildIs(ctx.build,
-		            {GameBuild::v1004, GameBuild::v1060, GameBuild::v1070, GameBuild::v1080,
-		             GameBuild::v1061, GameBuild::v1100, GameBuild::v1110, GameBuild::v1120,
-		             GameBuild::v1130, GameBuild::v12043}))
-		{
+        constexpr NopSite kEpisodicVehicleSites[] = {
+            // The two recovered component-window sites, eight bytes before the match.
+            {"7C 18 0F BF 4E 2E", {-6, 8}, {0, 0}, 2,
+             "EpisodicVehicleSupport component window"},
+            // `cmp [zpatch_episode_flag], 2` before the component call.
+            {"83 3D ? ? ? ? 02 75 17 F3 0F 10 44 24 08", {0, 9}, {0, 0}, 2,
+             "EpisodicVehicleSupport episode test"},
+            {"39 35 ? ? ? ? 75 0E 80 3D", {6, 2}, {0, 0}, 0, nullptr},
+            {"74 17 83 3D ? ? ? ? 02 75 0E F3 0F 10 05", {2, 9}, {0, 0}, 0, nullptr},
+            {"7C 22 83 F8 28 75 1D", {0, 2}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 0F 8C 0E 05 00 00", {0, 13}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 75 08 3B 05", {0, 9}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 75 17 F3 0F 10 44 24 0C", {0, 9}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 75 1F 8B 44 24 04", {0, 9}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 75 21 8B 96 20 08 00 00", {0, 9}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 75 24 F6 87 6C 02 00 00 04", {0, 9}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 75 35 0F BF 46 2E", {0, 9}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 75 38 8B 16", {0, 9}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 7C 11 8B 4E", {7, 2}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 7C 1F 8B", {7, 2}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 7C 26 8B 85 40 0B 00 00", {0, 9}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 7C 35 0F BF 43 2E", {0, 9}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 7C 43", {7, 2}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 7C 4A 0F BF 46 2E", {0, 13}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 89 44 24 38", {11, 6}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 8A 0D", {0, 7}, {17, 2}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 F3 0F 10 05 ? ? ? ? F3 0F 11 44 24 20 75 4C",
+             {21, 2}, {0, 0}, 0, nullptr},
+            {"8B 56 04 8B 4A 0C 89 4C 24 1C 7C 18", {-15, 7}, {10, 2}, 0, nullptr},
+        };
 
-			if (auto pattern = Pattern(image, "83 7D 18 1C 75 14"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
+        constexpr NopSite kEpisodicWeaponSites[] = {
+            {"75 5B 83 3D ? ? ? ? 00 75", {0, 2}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 0F 85 8C 01 00 00", {7, 6}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 0F 8C D5 00", {0, 13}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 75 20 8B CD E8", {7, 2}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 75 50", {7, 2}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 7C 21 8B 44 24 0C", {7, 2}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 7C 32 8B 41", {7, 2}, {0, 0}, 0, nullptr},
+            {"83 3D ? ? ? ? 02 7C 7D 8B 4C 24 0C", {7, 2}, {0, 0}, 0, nullptr},
+        };
 
-				injector::MakeNOP(match - 9, 9, true); //nop
-			}
-		}
-	}
-}
+        constexpr NopSite kPoliceEpisodicSites[] = {
+            {"39 2D ? ? ? ? 75 3E", {6, 2}, {0, 0}, 0, nullptr},
+        };
 
-void ApplyReversingLightFix(const PatchContext& ctx)
-{
-	Trace("ReversingLightFix");
-	if (ctx.Option("ReversingLightFix", "1"))
-	{
-		const GameImage& image = ctx.image;
+        constexpr NopSite kHeliHeightLimitSites[] = {
+            {"83 3D ? ? ? ? 02 7C 0A F3 0F", {7, 2}, {0, 0}, 0, nullptr},
+        };
 
-		if (auto pattern = Pattern(image, "11 01 00 00 8B 16 8B 42 64 8B CE FF D0 F3 0F 10"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+        // ----- the shared steering sites --------------------------------------
+        void PublishSteerSlots(PatchContext& ctx)
+        {
+            // The first pattern is the EAX call variant, the second the EDX one;
+            // the calls' resumes are 16 bytes into the match.
+            constexpr ptrdiff_t kSteerResumeOffset = 16;
+            // The call each variant makes, as the E8 operand's offset.
+            const GameImage& image = ctx.image;
+            if (auto pattern = Pattern(image, kSteerEaxPattern); pattern.size() > 0)
+            {
+                zpatch_steer_resume = MatchAddress(pattern, kSteerResumeOffset);
+                zpatch_steer_vtable_fn = BranchDestination(
+                    pattern.get(0).get<uint8_t>(), 423);
+            }
+            if (auto pattern = Pattern(image, kSteerEdxPattern); pattern.size() > 0)
+            {
+                zpatch_steer_resume = MatchAddress(pattern, kSteerResumeOffset);
+                zpatch_steer_vtable_fn = BranchDestination(
+                    pattern.get(0).get<uint8_t>(), 140);
+            }
+            if (auto pattern = Pattern(image, kIdeHookPattern); pattern.size() > 0)
+                zpatch_ide_hook_slot = MatchAddress(pattern, kIdeHookSlotOffset);
+        }
 
-			injector::WriteMemory<std::uint8_t>(match + 8, kPushadOpcode, true); // push 0x64 -> pushad
-		}
-	}
-}
+        void InstallSteerSlots(PatchContext& ctx)
+        {
+            // The E9 replaces the call at match+2.
+            constexpr ptrdiff_t kSteerInstallOffset = 2;
+            const GameImage& image = ctx.image;
+            if (auto pattern = Pattern(image, kSteerEaxPattern); pattern.size() > 0)
+                JumpTo(ctx, pattern.get(0).get<uint8_t>() + kSteerInstallOffset,
+                       OPP_BODY(abi_steer_detour_eax));
+            if (auto pattern = Pattern(image, kSteerEdxPattern); pattern.size() > 0)
+                JumpTo(ctx, pattern.get(0).get<uint8_t>() + kSteerInstallOffset,
+                       OPP_BODY(abi_steer_detour_edx));
+            if (auto pattern = Pattern(image, kIdeHookPattern); pattern.size() > 0)
+                JumpTo(ctx, pattern.get(0).get<uint8_t>() + kIdeHookInstallOffset,
+                       OPP_BODY(abi_copsirens_ide));
+        }
 
-void ApplyTeleportProtection(const PatchContext& ctx)
-{
-	Trace("TeleportProtection");
-	if (ctx.Option("TeleportProtection", "1"))
-	{
-		const GameImage& image = ctx.image;
+        // ----- PopupHeadlightsFlag --------------------------------------------
+        // The original handler (0x10044590) is an if/else over the EAX/EDX pair, so
+        // exactly one site is ever patched and its two resume slots are the ones
+        // the body tail-jumps through.
+        void StorePopupResumes(hook::pattern& pattern) noexcept
+        {
+            // The branch resume, 10 bytes into the match, and the fall-through one.
+            zpatch_popup_resume_b = MatchAddress(pattern, 10);
+            zpatch_popup_resume_a = MatchAddress(pattern, 12);
+        }
 
-		if (auto pattern = Pattern(image, "55 8B EC 83 E4 F8 51 53 8B 5D 08 56 57 6A 08 8D 44 24 10 8B F1 8D 7B 04 50 8B CF C7 44 24 14 00"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+        // The jump at the match start, the `jz` at +10 and the `fld` operand at +82
+        // that now loads our pi/2 float.
+        void WritePopupSite(PatchContext& ctx, hook::pattern& pattern, void* body)
+        {
+            auto* match = pattern.get(0).get<uint8_t>();
+            JumpTo(ctx, match, body);
+            WriteValue<uint8_t>(ctx, pattern.get(0).get<uint8_t>(10), opp::ops::kJmpRel8);
+            WriteValue<uint32_t>(ctx, pattern.get(0).get<uint8_t>(82),
+                                 AddressOf(&zpatch_popup_angle));
+        }
 
-			// The original writes exactly three bytes: C2 08 over the opcode bytes and 00 over
-			// the byte after the immediate. injector::MakeRET is NOT equivalent - its header
-			// stores the opcode through a 4-byte int store, so it also zeroes match+3 (0x83 on
-			// 1.0.8.0, the first byte of the next instruction). Keep the three-byte form.
-			constexpr std::uint16_t kRet8Imm = 0x08C2u;  // C2 08 = ret 8
-			constexpr std::uint8_t kRet8High = 0x00u;    // high byte of the imm16
-			injector::WriteMemory<std::uint16_t>(injector::raw_ptr(match), kRet8Imm, true); //ret 8
-			injector::WriteMemory<std::uint8_t>(injector::raw_ptr(match + 2), kRet8High, true); //ret 8
-		}
-	}
-}
+        // ----- CopSirensFlag --------------------------------------------------
+    }  // namespace
 
-void ApplyCarPartsShadowFix(const PatchContext& ctx)
-{
-	Trace("CarPartsShadowFix");
-	if (ctx.Option("CarPartsShadowFix", "1") || ctx.Option("CarDynamicShadowFix", "1"))
-	{
-		const GameImage& image = ctx.image;
+    // BikeFeetFix
 
-		if (auto pattern = Pattern(image, "85 DB 7E 41 55 EB 0A"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+    void InstallBikeFeetFix(PatchContext& ctx)
+    {
 
-			injector::MakeJMP(match - 6, reinterpret_cast<void*>(&abi_carparts_shadow), true); //jmp
-		}
-	}
-}
+        TraceArm("BikeFeetFix");
 
-void ApplyForceCarHeadlightShadows(const PatchContext& ctx)
-{
-	Trace("ForceCarHeadlightShadows");
-	if (ctx.Option("ForceCarHeadlightShadows", "1"))
-	{
-		const GameImage& image = ctx.image;
+        // BikeFeetFix: 1 literal
+        if (ctx.Option("BikeFeetFix", "1"))
+            ApplyNopSites(ctx, kBikeFeetFixSites);
 
-		if (auto pattern = Pattern(image, "3C 01 75 50 84 DB 75 79"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+    }
 
-			injector::WriteMemory<std::uint8_t>(match + 6, kShortJmpOpcode, true); //jmp
-			injector::MakeJMP(match + 95, reinterpret_cast<void*>(match + 476), true); //jmp
-			injector::WriteMemory<std::uint8_t>(match + 379, kShortJmpOpcode, true); //jmp
-			injector::WriteMemory<std::uint32_t>(match + 211, AddressOf(&zpatch_fchs_offset),
-			                                    true); // fld operand -> our offset
-		}
 
-		if (auto pattern = Pattern(image, "55 8B EC 83 E4 F0 81 EC D4 00 00 00 8B 45 20 8B"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+    // BikePhoneAnimsFix
 
-			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_fchs_shim), true); //jmp
-		}
+    void InstallBikePhoneAnimsFix(PatchContext& ctx)
+    {
 
-		if (auto pattern = Pattern(image, "8D 4C 24 50 51 68 04 05 00 00"); pattern.size() > 0)
-		{
-			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6),
-			                                    kShadowPushA & kByteMask, true); // force 0x504, low byte
-			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(7),
-			                                    (kShadowPushA >> 8) & kByteMask, true); // force 0x504, high byte
-		}
+        TraceArm("BikePhoneAnimsFix");
 
-		if (auto pattern = Pattern(image, "8D 44 24 50 50 68 04 01 00 00"); pattern.size() > 0)
-		{
-			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6),
-			                                    kShadowPushB & kByteMask, true); // force 0x104, low byte
-			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(7),
-			                                    (kShadowPushB >> 8) & kByteMask, true); // force 0x104, high byte
-		}
+        // BikePhoneAnimsFix: 1 literal
+        if (ctx.Option("BikePhoneAnimsFix", "1"))
+            ApplyNopSites(ctx, kBikePhoneAnimsFixSites);
 
-		if (auto pattern = Pattern(image, "F3 0F 11 44 24 1C 0F 84 9E 00 00 00"); pattern.size() > 0)
-		{
-			constexpr std::uint16_t kBranchDisplacement = 0x009Eu;  // je +0x9E
-			auto* site = pattern.get(0).get<std::uint8_t>(6);
-			// `0F 84 9E 00 00 00` = je +0x9E; the arm rewrites the first four
-			// bytes (the sixth was already 0).
-			injector::WriteMemory<std::uint8_t>(site, kJeRel32First, true);      // 0F
-			injector::WriteMemory<std::uint8_t>(site + 1, kJeRel32Second, true); // 84
-			injector::WriteMemory<std::uint16_t>(site + 2, kBranchDisplacement, true); // +0x9E
-			injector::WriteMemory<std::uint8_t>(site + 4, kZeroByte, true); //jz rel32
-		}
-	}
-}
+    }
 
-void ApplyFreezeCarFix(const PatchContext& ctx)
-{
-	Trace("FreezeCarFix");
-	if (ctx.Option("FreezeCarFix", "1"))
-	{
-		const GameImage& image = ctx.image;
 
-		// The recovered gate is the first scan: when it misses, none of the other
-		// probe sites are installed. Its match is reused for the first site.
-		if (auto primary = Pattern(image, "32 DB 8B 54 24 24 52 E8 ? ? ? ? 8B F0");
-		    primary.size() > 0)
-		{
-			auto* primaryMatch = primary.get(0).get<std::uint8_t>();
+    // publish CopSirensFlag
 
-			injector::MakeCALL(primaryMatch + 7, reinterpret_cast<void*>(&abi_spawns_probe),
-			                   true); //call
+    void PublishCopSirensFlag(PatchContext& ctx)
+    {
 
-			if (auto pattern = Pattern(image, "8B 4C 24 28 8B 54 24 24 50 51 52 E8 ? ? ? ? 5F 5E 5D 5B"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
+        TraceArm("publish CopSirensFlag");
 
-				injector::MakeCALL(match + 11, reinterpret_cast<void*>(&abi_spawns_guard), true); //call
-			}
+        // CopSirensFlag: 3 slots
+        if (ctx.Option("CopSirensFlag", "1"))
+        {
+            // The resume after the five-byte E8, and the second resume 28 bytes
+            // into the model match.
+            const GameImage& image = ctx.image;
 
-			if (auto pattern = Pattern(image, "E9 A1 02 00 00 83 FF 09 0F 87 F2 00 00 00"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
+            if (auto pattern = Pattern(image, kCopSirensCallPattern); pattern.size() > 0)
+            {
+                zpatch_copsirens_resume = MatchAddress(pattern, 5);
+            }
 
-				// The ten case bodies inside the probe: the original's jump-table
-				// selectors are the byte offsets from the probe match.
-				for (const SpawnCase& spawn : kSpawnCases)
-					injector::MakeCALL(match + spawn.dispatchOffset,
-					                   reinterpret_cast<void*>(spawn.body), true); //call
-			}
+            if (auto pattern = Pattern(image, kCopSirensModelPattern); pattern.size() > 0)
+            {
+                zpatch_copsirens_resume_b = MatchAddress(pattern, 28);
+            }
 
-			if (auto pattern = Pattern(image, "88 87 40 01 00 00 E8"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
+            if (auto pattern = Pattern(image, kIdeHookPattern); pattern.size() > 0)
+            {
+                // The shared IDE parser hook slot is the byte before the match.
+                zpatch_ide_hook_slot = MatchAddress(pattern, kIdeHookSlotOffset);
+            }
+        }
 
-				injector::MakeCALL(match + 6, reinterpret_cast<void*>(&abi_spawns_probe), true); //call
-			}
+    }
 
-			if (auto pattern = Pattern(image, "88 5C 24 1F 8B 54 24 28 52 E8"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
 
-				injector::MakeCALL(match + 9, reinterpret_cast<void*>(&abi_spawns_probe), true); //call
-				injector::MakeCALL(match + 254, reinterpret_cast<void*>(&abi_spawns_probe), true); //call
-			}
+    // CopSirensFlag
 
-			if (auto pattern = Pattern(image, "38 98 8C 00 00 00 75 2D 57 E8"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
+    void InstallCopSirensFlag(PatchContext& ctx)
+    {
 
-				injector::MakeCALL(match + 9, reinterpret_cast<void*>(&abi_spawns_probe), true); //call
-			}
+        TraceArm("CopSirensFlag");
 
-			if (auto pattern = Pattern(image, "32 DB 8B 54 24 24 52 E8"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
+        // CopSirensFlag: 3 siginstalls, 2 sigjumps
+        if (ctx.Option("CopSirensFlag", "1"))
+        {
+            const GameImage& image = ctx.image;
 
-				injector::MakeCALL(match + 7, reinterpret_cast<void*>(&abi_spawns_probe), true); //call
-			}
-		}
-	}
-}
+            if (auto pattern = Pattern(image, kCopSirensCallPattern); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
 
-void ApplyCarDynamicShadowFix(const PatchContext& ctx)
-{
-	Trace("CarDynamicShadowFix");
-	if (ctx.Option("CarDynamicShadowFix", "0"))
-	{
-		const GameImage& image = ctx.image;
+                JumpTo(ctx, match, OPP_BODY(abi_copsirens_a));
+            }
 
-		if (auto pattern = Pattern(image, "56 6A 02 53 53 57 E8 ?? ?? ?? ?? 56 6A 02 6A 04 6A 05 57 E8"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+            if (auto pattern = Pattern(image, kCopSirensModelPattern); pattern.size() > 0)
+            {
+                // The model-check detour's entry, 22 bytes into the match.
+                JumpTo(ctx, pattern.get(0).get<uint8_t>(22), OPP_BODY(abi_copsirens_b));
+            }
 
-			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_carparts_shadow_2), true); //jmp
-		}
+            if (auto pattern = Pattern(image, kIdeHookPattern); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
 
-		if (auto pattern = Pattern(image, "56 6A 02 6A 00 6A 00 57 E8 ? ? ? ? 56 6A 02 6A 04 6A 05 57 E8"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+                // The shared IDE parser hook is installed 10 bytes before the
+                // match (the body rewrites the match-1 slot).
+                JumpTo(ctx, match + kIdeHookInstallOffset, OPP_BODY(abi_copsirens_ide));
+            }
+        }
 
-			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_carparts_shadow_2b), true); //jmp
-		}
+    }
 
-		if (auto pattern = Pattern(image, "83 F8 14 7D 05 83 F8 06 7D 14"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
 
-			injector::MakeJMP(match + 3, reinterpret_cast<void*>(match + 30), true); //jmp
-		}
+    // EpisodicVehicleSupport
 
-		if (auto pattern = Pattern(image, "83 E0 0F 83 F8 03 75 17 F6 86 6C 02 00 00 04"); pattern.size() > 0)
-		{
-			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(6), kShortJmpOpcode, true); //jmp
-		}
+    void InstallEpisodicVehicleSupport(PatchContext& ctx)
+    {
 
-		if (auto pattern = Pattern(image, "50 68 04 01 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
-		{
-			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(2), kZeroByte,
-			                                    true); // shadow size 0x104 -> 0x100
-		}
+        TraceArm("EpisodicVehicleSupport");
 
-		// The @noFCHS variant: with ForceCarHeadlightShadows on, the original takes the
-		// other path and makes neither of these two writes (probed: CarDynamic+FCHS writes
-		// only 0x8F7422; CarDynamic alone also writes 0x8F73EC and 0x8F719F).
-		//   * `0F 84 <rel32>` (jz) becomes `E9 <rel32+1>`: a jmp to the same target, the
-		//     displacement growing by one because the jz encoding is one byte longer
-		//     (match+6+rel == match+5+newRel).
-		//   * `push 0x504` becomes `push 0x100`, written as a dword over the immediate.
-		if (!ctx.Option("ForceCarHeadlightShadows", "1"))
-		{
-			if (auto pattern = Pattern(image, "0F 84 9E 00 00 00 80 7D 28"); pattern.size() > 0)
-			{
-				auto* match = pattern.get(0).get<std::uint8_t>();
+        // EpisodicVehicleSupport: the four episode-flag pointer stores and the
+        // recovered NOP sites.
+        if (ctx.Option("EpisodicVehicleSupport", "1"))
+        {
+            const GameImage& image = ctx.image;
 
-				// The jz's own destination, re-encoded as a 5-byte jmp (rel32+1 falls out of
-				// dest-(match+5)); the old instruction's sixth byte is left untouched, as before.
-				const auto* target = reinterpret_cast<std::uint8_t*>(
-				    injector::ReadRelativeOffset(injector::raw_ptr(match + 2), 4, true).as_int());
-				injector::MakeJMP(injector::raw_ptr(match), injector::raw_ptr(target), true); //jmp
-			}
+            for (const FlagStoreSite& site : kEpisodeFlagSites)
+            {
+                if (site.build != ctx.build) continue;
+                if (auto pattern = Pattern(image, site.signature); pattern.size() > 0)
+                {
+                    WriteValue<uint32_t>(ctx, pattern.get(0).get<uint8_t>(),
+                                         AddressOf(&zpatch_episode_flag));
+                }
+            }
 
-			if (auto pattern = Pattern(image, "51 68 04 05 00 00 6A 02 6A 00 E8"); pattern.size() > 0)
-			{
-				constexpr std::uint32_t kShadowSizeForced = 0x100u;  // push 0x504 -> 0x100
-				auto* match = pattern.get(0).get<std::uint8_t>();
+            if (IsEpisodicBuild(ctx.build))
+                ApplyNopSites(ctx, kEpisodicVehicleSites);
+        }
 
-				injector::WriteMemory<std::uint32_t>(match + 2, kShadowSizeForced, true); // push 0x504 -> 0x100
-			}
-		}
-	}
-}
+    }
 
-void ApplyGarageModelFix(const PatchContext& ctx)
-{
-	Trace("GarageModelFix");
-	if (ctx.Option("GarageModelFix", "1"))
-	{
-		const GameImage& image = ctx.image;
 
-		if (auto pattern = Pattern(image, "8B 57 20 D9 42 34 D9 5E 04 8B 47 20"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+    // EpisodicWeaponSupport
 
-			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_garage_body_a), true); //jmp
-		}
+    void InstallEpisodicWeaponSupport(PatchContext& ctx)
+    {
 
-		if (auto pattern = Pattern(image, "0F B7 0E 50 51 E8"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
+        TraceArm("EpisodicWeaponSupport");
 
-			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_garage_body_b), true); //jmp
-		}
-	}
-}
+        // EpisodicWeaponSupport: the recovered NOP sites.
+        if (ctx.Option("EpisodicWeaponSupport", "1") && IsEpisodicBuild(ctx.build))
+            ApplyNopSites(ctx, kEpisodicWeaponSites);
+
+    }
+
+
+    // publish HighFPSBikePhysicsFix
+
+    void PublishHighFPSBikePhysicsFix(PatchContext& ctx)
+    {
+
+        TraceArm("publish HighFPSBikePhysicsFix");
+
+        // HighFPSBikePhysicsFix: 1 slot
+        if (ctx.Option("HighFPSBikePhysicsFix", "1"))
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, "D9 45 08 51 8B CE D9 1C 24 E8 ? ? ? ? 8A 86 90 14 00 00"); pattern.size() > 0)
+            {
+                zpatch_bike_resume = MatchAddress(pattern, 9);
+            }
+        }
+
+    }
+
+
+    // HighFPSBikePhysicsFix
+
+    void InstallHighFPSBikePhysicsFix(PatchContext& ctx)
+    {
+
+        TraceArm("HighFPSBikePhysicsFix");
+
+        // HighFPSBikePhysicsFix: 1 sigjump
+        if (ctx.Option("HighFPSBikePhysicsFix", "1"))
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, "D9 45 08 51 8B CE D9 1C 24 E8 ? ? ? ? 8A 86 90 14 00 00"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                JumpTo(ctx, match, OPP_BODY(abi_bike_physics_detour));
+            }
+        }
+
+    }
+
+
+    // MovingPlaneParts / MovingSteeringWheelSupport / ShakingEngineBlock are
+    // three INI arms over the same five slots (PublishSteerSlots/InstallSteerSlots
+    // above).
+
+    // publish MovingPlaneParts
+
+    void PublishMovingPlaneParts(PatchContext& ctx)
+    {
+
+        TraceArm("publish MovingPlaneParts");
+
+        // MovingPlaneParts: 5 slots (the shared steering slots).
+        if (ctx.Option("MovingPlaneParts", "1"))
+            PublishSteerSlots(ctx);
+
+    }
+
+
+    // MovingPlaneParts
+
+    void InstallMovingPlaneParts(PatchContext& ctx)
+    {
+
+        TraceArm("MovingPlaneParts");
+
+        // MovingPlaneParts: 3 siginstalls (the shared steering sites).
+        if (ctx.Option("MovingPlaneParts", "1"))
+            InstallSteerSlots(ctx);
+
+    }
+
+
+    // publish MovingSteeringWheelSupport
+
+    void PublishMovingSteeringWheelSupport(PatchContext& ctx)
+    {
+
+        TraceArm("publish MovingSteeringWheelSupport");
+
+        // MovingSteeringWheelSupport: 5 slots (the shared steering slots).
+        if (ctx.Option("MovingSteeringWheelSupport", "1"))
+            PublishSteerSlots(ctx);
+
+    }
+
+
+    // MovingSteeringWheelSupport
+
+    void InstallMovingSteeringWheelSupport(PatchContext& ctx)
+    {
+
+        TraceArm("MovingSteeringWheelSupport");
+
+        // MovingSteeringWheelSupport: 3 siginstalls (the shared steering sites).
+        if (ctx.Option("MovingSteeringWheelSupport", "1"))
+            InstallSteerSlots(ctx);
+
+    }
+
+
+    // publish NoLiveryLimit
+
+    void PublishNoLiveryLimit(PatchContext& ctx)
+    {
+
+        TraceArm("publish NoLiveryLimit");
+
+        // NoLiveryLimit: 5 slots
+        if (ctx.Option("NoLiveryLimit", "1"))
+        {
+            const GameImage& image = ctx.image;
+
+            if (auto pattern = Pattern(image, "74 52 8D B5 3C 01 00 00 83 FB 04"); pattern.size() > 0)
+            {
+                // The call operand at -6 (its next instruction is at -2); the
+                // resume is 90 bytes into the match.
+                auto* match = pattern.get(0).get<uint8_t>();
+                zpatch_nolivery_fn = BranchDestination(match - 2, -6);
+                zpatch_nolivery_resume_d = MatchAddress(pattern, 90);
+            }
+
+            if (auto pattern = Pattern(image, "8B 8C 83 3C 01 00 00 0F BF 53 48"); pattern.size() > 0)
+            {
+                // The resume is 13 bytes into the match (after its prologue).
+                zpatch_nolivery_resume = MatchAddress(pattern, 13);
+            }
+
+            if (auto pattern = Pattern(image, "8D AF 3C 01 00 00 8D 54 24 20"); pattern.size() > 0)
+            {
+                // The same call shape as the first row, four bytes earlier.
+                auto* match = pattern.get(0).get<uint8_t>();
+                zpatch_nolivery_fn = BranchDestination(match - 4, -8);
+                zpatch_nolivery_resume_d = MatchAddress(pattern, 84);
+            }
+        }
+
+    }
+
+
+    // NoLiveryLimit
+
+    void InstallNoLiveryLimit(PatchContext& ctx)
+    {
+
+        TraceArm("NoLiveryLimit");
+
+        // NoLiveryLimit: 1 siginstall, 3 sigjumps
+        if (ctx.Option("NoLiveryLimit", "1"))
+        {
+            const GameImage& image = ctx.image;
+
+            // The naked bodies tail-jump through the handler-published resume
+            // and call the published count function. If any publish pattern
+            // missed, those slots are not game addresses; installing the bodies
+            // would jump/call through the stale values. The failsafe skips the
+            // arm instead (the original handler's signature-miss behaviour).
+#if !defined(_WIN64)
+            const auto is_game_address = [&ctx](uint32_t va) {
+                const auto base = reinterpret_cast<uintptr_t>(ctx.image.base);
+                return base != 0u && va >= base && (va - base) < ctx.image.size;
+            };
+            if (zpatch_failsafe_skip("NoLiveryLimit publish",
+                                     !is_game_address(zpatch_nolivery_resume) ||
+                                         !is_game_address(zpatch_nolivery_resume_d) ||
+                                         !is_game_address(zpatch_nolivery_fn)))
+                return;
+#endif
+
+            if (auto pattern = Pattern(image, "8B 8C 83 3C 01 00 00 0F BF 53 48"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                // The three no-livery body entries relative to their shared match.
+                JumpTo(ctx, match - 237, OPP_BODY(abi_nolivery_b));
+                JumpTo(ctx, match - 199, OPP_BODY(abi_nolivery_c));
+                JumpTo(ctx, match, OPP_BODY(abi_nolivery_a));
+            }
+
+            if (auto pattern = Pattern(image, "74 52 8D B5 3C 01 00 00 83 FB 04"); pattern.size() > 0)
+            {
+                JumpTo(ctx, pattern.get(0).get<uint8_t>(2), OPP_BODY(abi_nolivery_d));
+            }
+
+            if (auto pattern = Pattern(image, "8D AF 3C 01 00 00 8D 54 24 20"); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                JumpTo(ctx, match, OPP_BODY(abi_nolivery_e));
+            }
+        }
+
+    }
+
+
+    // PoliceEpisodicWeaponSupport
+
+    void InstallPoliceEpisodicWeaponSupport(PatchContext& ctx)
+    {
+
+        TraceArm("PoliceEpisodicWeaponSupport");
+
+        // PoliceEpisodicWeaponSupport: 1 literal
+        if (ctx.Option("PoliceEpisodicWeaponSupport", "0") && IsEpisodicBuild(ctx.build))
+            ApplyNopSites(ctx, kPoliceEpisodicSites);
+
+    }
+
+
+    // publish PopupHeadlightsFlag
+
+    void PublishPopupHeadlightsFlag(PatchContext& ctx)
+    {
+
+        TraceArm("publish PopupHeadlightsFlag");
+
+        // PopupHeadlightsFlag: 5 slots
+        if (ctx.Option("PopupHeadlightsFlag", "1"))
+        {
+            const GameImage& image = ctx.image;
+
+            // The original handler (0x10044590) is `if (pattern A) { ... }
+            // else { pattern B ... }`: exactly ONE of the two EAX/EDX sites is
+            // ever patched, and the two resume slots belong to that site. Two
+            // independent `if`s would write both against whichever pattern
+            // matched last, so the first body would tail-jump to the second
+            // site's resume.
+            if (auto pattern = Pattern(image, kPopupEaxPattern); pattern.size() > 0)
+                StorePopupResumes(pattern);
+            else if (auto pattern = Pattern(image, kPopupEdxPattern); pattern.size() > 0)
+                StorePopupResumes(pattern);
+
+            // The IDE parser hook is independent of the two model tests and is
+            // shared with the other arms that install it.
+            if (auto pattern = Pattern(image, kIdeHookPattern); pattern.size() > 0)
+                zpatch_ide_hook_slot = MatchAddress(pattern, kIdeHookSlotOffset);
+        }
+
+    }
+
+
+    // PopupHeadlightsFlag
+
+    void InstallPopupHeadlightsFlag(PatchContext& ctx)
+    {
+
+        TraceArm("PopupHeadlightsFlag");
+
+        // PopupHeadlightsFlag: 3 siginstalls, 1 sigjump
+        if (ctx.Option("PopupHeadlightsFlag", "1"))
+        {
+            const GameImage& image = ctx.image;
+
+            // if / else, like the original: see the publish arm above.
+            if (auto pattern = Pattern(image, kPopupEaxPattern); pattern.size() > 0)
+                WritePopupSite(ctx, pattern, OPP_BODY(abi_popup_headlights));
+            else if (auto pattern = Pattern(image, kPopupEdxPattern); pattern.size() > 0)
+                WritePopupSite(ctx, pattern, OPP_BODY(abi_popup_headlights_edx));
+
+            if (auto pattern = Pattern(image, kIdeHookPattern); pattern.size() > 0)
+            {
+                auto* match = pattern.get(0).get<uint8_t>();
+
+                JumpTo(ctx, match + kIdeHookInstallOffset, OPP_BODY(abi_copsirens_ide));
+            }
+        }
+
+    }
+
+
+    // publish ShakingEngineBlock
+
+    void PublishShakingEngineBlock(PatchContext& ctx)
+    {
+
+        TraceArm("publish ShakingEngineBlock");
+
+        // ShakingEngineBlock: 5 slots (the shared steering slots).
+        if (ctx.Option("ShakingEngineBlock", "1"))
+            PublishSteerSlots(ctx);
+
+    }
+
+
+    // ShakingEngineBlock
+
+    void InstallShakingEngineBlock(PatchContext& ctx)
+    {
+
+        TraceArm("ShakingEngineBlock");
+
+        // ShakingEngineBlock: 3 siginstalls (the shared steering sites).
+        if (ctx.Option("ShakingEngineBlock", "1"))
+            InstallSteerSlots(ctx);
+
+    }
+
+
+    // TBoGTHeliHeightLimit
+
+    void InstallTBoGTHeliHeightLimit(PatchContext& ctx)
+    {
+
+        TraceArm("TBoGTHeliHeightLimit");
+
+        // TBoGTHeliHeightLimit: 1 literal
+        if (ctx.Option("TBoGTHeliHeightLimit", "0") && IsEpisodicBuild(ctx.build))
+            ApplyNopSites(ctx, kHeliHeightLimitSites);
+
+    }
 
 namespace
 {
-void ApplySteerSites(const PatchContext& ctx)
+    class VehiclesFeatures
+    {
+    public:
+        VehiclesFeatures()
+        {
+            PublishEvent().Add(&PublishCopSirensFlag, "PublishCopSirensFlag");
+            PublishEvent().Add(&PublishHighFPSBikePhysicsFix, "PublishHighFPSBikePhysicsFix");
+            PublishEvent().Add(&PublishNoLiveryLimit, "PublishNoLiveryLimit");
+            PublishEvent().Add(&PublishPopupHeadlightsFlag, "PublishPopupHeadlightsFlag");
+            PublishEvent().Add(&PublishMovingSteeringWheelSupport, "PublishMovingSteeringWheelSupport");
+            PublishEvent().Add(&PublishShakingEngineBlock, "PublishShakingEngineBlock");
+            PublishEvent().Add(&PublishMovingPlaneParts, "PublishMovingPlaneParts");
+            InstallEvent().Add(&InstallBikeFeetFix, "InstallBikeFeetFix");
+            InstallEvent().Add(&InstallBikePhoneAnimsFix, "InstallBikePhoneAnimsFix");
+            InstallEvent().Add(&InstallCopSirensFlag, "InstallCopSirensFlag");
+            InstallEvent().Add(&InstallEpisodicVehicleSupport, "InstallEpisodicVehicleSupport");
+            InstallEvent().Add(&InstallEpisodicWeaponSupport, "InstallEpisodicWeaponSupport");
+            InstallEvent().Add(&InstallHighFPSBikePhysicsFix, "InstallHighFPSBikePhysicsFix");
+            InstallEvent().Add(&InstallNoLiveryLimit, "InstallNoLiveryLimit");
+            InstallEvent().Add(&InstallPoliceEpisodicWeaponSupport, "InstallPoliceEpisodicWeaponSupport");
+            InstallEvent().Add(&InstallPopupHeadlightsFlag, "InstallPopupHeadlightsFlag");
+            InstallEvent().Add(&InstallTBoGTHeliHeightLimit, "InstallTBoGTHeliHeightLimit");
+            InstallEvent().Add(&InstallMovingSteeringWheelSupport, "InstallMovingSteeringWheelSupport");
+            InstallEvent().Add(&InstallShakingEngineBlock, "InstallShakingEngineBlock");
+            InstallEvent().Add(&InstallMovingPlaneParts, "InstallMovingPlaneParts");
+        }
+    } vehiclesFeatures;
+} // namespace
+
+} // namespace opp::features
+
+export namespace opp
 {
-	const GameImage& image = ctx.image;
+    struct VehicleLightValue
+    {
+        uint32_t modelHash{};
+        float value{};
+        bool populated{};
+    };
 
-	if (auto pattern = Pattern(image, "32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"); pattern.size() > 0)
-	{
-		auto* match = pattern.get(0).get<std::uint8_t>();
+    struct VehicleLightTables
+    {
+        std::array<VehicleLightValue, kModelTableSlots> popupAngles{};  // radians
+        std::array<VehicleLightValue, kModelTableSlots> headlightOffsets{};
+    };
 
-		injector::MakeJMP(match + 2, reinterpret_cast<void*>(&abi_steer_detour_eax), true); //jmp
-	}
+    // FUN_100523c0's two 512-slot INI loops. Missing model names leave holes;
+    // numeric parsing follows strtof's prefix acceptance.
+    PatchResult LoadVehicleLightTables(const Config& config, VehicleLightTables& output) noexcept;
 
-	if (auto pattern = Pattern(image, "7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"); pattern.size() > 0)
-	{
-		auto* match = pattern.get(0).get<std::uint8_t>();
+    using ModelIndexResolver = int (*)(uint32_t, void*);
 
-		injector::MakeJMP(match + 2, reinterpret_cast<void*>(&abi_steer_detour_edx), true); //jmp
-	}
+    struct PopupLightSelection
+    {
+        float angleRadians{kHalfPi};
+        bool supported{};
+    };
 
-	if (auto pattern = Pattern(image, "0C 83 88 94 00 00 00 04"); pattern.size() > 0)
-	{
-		auto* match = pattern.get(0).get<std::uint8_t>();
+    PopupLightSelection SelectPopupLight(
+        const VehicleLightTables&,
+        const std::array<uint32_t, kModelTableSlots>& supportedModels, int modelIndex,
+        ModelIndexResolver, void* context = nullptr) noexcept;
+    float SelectHeadlightOffset(const VehicleLightTables&, int modelIndex, ModelIndexResolver,
+                                void* context = nullptr) noexcept;
+} // namespace opp
 
-		injector::MakeJMP(match - 10, reinterpret_cast<void*>(&abi_copsirens_ide), true); //jmp
-	}
-}
-}  // namespace
 
-void ApplyMovingSteeringWheelSupport(const PatchContext& ctx)
+
+
+
+namespace opp
 {
-	Trace("MovingSteeringWheelSupport");
-	if (ctx.Option("MovingSteeringWheelSupport", "1"))
-		ApplySteerSites(ctx);
-}
+    namespace
+    {
+        // One row per [PopupLightAngles]/[HeadlightConeOffsets] table: the INI
+        // section, its key suffix, the table it fills and whether its values are
+        // degrees (the popup angles are, the cone offsets are not).
+        struct LightTableSection final
+        {
+            const char* section;
+            const char* suffix;
+            std::array<VehicleLightValue, kModelTableSlots> VehicleLightTables::* table;
+            bool degrees;
+        };
 
-void ApplyShakingEngineBlock(const PatchContext& ctx)
+        constexpr LightTableSection kLightTableSections[] = {
+            {"PopupLightAngles", "Angle", &VehicleLightTables::popupAngles, true},
+            {"HeadlightConeOffsets", "Offset", &VehicleLightTables::headlightOffsets, false},
+        };
+    }  // namespace
+
+    PatchResult LoadVehicleLightTables(const Config& config, VehicleLightTables& output) noexcept
+    {
+        try
+        {
+            VehicleLightTables parsed;
+            for (const LightTableSection& section : kLightTableSections)
+            {
+                auto& slots = parsed.*(section.table);
+                for (size_t i = 0; i < slots.size(); ++i)
+                {
+                    const std::string prefix = "Car" + std::to_string(i + 1);
+                    const std::string name =
+                        config.String(section.section, prefix + "Name", "");
+                    if (name.empty())
+                        continue;
+
+                    const std::string value =
+                        config.String(section.section, prefix + section.suffix, "");
+                    if (value.empty())
+                        return {PatchResultCode::parse_error, "missing vehicle light value"};
+
+                    char* end = nullptr;
+                    errno = 0;
+                    const float numeric = std::strtof(value.c_str(), &end);
+                    if (end == value.c_str() || errno == ERANGE)
+                        return {PatchResultCode::parse_error, "invalid vehicle light value"};
+
+                    VehicleLightValue& slot = slots[i];
+                    slot.modelHash = GameHash(name);
+                    slot.populated = true;
+                    slot.value = section.degrees ? DegreesToRadians(numeric) : numeric;
+                }
+            }
+
+            output = parsed;
+            return {};
+        }
+        catch (...)
+        {
+            return {PatchResultCode::invalid_input, "vehicle table allocation failed"};
+        }
+    }
+
+    PopupLightSelection SelectPopupLight(
+        const VehicleLightTables& tables,
+        const std::array<uint32_t, kModelTableSlots>& supportedModels, int modelIndex,
+        ModelIndexResolver resolve, void* context) noexcept
+    {
+        PopupLightSelection result;
+        if (!resolve || modelIndex < 0)
+            return result;
+
+        // The popuplights hash is the one the original resolves and compares first
+        // (FUN_1001ad20).
+        const int specialIndex = resolve(kPopupLightsModelHash, context);
+        if (specialIndex >= 0 && specialIndex == modelIndex)
+        {
+            result.supported = true;
+            return result;
+        }
+
+        for (const uint32_t hash : supportedModels)
+        {
+            if (!hash)
+                break;
+            if (resolve(hash, context) != modelIndex)
+                continue;
+
+            result.supported = true;
+            // The original scans all 512 slots; the last duplicate wins.
+            for (const VehicleLightValue& entry : tables.popupAngles)
+            {
+                if (entry.populated && entry.modelHash != 0 && entry.modelHash == hash)
+                    result.angleRadians = entry.value;
+            }
+            break;
+        }
+        return result;
+    }
+
+    float SelectHeadlightOffset(const VehicleLightTables& tables, int modelIndex,
+                                ModelIndexResolver resolve, void* context) noexcept
+    {
+        if (!resolve || modelIndex < 0)
+            return kDefaultConeOffset;
+
+        // FUN_1001ad20 stops at the first zero hash rather than skipping holes.
+        for (const VehicleLightValue& entry : tables.headlightOffsets)
+        {
+            if (!entry.modelHash)
+                break;
+            if (entry.populated && resolve(entry.modelHash, context) == modelIndex)
+                return entry.value;
+        }
+        return kDefaultConeOffset;
+    }
+} // namespace opp
+
+// ---- hook bodies ----
+// The machine-level entry points the arms above install, kept together here
+// after the readable installers. Each keeps the original site's calling
+// convention and register contract; its comment names the destination VA.
+#if !defined(_WIN64)
+
+extern "C"
 {
-	Trace("ShakingEngineBlock");
-	if (ctx.Option("ShakingEngineBlock", "1"))
-		ApplySteerSites(ctx);
-}
 
-void ApplyMovingPlaneParts(const PatchContext& ctx)
+// @exact 0x10044530 PopupHeadlightsFlag (pattern "0F BF 46 2E 3B 05 ? ? ? ? 75 ? A1",
+// live on 1.0.8.0 at game 0xA53A64).
+//   movsx eax,word [esi+2Eh]; pushad; mov [dword_1015BE20],eax
+//   call sub_10044310; popad; cmp [dword_1015BE24],1; je resume_a
+//   cmp eax,[dword_1015BE1C]; jmp [dword_1015D62C]  ; resume B = site+0xA
+// resume_a: jmp [dword_1015D628]                   ; resume A = site+0xC
+// pushad/popad is essential: the helper may clobber every GPR, and the resumes
+// consume ECX/EDX/ESI exactly as the site left them.
+__declspec(naked) void abi_popup_headlights()
 {
-	Trace("MovingPlaneParts");
-	if (ctx.Option("MovingPlaneParts", "1"))
-		ApplySteerSites(ctx);
+    __asm {
+        movsx eax, word ptr [esi + 2Eh]
+        pushad
+        mov   dword ptr [zpatch_popup_model], eax
+        call  abi_popup_check
+        popad
+        cmp   dword ptr [zpatch_popup_flag], 1
+        je    popup_resume_a
+        cmp   eax, dword ptr [zpatch_popup_index]
+        jmp   dword ptr [zpatch_popup_resume_b]
+    popup_resume_a:
+        jmp   dword ptr [zpatch_popup_resume_a]
+    }
 }
-void ApplyCarDecalsFix(const PatchContext& ctx)
+// @exact 0x10044560 PopupHeadlightsFlag: the EDX twin for the second site
+// pattern (absent on 1.0.8.0).
+__declspec(naked) void abi_popup_headlights_edx()
 {
-	Trace("CarDecalsFix");
-	if (ctx.Option("CarDecalsFix", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "8B 44 24 08 8B 48 28 81 E1 C0 03 00 00 81 F9 80 00 00 00"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_car_decals_fix), true); //jmp
-		}
-	}
+    __asm {
+        movsx edx, word ptr [esi + 2Eh]
+        pushad
+        mov   dword ptr [zpatch_popup_model], edx
+        call  abi_popup_check
+        popad
+        cmp   dword ptr [zpatch_popup_flag], 1
+        je    popup_edx_resume_a
+        cmp   edx, dword ptr [zpatch_popup_index]
+        jmp   dword ptr [zpatch_popup_resume_b]
+    popup_edx_resume_a:
+        jmp   dword ptr [zpatch_popup_resume_a]
+    }
 }
 
-void ApplyCarDynamicShadowFixNoE(const PatchContext& ctx)
+// @exact 0x100051B0 MovingSteeringWheelSupport detour: the installer E9s the
+// game site at match+2 (game 0xA538A0); the body caches ESI (the vehicle), runs
+// the shared consumer between pushad/popad, calls vfunc 296 (al = its result)
+// and tail-jumps to the resume (match+16, the jne after the replayed test).
+__declspec(naked) void abi_steer_detour_eax()
 {
-	Trace("CarDynamicShadowFixNoE");
-	if (ctx.Option("CarDynamicShadowFix", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "83 F8 14 7D 05 83 F8 06 7D 14"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeNOP(match + 62, 6, true); //nop
-		}
-	}
+    __asm {
+        mov  dword ptr [zpatch_steer_vehicle], esi
+        pushad
+        call abi_steer_body
+        popad
+        mov  edx, dword ptr [esi]
+        mov  eax, dword ptr [edx + 128h]
+        mov  ecx, esi
+        call eax
+        test al, al
+        jmp  dword ptr [zpatch_steer_resume]
+    }
 }
-
-void ApplyDualVehicleHeadlightsOld(const PatchContext& ctx)
+// @exact 0x100051E0 MovingSteeringWheelSupport fallback detour (pattern absent
+// on 1.0.8.0): same, with the vfunc fetched through EAX/EDX instead.
+__declspec(naked) void abi_steer_detour_edx()
 {
-	Trace("DualVehicleHeadlightsOld");
-	if (ctx.Option("DualVehicleHeadlights", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "8B 17 8B 42 64 8B CF FF D0 8B 54"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_dual_headlights_old), true); //jmp
-		}
-	}
+    __asm {
+        mov  dword ptr [zpatch_steer_vehicle], esi
+        pushad
+        call abi_steer_body
+        popad
+        mov  eax, dword ptr [esi]
+        mov  edx, dword ptr [eax + 128h]
+        mov  ecx, esi
+        call edx
+        test al, al
+        jmp  dword ptr [zpatch_steer_resume]
+    }
 }
 
-void ApplyDualVehicleHeadlightsNew(const PatchContext& ctx)
+// @exact 0x1003d310: name = &ebx[0x13c], index = eax; resume with (hash, movsx ebx[0x48]).
+__declspec(naked) void abi_nolivery_a()
 {
-	Trace("DualVehicleHeadlightsNew");
-	if (ctx.Option("DualVehicleHeadlights", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "8B 17 8B 42 64 8B CF FF D0 8B 54"); pattern.size() > 0)
-		{
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::MakeJMP(match, reinterpret_cast<void*>(&abi_dual_headlights_new), true); //jmp
-		}
-	}
+    __asm {
+        pushad
+        lea ecx, [ebx + 13Ch]
+        mov DWORD PTR [zpatch_nolivery_name], ecx
+        mov DWORD PTR [zpatch_nolivery_index], eax
+        call abi_nolivery_hash_sign
+        popad
+        mov ecx, DWORD PTR [zpatch_nolivery_hash]
+        movsx edx, WORD PTR [ebx + 48h]
+        push ecx
+        push edx
+        jmp DWORD PTR [zpatch_nolivery_resume]
+    }
 }
-
-void ApplyCarPartsShadowFixStandalone(const PatchContext& ctx)
+// @exact 0x1003d340: name = &ebx[0x13c], index = ecx; resume with (hash, movsx ebx[0x48]).
+__declspec(naked) void abi_nolivery_b()
 {
-	Trace("CarPartsShadowFixStandalone");
-	if (ctx.Option("CarPartsShadowFix", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "83 F8 04 C6 44 24 0E 00 75 0F"); pattern.size() > 0)
-		{
-			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(8), kShortJmpOpcode, true); //jmp
-		}
-
-		if (auto pattern = Pattern(image, "83 FA 04 75 0C"); pattern.size() > 0)
-		{
-			injector::WriteMemory<std::uint8_t>(pattern.get(0).get<std::uint8_t>(3), kShortJmpOpcode, true); //jmp
-		}
-	}
+    __asm {
+        pushad
+        lea edx, [ebx + 13Ch]
+        mov DWORD PTR [zpatch_nolivery_name], edx
+        mov DWORD PTR [zpatch_nolivery_index], ecx
+        call abi_nolivery_hash_sign
+        popad
+        mov edx, DWORD PTR [zpatch_nolivery_hash]
+        movsx eax, WORD PTR [ebx + 48h]
+        push edx
+        push eax
+        jmp DWORD PTR [zpatch_nolivery_resume]
+    }
 }
-
-void ApplyIncreaseVehicleModelLimit(const PatchContext& ctx)
+// @exact 0x1003d370: like a, but the original also drops 8 bytes of args first.
+__declspec(naked) void abi_nolivery_c()
 {
-	Trace("IncreaseVehicleModelLimit");
-	if (ctx.Option("IncreaseVehicleModelLimit", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "83 C7 01 81 FF 18 79 00 00 7C D2"); pattern.size() > 0)
-		{
-			constexpr std::uint32_t kVehicleModelLimit = 0x400u;  // 1024 models (raised cap)
-			auto* target = MatchPointer(pattern, 77);
-			if (target != nullptr)
-				injector::WriteMemory<std::uint32_t>(target, kVehicleModelLimit, true); // model limit = 1024
-		}
-	}
+    __asm {
+        pushad
+        lea edx, [ebx + 13Ch]
+        mov DWORD PTR [zpatch_nolivery_name], edx
+        mov DWORD PTR [zpatch_nolivery_index], eax
+        call abi_nolivery_hash_sign
+        popad
+        mov edx, DWORD PTR [zpatch_nolivery_hash]
+        movsx eax, WORD PTR [ebx + 48h]
+        add esp, 8
+        push edx
+        push eax
+        jmp DWORD PTR [zpatch_nolivery_resume]
+    }
 }
-
-void ApplyIncreaseVehicleStructLimit(const PatchContext& ctx)
+// @exact 0x1003d3a0: copies the frame name into a 16-byte buffer, counts the
+// "<name>_sign_N" lookups, writes the count to [ebp+0xc2], then resumes.
+__declspec(naked) void abi_nolivery_d()
 {
-	Trace("IncreaseVehicleStructLimit");
-	if (ctx.Option("IncreaseVehicleStructLimit", "1"))
-	{
-		const GameImage& image = ctx.image;
-
-		if (auto pattern = Pattern(image, "68 ? ? ? ? 6A 32 8B C8"); pattern.size() > 0)
-		{
-			constexpr std::uint8_t kVehicleStructLimit = 100u;  // 0x64: struct count
-			auto* match = pattern.get(0).get<std::uint8_t>();
-
-			injector::WriteMemory<std::uint8_t>(match + 6,
-			                                    static_cast<std::uint8_t>(kVehicleStructLimit),
-			                                    true); // struct count = 100
-		}
-	}
+    __asm {
+        pushad
+        mov DWORD PTR [zpatch_nolivery_arg], edi
+        lea ecx, [ebp + 13Ch]
+        mov DWORD PTR [zpatch_nolivery_dest], ecx
+        lea ecx, [esp + 60h]
+        mov DWORD PTR [zpatch_nolivery_bufptr], ecx
+        call abi_nolivery_copy_name
+        call abi_nolivery_count_loop
+        popad
+        push ebx
+        mov ebx, DWORD PTR [zpatch_nolivery_count]
+        mov BYTE PTR [ebp + 0C2h], bl
+        pop ebx
+        jmp DWORD PTR [zpatch_nolivery_resume_d]
+    }
 }
+// @exact 0x1003d3e0: the same sequence as 0x1003d3a0 with ESI as the object
+// (name = &edi[0x13c], count written to [edi+0xc2]); same resume slot.
+__declspec(naked) void abi_nolivery_e()
+{
+    __asm {
+        pushad
+        mov DWORD PTR [zpatch_nolivery_arg], esi
+        lea ecx, [edi + 13Ch]
+        mov DWORD PTR [zpatch_nolivery_dest], ecx
+        lea ecx, [esp + 60h]
+        mov DWORD PTR [zpatch_nolivery_bufptr], ecx
+        call abi_nolivery_copy_name
+        call abi_nolivery_count_loop
+        popad
+        push ebx
+        mov ebx, DWORD PTR [zpatch_nolivery_count]
+        mov BYTE PTR [edi + 0C2h], bl
+        pop ebx
+        jmp DWORD PTR [zpatch_nolivery_resume_d]
+    }
+}
+
+// @exact 0x10006310
+__declspec(naked) void abi_copsirens_a()  // 0x10006310
+{
+    __asm {
+        mov DWORD PTR [zpatch_copsirens_index], edx
+        pushad
+        pushfd
+        call abi_copsirens_check_a
+        popfd
+        popad
+        mov eax, DWORD PTR [zpatch_copsirens_flag]
+        jmp DWORD PTR [zpatch_copsirens_resume]
+    }
+}
+// @exact 0x10006330
+__declspec(naked) void abi_copsirens_b()  // 0x10006330
+{
+    __asm {
+        mov DWORD PTR [zpatch_copsirens_index_b], eax
+        pushad
+        pushfd
+        call abi_copsirens_check_b
+        popfd
+        popad
+        cmp DWORD PTR [zpatch_copsirens_flag_b], 1
+        jmp DWORD PTR [zpatch_copsirens_resume_b]
+    }
+}
+// @exact 0x100040E0
+__declspec(naked) void abi_copsirens_ide()  // 0x100040E0
+{
+    __asm {
+        pushad
+        mov DWORD PTR [zpatch_ide_string], edi
+        mov DWORD PTR [zpatch_ide_model], eax
+        call abi_ide_parse
+        popad
+        mov ecx, 7
+        xor edx, edx
+        __emit 0F3h
+        __emit 0A6h               // repe cmpsb
+        jmp DWORD PTR [zpatch_ide_hook_slot]
+    }
+}
+
+// 0x1001ef60 HighFPSBikePhysicsFix: saves the incoming value, clamps it,
+// restores the registers, then tail-jumps to the resume (match+9).
+// @exact 0x1001EF60
+__declspec(naked) void abi_bike_physics_detour()
+{
+    __asm {
+        fld DWORD PTR [ebp + 8]
+        fstp DWORD PTR [zpatch_bike_value]
+        pushad
+        call abi_bike_physics_helper
+        popad
+        mov DWORD PTR [zpatch_bike_saved], eax
+        mov eax, DWORD PTR [zpatch_bike_value]
+        mov DWORD PTR [ebp + 8], eax
+        mov eax, DWORD PTR [zpatch_bike_saved]
+        fld DWORD PTR [ebp + 8]
+        push ecx
+        mov ecx, esi
+        fstp DWORD PTR [esp]
+        jmp DWORD PTR [zpatch_bike_resume]
+    }
+}
+
+}  // extern "C"
+
+#endif  // !defined(_WIN64)

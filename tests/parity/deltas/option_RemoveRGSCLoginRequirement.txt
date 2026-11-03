@@ -1,0 +1,5 @@
+00498460 E9 InstallRemoveRGSCLoginRequirement
+00498461 EB InstallRemoveRGSCLoginRequirement
+00498462 00 InstallRemoveRGSCLoginRequirement
+00498463 7A InstallRemoveRGSCLoginRequirement
+00498464 0F InstallRemoveRGSCLoginRequirement

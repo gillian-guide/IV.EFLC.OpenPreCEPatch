@@ -1,520 +1,416 @@
-#include "pch.h"
-// Write-set dump: applies the installers to a mapped copy of game_refs/GTAIV.exe
-// and writes "RVA byte" lines, so the result can be diffed against the reference
-// implementation. The hook bodies are stubbed (see stub_bodies.cpp): only their
-// addresses matter here.
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Run: zp_dump <out.txt> [ZolikaPatch.ini]
+// Write-set dump: apply the installers to a mapped copy of a PE32 image and
+// print "RVA byte" lines. Used by the parity harness and by contributors who
+// want to diff an INI's effect without launching the game.
 
+#include "common.hxx"
+
+#include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
-#include <psapi.h>
+import opp.common;
+import opp.config;
+import opp.game;
 
-#include "common.h"
-#include "patches.h"
+namespace opp
+{
+    namespace
+    {
+        std::vector<uint32_t>& DumpPointers()
+        {
+            static std::vector<uint32_t> pointers;
+            return pointers;
+        }
+    } // namespace
+} // namespace opp
 
-import zp.hook_bodies;
+// Recorded by AddressOf / FindGlobalValue / FindGlobalSymbol under
+// OPCEP_DUMP_TOOL. The dump canonicalises these operands after the pass:
+// their numeric value depends on this tool's module layout, not behaviour.
+// C linkage so the modules (opp.common declares it) and this plain TU agree.
+extern "C" void opp_record_dump_pointer(uint32_t value)
+{
+    opp::DumpPointers().push_back(value);
+}
 
 namespace
 {
-// PE32 layout the dump reads; 0x400000 is GTA IV's preferred image base.
-constexpr std::size_t kDosLfanewOffset = 0x3C;
-constexpr std::size_t kPeSignatureSize = 4;
-constexpr std::size_t kCoffHeaderSize = 20;
-constexpr std::size_t kSectionHeaderSize = 40;
-constexpr std::size_t kMinPeSize = 0x100;
-// COFF file header plus the optional-header fields the dump reads (the
-// reader needs at least this much of the NT headers).
-constexpr std::size_t kMinNtHeadersSize = 0x60;
-constexpr std::uint8_t kNop = 0x90u;
-constexpr std::uint8_t kJeRel8Opcode = 0x74u; // je rel8
-constexpr std::uint8_t kShortJmpOpcode = 0xEBu; // jmp rel8
-// The RemoveUselessChecks pass writes these two bytes over the signatures.
-constexpr std::uint8_t kUselessChecksMiscByte = 0x90u;
-constexpr std::uint8_t kUselessChecksDeathByte = 0x32u;
-constexpr std::uint32_t kMaxImageSize = 0x10000000u;
-// IMAGE_OPTIONAL_HEADER32 / IMAGE_FILE_HEADER / IMAGE_SECTION_HEADER fields the
-// mapper reads. The dump parses the raw file, so these are WinNT.h offsets.
-constexpr std::size_t kOptionalImageBase = 28;
-constexpr std::size_t kOptionalSizeOfImage = 56;
-constexpr std::size_t kOptionalSizeOfHeaders = 60;
-constexpr std::size_t kCoffSizeOfOptionalHeader = 16;
-constexpr std::size_t kCoffNumberOfSections = 2;
-constexpr std::size_t kSectionVirtualSize = 8;
-constexpr std::size_t kSectionVirtualAddress = 12;
-constexpr std::size_t kSectionSizeOfRawData = 16;
-constexpr std::size_t kSectionPointerToRawData = 20;
-constexpr unsigned kFaultFrameCount = 16;
-constexpr std::size_t kSparePage = 0x1000;
-// A rel32 branch: one opcode byte and a four-byte displacement.
-constexpr std::uint32_t kBranchBytes = 5;
-constexpr std::uint8_t kJumpOpcode = 0xE9;
+    constexpr size_t kDosLfanewOffset = 0x3C;
+    constexpr size_t kPeSignatureSize = 4;
+    constexpr size_t kCoffHeaderSize = 20;
+    constexpr size_t kSectionHeaderSize = 40;
+    constexpr size_t kMinPeSize = 0x100;
+    constexpr uint32_t kMaxImageSize = 0x10000000u;
+    constexpr size_t kSparePage = 0x1000;
 
-bool MapPeImage(const char* path, std::vector<std::uint8_t>& image, std::uint32_t& imageBase,
-                std::uint32_t& sizeOfImage)
-{
-	std::ifstream in(path, std::ios::binary);
-	if (!in)
-		return false;
-	const std::vector<char> raw{std::istreambuf_iterator<char>(in),
-	                            std::istreambuf_iterator<char>()};
-	std::vector<std::uint8_t> file(raw.size());
-	for (std::size_t i = 0; i < raw.size(); ++i)
-		file[i] = static_cast<std::uint8_t>(raw[i]);
-	if (file.size() < kMinPeSize)
-		return false;
+    bool MapPeImage(const char* path, std::vector<uint8_t>& image, uint32_t& imageBase,
+                    uint32_t& sizeOfImage)
+    {
+        std::ifstream in(path, std::ios::binary);
+        if (!in)
+            return false;
+        const std::vector<char> raw{std::istreambuf_iterator<char>(in),
+                                    std::istreambuf_iterator<char>()};
+        std::vector<uint8_t> file(raw.size());
+        for (size_t i = 0; i < raw.size(); ++i)
+            file[i] = static_cast<uint8_t>(raw[i]);
+        if (file.size() < kMinPeSize)
+            return false;
 
-	const auto rd16 = [&](std::size_t off) {
-		return static_cast<std::uint16_t>(file[off] | (file[off + 1] << 8));
-	};
-	const auto rd32 = [&](std::size_t off) {
-		return static_cast<std::uint32_t>(file[off] | (file[off + 1] << 8) |
-		                                  (file[off + 2] << 16) | (file[off + 3] << 24));
-	};
-	if (file[0] != 'M' || file[1] != 'Z')
-		return false;
+        const auto rd16 = [&](size_t off) {
+            return static_cast<uint16_t>(file[off] | (file[off + 1] << 8));
+        };
+        const auto rd32 = [&](size_t off) {
+            return static_cast<uint32_t>(file[off] | (file[off + 1] << 8) |
+                                              (file[off + 2] << 16) | (file[off + 3] << 24));
+        };
+        if (file[0] != 'M' || file[1] != 'Z')
+            return false;
 
-	const std::size_t e_lfanew = rd32(kDosLfanewOffset);
-	if (e_lfanew + kMinNtHeadersSize > file.size())
-		return false;
-	const std::size_t coff = e_lfanew + kPeSignatureSize;
-	const std::size_t optional = coff + kCoffHeaderSize;
-	imageBase = rd32(optional + kOptionalImageBase);
-	sizeOfImage = rd32(optional + kOptionalSizeOfImage);
-	const std::uint32_t sizeOfHeaders = rd32(optional + kOptionalSizeOfHeaders);
-	if (sizeOfImage == 0 || sizeOfImage > kMaxImageSize)
-		return false;
+        const size_t e_lfanew = rd32(kDosLfanewOffset);
+        if (e_lfanew + 0x60 > file.size())
+            return false;
+        const size_t coff = e_lfanew + kPeSignatureSize;
+        const size_t optional = coff + kCoffHeaderSize;
+        imageBase = rd32(optional + 28);
+        sizeOfImage = rd32(optional + 56);
+        const uint32_t sizeOfHeaders = rd32(optional + 60);
+        if (sizeOfImage == 0 || sizeOfImage > kMaxImageSize)
+            return false;
 
-	image.assign(sizeOfImage, 0);
-	std::memcpy(image.data(), file.data(),
-	            sizeOfHeaders < file.size() ? sizeOfHeaders : file.size());
-	// IMAGE_SECTION_HEADERs follow COFF + SizeOfOptionalHeader, 40 bytes each.
-	const std::size_t sectionTable = optional + rd16(coff + kCoffSizeOfOptionalHeader);
-	for (std::size_t sh = sectionTable,
-	                 end = sectionTable + rd16(coff + kCoffNumberOfSections) * kSectionHeaderSize;
-	     sh < end; sh += kSectionHeaderSize)
-	{
-		if (sh + kSectionHeaderSize > file.size())
-			return false;
-		const std::uint32_t vsize = rd32(sh + kSectionVirtualSize);
-		const std::uint32_t vaddr = rd32(sh + kSectionVirtualAddress);
-		const std::uint32_t rsize = rd32(sh + kSectionSizeOfRawData);
-		const std::uint32_t rptr = rd32(sh + kSectionPointerToRawData);
-		const std::uint32_t count = rsize < vsize ? rsize : vsize;
-		if (count && vaddr + count <= sizeOfImage && rptr + count <= file.size())
-			std::memcpy(image.data() + vaddr, file.data() + rptr, count);
-	}
-	return true;
-}
+        image.assign(sizeOfImage, 0);
+        std::memcpy(image.data(), file.data(),
+                    sizeOfHeaders < file.size() ? sizeOfHeaders : file.size());
+        const size_t sectionTable = optional + rd16(coff + 16);
+        for (size_t sh = sectionTable,
+                         end = sectionTable + rd16(coff + 2) * kSectionHeaderSize;
+             sh < end; sh += kSectionHeaderSize)
+        {
+            if (sh + kSectionHeaderSize > file.size())
+                return false;
+            const uint32_t vsize = rd32(sh + 8);
+            const uint32_t vaddr = rd32(sh + 12);
+            const uint32_t rsize = rd32(sh + 16);
+            const uint32_t rptr = rd32(sh + 20);
+            const uint32_t count = rsize < vsize ? rsize : vsize;
+            if (count && vaddr + count <= sizeOfImage && rptr + count <= file.size())
+                std::memcpy(image.data() + vaddr, file.data() + rptr, count);
+        }
+        return true;
+    }
+
+    // Per-arm attribution. `before` always mirrors the live image, so each arm
+    // records only the bytes that arm left changed (the net write set of that
+    // arm, not every transient store). Records are kept in memory so the
+    // module-address canonicalisation below can rewrite both outputs.
+    struct WriteRecord
+    {
+        size_t rva;
+        uint8_t oldValue;
+        uint8_t newValue;
+        const char* arm;
+    };
+
+    struct Attribution
+    {
+        uint8_t* image{};
+        size_t size{};
+        std::vector<uint8_t> before;
+        std::vector<WriteRecord> records;
+    };
+
+    void AttributionEnd(void* user, const char* arm)
+    {
+        auto* state = static_cast<Attribution*>(user);
+        for (size_t i = 0; i < state->size; ++i)
+        {
+            const uint8_t now = state->image[i];
+            const uint8_t old = state->before[i];
+            if (now == old)
+                continue;
+            state->records.push_back({i, old, now, arm});
+            state->before[i] = now;
+        }
+    }
+
+    // Module-relative operands (AddressOf(&global), FindGlobalValue, ...) move
+    // whenever unrelated code or data is added. Replace every 4-byte window that
+    // holds one of the recorded addresses with a stable synthetic address, so a
+    // pure refactor keeps the write set byte-identical. Game-image addresses are
+    // left alone: the installers write those deliberately and they are stable.
+    void CanonicaliseModulePointers(Attribution& state, const std::vector<uint8_t>& pristine,
+                                    uintptr_t gameBase, size_t gameSize)
+    {
+        std::unordered_set<uint32_t> modulePointers;
+        for (const uint32_t value : opp::DumpPointers())
+        {
+            if (value >= gameBase && value < gameBase + gameSize)
+                continue;
+            modulePointers.insert(value);
+        }
+
+        if (!state.records.empty() && !modulePointers.empty())
+        {
+            std::unordered_map<size_t, size_t> byRva;
+            for (size_t i = 0; i < state.records.size(); ++i)
+                byRva.emplace(state.records[i].rva, i);
+
+            const size_t originalCount = state.records.size();
+            for (size_t i = 0; i < originalCount; ++i)
+            {
+                const size_t rva = state.records[i].rva;
+                const char* arm = state.records[i].arm;
+                for (size_t back = 0; back <= 3 && back <= rva; ++back)
+                {
+                    const size_t start = rva - back;
+                    if (start + 4 > state.size)
+                        continue;
+                    uint32_t value = 0;
+                    std::memcpy(&value, state.image + start, sizeof(value));
+                    if (modulePointers.find(value) == modulePointers.end())
+                        continue;
+
+                    // Site-derived, so the marker does not depend on how many
+                    // pointers the pass recorded or in which order.
+                    const uint32_t replacement =
+                        0x0A000000u | (static_cast<uint32_t>(start) & 0x00FFFFFFu);
+                    const uint8_t bytes[4] = {
+                        static_cast<uint8_t>(replacement),
+                        static_cast<uint8_t>(replacement >> 8),
+                        static_cast<uint8_t>(replacement >> 16),
+                        static_cast<uint8_t>(replacement >> 24),
+                    };
+                    for (size_t k = 0; k < 4; ++k)
+                    {
+                        const size_t target = start + k;
+                        const auto existing = byRva.find(target);
+                        if (existing == byRva.end())
+                        {
+                            state.records.push_back(
+                                {target, pristine[target], bytes[k], arm});
+                            byRva.emplace(target, state.records.size() - 1);
+                        }
+                        else
+                        {
+                            state.records[existing->second].newValue = bytes[k];
+                        }
+                        state.image[target] = bytes[k];
+                    }
+                }
+            }
+        }
+
+        // Several arms can touch the same site (e.g. RemoveUselessChecks then
+        // RestoreDeathMusic, or two options that patch the same flag). The final
+        // image has one byte per RVA, so keep the last write for each and emit a
+        // unique, order-independent set.
+        std::unordered_map<size_t, WriteRecord> latest;
+        latest.reserve(state.records.size());
+        for (const WriteRecord& record : state.records)
+            latest[record.rva] = record;
+        state.records.clear();
+        state.records.reserve(latest.size());
+        for (const auto& entry : latest)
+            state.records.push_back(entry.second);
+
+        std::sort(state.records.begin(), state.records.end(),
+                  [](const WriteRecord& left, const WriteRecord& right) {
+                      return left.rva < right.rva;
+                  });
+    }
+
+    // Exercise the real first-run importer without touching the source fixture:
+    // copy it into a throwaway directory next to `outPath` and keep the result.
+    int ImportLegacy(const char* legacyPath, const char* outPath)
+    {
+        namespace fs = std::filesystem;
+        const fs::path out = fs::absolute(outPath);
+        const fs::path work = out.parent_path() / (out.filename().string() + ".import");
+        std::error_code error;
+        fs::remove_all(work, error);
+        fs::create_directories(work, error);
+        fs::copy_file(legacyPath, work / "ZolikaPatch.ini",
+                      fs::copy_options::overwrite_existing, error);
+        if (error)
+        {
+            std::fprintf(stderr, "opcep_dump: cannot stage %s: %s\n", legacyPath,
+                         error.message().c_str());
+            return 6;
+        }
+
+        const fs::path created = opp::EnsureConfigFile(work);
+        if (created.empty())
+        {
+            std::fprintf(stderr, "opcep_dump: import of %s failed\n", legacyPath);
+            fs::remove_all(work, error);
+            return 6;
+        }
+        fs::copy_file(created, out, fs::copy_options::overwrite_existing, error);
+        fs::remove_all(work, error);
+        if (error)
+        {
+            std::fprintf(stderr, "opcep_dump: cannot write %s: %s\n", outPath,
+                         error.message().c_str());
+            return 6;
+        }
+        std::fprintf(stderr, "opcep_dump: imported %s -> %s\n", legacyPath, outPath);
+        return 0;
+    }
 } // namespace
-
-// The pass runs inside SEH so a fault can be reported; keep this function free
-// of C++ objects (MSVC forbids __try in a frame that needs unwinding).
-static ULONG_PTR g_access = 0;
-static void* g_frames[kFaultFrameCount]{};
-static unsigned short g_frameCount = 0;
-static void* g_target = nullptr;
-
-// The hook-body table under ZP_DUMP_TOOL (see dllmain.cpp): a body's address in
-// the tool is a load-time value, so the dump canonicalises the branches it wrote
-// to the body's reference VA. Without that the oracle would change whenever the
-// tool's own layout did.
-extern std::size_t DumpHookBodyCount() noexcept;
-extern std::uint32_t DumpHookBodyReference(std::size_t index) noexcept;
-extern std::uintptr_t DumpHookBodyAddress(std::size_t index) noexcept;
-
-namespace
-{
-struct HookBodyStand
-{
-	std::uintptr_t address;     // where the stub sits in this process
-	std::uint32_t referenceVa;  // the destination the original ASI uses
-};
-
-std::vector<HookBodyStand> HookBodyStands()
-{
-	std::vector<HookBodyStand> stands;
-	for (std::size_t i = 0; i < DumpHookBodyCount(); ++i)
-		stands.push_back({DumpHookBodyAddress(i), DumpHookBodyReference(i)});
-	return stands;
-}
-
-// The installer keys and their per-arm defaults (generated).
-struct OptionKey
-{
-	const char* key;
-	const char* defaultValue;
-};
-#include "option_keys.inc"
-
-// The repository INI with every known key forced off, then `enabled` forced on:
-// isolates a set of arms from whatever the config file happens to contain.
-ConfigDocument IsolateOptions(const ConfigDocument& base, const char* const* enabled,
-                              std::size_t enabledCount)
-{
-	ConfigDocument config = base;
-	for (std::size_t i = 0; i < kOptionKeyCount; ++i)
-		config.entries.push_back({"Options", kOptionKeys[i].key, "0"});
-	for (std::size_t i = 0; i < enabledCount; ++i)
-		config.entries.push_back({"Options", enabled[i], "1"});
-	return config;
-}
-
-bool HasMatch(const std::uint8_t* image, std::uint32_t size, const char* signature)
-{
-	Match match;
-	return FindPattern(ModuleView{image, size}, signature, match);
-}
-// Rewrite every branch this pass wrote to a hook body so its displacement names
-// the body's reference VA instead of the stub's load address. Byte-for-byte this
-// keeps the installer's decisions and drops the tool's own layout from the
-// oracle; a body branch the installer did not write is left alone.
-void CanonicaliseHookBodyBranches(std::uint8_t* image, const std::uint8_t* pristine,
-                                  std::uintptr_t imageBase, std::uint32_t size,
-                                  const std::vector<HookBodyStand>& stands)
-{
-	for (std::uint32_t offset = 0; offset + kBranchBytes <= size; ++offset)
-	{
-		const std::uint8_t opcode = image[offset];
-		if (opcode != kCallOpcode && opcode != kJumpOpcode)
-			continue;
-		const bool written = opcode != pristine[offset] ||
-		                     std::memcmp(image + offset + 1, pristine + offset + 1,
-		                                 kBranchBytes - 1) != 0;
-		if (!written)
-			continue;
-		std::int32_t relative = 0;
-		std::memcpy(&relative, image + offset + 1, sizeof(relative));
-		// An x86 branch encodes a 32-bit displacement; compare the truncated
-		// destination, exactly as the CPU resolves it.
-		const std::uint32_t next = imageBase + offset + kBranchBytes;
-		const std::uint32_t destination = next + static_cast<std::uint32_t>(relative);
-		for (const HookBodyStand& stand : stands)
-		{
-			if (destination != static_cast<std::uint32_t>(stand.address))
-				continue;
-			const auto canonical = static_cast<std::int32_t>(stand.referenceVa - next);
-			std::memcpy(image + offset + 1, &canonical, sizeof(canonical));
-			break;
-		}
-	}
-}
-} // namespace
-
-static bool RunPass(std::uint8_t* image, std::uint32_t size, GameBuild build,
-                    const ConfigDocument* config, DWORD& code, void*& where)
-{
-	__try
-	{
-		PatchGame(build, GameImage{image, size}, *config);
-		return true;
-	}
-	__except (code = GetExceptionCode(),
-	          where = GetExceptionInformation()->ExceptionRecord->ExceptionAddress,
-	          g_access = GetExceptionInformation()->ExceptionRecord->ExceptionInformation[0],
-	          g_target = reinterpret_cast<void*>(
-	              GetExceptionInformation()->ExceptionRecord->ExceptionInformation[1]),
-	          g_frameCount = RtlCaptureStackBackTrace(0, kFaultFrameCount, g_frames, nullptr),
-	          EXCEPTION_EXECUTE_HANDLER)
-	{
-		return false;
-	}
-}
-
-// Ordering guard: RemoveUselessChecks must stay ahead of MiscFixes and
-// RestoreDeathMusic, as in the original loader. Its tables overwrite one fixed
-// byte of each of their signatures (MiscFixes' `E8` at match+9 = 0x90631
-// becomes 0x90, RestoreDeathMusic's `E8` at match+0 = 0x41E53A becomes 0x32),
-// so with all three enabled both arms must find no match and leave their own
-// patch byte untouched: 0x74 at 0x90628 for MiscFixes, and RestoreDeathMusic's
-// third CALL (at 0x41E53A) absent. With RemoveUselessChecks off both arms must
-// apply. Moving RemoveUselessChecks after them re-enables both installs and
-// fails here.
-int RunOrderingCheck(std::uint8_t* image, std::uint32_t size, const ConfigDocument& config)
-{
-	constexpr const char* kMiscFixesSignature =
-	    "74 05 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 83 C4 04 B9";
-	constexpr const char* kDeathMusicSignature = "E8 ? ? ? ? 84 C0 74 C6 8B BE";
-	// Build 9 (1.0.8.0) sites.
-	constexpr std::uint32_t kMiscFixesPatchByte = 0x90628; // the `74` MiscFixes turns into EB
-	constexpr std::uint32_t kMiscFixesScanByte = 0x90631;  // the `E8` RemoveUselessChecks NOPs
-	constexpr std::uint32_t kDeathMusicScanByte = 0x41E53A; // the `E8` RemoveUselessChecks patches
-	// RestoreDeathMusic's other two CALLs, which run after RemoveUselessChecks.
-	constexpr std::array<std::uint32_t, 2> kDeathMusicCalls{0x41E3B8, 0x41E4FC};
-
-	if (size <= kMiscFixesScanByte + kBranchBytes)
-	{
-		std::fprintf(stderr, "zp_dump: ordering: image too small\n");
-		return 1;
-	}
-	const std::vector<std::uint8_t> pristine(image, image + size);
-	// The two anchor bytes prove the image is the build these RVAs belong to.
-	if (pristine[kMiscFixesScanByte] != kCallOpcode ||
-    pristine[kDeathMusicScanByte] != kCallOpcode)
-	{
-		std::fprintf(stderr, "zp_dump: ordering: image is not 1.0.8.0 (0x%X=%02X, 0x%X=%02X)\n",
-		             kMiscFixesScanByte, pristine[kMiscFixesScanByte], kDeathMusicScanByte,
-		             pristine[kDeathMusicScanByte]);
-		return 1;
-	}
-	const char* all[] = {"RemoveUselessChecks", "MiscFixes", "RestoreDeathMusic"};
-	int failures = 0;
-
-	const auto pass = [&](const char* const* enabled, std::size_t count) {
-		std::memcpy(image, pristine.data(), size);
-		const ConfigDocument isolated = IsolateOptions(config, enabled, count);
-		DWORD code = 0;
-		void* where = nullptr;
-		if (RunPass(image, size, GameBuild::v1080, &isolated, code, where))
-			return true;
-		std::fprintf(stderr, "zp_dump: ordering: pass faulted %08lX at %p\n", code, where);
-		return false;
-	};
-	const auto expectByte = [&](std::uint32_t site, std::uint8_t want, const char* what) {
-		if (image[site] == want)
-			return 0;
-		std::fprintf(stderr, "zp_dump: ordering: %s at 0x%X is %02X, expected %02X\n", what, site,
-		             image[site], want);
-		return 1;
-	};
-
-	// RemoveUselessChecks on: both installs must be suppressed.
-	if (!pass(all, 3))
-		return 1;
-	failures += expectByte(kMiscFixesScanByte, kUselessChecksMiscByte,
-                       "the RemoveUselessChecks byte");
-	failures += expectByte(kDeathMusicScanByte, kUselessChecksDeathByte,
-                       "the RemoveUselessChecks byte");
-	failures += expectByte(kMiscFixesPatchByte, kJeRel8Opcode, "MiscFixes' patch byte");
-	if (HasMatch(image, size, kMiscFixesSignature))
-	{
-		std::fprintf(stderr,
-		             "zp_dump: ordering: MiscFixes' signature still matches with RemoveUselessChecks on\n");
-		++failures;
-	}
-	if (HasMatch(image, size, kDeathMusicSignature))
-	{
-		std::fprintf(stderr, "zp_dump: ordering: RestoreDeathMusic's signature still matches with "
-		                     "RemoveUselessChecks on\n");
-		++failures;
-	}
-	for (const std::uint32_t site : kDeathMusicCalls)
-	{
-		if (std::memcmp(image + site, pristine.data() + site, kBranchBytes) == 0)
-		{
-			std::fprintf(stderr, "zp_dump: ordering: RestoreDeathMusic's call at 0x%X was not "
-			                     "written\n", site);
-			++failures;
-		}
-		// These two calls survive only because RestoreDeathMusic runs AFTER
-		// RemoveUselessChecks. Run it first and the tables' 5-byte nops overwrite
-		// both, so the opcode byte would be 0x90 instead of 0xE8: this is what
-		// distinguishes the two orders (the third call is destroyed either way).
-		failures += expectByte(site, kCallOpcode,
-                       "a RestoreDeathMusic call surviving RemoveUselessChecks");
-	}
-
-	// RemoveUselessChecks off: both arms must apply. This is the control that
-	// proves the suppression above is due to the tables, not to the arms.
-	if (!pass(all + 1, 2))
-		return 1;
-	failures += expectByte(kMiscFixesPatchByte, kShortJmpOpcode,
-                       "MiscFixes' patch byte with RC off");
-	failures += expectByte(kMiscFixesScanByte, kCallOpcode,
-                       "the untouched signature byte");
-	if (std::memcmp(image + kDeathMusicScanByte, pristine.data() + kDeathMusicScanByte,
-	                kBranchBytes) == 0)
-	{
-		std::fprintf(stderr,
-		             "zp_dump: ordering: RestoreDeathMusic's call at 0x%X was not written with RC off\n",
-		             kDeathMusicScanByte);
-		++failures;
-	}
-
-	std::fprintf(stderr, "zp_dump: ordering: %s\n", failures != 0 ? "FAIL" : "ok");
-	return failures != 0 ? 1 : 0;
-}
 
 int main(int argc, char** argv)
 {
-	// --exe/--build select which game image and build id the pass runs as, so a
-	// build-gated arm can be exercised against its own executable. Everything
-	// after the flags is <out.txt> [ini].
-	bool perOption = false;
-	bool ordering = false;
-	const char* exePath = nullptr;
-	int buildId = -1;
-	std::vector<const char*> positional;
-	for (int i = 1; i < argc; ++i)
-	{
-		if (std::strcmp(argv[i], "--per-option") == 0)
-			perOption = true;
-		else if (std::strcmp(argv[i], "--ordering") == 0)
-			ordering = true;
-		else if (std::strcmp(argv[i], "--exe") == 0 && i + 1 < argc)
-			exePath = argv[++i];
-		else if (std::strcmp(argv[i], "--build") == 0 && i + 1 < argc)
-			buildId = std::atoi(argv[++i]);
-		else
-			positional.push_back(argv[i]);
-	}
-	if (!ordering && positional.empty())
-	{
-		std::fprintf(stderr,
-		             "usage: zp_dump [--per-option] [--exe <image>] [--build <id>] <out.txt> [ini]\n"
-		             "       zp_dump --ordering [ini]\n");
-		return 1;
-	}
+    if (argc == 4 && std::strcmp(argv[1], "--import-legacy") == 0)
+        return ImportLegacy(argv[2], argv[3]);
 
-	GameBuild build = GameBuild::v1080;
-	if (buildId >= 0)
-	{
-		bool known = false;
-		for (const int id : {0, 1, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 18})
-			known = known || id == buildId;
-		if (!known)
-		{
-			std::fprintf(stderr, "zp_dump: unknown build id %d\n", buildId);
-			return 1;
-		}
-		build = static_cast<GameBuild>(buildId);
-	}
+    // Print the effective install order, one name per line, tier by tier, in the
+    // same name order PatchGame runs them. The order golden in
+    // tests/order_golden.txt is the per-tier arm set captured with this mode.
+    if (argc == 2 && std::strcmp(argv[1], "--order") == 0)
+    {
+        for (const opp::Event<opp::PatchContext&>* event : {&opp::PublishEvent(),
+                                                           &opp::InstallEvent(),
+                                                           &opp::PostEvent()})
+        {
+            std::vector<const char*> names;
+            for (size_t i = 0; i < event->size(); ++i)
+            {
+                if (const char* name = event->name(i))
+                    names.push_back(name);
+            }
+            std::sort(names.begin(), names.end(), [](const char* a, const char* b) {
+                return std::strcmp(a, b) < 0;
+            });
+            for (const char* name : names)
+                std::printf("%s\n", name);
+        }
+        return 0;
+    }
 
-	std::vector<std::uint8_t> file_image;
-	std::uint32_t imageBase = 0;
-	std::uint32_t size = 0;
-	if (exePath != nullptr)
-	{
-		if (!MapPeImage(exePath, file_image, imageBase, size))
-		{
-			std::fprintf(stderr, "zp_dump: cannot read %s\n", exePath);
-			return 2;
-		}
-	}
-	else if (!MapPeImage("game_refs/GTAIV.exe", file_image, imageBase, size) &&
-	         !MapPeImage("../game_refs/GTAIV.exe", file_image, imageBase, size))
-	{
-		std::fprintf(stderr, "zp_dump: GTAIV.exe not found\n");
-		return 2;
-	}
+    if (argc < 3)
+    {
+        std::fprintf(stderr,
+                     "usage: opcep_dump <game.exe> <ini> <out.txt> "
+                     "[--attribution <arm.txt>]\n"
+                     "       opcep_dump --import-legacy <legacy.ini> <out.ini>\n"
+                     "       opcep_dump --order\n");
+        return 1;
+    }
 
-	// Absolute module addresses are part of the image: map it at its own base.
-	// One spare page: signature scans may read a few bytes past the image end.
-	auto* image = static_cast<std::uint8_t*>(
-	    VirtualAlloc(reinterpret_cast<void*>(static_cast<std::uintptr_t>(imageBase)),
-	                 size + kSparePage, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
-	if (!image)
-	{
-		// 487 is ERROR_INVALID_ADDRESS: something (a Win32 process's heap and
-		// loader mappings, or another image) already owns the low range. Describe
-		// what covers the base so the failure is diagnosable from the log.
-		MEMORY_BASIC_INFORMATION region{};
-		std::fprintf(stderr, "zp_dump: cannot map at 0x%X (err=%lu), module base %p\n", imageBase,
-		             GetLastError(), static_cast<void*>(GetModuleHandleA(nullptr)));
-		if (VirtualQuery(reinterpret_cast<void*>(static_cast<std::uintptr_t>(imageBase)), &region,
-		                 sizeof(region)))
-		{
-			char mapped[MAX_PATH]{};
-			GetMappedFileNameA(GetCurrentProcess(),
-			                   reinterpret_cast<void*>(static_cast<std::uintptr_t>(imageBase)), mapped,
-			                   sizeof(mapped));
-			std::fprintf(stderr, "zp_dump: 0x%X is state=%lu type=%lu in %p..%p file=%s\n",
-			             imageBase, region.State, region.Type, region.BaseAddress,
-			             static_cast<void*>(static_cast<std::uint8_t*>(region.BaseAddress) +
-			                                region.RegionSize),
-			             mapped[0] ? mapped : "(anonymous)");
-		}
-		return 3;
-	}
-	std::memcpy(image, file_image.data(), size);
+    const char* attributionPath = nullptr;
+    uint32_t buildOverride = 0;
+    for (int i = 4; i < argc; ++i)
+    {
+        if (std::strcmp(argv[i], "--attribution") == 0 && i + 1 < argc)
+            attributionPath = argv[++i];
+        else if (std::strcmp(argv[i], "--build") == 0 && i + 1 < argc)
+            buildOverride = static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
+    }
 
-	const char* ini = positional.size() > 1 ? positional[1] : "game_refs/ZolikaPatch.ini";
-	ConfigDocument config;
-	if (!LoadConfig(ini, config) && !LoadConfig("../game_refs/ZolikaPatch.ini", config))
-	{
-		std::fprintf(stderr, "zp_dump: cannot read %s\n", ini);
-		return 4;
-	}
+    std::vector<uint8_t> file_image;
+    uint32_t imageBase = 0;
+    uint32_t size = 0;
+    if (!MapPeImage(argv[1], file_image, imageBase, size))
+    {
+        std::fprintf(stderr, "opcep_dump: cannot map %s\n", argv[1]);
+        return 2;
+    }
 
-	std::fprintf(stderr, "zp_dump: module base %p build %d image %s\n",
-	             static_cast<void*>(GetModuleHandleA(nullptr)), static_cast<int>(build),
-	             exePath ? exePath : "game_refs/GTAIV.exe");
+    auto* image = static_cast<uint8_t*>(
+        VirtualAlloc(reinterpret_cast<void*>(static_cast<uintptr_t>(imageBase)),
+                     size + kSparePage, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+    // A 32-bit host cannot always reserve the game's 0x400000 base. The write
+    // set is still address-independent: rows use RVA + this mapped base.
+    if (!image)
+    {
+        MEMORY_BASIC_INFORMATION mbi{};
+        VirtualQuery(reinterpret_cast<void*>(static_cast<uintptr_t>(imageBase)), &mbi,
+                     sizeof(mbi));
+        std::fprintf(stderr,
+                     "opcep_dump: preferred base 0x%X unavailable (err=%lu state=0x%lX type=0x%lX "
+                     "region=%p size=0x%zX)\n",
+                     imageBase, GetLastError(), mbi.State, mbi.Type, mbi.BaseAddress,
+                     mbi.RegionSize);
+        image = static_cast<uint8_t*>(
+            VirtualAlloc(nullptr, size + kSparePage, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+    }
+    if (!image)
+    {
+        std::fprintf(stderr, "opcep_dump: cannot map image (err=%lu)\n", GetLastError());
+        return 3;
+    }
+    std::memcpy(image, file_image.data(), size);
 
-	// Ordering guard (see RunOrderingCheck); its RVAs are the 1.0.8.0 sites.
-	if (ordering)
-	{
-		if (build != GameBuild::v1080)
-		{
-			std::fprintf(stderr, "zp_dump: --ordering is a 1.0.8.0 check\n");
-			return 1;
-		}
-		return RunOrderingCheck(image, size, config);
-	}
+    opp::Config config(argv[2]);
+    if (!config.present())
+    {
+        std::fprintf(stderr, "opcep_dump: cannot read %s\n", argv[2]);
+        return 4;
+    }
 
-	// --per-option: run each arm alone (every other key forced to 0) and print
-	// "option rva byte" so a divergence can be attributed to one installer.
-	if (perOption)
-	{
-		std::FILE* perOut = std::fopen(positional[0], "wb");
-		if (!perOut)
-			return 5;
-		const std::vector<HookBodyStand> stands = HookBodyStands();
-		for (std::size_t i = 0; i < kOptionKeyCount; ++i)
-		{
-			const char* enabled[] = {kOptionKeys[i].key};
-			ConfigDocument single = IsolateOptions(config, enabled, 1);
+    std::vector<uint8_t> pristine(image, image + size);
 
-			std::memcpy(image, file_image.data(), size);
-			PatchGame(build, GameImage{image, size}, single);
-			CanonicaliseHookBodyBranches(image, file_image.data(), imageBase, size, stands);
-			for (std::size_t b = 0; b < size; ++b)
-			{
-				if (image[b] != file_image[b])
-					std::fprintf(perOut, "%s %08zX %02X\n", kOptionKeys[i].key, b, image[b]);
-			}
-		}
-		std::fclose(perOut);
-		return 0;
-	}
+    Attribution attribution;
+    attribution.image = image;
+    attribution.size = size;
+    attribution.before = pristine;
+    opp::PatchObserver observer;
+    observer.user = &attribution;
+    observer.end = &AttributionEnd;
 
-	std::vector<std::uint8_t> pristine(image, image + size);
+    // SkipLauncher belongs to the separate XLivelessAddon successor module; the
+    // OpenPreCEPatch write set starts at the option pass.
 
-	// Report where the pass faults instead of dying silently: the installers
-	// write the way the original does, so a fault is a finding.
-	DWORD faultCode = 0;
-	void* faultAddress = nullptr;
-	if (!RunPass(image, size, build, &config, faultCode, faultAddress))
-	{
-		for (unsigned short i = 0; i < g_frameCount; ++i)
-		{
-			std::fprintf(stderr, "  frame %u: rva %llX\n", i,
-			             static_cast<unsigned long long>(
-			                 reinterpret_cast<std::uintptr_t>(g_frames[i]) -
-			                 reinterpret_cast<std::uintptr_t>(GetModuleHandleA(nullptr))));
-		}
-		std::fprintf(stderr, "zp_dump: fault %08lX at %p access=%llu target=%p (image %p..%p)\n",
-		             faultCode, faultAddress, static_cast<unsigned long long>(g_access), g_target,
-		             static_cast<void*>(image), static_cast<void*>(image + size));
-		return 6;
-	}
+    // The real ASI classifies the build from the running executable. The dump
+    // maps an image without executing it, so a cross-build write set needs the
+    // build named; --build 1060 etc. selects the same arm set the ASI would run.
+    opp::GameBuild build = opp::GameBuild::v1080;
+    if (buildOverride != 0)
+    {
+        build = opp::ClassifyGameBuild(buildOverride);
+        if (build == opp::GameBuild::unknown)
+        {
+            std::fprintf(stderr, "opcep_dump: unsupported --build %u\n", buildOverride);
+            return 7;
+        }
+        std::fprintf(stderr, "opcep_dump: build forced to %s\n", opp::GameBuildName(build));
+    }
 
-	std::FILE* out = std::fopen(positional[0], "wb");
-	if (!out)
-		return 5;
-	CanonicaliseHookBodyBranches(image, pristine.data(), imageBase, size, HookBodyStands());
-	std::size_t changed = 0;
-	for (std::size_t i = 0; i < size; ++i)
-	{
-		if (image[i] == pristine[i])
-			continue;
-		std::fprintf(out, "%08zX %02X\n", i, image[i]);
-		++changed;
-	}
-	std::fclose(out);
-	std::fprintf(stderr, "zp_dump: %zu bytes changed\n", changed);
-	return 0;
+    opp::PatchGame(build, opp::GameImage{image, size}, config, observer);
+
+    CanonicaliseModulePointers(attribution, pristine,
+                               reinterpret_cast<uintptr_t>(image), size);
+
+    std::FILE* out = std::fopen(argv[3], "wb");
+    if (!out)
+        return 5;
+    for (const WriteRecord& record : attribution.records)
+        std::fprintf(out, "%08zX %02X\n", record.rva, record.newValue);
+    std::fclose(out);
+
+    if (attributionPath != nullptr)
+    {
+        std::FILE* arms = std::fopen(attributionPath, "wb");
+        if (arms == nullptr)
+            return 5;
+        for (const WriteRecord& record : attribution.records)
+            std::fprintf(arms, "%08zX %02X %02X %s\n", record.rva, record.oldValue,
+                         record.newValue, record.arm);
+        std::fclose(arms);
+        std::fprintf(stderr, "opcep_dump: %zu attributed bytes\n",
+                     attribution.records.size());
+    }
+
+    std::fprintf(stderr, "opcep_dump: %zu bytes changed\n", attribution.records.size());
+    return 0;
 }

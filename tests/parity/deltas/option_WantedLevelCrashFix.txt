@@ -1,0 +1,5 @@
+005B26C9 E9 InstallWantedLevelCrashFix
+005B26CA C2 InstallWantedLevelCrashFix
+005B26CB DD InstallWantedLevelCrashFix
+005B26CC 69 InstallWantedLevelCrashFix
+005B26CD 0F InstallWantedLevelCrashFix

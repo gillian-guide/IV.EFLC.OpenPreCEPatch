@@ -1,0 +1,4 @@
+008A058D 90 InstallNoImpostorHeightCutoff
+008A058E 90 InstallNoImpostorHeightCutoff
+008A118E 90 InstallNoImpostorHeightCutoff
+008A118F 90 InstallNoImpostorHeightCutoff

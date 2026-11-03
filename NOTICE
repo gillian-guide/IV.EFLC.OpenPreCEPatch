@@ -1,81 +1,45 @@
-# Third-party notices
+# NOTICE
 
-This repository contains original code plus the following third-party
-components. They are checked out as git submodules (`.gitmodules`), pinned to
-the upstream commits whose files this tree was written against; their licenses
-travel with them and apply to those files, not to the reconstruction.
+OpenPreCEPatch is licensed under the GNU General Public License, version 3 or
+later (see `LICENSE`). It is a derivative of the following work.
 
-## injector
+## GTAIV.EFLC.FusionFix
 
-`external/injector` - https://github.com/ThirteenAG/injector, pinned to
-`fdd27705` (`external/injector/include/injector/*.hpp`).
+The repository layout, the module/event conventions, the build files, the
+submodule choices and parts of the compatibility approach follow
+GTAIV.EFLC.FusionFix, Copyright (C) ThirteenAG and contributors, licensed under
+GPL-3.0. The intro/windowed logic used by the separate XLivelessAddon companion
+follows FusionFix's `skipintro.ixx` and `windowed.ixx`. The improvements in this
+module are the shipped code: there is no test-only parity switch or older branch
+compiled alongside them. Any other code later borrowed from FusionFix stays under
+GPL-3.0 and is attributed in the file header.
 
-Copyright (C) 2012-2014 LINK/2012 <dma_2012@hotmail.com>
+## ZolikaPatch
 
-zlib-style license: permission is granted to use, alter and redistribute
-freely, provided the origin is not misrepresented and this notice is kept.
-The full text is at the top of `external/injector/include/injector/injector.hpp`.
+The feature set, INI keys, defaults, signatures and machine-level behaviour are
+those of ZolikaPatch by Zolika1351. ZolikaPatch was distributed as a compiled
+ASI without source. This repository contains a clean-room reconstruction and a
+readable rewrite of that binary, not the original source.
 
-## Hooking.Patterns
+## XLivelessAddon
 
-`external/Hooking.Patterns` - https://github.com/ThirteenAG/Hooking.Patterns,
-pinned to `961c83cc`.
+The launcher/SecuROM bypass and the xliveless file layer descend from
+XLivelessAddon by the GTAmodding community (public domain). They are not part of
+this repository; the reimplemented code lives in the separate XLivelessAddon
+companion repository and is attributed there.
 
-Part of the CitizenFX project (https://citizen.re/), MIT licensed. The
-upstream LICENSE.md carries the full terms. The tree compiles upstream's
-`Hooking.Patterns.cpp` unmodified; this project's earlier copy added a
-precompiled-header include, which is now handled by the build instead.
+## Vendored libraries (git submodules)
 
-## jitasm, Hooking.h / Hooking.cpp, Pool.h, StdInc.h
+- `external/injector` — LINK/2012 and ThirteenAG, zlib license.
+- `external/hooking` — CitizenFX and ThirteenAG, MIT license.
+- `external/inireader` — ThirteenAG, MIT license.
 
-`jitasm.h`, `Hooking.h`, `Hooking.cpp`, `Pool.h`, `StdInc.h`
+Their license texts are kept in their own submodule trees.
 
-These are carried verbatim from the original project's source tree, because
-they are part of it: `jitasm.h` is Takashi Tosaka's runtime assembler,
-`Hooking.h` / `Hooking.cpp` are CitizenFX's `hook2` framework built on it, and
-`Pool.h` / `StdInc.h` are the pool accessor and the shared include the original
-loader compiled against. The rebuilt hook bodies do not use them; they are kept
-so the tree matches the original and so a reader can compare the two hooking
-approaches. Their licenses are the upstream ones (jitasm: free use, see its
-header; CitizenFX: MIT).
+## Game assets
 
-## ZolikaPatch.ini reader
-
-`INI.h`
-
-The loader needs the shipped mod's own parsing rules (duplicate keys are
-last-value-wins, an absent key yields the option arm's default, a value must
-parse to exactly 1), so `INI.h` is this project's implementation. It keeps the
-`INI<>` call shape of the Feather INI parser (Turbine) that the original
-source used; no Feather code is included.
-
-## ZolikaPatch and XLivelessAddon
-
-This is an independent, readable reimplementation of ZolikaPatch 7.65 by
-Zolika1351. No ZolikaPatch source code from the older source mirror is copied
-here; the mirror (which states no license) was used only as a style reference.
-The vendored libraries above are separate third-party components, licensed as
-described. The SkipLauncher feature descends from XLivelessAddon
-(GTAmodding/XLivelessAddon), which also states no license; its behaviour was
-reimplemented from the observed feature contract, not copied.
-
-The hook bodies are hand-written transcriptions of the shipped mod's machine
-code. They are part of this repository's MIT-licensed code; the original mod's
-authorship and the game's rights holders are acknowledged in CREDITS.md.
-
-The repository history carries `GTAmodding/XLivelessAddon` as a merged
-ancestor, so the lineage of the SkipLauncher work stays visible in `git log`.
-That merge adds history only: its tree is this project's, and no XLivelessAddon
-source is copied into it.
-
-## Game data
-
-`catalogue_data.cpp` contains the multiplayer model-name list used for
-diagnostic messages. `ooc_payload.h` is the original compressed
-`finale2.sco` resource used by OutOfCommissionFix, kept as static data because
-the shipped mod carried it as a module resource. `data/finale2.sco` is the
-decoded table for research, and `tools/compress_ooc.py` can produce an
-equivalent blob. Both are data extracted from the game / the original mod and
-remain the property of their respective rights holders. They are included so a
-clean checkout builds the complete mod; `tools/extract_data.py` can regenerate
-them from files you own.
+GTA IV and Episodes from Liberty City are property of Rockstar Games and
+Take-Two Interactive. This repository ships no game executables, archives,
+textures or other game data. The OutOfCommission script payload and the model
+name catalogue are derived data extracted from the user's own game files by the
+documented tools; see `docs/origins.md`.
