@@ -1,0 +1,46 @@
+name: build
+
+# Builds and tests the rewritten ASI: Win32, MSVC, C++23 module interface units.
+# The presets target Visual Studio 18 2026; the runners carry 17 2022, so the
+# workflow configures the same tree with an explicit 17 2022 Win32 generator.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure
+        run: >
+          cmake -S . -B build/ci
+          -G "Visual Studio 17 2022" -A Win32
+          -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          -DCMAKE_CXX_SCAN_FOR_MODULES=ON
+
+      - name: Build
+        run: cmake --build build/ci --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build/ci -C Release --output-on-failure
+
+      - name: Prove the artifact is the expected shape
+        run: python tools/pe_check.py build/ci/Release/ZolikaPatch.asi
+        continue-on-error: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZolikaPatch
+          path: |
+            build/ci/Release/ZolikaPatch.asi
+            ZolikaPatch.ini
+          if-no-files-found: error

@@ -1,0 +1,11 @@
+readable-fusion — a from-scratch reimplementation of ZolikaPatch 7.65.
+
+Written by the OpenZDecomp project. The structure and the Event<Args...> shape
+follow GTAIV.EFLC.FusionFix by ThirteenAG (GPL-3.0); the INI grammar reproduced
+in source/config.ixx is the contract of feather-ini-parser 1.41 by Turbine1991,
+which the original mod linked statically.
+
+Vendored under external/ (pinned submodules, never modified):
+
+  injector          LINK/2012, ThirteenAG                     zlib licence
+  hooking           Hooking.Patterns, CitizenFX/ThirteenAG     see LICENSE.md

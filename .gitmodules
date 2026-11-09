@@ -1,0 +1,3 @@
+# Vendored libraries, committed rather than referenced: a fresh clone has to
+# build without network access, and a submodule that was never initialised is
+# what broke the first CI run.

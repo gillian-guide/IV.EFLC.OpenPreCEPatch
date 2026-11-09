@@ -1,0 +1,38 @@
+// Version resource. The rsc_* macros come from the build (premake5.lua does the
+// same for FusionFix); the product version carries the commit hash, which is the
+// first line the trace log writes.
+#include <winresrc.h>
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION rsc_FileVersion_MAJOR, rsc_FileVersion_MINOR, rsc_FileVersion_BUILD, rsc_FileVersion_REVISION
+ PRODUCTVERSION rsc_FileVersion_MAJOR, rsc_FileVersion_MINOR, rsc_FileVersion_BUILD, rsc_FileVersion_REVISION
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x40004L
+ FILETYPE 0x2L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040004b0"
+        BEGIN
+            VALUE "CompanyName", rsc_CompanyName
+            VALUE "FileDescription", rsc_FileDescription
+            VALUE "FileVersion", rsc_FileVersion
+            VALUE "InternalName", rsc_InternalName
+            VALUE "LegalCopyright", rsc_LegalCopyright
+            VALUE "OriginalFilename", rsc_OriginalFilename
+            VALUE "ProductName", rsc_ProductName
+            VALUE "ProductVersion", rsc_ProductVersion
+            VALUE "GitHash", rsc_GitSHA1
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x400, 1200
+    END
+END
