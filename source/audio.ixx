@@ -15,6 +15,7 @@ import bodies;
 import bytes;
 import common;
 import game;
+import improvements;
 import loader;
 import native;
 import patch;
@@ -474,6 +475,12 @@ namespace
     void InstallPedModelsInCutscenesFix()
     {
         if (!Loader::Enabled("PedModelsInCutscenesFix"))
+            return;
+
+        // The body resolves "player" and calls the game's model lookup. A missed
+        // preamble scan is a null call inside every cutscene object check.
+        if (Failsafe::Missing("PedModelsInCutscenesFix model lookup",
+                zpatch_model_lookup == 0))
             return;
 
         auto pattern = find_pattern("56 8B F1 E8 ? ? ? ? 85 C0 74 0E 66 8B 40 2E");

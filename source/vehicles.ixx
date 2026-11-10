@@ -14,6 +14,7 @@ import bodies;
 import bytes;
 import common;
 import config;
+import improvements;
 import loader;
 import native;
 import options;
@@ -1314,6 +1315,9 @@ namespace
 
             auto* const site =
                 reinterpret_cast<std::byte*>(Game::Get().ImageBase() + store.rva);
+            if (!Failsafe::Site("EpisodicVehicleSupport episode word",
+                    reinterpret_cast<uintptr_t>(site), sizeof(uint32_t)))
+                continue;
             injector::WriteMemory<uint32_t>(site, flag, true);
             Bodies::RegisterPublished(reinterpret_cast<uintptr_t>(site));
         }
@@ -1321,13 +1325,19 @@ namespace
         // Row 1: the `jl` of a loop that only runs on the episodic builds. Two
         // sites, both rewritten (the original writes hits[0] and hits[1]).
         auto pattern = find_pattern<2>("7C 18 0F BF 4E 2E");
-        for (size_t hit = 0; hit < pattern.size(); ++hit)
-            injector::MakeNOP(pattern.get(hit).get<std::byte>(-6), 8, true);
+        if (ExpectMatchCount(pattern, 2, "EpisodicVehicleSupport component window"))
+        {
+            for (size_t hit = 0; hit < pattern.size(); ++hit)
+                injector::MakeNOP(pattern.get(hit).get<std::byte>(-6), 8, true);
+        }
 
         // Row 2: the same `cmp [episode], 2` shape twice in two functions.
         pattern = find_pattern<2>("83 3D ?? ?? ?? ?? 02 75 17 F3 0F 10 44 24 08");
-        for (size_t hit = 0; hit < pattern.size(); ++hit)
-            injector::MakeNOP(pattern.get(hit).get<std::byte>(0), 9, true);
+        if (ExpectMatchCount(pattern, 2, "EpisodicVehicleSupport episode test"))
+        {
+            for (size_t hit = 0; hit < pattern.size(); ++hit)
+                injector::MakeNOP(pattern.get(hit).get<std::byte>(0), 9, true);
+        }
 
         // Rows 3-20: one window each.
         pattern = find_pattern("39 35 ?? ?? ?? ?? 75 0E 80 3D");
@@ -1492,6 +1502,17 @@ namespace
     // the same bytes twice, as the original's two handler calls do.
     void InstallSteerSites()
     {
+        // The consumer calls the game's model lookup and four preamble-resolved
+        // entries. A build whose scans missed one would fault at the first frame
+        // that reaches the detour; keep the game's own (absent) motion instead.
+        if (Failsafe::Missing("moving-parts model lookup", zpatch_model_lookup == 0) ||
+            Failsafe::Missing("moving-parts bone lookup", zpatch_steer_bone == 0) ||
+            Failsafe::Missing("moving-parts setter A", zpatch_steer_matrix_a == 0) ||
+            Failsafe::Missing("moving-parts setter B", zpatch_steer_matrix_b == 0) ||
+            Failsafe::Missing("moving-parts component call", zpatch_steer_part_call == 0) ||
+            Failsafe::Missing("moving-parts model table", zpatch_steer_model_array == 0))
+            return;
+
         auto pattern = find_pattern("32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0");
         if (!pattern.empty())
             injector::MakeJMP(pattern.get_first<std::byte>(2),
@@ -1539,6 +1560,16 @@ namespace
         if (!Loader::Enabled("GarageModelFix"))
             return;
 
+        // The colour body reads the model-info array and the lookup body calls the
+        // game's model lookup; both sites tail-jump through their published resume.
+        if (Failsafe::Missing("GarageModelFix model table",
+                zpatch_steer_model_array == 0) ||
+            Failsafe::Missing("GarageModelFix model lookup",
+                zpatch_model_lookup == 0) ||
+            Failsafe::Missing("GarageModelFix resume",
+                zpatch_garage_resume_a == 0 || zpatch_garage_resume_b == 0))
+            return;
+
         auto pattern = find_pattern("8B 57 20 D9 42 34 D9 5E 04 8B 47 20");
         if (!pattern.empty())
             injector::MakeJMP(pattern.get_first<std::byte>(0),
@@ -1557,6 +1588,15 @@ namespace
     void InstallNoLiveryLimit()
     {
         if (!Loader::Enabled("NoLiveryLimit"))
+            return;
+
+        // The bodies call the published lookup and jump through both resumes. A
+        // view whose anchor matched but whose call operand did not is exactly the
+        // shape that faults at the first livery scan.
+        if (Failsafe::Missing("NoLiveryLimit lookup", zpatch_nolivery_fn == 0) ||
+            Failsafe::Missing("NoLiveryLimit resume",
+                zpatch_nolivery_resume == 0 || zpatch_nolivery_resume_d == 0) ||
+            Failsafe::Missing("NoLiveryLimit name copy", zpatch_nolivery_strcpy_s == 0))
             return;
 
         auto pattern = find_pattern("74 52 8D B5 3C 01 00 00 83 FB 04");

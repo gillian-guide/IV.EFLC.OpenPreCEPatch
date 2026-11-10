@@ -11,6 +11,7 @@ import bodies;
 import bytes;
 import common;
 import game;
+import improvements;
 import loader;
 import patch;
 
@@ -539,6 +540,8 @@ namespace
             return;
 
         auto pattern = find_pattern(kLauncherSlot);
+        if (!ExpectMatchCount(pattern, 2, "LaunchWithPlayGTAIV name slots"))
+            return;
         for (size_t index = 0; index < pattern.size(); ++index)
         {
             auto* slot = pattern.get(index).get<std::byte>();

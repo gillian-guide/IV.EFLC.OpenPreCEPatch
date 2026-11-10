@@ -17,6 +17,7 @@ import bytes;
 import common;
 import config;
 import game;
+import improvements;
 import loader;
 import native;
 import patch;
@@ -906,6 +907,15 @@ namespace
     void InstallCopSirensFlag()
     {
         if (!Loader::Enabled("CopSirensFlag"))
+            return;
+
+        // The two check bodies call the shared model lookup and read both published
+        // resumes; the IDE hook jumps through its published slot. A miss is a null
+        // call on the first cop-siren draw.
+        if (Failsafe::Missing("CopSirensFlag model lookup", zpatch_model_lookup == 0) ||
+            Failsafe::Missing("CopSirensFlag resume",
+                zpatch_copsirens_resume == 0 || zpatch_copsirens_resume_b == 0) ||
+            Failsafe::Missing("CopSirensFlag IDE slot", zpatch_ide_hook_slot == 0))
             return;
 
         auto pattern = find_pattern("E8 ? ? ? ? C0 E0 ? 32 86 6F 0F 00");

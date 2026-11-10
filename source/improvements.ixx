@@ -3,6 +3,7 @@ module;
 #include <common.hxx>
 
 #include <cctype>
+#include <cstring>
 
 export module improvements;
 
@@ -69,9 +70,19 @@ export void ResetImprovementsForTest() noexcept;
 
 export const char* ImprovementName(Improvement group) noexcept;
 
+// Test seam: names a guard's `what` string as missing even when its value is
+// present, so a test can drive one arm's failsafe decision on the real image
+// without corrupting the image. Cleared by ClearMissingForTest.
+export void SetMissingForTest(const char* what) noexcept;
+export void ClearMissingForTest() noexcept;
+export bool ForcedMissingForTest(const char* what) noexcept;
+
 namespace ImprovementsDetail
 {
     std::atomic<uint32_t> resolved{ 0xFFFFFFFFu };
+    constexpr size_t kForcedMissingSlots = 16;
+    const char* forcedMissing[kForcedMissingSlots] = {};
+    size_t forcedMissingCount = 0;
 }
 
 export namespace Failsafe
@@ -82,7 +93,8 @@ export namespace Failsafe
     // this is a plain `return false` and the original fault is unchanged.
     inline bool Missing(const char* what, bool missing) noexcept
     {
-        if (!missing)
+        const bool absent = missing || ForcedMissingForTest(what);
+        if (!absent)
             return false;
         if (!ImprovementEnabled(Improvement::failsafe))
             return false;
@@ -269,4 +281,31 @@ const char* ImprovementName(Improvement group) noexcept
     case Improvement::none: return "none";
     }
     return "unknown";
+}
+
+void SetMissingForTest(const char* what) noexcept
+{
+    if (what == nullptr || ImprovementsDetail::forcedMissingCount >= ImprovementsDetail::kForcedMissingSlots)
+        return;
+    ImprovementsDetail::forcedMissing[ImprovementsDetail::forcedMissingCount++] = what;
+}
+
+void ClearMissingForTest() noexcept
+{
+    for (size_t index = 0; index < ImprovementsDetail::forcedMissingCount; ++index)
+        ImprovementsDetail::forcedMissing[index] = nullptr;
+    ImprovementsDetail::forcedMissingCount = 0;
+}
+
+bool ForcedMissingForTest(const char* what) noexcept
+{
+    if (what == nullptr)
+        return false;
+    for (size_t index = 0; index < ImprovementsDetail::forcedMissingCount; ++index)
+    {
+        if (ImprovementsDetail::forcedMissing[index] != nullptr &&
+            std::strcmp(ImprovementsDetail::forcedMissing[index], what) == 0)
+            return true;
+    }
+    return false;
 }

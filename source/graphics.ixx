@@ -8,6 +8,7 @@ import bodies;
 import bytes;
 import common;
 import game;
+import improvements;
 import loader;
 import patch;
 
@@ -249,10 +250,11 @@ namespace
         // ask for both: the scanner's count is a hint that stops the scan, and the
         // default one hit would leave the second slot at zero.
         pattern = find_pattern<2>("8B 46 28 83 4E 24 05 25 7F FC FF FF 83 C8 40 89 46 28 C7 06");
-        if (!pattern.empty())
+        if (!pattern.empty() && ExpectMatchCount(pattern, 2, "BuildingDynamicShadows hash pair"))
+        {
             zpatch_bds_hash_a = *pattern.get(0).get<uint32_t>(20);
-        if (pattern.size() > 1)
             zpatch_bds_hash_b = *pattern.get(1).get<uint32_t>(20);
+        }
     }
 
     // HighQualityReflections' published state: the resume is the instruction after
@@ -423,7 +425,8 @@ namespace
     // in the loader) scans the pattern once for two hits and then writes hits[0]
     // and hits[1] with no bounds check - on 1.0.0.0 the pattern matches once, so it
     // VirtualProtects and writes through an uninitialised vector entry. That fault
-    // is preserved: there is deliberately no `pattern.size() > 1` here.
+    // is preserved in the 1:1 configuration (the failsafe group off). With the
+    // group on, the P13 count check refuses the partial install instead.
     void InstallNoImpostorHeightCutoff()
     {
         if (!Loader::Enabled("NoImpostorHeightCutoff"))
@@ -431,6 +434,8 @@ namespace
 
         auto pattern = find_pattern<2>("76 0B F3 0F 11 8C 24 88 00 00 00 EB 09");
         if (pattern.empty())
+            return;
+        if (!ExpectMatchCount(pattern, 2, "NoImpostorHeightCutoff literals"))
             return;
 
         injector::MakeNOP(pattern.get(0).get<std::byte>(0), 2, true);
@@ -509,6 +514,13 @@ namespace
         if (!Loader::Enabled("BuildingDynamicShadows"))
             return;
 
+        // The shim compares against both published model hashes; a publish that
+        // refused the pair leaves them zero, and installing it would make every
+        // building shadow test compare against hash 0. Keep the game's path.
+        if (Failsafe::Missing("BuildingDynamicShadows hash pair",
+                zpatch_bds_hash_a == 0 || zpatch_bds_hash_b == 0))
+            return;
+
         auto pattern = find_pattern("50 68 04 01 00 00 6A 02 6A 00 E8");
         if (!pattern.empty())
             injector::WriteMemory<std::byte>(pattern.get_first(2), Bytes::Zero, true);
@@ -561,8 +573,20 @@ namespace
         if (!Loader::Enabled("SuperLODFix"))
             return;
 
+        // The body's three published pointers come from the per-build table. A
+        // build outside it leaves them zero and the original shim faults on the
+        // lookup; the failsafe keeps the game's own LOD test instead.
+        if (Failsafe::Missing("SuperLODFix lookup", zpatch_super_lod_lookup == 0) ||
+            Failsafe::Missing("SuperLODFix resume",
+                zpatch_super_lod_fail == 0 || zpatch_super_lod_ok == 0))
+            return;
+
         auto pattern = find_pattern("F6 40 ? ? 74 ? 85 ED 0F 85 ? ? ? ? 55 6A ? E8 ? ? ? ? 8B F8");
         if (pattern.empty())
+            return;
+        if (!Failsafe::Site("SuperLODFix site",
+                reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(0)), 6) ||
+            !Failsafe::Body("SuperLODFix body", reinterpret_cast<uintptr_t>(&SuperLodShim)))
             return;
 
         Bodies::Register(reinterpret_cast<uintptr_t>(&SuperLodModel), 0x100469A0u);

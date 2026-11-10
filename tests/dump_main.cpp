@@ -8,6 +8,7 @@ import bodies;
 import common;
 import config;
 import game;
+import improvements;
 import loader;
 import options;
 import shared;
@@ -522,6 +523,7 @@ int main(int argc, char** argv)
     std::filesystem::path ini = "ZolikaPatch.ini";
     bool perOption = false;
     bool oocSelfTest = false;
+    std::vector<std::string> failsafeMissing;
 
     for (int index = 1; index < argc; ++index)
     {
@@ -532,6 +534,8 @@ int main(int argc, char** argv)
             build = argv[++index];
         else if (argument == "--per-option")
             perOption = true;
+        else if (argument == "--failsafe-missing" && index + 1 < argc)
+            failsafeMissing.emplace_back(argv[++index]);
         else if (argument == "--ooc-selftest")
             oocSelfTest = true;
         else if (output.empty())
@@ -539,6 +543,11 @@ int main(int argc, char** argv)
         else
             ini = argv[index];
     }
+
+    // The test's forced-missing names plug into the same Failsafe::Missing calls
+    // the arms make, so a dump cell can drive one guard without a damaged image.
+    for (const auto& name : failsafeMissing)
+        SetMissingForTest(name.c_str());
 
     // The payload path only runs when the game calls the wrapper the arm installs,
     // so this is the one way the rebuilt decoder and archive builder execute
@@ -553,7 +562,8 @@ int main(int argc, char** argv)
 
     if (output.empty())
     {
-        std::printf("usage: zp_dump [--exe <image>] [--build <compact>] [--per-option] <out> [ini]\n"
+        std::printf("usage: zp_dump [--exe <image>] [--build <compact>] [--per-option]\n"
+                    "               [--failsafe-missing <name>] <out> [ini]\n"
                     "       zp_dump --ooc-selftest\n");
         return 2;
     }

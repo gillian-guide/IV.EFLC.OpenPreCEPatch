@@ -295,6 +295,18 @@ if(Python3_Interpreter_FOUND AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs
   add_test(NAME zp_dump_empty
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_empty_dump.py
             $<TARGET_FILE:zp_dump> ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs)
+  # The failsafe group's fault parity, measured on real images: a forced-missing
+  # preamble pointer removes exactly the guarded jump and nothing else, the
+  # 1.0.0.0 NoImpostor cell faults with the group off and completes with it on,
+  # and a healthy image's write set is identical in both configurations.
+  add_test(NAME zp_failsafe_parity
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_failsafe_parity.py
+            --dump $<TARGET_FILE:zp_dump>
+            --game ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs
+            --work ${CMAKE_CURRENT_BINARY_DIR}/failsafe_parity)
+  set_tests_properties(zp_failsafe_parity PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    TIMEOUT 300)
 endif()
 
 add_executable(zp_pe_check tests/pe_check.cpp)

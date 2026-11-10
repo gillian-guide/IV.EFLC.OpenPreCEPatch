@@ -17,6 +17,7 @@ import bodies;
 import bytes;
 import common;
 import game;
+import improvements;
 import loader;
 import patch;
 import shared;
@@ -122,6 +123,8 @@ extern "C"
     // entry (sub_100038E0) and the game's model-index lookup (dword_10159C0C).
     extern uintptr_t zpatch_native_invoke_entry;
     extern uintptr_t zpatch_model_lookup;
+    // dword_10159D2C: PlayerAsPedComponentsFix's published resume (source/shared.ixx).
+    extern uint32_t zpatch_player_ped_resume;
 }
 
 // The literals the transcribed bodies push, at the original's own text: the wide
@@ -671,8 +674,20 @@ namespace
         if (!Loader::Enabled("PlayerAsPedComponentsFix"))
             return;
 
+        // The shared shim calls the model lookup and jumps through the published
+        // resume. A failed preamble scan leaves either zero; the un-patched
+        // variation flag is what the game would have computed itself.
+        if (Failsafe::Missing("PlayerAsPedComponentsFix model lookup",
+                zpatch_model_lookup == 0) ||
+            Failsafe::Missing("PlayerAsPedComponentsFix resume",
+                zpatch_player_ped_resume == 0))
+            return;
+
         auto pattern = find_pattern("8B 54 24 10 52 0F B6 90 19 02 00 00");
         if (pattern.empty())
+            return;
+        if (!Failsafe::Body("PlayerAsPedComponentsFix body",
+                Shared::PlayerPedComponentsShim()))
             return;
 
         injector::MakeJMP(pattern.get_first(5),
@@ -757,8 +772,28 @@ namespace
         if (!Loader::Enabled("BadPlayerModelCrashFix"))
             return;
 
+        // The payload walks the ped-model array, calls the model-class lookup and
+        // the native layer's four transcribed wrappers, and the trampoline
+        // tail-jumps through the published resume. Every one is a game or layer
+        // address the original's preamble resolved; a miss is a null call or a
+        // jump to zero at the first model resolution.
+        if (Failsafe::Missing("BadPlayerModelCrashFix model table",
+                zpatch_bpm_ped_array == 0) ||
+            Failsafe::Missing("BadPlayerModelCrashFix model lookup",
+                zpatch_model_lookup == 0) ||
+            Failsafe::Missing("BadPlayerModelCrashFix script detour",
+                zpatch_bpm_fn_59c74 == 0) ||
+            Failsafe::Missing("BadPlayerModelCrashFix layer",
+                zpatch_bpm_context_init == 0 || zpatch_bpm_cleanup_dword == 0 ||
+                    zpatch_bpm_call_hash == 0 || zpatch_bpm_call_bool == 0 ||
+                    zpatch_bpm_resolver == 0 || zpatch_bpm_resume == 0))
+            return;
+
         auto pattern = find_pattern("83 E4 F0 83 EC 54 0F 57 C0 53 8B 5D 0C");
         if (pattern.empty())
+            return;
+        if (!Failsafe::Body("BadPlayerModelCrashFix body",
+                reinterpret_cast<uintptr_t>(&BpmTrampoline)))
             return;
 
         Bodies::Register(reinterpret_cast<uintptr_t>(&BpmTrampoline), 0x10037BA0u);

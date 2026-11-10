@@ -14,6 +14,7 @@ import bytes;
 import common;
 import config;
 import game;
+import improvements;
 import loader;
 import patch;
 import shared;
@@ -1326,6 +1327,11 @@ namespace
         zpatch_xlive_base =
             static_cast<uint32_t>(reinterpret_cast<uintptr_t>(GetModuleHandleA("xlive.dll")));
 
+        // The stub replays into xlive.dll through the captured base. Without the
+        // module the original writes through zero; keep the game's popup instead.
+        if (Failsafe::Missing("RemoveGFWLUpdatePopup xlive.dll", zpatch_xlive_base == 0))
+            return;
+
         auto pattern = find_pattern("2B C1 1B D6 89 44 24 0C 89 54 24 10 DF 6C 24 0C D8 0D ? ? ? ? D9 5C 24 08");
         if (!pattern.empty())
         {
@@ -1408,7 +1414,7 @@ namespace
             return;
 
         auto pattern = find_pattern<2>("E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20");
-        if (!pattern.empty())
+        if (!pattern.empty() && ExpectMatchCount(pattern, 2, "BenchmarkFix entries"))
         {
             // The two resumes are each match's own +13, not one shared value:
             // `mov eax,[edx]; add eax,0Dh; mov dword_1015AD50,eax` publishes the
@@ -1640,6 +1646,9 @@ namespace
         for (const auto& write : row->writes)
         {
             auto* site = base + write.site;
+            const size_t width = write.kind == DlcWriteKind::nop_tail ? kDlcTailNopLength : 5;
+            if (!Failsafe::Site("LoadDLCs site", reinterpret_cast<uintptr_t>(site), width))
+                continue;
             switch (write.kind)
             {
             case DlcWriteKind::jump_rva:
@@ -1649,9 +1658,15 @@ namespace
                 injector::MakeCALL(site, base + write.target, true);
                 break;
             case DlcWriteKind::jump_body:
+                if (!Failsafe::Body("LoadDLCs struct fixup",
+                        reinterpret_cast<uintptr_t>(&DlcStructFixupBody)))
+                    continue;
                 injector::MakeJMP(site, reinterpret_cast<void*>(&DlcStructFixupBody), true);
                 break;
             case DlcWriteKind::call_body:
+                if (!Failsafe::Body("LoadDLCs dummy",
+                        reinterpret_cast<uintptr_t>(&DlcDummyBody)))
+                    continue;
                 injector::MakeCALL(site, reinterpret_cast<void*>(&DlcDummyBody), true);
                 break;
             case DlcWriteKind::nop_tail:

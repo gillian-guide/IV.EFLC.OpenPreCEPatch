@@ -85,6 +85,45 @@ oracle's own loader:
   with no `ios::binary` (`0x20`), so the CRT folds `\r\n` before the parser sees it,
   and the tree folds it itself.
 
+## The OpenPreCEPatch failsafe overlay
+
+`OPCEP_IMPROVEMENTS` selects improvement groups. Unset is the 1:1 path; the
+failsafe group is the only folded group today, so `OPCEP_IMPROVEMENTS=all` is the
+default-on failsafe and `OPCEP_IMPROVEMENTS=except:failsafe` is the 1:1
+configuration. A guard asks its question only inside the group: with the group
+off every `Failsafe::Missing`/`Site`/`Body` call answers "not missing" and the
+original write, fault or partial install is unchanged.
+
+The guards are install-time. A transcribed body is never rewritten: when a
+preamble pointer a body would dereference is zero, the arm refuses the install
+and the game keeps its own un-patched path - the same outcome as OpenPreCEPatch's
+body-top skip, without changing a proven instruction stream. `Site` refuses a
+write outside the image and `Body` refuses a jump to an unresolved body.
+`ExpectMatchCount` is the P13 rule for the multi-site arms.
+
+| key | original behaviour | guarded behaviour | switch | measurement (off / on) |
+| --- | --- | --- | --- | --- |
+| `NoImpostorHeightCutoff` | on 1.0.0.0 one literal matches and the handler writes `hits[1]` through an uninitialised vector entry: `0xC0000005` | the P13 count check (2 expected) refuses the partial install; the cell completes with no write | `failsafe` | `zp_failsafe_parity`: isolated 1.0.0.0 cell exits `0xC0000005` off, 0 on; 1.0.8.0 write set identical |
+| `SuperLODFix` | the shim calls the published lookup; a build outside the per-build table leaves it zero and the lookup call faults | the arm installs nothing; the game's own LOD test runs | `failsafe` | `zp_failsafe_parity`: forced `SuperLODFix lookup` removes exactly the 5-byte `E9` and no other byte |
+| `PlayerAsPedComponentsFix` | the shared shim calls the model lookup and jumps through the published resume; either miss faults | the arm installs nothing; the game's variation flag is used | `failsafe` | `zp_failsafe_parity`: forced `... model lookup` removes exactly one 5-byte `E9` |
+| `BadPlayerModelCrashFix` | the trampoline calls the ped array, class lookup, native wrappers and resume; a miss is a null call on the first model resolution | the arm installs nothing | `failsafe` | guard covers seven published pointers; mechanism measured by `zp_failsafe` and the shared `Missing` child |
+| `GarageModelFix` | the colour body indexes the model array; the lookup body calls the model lookup; both tail-jump through published resumes | the arm installs neither site | `failsafe` | `zp_failsafe_parity`: forced `GarageModelFix model lookup` removes exactly two 5-byte `E9`s (10 bytes) |
+| `PedModelsInCutscenesFix` | the cutscene check calls the model lookup and reads a null model table on a miss | the arm installs nothing; the game's original check runs | `failsafe` | guard is a single published pointer; `zp_failsafe` proves the missing-pointer decision |
+| `MovingSteeringWheelSupport`, `ShakingEngineBlock`, `MovingPlaneParts` | the shared consumer calls the model lookup, bone getter, two setters and the part-drive call; a missed preamble scan faults on the first frame | `InstallSteerSites` installs none of the detours | `failsafe` | guard covers six published pointers; `zp_failsafe` proves the decision, `zp_dump_empty` proves the 1:1 write set |
+| `CopSirensFlag` | both checks call the model lookup and the IDE hook jumps through its published slot | the arm installs nothing | `failsafe` | guard covers three published pointers; `zp_failsafe` proves the decision |
+| `NoLiveryLimit` | the bodies call the published lookup and tail-jump through two resumes; a miss faults at the first livery scan | the arm installs nothing | `failsafe` | guard covers three published pointers plus the CRT copy; `zp_failsafe` proves the decision |
+| `RemoveGFWLUpdatePopup` | writes into `xlive.dll` through the captured module base; without the module the base is zero | the arm installs nothing; the original popup stays | `failsafe` | `zp_failsafe_parity`: isolated 1.0.0.0 cell, off installs the 5-byte `E9`, on removes exactly it |
+| `LoadDLCs` | writes the per-build rows at fixed RVAs; a mis-classified image writes outside the function | each site and body is checked; an outside site or unresolved body is skipped | `failsafe` | `zp_dump_empty` proves the 1:1 rows are unchanged; the skip is the same `Site`/`Body` mechanism `zp_failsafe` measures |
+| `BuildingDynamicShadows` | the shim compares against two published model hashes; a one-hit scan leaves the second at zero | the publish refuses the pair and the install keeps the game's path | `failsafe` | `zp_failsafe` proves the count decision; the 1:1 dump still writes the arm |
+| `EpisodicVehicleSupport` | two multi-hit rows write every hit; a short scan silently drops a window | each row is installed only with its recovered count | `failsafe` | `zp_failsafe` proves the count decision; the 1:1 dump still writes both rows |
+| `BenchmarkFix` | two entries; a one-hit scan leaves body B's resume zero | the pair is installed only with two hits | `failsafe` | `zp_failsafe` proves the count decision; 1.0.8.0 is outside the key's mask |
+| `LaunchWithPlayGTAIV` | rewrites every `LaunchGTAIV.exe` name slot it finds | exactly two slots, else the arm leaves the image untouched | `failsafe` | `zp_launcher_slots` pins the 1:1 two-slot write; `zp_failsafe` proves the count decision |
+
+The 1:1 configuration is not affected by any row above: `tools/parity_report.py`
+and the 18-cell matrix run without `OPCEP_IMPROVEMENTS`, and
+`zp_failsafe_parity` proves a healthy 1.0.8.0 image has the same write set with
+the group on and off.
+
 ## Rebuilt pieces
 
 Not every body is transcribed. A piece is rebuilt in C++ when its original stream
