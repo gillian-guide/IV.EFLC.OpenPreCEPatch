@@ -62,6 +62,7 @@ set_target_properties(zp_modules PROPERTIES CXX_SCAN_FOR_MODULES ON CXX_EXTENSIO
 target_sources(zp_modules PUBLIC
   FILE_SET CXX_MODULES FILES
     source/common.ixx
+    source/improvements.ixx
     source/bytes.ixx
     source/bodies.ixx
     source/patch.ixx
@@ -125,6 +126,16 @@ target_link_libraries(zp_tests PRIVATE zp_modules)
 add_dependencies(zp_tests ${ZP_NAME})
 add_test(NAME zp_tests COMMAND zp_tests $<TARGET_FILE:${ZP_NAME}>)
 set_tests_properties(zp_tests PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+# The OPCEP_IMPROVEMENTS switch and the failsafe primitives: the parser's
+# documented values, the one-time environment resolver, the image-containment and
+# body checks, the P13 match-count rule, and the same null dereference in a child
+# process under both configurations (off must die with 0xC0000005, on must exit 0).
+add_executable(zp_failsafe tests/failsafe.cpp)
+set_target_properties(zp_failsafe PROPERTIES CXX_SCAN_FOR_MODULES ON)
+target_link_libraries(zp_failsafe PRIVATE zp_modules)
+add_test(NAME zp_failsafe COMMAND zp_failsafe)
+set_tests_properties(zp_failsafe PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
 # The two per-model light tables the loader preamble reads from
 # [PopupLightAngles] / [HeadlightConeOffsets]: the recovered grammar, defaults and

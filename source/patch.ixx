@@ -6,6 +6,7 @@ export module patch;
 
 import common;
 import game;
+import improvements;
 
 // Signature scanning, byte/introspection helpers and the two patch primitives
 // that need more than a direct injector call. Everything else (MakeNOP,
@@ -68,9 +69,32 @@ hook::pattern find_pattern(Args... args)
     return pattern;
 }
 
-export template <size_t n>
-std::string pattern_str(const std::array<uint8_t, n>& bytes)
+// OpenPreCEPatch's P13 rule: a multi-site arm whose original read or patched a
+// fixed set of sites refuses a partial install. A different count is a view that
+// does not have the shape the arm was recovered from, and installing the subset
+// that happens to match is worse than leaving the image alone.
+//
+// The 1:1 configuration is not guarded: with the failsafe group off this always
+// answers true, so an arm keeps the original's partial write (and, for
+// NoImpostorHeightCutoff on 1.0.0.0, the original's fault).
+export bool ExpectMatchCount(size_t found, size_t expected, const char* what) noexcept
 {
+    if (found == expected)
+        return true;
+    if (!ImprovementEnabled(Improvement::failsafe))
+        return true;
+
+    Log::Print("arm {}: {} match(es), expected {}: skipped", what, found, expected);
+    return false;
+}
+
+export bool ExpectMatchCount(hook::pattern& pattern, size_t expected, const char* what) noexcept
+{
+    return ExpectMatchCount(pattern.size(), expected, what);
+}
+
+export template <size_t n>
+std::string pattern_str(const std::array<uint8_t, n>& bytes){
     std::string result;
     for (size_t i = 0; i < n; ++i)
         result += std::format("{:02X} ", bytes[i]);
