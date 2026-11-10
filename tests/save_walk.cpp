@@ -7,6 +7,7 @@
 #include <new>
 
 import loading;
+import improvements;
 
 // The save converter's behavioural test: what `sub_10051B30` (0x10051B30, 337
 // instructions, rebuilt as `NewSavesConvert`) decides about a save file, on the real
@@ -329,6 +330,8 @@ namespace
             return "notASave";
         case Loading::SaveWalkEnd::noFile:
             return "noFile";
+        case Loading::SaveWalkEnd::rejected:
+            return "rejected";
         }
         return "unknown";
     }
@@ -497,6 +500,23 @@ namespace
             std::format("{}: 0x110 zero bytes answered {} - the magic test is the only gate",
                 notASave.filename().string(), plainOutcome));
         const std::string missingOutcome = OutcomeOf(inputs / "does_not_exist.bin");
+        Check(missingOutcome == "noFile", "does_not_exist.bin answered " + missingOutcome);
+
+        // (5) The hardening group: the same inputs are rejected before any
+        // underflow or unchecked header read. The caller then leaves the save
+        // alone, which is the un-patched game's behaviour.
+        SetImprovementsForTest(Improve(Improvement::hardening));
+        Check(OutcomeOf(sizeZero) == "rejected",
+            "hardening: chunk size 0 is rejected, not bad_alloc");
+        Check(OutcomeOf(sizeEight) == "rejected",
+            "hardening: chunk size 8 is rejected, not bad_alloc");
+        Check(OutcomeOf(truncMagic) == "rejected",
+            "hardening: a short header is rejected before the magic test");
+        Check(OutcomeOf(notASave) == "notASave",
+            "hardening: a non-save still answers notASave");
+        Check(OutcomeOf(inputs / "does_not_exist.bin") == "noFile",
+            "hardening: a missing file still answers noFile");
+        SetImprovementsForTest(0);
         Check(missingOutcome == "noFile",
             std::format("does_not_exist.bin: a missing path answered {} - fopen_s's own answer",
                 missingOutcome));

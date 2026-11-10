@@ -703,7 +703,25 @@ void TestHardening()
     Check(mine != nullptr && arena.contains(Address(mine)) == 1,
         "nms: a normal allocation still registers");
     if (mine != nullptr)
+    {
+        // The original simple allocator answers ownership by range, so an
+        // interior pointer is "mine". NMS's exact set would say no, and the
+        // multi allocator would fatal with MMA10; the page map restores the
+        // range answer and `release` ignores the non-exact free instead of
+        // freeing the block twice.
+        Check(arena.contains(Address(mine) + 1) == 1,
+            "nms: an interior pointer answers as owned (range, not exact)");
+        arena.release(reinterpret_cast<void*>(Address(mine) + 1));
+        Check(arena.contains(Address(mine)) == 1,
+            "nms: an interior release does not free the block");
+
         arena.release(mine);
+        Check(arena.contains(Address(mine)) == 1,
+            "nms: the page stays owned after free, like the original arena");
+        arena.release(mine);  // double free: a no-op, never a second HeapFree
+        Check(arena.contains(Address(mine)) == 1,
+            "nms: a double release is ignored");
+    }
 
     SetImprovementsForTest(0);
 }

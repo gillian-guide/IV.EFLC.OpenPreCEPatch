@@ -71,6 +71,11 @@ export enum class Improvement : uint32_t
     // leaks on every call).
     ooc_cache = 1u << 7,
 
+    // NewSavesCompatibility's validated walk: a short header/read, a chunk size
+    // below nine and a failed payload seek are rejected instead of throwing or
+    // reading uninitialised bytes; payloads are seeked over instead of read.
+    hardening = 1u << 8,
+
     // The folded groups: what `all` means. `except:<group>` complements this set.
     // Only the failsafe is folded today: every other group changes a user-visible
     // outcome and is named explicitly, so `all` stays the default-on failsafe and
@@ -206,6 +211,9 @@ namespace
         { "ooc", Improvement::ooc_cache },
         { "ooc_cache", Improvement::ooc_cache },
         { "ooc-cache", Improvement::ooc_cache },
+        { "hardening", Improvement::hardening },
+        { "saves", Improvement::hardening },
+        { "newsaves", Improvement::hardening },
         { "all", Improvement::all },
     };
 

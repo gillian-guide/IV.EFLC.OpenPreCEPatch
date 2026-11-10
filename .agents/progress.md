@@ -74,6 +74,28 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
   1.0.0.0/1.0.4.0). `docs/matrix.md` regenerated.
 - Release and Trace suites: 30/30 each.
 
+## 2026-11-11 — MMA10 investigation and the NewSaves walk
+
+- Read the four crash reports and the 2026-11-04 minidump. Three are unrelated
+  plugins (SISCO/overlay stack overflow, CloudFixIV access violations). The
+  memory run has `NewMemorySystem=1` and `GTA IV Fatal Error: MMA10` on the
+  crashing thread's stack.
+- IDA: `0x00456D16` is the deliberate null store in `lmsgboxExit`; the caller is
+  `sysMemMultiAllocator::free` (`0x00455FF0`) at `0x00456021`, which calls
+  `lmsgboxExit("MMA10")` when none of its children claims the pointer. The
+  minidump gives `a2 = 0x979F1B10` and 127,454 live NMS registry entries.
+- Root cause: the original `sysMemSimpleAllocator::isThisPointerMine`
+  (`0x00454FB0`) is a **range** test; oPCEP's NMS registry is an **exact-start**
+  set. An interior or double-freed pointer makes the multi allocator fatal.
+- Fix in the `nms` group: a 128 KiB page bitmap answers the range question; the
+  exact registry still decides the real free; a non-exact free is a logged no-op.
+  `zp_nms_arena` now proves interior containment, interior no-op, page-stays-owned
+  and double-release (255 checks). `docs/mma10.md` records the evidence.
+- Also shipped the NewSavesCompatibility `hardening` group: validated header and
+  chunk reads, `size < 9` rejection, payload `fseek`, and a rejected walk leaves
+  the save unpatched. `zp_save_walk` proves the same corrupt files throw under
+  1:1 and are `rejected` under the group (264 checks).
+
 ## Open items
 
 - 18-cell `dump_matrix.py` full run; record `differing`.

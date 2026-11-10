@@ -4,6 +4,7 @@ module;
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <shlwapi.h>
 #include <unordered_set>
 
@@ -627,6 +628,61 @@ namespace
 
     NmsRegistry nms_allocations;
 
+    // The original simple allocator answers "is this pointer mine?" by *range*:
+    // `sub_454FB0` is `ptr >= block + 16 && ptr < block + size`. NMS answered by
+    // exact allocation start, so a pointer that was an interior pointer - or a
+    // pointer already freed - made `sysMemMultiAllocator::free` (0x455FF0) find
+    // no owner and call `lmsgboxExit("MMA10")` (0x456021). That is a fatal
+    // mis-owned free, not an out-of-memory code: the 2026-11-04 minidump has the
+    // freed pointer and the MMA10 string on the same stack.
+    //
+    // The group now keeps the original's *range* answer at page granularity: one
+    // bit per 4 KiB page of the 32-bit address space (128 KiB, allocated once).
+    // A page is marked when an NMS block covers it and stays marked, like the
+    // original's reserved arena, whose free space is still "mine". `free` still
+    // uses the exact registry: an exact, live pointer is freed; a pointer that
+    // is only inside a marked page is a no-op (the original would have routed it
+    // to the same allocator, but calling HeapFree on an interior/double-freed
+    // address would corrupt the heap).
+    std::atomic<uint8_t*> nms_page_map{ nullptr };
+    std::once_flag nms_page_map_once;
+
+    constexpr size_t kNmsPageShift = 12;                 // 4 KiB pages
+    constexpr size_t kNmsPageCount = 1u << (32 - kNmsPageShift);
+    constexpr size_t kNmsPageMapBytes = kNmsPageCount / 8;  // 128 KiB
+
+    uint8_t* NmsPageMap() noexcept
+    {
+        std::call_once(nms_page_map_once, []
+        {
+            nms_page_map.store(static_cast<uint8_t*>(VirtualAlloc(nullptr,
+                kNmsPageMapBytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)));
+        });
+        return nms_page_map.load(std::memory_order_acquire);
+    }
+
+    void MarkNmsPages(uintptr_t begin, size_t bytes) noexcept
+    {
+        auto* map = NmsPageMap();
+        if (map == nullptr || bytes == 0)
+            return;
+        const size_t first = begin >> kNmsPageShift;
+        const size_t last = (begin + bytes - 1) >> kNmsPageShift;
+        for (size_t page = first; page <= last && page < kNmsPageCount; ++page)
+            map[page >> 3] = static_cast<uint8_t>(map[page >> 3] | (1u << (page & 7)));
+    }
+
+    bool NmsPageIsMine(uintptr_t address) noexcept
+    {
+        const auto* map = nms_page_map.load(std::memory_order_acquire);
+        if (map == nullptr)
+            return false;
+        const size_t page = address >> kNmsPageShift;
+        if (page >= kNmsPageCount)
+            return false;
+        return (map[page >> 3] & (1u << (page & 7))) != 0;
+    }
+
     // The private heap: NMS allocations stay off the CRT heap FusionFix and
     // LibertyCityPlates use. A failed HeapCreate falls back to the process heap.
     HANDLE nms_heap = nullptr;
@@ -695,6 +751,8 @@ namespace
 
         EnterCriticalSection(&nms_registry_lock);
         (void)nms_allocations.Insert(aligned);
+        if (hardened)
+            MarkNmsPages(raw, static_cast<size_t>(want) + unit * 2u);
         LeaveCriticalSection(&nms_registry_lock);
         return reinterpret_cast<void*>(aligned);
     }
@@ -722,6 +780,18 @@ namespace
 
             if (!mine)
             {
+                // A pointer that was already freed, or an interior pointer into
+                // a live NMS block: the original's range answer was "mine", so
+                // `sysMemMultiAllocator::free` routed it here. Answering the
+                // range truth and then not calling HeapFree keeps the game
+                // alive; the block is freed by its real owner (or leaked if it
+                // was a double free), never freed twice.
+                if (NmsPageIsMine(raw))
+                {
+                    Log::Print("nms: free of a non-exact pointer {:#010x} inside an "
+                               "NMS block; ignored (MMA10 avoided)", raw);
+                    return;
+                }
                 if (nms_original_object != nullptr && nms_original_vtable[3] != 0)
                 {
                     using OriginalFree = void(__thiscall*)(void*, void*);
@@ -749,7 +819,7 @@ namespace
     uint8_t __stdcall NmsContainsBody(uint32_t key)
     {
         EnterCriticalSection(&nms_registry_lock);
-        const bool found = nms_allocations.Contains(key);
+        const bool found = nms_allocations.Contains(key) || NmsPageIsMine(key);
         LeaveCriticalSection(&nms_registry_lock);
         return found ? uint8_t{ 1 } : uint8_t{ 0 };
     }
@@ -1045,6 +1115,7 @@ export namespace Loading
         noFile,    // fopen_s answered non-zero
         notASave,  // the dword at +0xC is not "SAVE"
         walked,    // all eighteen chunk headers were read
+        rejected,  // the hardening group: a short read or a size below nine
     };
 
     struct SaveWalkDecision
@@ -1162,8 +1233,23 @@ namespace
         if (fopen_s(&stream, path, "rb") != 0 || stream == nullptr)
             return Loading::SaveWalkEnd::noFile;
 
+        const bool hardened = ImprovementEnabled(Improvement::hardening);
+
         uint8_t header[kNewSavesHeaderSize];
-        (void)std::fread(header, kNewSavesHeaderSize, 1, stream);
+        if (hardened)
+        {
+            // A short header is not a save this build can read; the 1:1 walk
+            // reads it unchecked and decides on whatever the stack held.
+            if (std::fread(header, kNewSavesHeaderSize, 1, stream) != 1)
+            {
+                std::fclose(stream);
+                return Loading::SaveWalkEnd::rejected;
+            }
+        }
+        else
+        {
+            (void)std::fread(header, kNewSavesHeaderSize, 1, stream);
+        }
 
         uint32_t magic = 0;
         std::memcpy(&magic, header + kNewSavesMagicOffset, sizeof(magic));
@@ -1178,14 +1264,46 @@ namespace
         uint8_t chunkHeader[kNewSavesChunkHeaderSize];
         for (std::size_t index = 0; index < kNewSavesChunkCount; ++index)
         {
-            (void)std::fread(chunkHeader, kNewSavesChunkHeaderSize, 1, stream);
+            if (hardened)
+            {
+                if (std::fread(chunkHeader, kNewSavesChunkHeaderSize, 1, stream) != 1)
+                {
+                    std::fclose(stream);
+                    return Loading::SaveWalkEnd::rejected;
+                }
+            }
+            else
+            {
+                (void)std::fread(chunkHeader, kNewSavesChunkHeaderSize, 1, stream);
+            }
+
             uint32_t size = 0;
             std::memcpy(&size, chunkHeader + kNewSavesChunkSizeOffset, sizeof(size));
 
+            if (hardened && size < static_cast<uint32_t>(kNewSavesChunkHeaderSize))
+            {
+                std::fclose(stream);
+                return Loading::SaveWalkEnd::rejected;
+            }
+
             const uint32_t payload = size - static_cast<uint32_t>(kNewSavesChunkHeaderSize);
-            void* const payloadBlock = ::operator new(payload);
-            (void)std::fread(payloadBlock, 1, payload, stream);
-            std::free(payloadBlock);
+            if (hardened)
+            {
+                // The scan only needs the headers; seek over the payload. A
+                // failed seek means the file is shorter than its own chunk table.
+                if (payload > static_cast<uint32_t>(std::numeric_limits<long>::max()) ||
+                    std::fseek(stream, static_cast<long>(payload), SEEK_CUR) != 0)
+                {
+                    std::fclose(stream);
+                    return Loading::SaveWalkEnd::rejected;
+                }
+            }
+            else
+            {
+                void* const payloadBlock = ::operator new(payload);
+                (void)std::fread(payloadBlock, 1, payload, stream);
+                std::free(payloadBlock);
+            }
 
             std::memcpy(walk.chunks[index].id, chunkHeader, sizeof(walk.chunks[index].id));
             walk.chunks[index].size = size;
