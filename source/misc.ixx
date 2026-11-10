@@ -829,7 +829,9 @@ namespace
     {
         if (!ImprovementEnabled(Improvement::opcep))
             return false;
-        return Config::Integer(Config::Ini(), "Options", key, fallback) == 1;
+        // The any-section read accepts OpenPreCEPatch's grouped INI as well as the
+        // original flat one; `[Options]` is searched first inside it.
+        return Config::Integer(Config::Ini(), key, fallback) == 1;
     }
 
     // RemoveModChecks is OpenPreCEPatch's unified key: it replaces the three

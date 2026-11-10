@@ -253,6 +253,45 @@ export namespace Config
         return { true, static_cast<int32_t>(value) };
     }
 
+    // The grouped layout OpenPreCEPatch ships, in its search order. `[Options]`
+    // is first, so the original flat ZolikaPatch.ini (and this tree's shipped
+    // INI) keeps working unchanged; a key is resolved in the first section that
+    // contains it. The 1:1 path never has a grouped file, so this order is
+    // inert unless a migrated OpenPreCEPatch INI is used.
+    inline constexpr std::string_view kOptionSections[] = {
+        "Options",
+        "STABILITY",
+        "FIXES",
+        "PERFORMANCE",
+        "GRAPHICS",
+        "EPISODIC",
+        "COMPATIBILITY",
+        "MULTIPLAYER",
+        "VEHICLES",
+        "MISC",
+        "AUDIO",
+        "INPUT",
+        "LOADING",
+    };
+
+    inline std::span<const std::string_view> OptionSections()
+    {
+        return kOptionSections;
+    }
+
+    // The first section in the order above that carries the key, or the caller's
+    // default. This is OpenPreCEPatch's `Config::FindAny`.
+    inline const std::string& ValueAny(const Feather::Document& document,
+        std::string_view key, const std::string& fallback)
+    {
+        for (const auto section : kOptionSections)
+        {
+            if (const auto* found = document.Find(section, key))
+                return *found;
+        }
+        return fallback;
+    }
+
     inline Feather::Document& Ini()
     {
         static Feather::Document document;
@@ -272,7 +311,7 @@ export namespace Config
     inline int32_t Integer(const Feather::Document& document, std::string_view key, std::string_view fallback)
     {
         const std::string defaultText(fallback);
-        const auto& value = Feather::Value(document, "Options", key, defaultText);
+        const auto& value = ValueAny(document, key, defaultText);
         if (ImprovementEnabled(Improvement::config))
         {
             const IntParse parsed = ParseInt(value);

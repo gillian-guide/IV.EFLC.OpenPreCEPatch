@@ -384,9 +384,22 @@ def markdown(results, table) -> str:
         lines.append(f"| {build} | {VERSIONS[build]} | {closed} | {opened} | {oracle} | {fault} |")
 
     faulted = [(build, cell) for build, _, cell, _ in results if cell.faulted or cell.fault]
+    full_faults = [(build, full) for build, full, _cell, _ in results if full.fault]
     lines += ["", "## The fault", ""]
-    if not faulted:
+    if not faulted and not full_faults:
         lines += ["No cell faulted.", ""]
+    for build, full in full_faults:
+        lines += [
+            f"`{BUILDS[build]}.exe` ({VERSIONS[build]}) dies in the **full** cell with",
+            f"`{full.fault}` after {full.partial} byte(s): the shipped INI reaches",
+            "`NoImpostorHeightCutoff`, whose 1.0.0.0 pattern matches once and whose",
+            "original writes `hits[1]` through an uninitialised vector entry. The",
+            "per-option cell isolates that key (its row is `open` above); in the 1:1",
+            "configuration this is the original's fault, and",
+            "`tools/check_failsafe_parity.py` shows the same cell completing with",
+            "`OPCEP_IMPROVEMENTS=all` and the guarded write absent.",
+            "",
+        ]
     for build, cell in faulted:
         key, text = cell.faulted[0] if cell.faulted else ("?", cell.fault)
         lines += [

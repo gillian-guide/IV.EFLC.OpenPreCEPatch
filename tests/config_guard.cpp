@@ -143,6 +143,28 @@ namespace
         Check(table.values[0] == 0.0f, "config: the unparseable value stays zero");
     }
 
+    void TestSections()
+    {
+        SetImprovementsForTest(0);
+
+        // A migrated OpenPreCEPatch INI keeps its grouped sections; the key is
+        // found even though it is not under [Options].
+        Config::Ini() = Feather::Parse("[STABILITY]\nAimProjectileCrashFix=0\n");
+        Check(Catalogue::Read("AimProjectileCrashFix") == 0,
+            "sections: a grouped key is read");
+
+        // [Options] is searched first, so a flat file wins over a stale group.
+        Config::Ini() = Feather::Parse(
+            "[Options]\nAimProjectileCrashFix=1\n[STABILITY]\nAimProjectileCrashFix=0\n");
+        Check(Catalogue::Read("AimProjectileCrashFix") == 1,
+            "sections: [Options] has precedence");
+
+        // A key in no searched section still uses the arm default.
+        Config::Ini() = Feather::Parse("[STABILITY]\nBikeFeetFix=1\n");
+        Check(Catalogue::Read("AimProjectileCrashFix") == 1,
+            "sections: an absent key keeps the default");
+    }
+
     void TestFusionFixGate()
     {
         Config::Ini() = Feather::Parse(
@@ -172,6 +194,7 @@ int main()
     TestInteger();
     TestFloat();
     TestModelTable();
+    TestSections();
     TestFusionFixGate();
 
     SetImprovementsForTest(0);

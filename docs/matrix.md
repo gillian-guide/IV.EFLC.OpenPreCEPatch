@@ -44,7 +44,7 @@ reported apart and never counted as closed; `fault` names the cell that died.
 
 | build | version | closed / 99 | open | oracle | fault |
 |---:|---|---:|---|---|---|
-| 1 | 1.0.0.0 | 96 | `NoImpostorHeightCutoff` | `CarDynamicShadowFix`, `SkipLauncher` | - |
+| 1 | 1.0.0.0 | 96 (isolated) | - | `CarDynamicShadowFix`, `SkipLauncher` | FAULTED at `NoImpostorHeightCutoff` (0xC0000005 ACCESS_VIOLATION) |
 | 5 | 1.0.4.0 | 97 | - | `CarDynamicShadowFix`, `SkipLauncher` | - |
 | 6 | 1.0.0.4 | 98 | - | `SkipLauncher` | - |
 | 7 | 1.0.6.0 | 96 | `Patch4RemoveModChecks` | `SkipLauncher`, `Patch7RemoveModChecks` | - |
@@ -56,7 +56,25 @@ reported apart and never counted as closed; `fault` names the cell that died.
 
 ## The fault
 
-No cell faulted.
+`GTAIV_1000.exe` (1.0.0.0) dies in the **full** cell with
+`0xC0000005 ACCESS_VIOLATION` after 4430 byte(s): the shipped INI reaches
+`NoImpostorHeightCutoff`, whose 1.0.0.0 pattern matches once and whose
+original writes `hits[1]` through an uninitialised vector entry. The
+per-option cell isolates that key (its row is `open` above); in the 1:1
+configuration this is the original's fault, and
+`tools/check_failsafe_parity.py` shows the same cell completing with
+`OPCEP_IMPROVEMENTS=all` and the guarded write absent.
+
+`GTAIV_1000.exe` (1.0.0.0) dies in the per-option cell at
+`NoImpostorHeightCutoff`, 0xC0000005 ACCESS_VIOLATION: the original's own fault -- an uninitialised vector entry,
+write `66 89 06` at the original's `0x100536F1` -- which `docs/parity.md`
+records as deliberate and unguarded. The cell wrote 15329 byte(s) before it died, so its rows are not a scoreboard: the
+first 48 keys ran, and the 51 after it
+were never reached. It is scored one key per subprocess instead, and
+`NoImpostorHeightCutoff` is the only key whose cell faults alone -- so no other cell faults on
+that build. The isolated cells are not a different measurement: on builds 5
+and 9 they are byte-identical to the per-option rows for all 99 keys
+(`python tools/dump_matrix.py --selfcheck-isolated --only 5`).
 
 ## What the matrix proves
 
