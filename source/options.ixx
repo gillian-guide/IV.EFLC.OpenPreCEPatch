@@ -54,8 +54,14 @@ export namespace Catalogue
 
     // Reads the key the way the original does: std::stoi on the stored text, or
     // on the arm's default when the key is absent.
+    // The recovered read plus the OpenPreCEPatch FusionFix gate (config group):
+    // an overlapping option is off when a FusionFix ASI is installed, so two
+    // hooks cannot fight over the same site. With the group off this is the
+    // original read exactly.
     inline int32_t Read(std::string_view key)
     {
+        if (Config::FusionFixGated(key))
+            return 0;
         const auto* option = Find(key);
         const auto fallback = DefaultText(key, false);
         return Config::Integer(Config::Ini(), key, fallback);

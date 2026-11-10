@@ -293,6 +293,7 @@ static void NmsSyncBody();
 static void NmsNoopArgBody();
 static void NmsThunk18Body();
 static void NmsApplyBody();
+static void NmsApplyHardenedBody();
 static void NewfilesRegisterBody();
 static void NewSavesReadHook();
 static void NewSavesSecondLoadHook();
@@ -477,10 +478,181 @@ namespace
 
     // The allocation registry. The original keeps the pointers it handed out in a
     // hash map (FNV-1a over the pointer's four bytes) behind the recursive
-    // critical section at 0x101A0808; only membership is observable, so the keys
-    // go in a plain set behind an equivalent lock.
+    // critical section at 0x101A0808; only membership is observable. The
+    // `nms` group replaces the node-per-insert set with a flat open-addressing
+    // table over VirtualAlloc: no allocation per game allocation, no throw in a
+    // noexcept caller, and the same membership. The 1:1 path's observable
+    // behaviour is unchanged either way (the set is not part of the write set).
     CRITICAL_SECTION nms_registry_lock;
-    std::unordered_set<uint32_t> nms_allocations;
+
+    class NmsRegistry final
+    {
+    public:
+        NmsRegistry() = default;
+        NmsRegistry(const NmsRegistry&) = delete;
+        NmsRegistry& operator=(const NmsRegistry&) = delete;
+        ~NmsRegistry() { Release(); }
+
+        bool Insert(uint32_t key) noexcept
+        {
+            if (key <= kErased)
+                return false;
+            if (slots_ == nullptr || (used_ + 1) * 4 >= capacity_ * 3)
+            {
+                if (!Grow())
+                    return false;
+            }
+            return InsertNoGrow(key);
+        }
+
+        bool Erase(uint32_t key) noexcept
+        {
+            if (slots_ == nullptr)
+                return false;
+            const size_t mask = capacity_ - 1;
+            for (size_t slot = Hash(key) & mask;; slot = (slot + 1) & mask)
+            {
+                const uint32_t value = slots_[slot];
+                if (value == kEmpty)
+                    return false;
+                if (value == key)
+                {
+                    slots_[slot] = kErased;
+                    --size_;
+                    return true;
+                }
+            }
+        }
+
+        bool Contains(uint32_t key) const noexcept
+        {
+            if (slots_ == nullptr)
+                return false;
+            const size_t mask = capacity_ - 1;
+            for (size_t slot = Hash(key) & mask;; slot = (slot + 1) & mask)
+            {
+                const uint32_t value = slots_[slot];
+                if (value == kEmpty)
+                    return false;
+                if (value == key)
+                    return true;
+            }
+        }
+
+        size_t Size() const noexcept { return size_; }
+        size_t Capacity() const noexcept { return capacity_; }
+
+    private:
+        static constexpr uint32_t kEmpty = 0u;
+        static constexpr uint32_t kErased = 1u;
+        static constexpr size_t kInitialSlots = 1024u;
+
+        static size_t Hash(uint32_t key) noexcept
+        {
+            return static_cast<size_t>(key * 2654435761u);
+        }
+
+        bool InsertNoGrow(uint32_t key) noexcept
+        {
+            const size_t mask = capacity_ - 1;
+            size_t erased = SIZE_MAX;
+            for (size_t slot = Hash(key) & mask;; slot = (slot + 1) & mask)
+            {
+                const uint32_t value = slots_[slot];
+                if (value == key)
+                    return true;
+                if (value == kErased)
+                {
+                    if (erased == SIZE_MAX)
+                        erased = slot;
+                    continue;
+                }
+                if (value == kEmpty)
+                {
+                    if (erased != SIZE_MAX)
+                    {
+                        slots_[erased] = key;
+                    }
+                    else
+                    {
+                        slots_[slot] = key;
+                        ++used_;
+                    }
+                    ++size_;
+                    return true;
+                }
+            }
+        }
+
+        bool Grow() noexcept
+        {
+            const size_t freshCapacity = capacity_ == 0 ? kInitialSlots : capacity_ * 2;
+            auto* fresh = static_cast<uint32_t*>(VirtualAlloc(nullptr,
+                freshCapacity * sizeof(uint32_t), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+            if (fresh == nullptr)
+                return false;
+
+            auto* previous = slots_;
+            const size_t previousCapacity = capacity_;
+            slots_ = fresh;
+            capacity_ = freshCapacity;
+            size_ = 0;
+            used_ = 0;
+            for (size_t slot = 0; slot < previousCapacity; ++slot)
+            {
+                const uint32_t value = previous[slot];
+                if (value > kErased)
+                    (void)InsertNoGrow(value);
+            }
+            if (previous != nullptr)
+                VirtualFree(previous, 0, MEM_RELEASE);
+            return true;
+        }
+
+        void Release() noexcept
+        {
+            if (slots_ != nullptr)
+                VirtualFree(slots_, 0, MEM_RELEASE);
+            slots_ = nullptr;
+            capacity_ = 0;
+            size_ = 0;
+            used_ = 0;
+        }
+
+        uint32_t* slots_ = nullptr;
+        size_t capacity_ = 0;
+        size_t size_ = 0;
+        size_t used_ = 0;  // occupied + tombstones
+    };
+
+    NmsRegistry nms_allocations;
+
+    // The private heap: NMS allocations stay off the CRT heap FusionFix and
+    // LibertyCityPlates use. A failed HeapCreate falls back to the process heap.
+    HANDLE nms_heap = nullptr;
+    std::once_flag nms_heap_once;
+
+    HANDLE NmsHeap() noexcept
+    {
+        std::call_once(nms_heap_once, [] { nms_heap = HeapCreate(0, 0, 0); });
+        return nms_heap != nullptr ? nms_heap : GetProcessHeap();
+    }
+
+    // The allocator object's pre-swap vtable, captured by the `nms` group's apply
+    // body before it writes ours. A pointer allocated before the swap is not in
+    // the registry and must be handed back to the allocator that produced it.
+    void** nms_original_object = nullptr;
+    uintptr_t nms_original_vtable[kNmsVtableSlots] = {};
+
+    void NmsCaptureOriginal() noexcept
+    {
+        auto* object = reinterpret_cast<void**>(static_cast<uintptr_t>(zpatch_nms_object));
+        if (object == nullptr || nms_original_object != nullptr)
+            return;
+        nms_original_object = object;
+        if (object[0] != nullptr)
+            std::memcpy(nms_original_vtable, object[0], sizeof(nms_original_vtable));
+    }
 
     // The one-time setup of the registry lock, shared by the two paths that reach
     // it: PublishNewMemorySystem (the game's allocator-init, once per process) and
@@ -506,7 +678,13 @@ namespace
         (void)flags;
         const uint32_t unit = align < 0x10u ? 0x10u : align;
         const uint32_t want = size < unit ? unit : size;
-        void* base = HeapAlloc(GetProcessHeap(), 0, want + unit * 2u);
+        const bool hardened = ImprovementEnabled(Improvement::nms);
+        // A 32-bit sum that wraps would HeapAlloc a tiny block and then fill
+        // `want` bytes past it. The original trusts the game not to ask; the
+        // group refuses the request instead.
+        if (hardened && want > UINT32_MAX - unit * 2u)
+            return nullptr;
+        void* base = HeapAlloc(hardened ? NmsHeap() : GetProcessHeap(), 0, want + unit * 2u);
         if (base == nullptr)
             return nullptr;
 
@@ -516,7 +694,7 @@ namespace
         std::memset(reinterpret_cast<void*>(aligned), kNmsHeapPoison, want);
 
         EnterCriticalSection(&nms_registry_lock);
-        nms_allocations.insert(aligned);
+        (void)nms_allocations.Insert(aligned);
         LeaveCriticalSection(&nms_registry_lock);
         return reinterpret_cast<void*>(aligned);
     }
@@ -529,11 +707,40 @@ namespace
             return;
 
         const auto raw = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(pointer));
+
+        // The group hands a pointer it did not allocate back to the allocator
+        // that produced it. Reading NMS's distance word from a foreign block
+        // would HeapFree an address that allocator never made; without a captured
+        // original vtable the block is left alone instead of corrupted.
+        if (ImprovementEnabled(Improvement::nms))
+        {
+            EnterCriticalSection(&nms_registry_lock);
+            const bool mine = nms_allocations.Contains(raw);
+            if (mine)
+                (void)nms_allocations.Erase(raw);
+            LeaveCriticalSection(&nms_registry_lock);
+
+            if (!mine)
+            {
+                if (nms_original_object != nullptr && nms_original_vtable[3] != 0)
+                {
+                    using OriginalFree = void(__thiscall*)(void*, void*);
+                    reinterpret_cast<OriginalFree>(nms_original_vtable[3])(
+                        nms_original_object, pointer);
+                }
+                return;
+            }
+
+            const auto base = raw - *reinterpret_cast<const uint32_t*>(raw - 4u);
+            HeapFree(NmsHeap(), 0, reinterpret_cast<void*>(base));
+            return;
+        }
+
         const auto base = raw - *reinterpret_cast<const uint32_t*>(raw - 4u);
         HeapFree(GetProcessHeap(), 0, reinterpret_cast<void*>(base));
 
         EnterCriticalSection(&nms_registry_lock);
-        nms_allocations.erase(raw);
+        (void)nms_allocations.Erase(raw);
         LeaveCriticalSection(&nms_registry_lock);
     }
 
@@ -542,7 +749,7 @@ namespace
     uint8_t __stdcall NmsContainsBody(uint32_t key)
     {
         EnterCriticalSection(&nms_registry_lock);
-        const bool found = nms_allocations.find(key) != nms_allocations.end();
+        const bool found = nms_allocations.Contains(key);
         LeaveCriticalSection(&nms_registry_lock);
         return found ? uint8_t{ 1 } : uint8_t{ 0 };
     }
@@ -1588,7 +1795,12 @@ namespace
             auto* match = pattern.get_first<std::byte>(0);
             // -34 is the call the original retargets, -29 the five-slot clear's
             // first store; the jump resumes four instructions later at -16.
-            injector::MakeCALL(match - 34, reinterpret_cast<void*>(&NmsApplyBody), true);
+            // The group uses a body that captures the pre-swap vtable first; the
+            // call's observable write is the same vtable dword.
+            void* body = ImprovementEnabled(Improvement::nms)
+                ? reinterpret_cast<void*>(&NmsApplyHardenedBody)
+                : reinterpret_cast<void*>(&NmsApplyBody);
+            injector::MakeCALL(match - 34, body, true);
             injector::MakeJMP(match - 29, reinterpret_cast<void*>(match - 16), true);
         }
     }
@@ -1753,7 +1965,10 @@ export void RegisterLoading()
     Bodies::Register(reinterpret_cast<uintptr_t>(&NmsSyncBody), 0x100057F0u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&NmsThunk18Body), 0x10038620u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&NmsNoopArgBody), 0x10038630u);
-    Bodies::Register(reinterpret_cast<uintptr_t>(&NmsApplyBody), 0x10038670u);
+    if (ImprovementEnabled(Improvement::nms))
+        Bodies::Register(reinterpret_cast<uintptr_t>(&NmsApplyHardenedBody), 0x10038670u);
+    else
+        Bodies::Register(reinterpret_cast<uintptr_t>(&NmsApplyBody), 0x10038670u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&NmsAllocateBody), 0x10038360u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&NmsFreeBody), 0x10038430u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&NmsContainsBody), 0x100385A0u);
@@ -2203,6 +2418,26 @@ static __declspec(naked) void NmsApplyBody()
         je nms_apply_done
         mov DWORD PTR [eax], OFFSET zpatch_nms_vtable
     nms_apply_done:
+        ret
+    }
+}
+
+// The `nms` group's apply body: capture the pre-swap vtable (for the foreign
+// pointer free path), then install ours exactly as the 1:1 body does. pushad/
+// popad keeps the caller's registers, which the five-instruction original also
+// leaves untouched.
+static __declspec(naked) void NmsApplyHardenedBody()
+{
+    __asm
+    {
+        __emit 0x60  // pushad
+        call NmsCaptureOriginal
+        __emit 0x61  // popad
+        mov eax, DWORD PTR [zpatch_nms_object]
+        test eax, eax
+        je nms_apply_hardened_done
+        mov DWORD PTR [eax], OFFSET zpatch_nms_vtable
+    nms_apply_hardened_done:
         ret
     }
 }

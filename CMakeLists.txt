@@ -137,6 +137,14 @@ target_link_libraries(zp_failsafe PRIVATE zp_modules)
 add_test(NAME zp_failsafe COMMAND zp_failsafe)
 set_tests_properties(zp_failsafe PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
+# The `config` group: the no-throw read, the saturation, the guarded vehicle
+# table and the FusionFix overlap gate, each against the 1:1 throw/gate-off side.
+add_executable(zp_config_guard tests/config_guard.cpp)
+set_target_properties(zp_config_guard PROPERTIES CXX_SCAN_FOR_MODULES ON)
+target_link_libraries(zp_config_guard PRIVATE zp_modules)
+add_test(NAME zp_config_guard COMMAND zp_config_guard)
+set_tests_properties(zp_config_guard PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
 # The two per-model light tables the loader preamble reads from
 # [PopupLightAngles] / [HeadlightConeOffsets]: the recovered grammar, defaults and
 # faults, on documents only -- no game image and no ASI load.
@@ -307,6 +315,17 @@ if(Python3_Interpreter_FOUND AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs
   set_tests_properties(zp_failsafe_parity PROPERTIES
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     TIMEOUT 300)
+  # The two arms whose OpenPreCEPatch implementation deliberately changes the
+  # write set: shader (two LookupShader calls, no chain jumps) and alpha_nop
+  # (the jnz alone). Both are selected by name, never by `all`.
+  add_test(NAME zp_opcep_deltas
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_opcep_deltas.py
+            --dump $<TARGET_FILE:zp_dump>
+            --game ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs
+            --work ${CMAKE_CURRENT_BINARY_DIR}/opcep_deltas)
+  set_tests_properties(zp_opcep_deltas PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    TIMEOUT 120)
 endif()
 
 add_executable(zp_pe_check tests/pe_check.cpp)

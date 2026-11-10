@@ -16,6 +16,7 @@ export module ooc;
 
 import bodies;
 import common;
+import improvements;
 import loader;
 import patch;
 
@@ -271,6 +272,40 @@ static void OocRegister(uint8_t* table)
 // call re-runs all of this and leaks the previous archive: kept 1:1.
 static uint32_t OocInitialise()
 {
+    // OpenPreCEPatch's cache: the original's one-shot guard has no writer, so
+    // every call re-decodes, re-registers and leaks the previous archive. The
+    // `ooc_cache` group decodes and mounts once, then answers the same archive
+    // for the process lifetime. It is opt-in because it changes the original's
+    // repeated-call behaviour.
+    if (ImprovementEnabled(Improvement::ooc_cache))
+    {
+        static uint32_t cached_archive = 0;
+        static uint32_t cached_state = 0;
+        if (cached_archive != 0)
+        {
+            zpatch_ooc_state = cached_state;
+            return cached_archive;
+        }
+
+        auto* table = static_cast<uint8_t*>(std::malloc(kOocTableSize));
+        if (table == nullptr)
+            return 0;
+        if (OocDecodeBody(table) == 0)
+        {
+            std::free(table);
+            return 0;
+        }
+        OocRegister(table);
+        uint8_t* archive = static_cast<uint8_t*>(OocBuildArchiveBody());
+        if (archive == nullptr)
+            return 0;
+
+        cached_archive = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(archive));
+        cached_state = zpatch_ooc_offset;
+        zpatch_ooc_state = cached_state;
+        return cached_archive;
+    }
+
     // Unchecked, like the original: the decode writes through the block whether
     // or not the allocation succeeded.
     auto* table = static_cast<uint8_t*>(std::malloc(kOocTableSize));

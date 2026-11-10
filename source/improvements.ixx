@@ -40,7 +40,41 @@ export enum class Improvement : uint32_t
     // value) instead of faulting.
     failsafe = 1u << 0,
 
+    // ImprovedShaderStreaming keeps LibertyCityPlates' address scan intact: only
+    // the two LookupShader calls are replaced, the two jumps over the remaining
+    // name chain (a pure speed-up the original also wrote) are dropped.
+    shader = 1u << 1,
+
+    // BuildingAlphaFix writes only the `jnz` (6 bytes) of the second site instead
+    // of the `test` + `jnz` pair (13 bytes), keeping the test's flags live.
+    alpha_nop = 1u << 2,
+
+    // The OpenPreCEPatch-only compatibility options and aliases: the xlive.dll
+    // protection disabler, the unified RemoveModChecks key, the Steam achievement
+    // mirror. They are not in the recovered 99-key catalogue, so they are opt-in.
+    opcep = 1u << 3,
+
+    // NewMemorySystem's hardening: a published-singleton guard, a 32-bit request
+    // overflow check, a private heap and a foreign-pointer free fallback.
+    nms = 1u << 4,
+
+    // The config hardening: a present but unparseable value falls back to the
+    // option's default instead of throwing out of DllMain; the FusionFix overlap
+    // gate; the first-run INI creation and legacy import.
+    config = 1u << 5,
+
+    // The startup warnings: Ultimate ASI Loader probe, unsupported version, a
+    // second copy of the ASI, and the FusionFix notice.
+    warnings = 1u << 6,
+
+    // The one-time OutOfCommissionFix archive cache (the original re-decodes and
+    // leaks on every call).
+    ooc_cache = 1u << 7,
+
     // The folded groups: what `all` means. `except:<group>` complements this set.
+    // Only the failsafe is folded today: every other group changes a user-visible
+    // outcome and is named explicitly, so `all` stays the default-on failsafe and
+    // `except:failsafe` stays the 1:1 configuration.
     all = failsafe,
 };
 
@@ -155,6 +189,23 @@ namespace
         { "failsafes", Improvement::failsafe },
         { "guards", Improvement::failsafe },
         { "null", Improvement::failsafe },
+        { "shader", Improvement::shader },
+        { "shaders", Improvement::shader },
+        { "lcp", Improvement::shader },
+        { "alpha", Improvement::alpha_nop },
+        { "alpha_nop", Improvement::alpha_nop },
+        { "alpha-nop", Improvement::alpha_nop },
+        { "opcep", Improvement::opcep },
+        { "compat", Improvement::opcep },
+        { "nms", Improvement::nms },
+        { "allocator", Improvement::nms },
+        { "config", Improvement::config },
+        { "ini", Improvement::config },
+        { "warnings", Improvement::warnings },
+        { "loader", Improvement::warnings },
+        { "ooc", Improvement::ooc_cache },
+        { "ooc_cache", Improvement::ooc_cache },
+        { "ooc-cache", Improvement::ooc_cache },
         { "all", Improvement::all },
     };
 
@@ -278,6 +329,13 @@ const char* ImprovementName(Improvement group) noexcept
     switch (group)
     {
     case Improvement::failsafe: return "failsafe";
+    case Improvement::shader: return "shader";
+    case Improvement::alpha_nop: return "alpha_nop";
+    case Improvement::opcep: return "opcep";
+    case Improvement::nms: return "nms";
+    case Improvement::config: return "config";
+    case Improvement::warnings: return "warnings";
+    case Improvement::ooc_cache: return "ooc_cache";
     case Improvement::none: return "none";
     }
     return "unknown";

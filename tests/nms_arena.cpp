@@ -6,6 +6,7 @@
 #include <vector>
 
 import loading;
+import improvements;
 
 // The NewMemorySystem arena, asserted by behaviour rather than by its disassembly.
 //
@@ -672,6 +673,41 @@ namespace
     }
 }
 
+void TestHardening()
+{
+    SetImprovementsForTest(Improve(Improvement::nms));
+
+    // A request whose `want + 2*unit` wraps is refused instead of allocating a
+    // tiny block and filling it.
+    void* overflow = arena.allocate(0xFFFFFFF0u, 0x10u, 0);
+    Check(overflow == nullptr, "nms: a wrapping request answers null");
+    if (overflow != nullptr)
+        arena.release(overflow);
+
+    // A block NMS did not allocate is not in the registry and is not freed
+    // through NMS's distance word. With no original vtable captured in this
+    // test, the group leaves it alone rather than corrupting the heap.
+    void* foreign = HeapAlloc(GetProcessHeap(), 0, 0x40);
+    Check(foreign != nullptr, "nms: the foreign block is allocated");
+    if (foreign != nullptr)
+    {
+        std::memset(foreign, 0x5A, 0x40);
+        Check(arena.contains(Address(foreign)) == 0, "nms: a foreign block is not a member");
+        arena.release(foreign);
+        Check(static_cast<unsigned char*>(foreign)[0] == 0x5A,
+            "nms: a foreign block is not freed through NMS");
+        HeapFree(GetProcessHeap(), 0, foreign);
+    }
+
+    void* mine = arena.allocate(0x20, 0x10, 0);
+    Check(mine != nullptr && arena.contains(Address(mine)) == 1,
+        "nms: a normal allocation still registers");
+    if (mine != nullptr)
+        arena.release(mine);
+
+    SetImprovementsForTest(0);
+}
+
 int main()
 {
     // A faulting heap is a test outcome here, never a message box on whoever runs the
@@ -691,6 +727,7 @@ int main()
         TestMembership();
         TestFree();
         TestFailurePath();
+        TestHardening();
     }
 
     std::printf("%d check(s), %d failure(s)\n", checks, failures);

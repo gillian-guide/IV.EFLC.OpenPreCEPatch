@@ -3,6 +3,7 @@
 import common;
 import config;
 import game;
+import improvements;
 import loader;
 import options;
 import shared;
@@ -42,6 +43,12 @@ namespace
 #endif
 
         const bool read = Config::Load();
+        if (ImprovementEnabled(Improvement::config))
+        {
+            // The OpenPreCEPatch overlap gate: one probe, recorded once, and
+            // every overlapping option reads as off through Catalogue::Read.
+            Config::SetFusionFixPresent(Config::DetectFusionFix(game.ModuleDirectory()));
+        }
         Loader::Current() = Classify(game.FileVersion());
         const auto build = Loader::Current();
 

@@ -820,6 +820,47 @@ namespace
         }
     }
 
+    // OpenPreCEPatch-only keys have no recovered catalogue row (the 99-key table
+    // is the original's INI), so they are read directly and only inside the
+    // `opcep` group. The read keeps the original's gate: the stored value must be
+    // exactly 1.
+    bool OpenOptionEnabled(std::string_view key, std::string_view fallback)
+    {
+        if (!ImprovementEnabled(Improvement::opcep))
+            return false;
+        return Config::Integer(Config::Ini(), "Options", key, fallback) == 1;
+    }
+
+    // RemoveModChecks is OpenPreCEPatch's unified key: it replaces the three
+    // recovered per-patch keys without making an old INI unreadable. It is read
+    // only in the opcep group, so the 1:1 arms keep their own gates.
+    bool ModChecksEnabled()
+    {
+        return Loader::Enabled("Patch4RemoveModChecks") ||
+               Loader::Enabled("Patch6and7RemoveModChecks") ||
+               Loader::Enabled("Patch7RemoveModChecks") ||
+               OpenOptionEnabled("RemoveModChecks", "0");
+    }
+
+    // The standalone GFWLProtectionDisabler2019.asi flips xlive.dll+0xF1605 from
+    // its `jz`/`jmp` to a `jmp`. No xlive image is available to scan, so the RVA
+    // is the only anchor and the pre-image byte is the guard: a different xlive
+    // build is left untouched.
+    void InstallGFWLProtectionDisabler()
+    {
+        if (!OpenOptionEnabled("GFWLProtectionDisabler", "1"))
+            return;
+
+        const HMODULE xlive = GetModuleHandleA("xlive.dll");
+        if (xlive == nullptr)
+            return;
+
+        auto* const site = reinterpret_cast<std::byte*>(xlive) + 988677;
+        const std::byte opcode = *site;
+        if (opcode == std::byte{ 0x74 } || opcode == std::byte{ 0xEB })
+            injector::WriteMemory<std::byte>(site, std::byte{ 0xEB }, true);
+    }
+
     void InstallPatch6and7RemoveModChecks()
     {
         // The original has one handler for two keys: `stoi(ini.get(
@@ -828,8 +869,7 @@ namespace
         // 0x10044710. Patch7RemoveModChecks is therefore not an alias that does
         // nothing -- it is the alternate trigger for the same full write set, and a
         // Patch7-only INI installs all 16/21 bytes on 1.0.6.0/1.0.7.0.
-        if (!Loader::Enabled("Patch6and7RemoveModChecks")
-            && !Loader::Enabled("Patch7RemoveModChecks"))
+        if (!ModChecksEnabled())
             return;
 
         for (const auto& row : kModChecksSites)
@@ -894,7 +934,11 @@ namespace
 
     void InstallPatch4RemoveModChecks()
     {
-        if (!Loader::Enabled("Patch4RemoveModChecks"))
+        // The unified key covers the patch-4 mod-check stub on 1.0.4.0, the build
+        // the check exists on; the recovered per-patch key keeps its own gate.
+        const bool unified = OpenOptionEnabled("RemoveModChecks", "0") &&
+                             Loader::Current() == Build::v1040;
+        if (!Loader::Enabled("Patch4RemoveModChecks") && !unified)
             return;
 
         auto pattern = find_pattern(
@@ -981,6 +1025,7 @@ namespace
             return;
 
         auto pattern = find_pattern("0F BF 46 2E 3B 05 ? ? ? ? 75 ? A1");
+        bool installedA = false;
         if (!pattern.empty())
         {
             auto* match = pattern.get_first<std::byte>(0);
@@ -989,6 +1034,7 @@ namespace
             injector::WriteMemory<uint32_t>(match + 82,
                 static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&zpatch_popup_angle)), true);
             Bodies::RegisterPublished(reinterpret_cast<uintptr_t>(match + 82));
+            installedA = true;
         }
 
         pattern = find_pattern("0C 83 88 94 00 00 00 04");
@@ -997,7 +1043,10 @@ namespace
                 reinterpret_cast<void*>(&IdeHookBody), true);
 
         pattern = find_pattern("0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1");
-        if (!pattern.empty())
+        // The original handler is `if (EAX twin found) ... else if (EDX twin
+        // found) ...`: the two arms share the resume slots, so installing both
+        // would let the second clobber the first on a view that carries both.
+        if (!installedA && !pattern.empty())
         {
             auto* match = pattern.get_first<std::byte>(0);
             injector::MakeJMP(match, reinterpret_cast<void*>(&PopupHeadlightsBodyB), true);
@@ -1030,6 +1079,7 @@ export void RegisterMisc()
         InstallSpeedupBugFix();
         InstallPatch4RemoveModChecks();
         InstallCopSirensFlag();
+        InstallGFWLProtectionDisabler();
         InstallPopupHeadlightsFlag();
         InstallVRAMFix();
         InstallFixPCIDKickbug();

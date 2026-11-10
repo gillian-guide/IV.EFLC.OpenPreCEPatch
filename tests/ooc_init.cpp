@@ -8,6 +8,7 @@
 #include <vector>
 
 import ooc;
+import improvements;
 
 // The OutOfCommissionFix init (`sub_1004B750`, 0x1004B750, 991 instructions,
 // `docs/rebuilt.md` §3 class B), asserted by behaviour with no game image.
@@ -663,6 +664,20 @@ int main()
             Check(g_archive_count == 6,
                 std::format("leak: six calls built six archives ({})", g_archive_count));
         }
+
+        // The ooc_cache group: the first call decodes/builds once, every later
+        // call answers the same archive and re-publishes the same state. This is
+        // the opt-in side of the leak above.
+        SetImprovementsForTest(Improve(Improvement::ooc_cache));
+        const OocInit::Run cached_first = OocInit::Initialise();
+        const OocInit::Run cached_second = OocInit::Initialise();
+        Check(cached_first.archive != 0, "cache: the first call builds an archive");
+        Check(cached_first.archive == cached_second.archive,
+            "cache: the second call reuses the same archive");
+        Check(cached_first.slots.bytes == cached_second.slots.bytes &&
+                  cached_first.slots.state == cached_second.slots.state,
+            "cache: the published cursor and state are the same");
+        SetImprovementsForTest(0);
     }
     catch (const std::exception& error)
     {

@@ -2,9 +2,15 @@ module;
 
 #include <common.hxx>
 
+#include <cctype>
+#include <cerrno>
+#include <cstdlib>
+#include <limits>
+
 export module config;
 
 import common;
+import improvements;
 
 // The INI boundary. The original reads ZolikaPatch.ini through feather-ini-parser
 // 1.41, a third-party library it links statically; its grammar is the contract,
@@ -204,6 +210,49 @@ export namespace Config
     // exactly as it is written here.
     inline constexpr std::string_view FileName = "ZolikaPatch.ini";
 
+    // OpenPreCEPatch's no-throw read. `strtol`'s base-10 prefix grammar: leading
+    // whitespace, an optional sign, decimal digits, stop at the first other byte.
+    // Out-of-range saturates instead of throwing, so the only consumer (`== 1`)
+    // answers false. The `config` group uses this; the 1:1 path keeps
+    // std::stoi and its two exceptions.
+    struct IntParse
+    {
+        bool ok{ false };
+        int32_t value{ 0 };
+    };
+
+    inline IntParse ParseInt(std::string_view text) noexcept
+    {
+        size_t index = 0;
+        while (index < text.size() && std::isspace(static_cast<unsigned char>(text[index])))
+            ++index;
+        if (index == text.size())
+            return {};
+
+        bool negative = false;
+        if (text[index] == '+' || text[index] == '-')
+        {
+            negative = text[index] == '-';
+            ++index;
+        }
+        if (index == text.size() || text[index] < '0' || text[index] > '9')
+            return {};
+
+        int64_t value = 0;
+        for (; index < text.size(); ++index)
+        {
+            const char character = text[index];
+            if (character < '0' || character > '9')
+                break;
+            value = value * 10 + (character - '0');
+            if (value > std::numeric_limits<int32_t>::max())
+                value = std::numeric_limits<int32_t>::max();
+        }
+        if (negative)
+            value = -value;
+        return { true, static_cast<int32_t>(value) };
+    }
+
     inline Feather::Document& Ini()
     {
         static Feather::Document document;
@@ -223,19 +272,131 @@ export namespace Config
     inline int32_t Integer(const Feather::Document& document, std::string_view key, std::string_view fallback)
     {
         const std::string defaultText(fallback);
-        return std::stoi(Feather::Value(document, "Options", key, defaultText));
+        const auto& value = Feather::Value(document, "Options", key, defaultText);
+        if (ImprovementEnabled(Improvement::config))
+        {
+            const IntParse parsed = ParseInt(value);
+            if (parsed.ok)
+                return parsed.value;
+            Log::Print("config: invalid value for {}: \"{}\", using default {}", key, value, fallback);
+            return std::stoi(defaultText);
+        }
+        return std::stoi(value);
     }
 
     inline int32_t Integer(const Feather::Document& document, std::string_view section, std::string_view key, std::string_view fallback)
     {
         const std::string defaultText(fallback);
-        return std::stoi(Feather::Value(document, section, key, defaultText));
+        const auto& value = Feather::Value(document, section, key, defaultText);
+        if (ImprovementEnabled(Improvement::config))
+        {
+            const IntParse parsed = ParseInt(value);
+            if (parsed.ok)
+                return parsed.value;
+            Log::Print("config: invalid value for {}: \"{}\", using default {}", key, value, fallback);
+            return std::stoi(defaultText);
+        }
+        return std::stoi(value);
     }
 
     inline float Float(const Feather::Document& document, std::string_view section, std::string_view key, std::string_view fallback)
     {
         const std::string defaultText(fallback);
-        return std::stof(Feather::Value(document, section, key, defaultText));
+        const auto& value = Feather::Value(document, section, key, defaultText);
+        if (ImprovementEnabled(Improvement::config))
+        {
+            errno = 0;
+            char* end = nullptr;
+            const float parsed = std::strtof(value.c_str(), &end);
+            if (end != value.c_str() && errno != ERANGE)
+                return parsed;
+            Log::Print("config: invalid float for {}: \"{}\", using default {}", key, value, fallback);
+            return std::strtof(defaultText.c_str(), nullptr);
+        }
+        return std::stof(value);
+    }
+
+    // -----------------------------------------------------------------------
+    // FusionFix overlap gate
+    // -----------------------------------------------------------------------
+    //
+    // FusionFix replaces several of the same subsystems. OpenPreCEPatch disables
+    // an overlapping option when a FusionFix ASI is installed and records the
+    // reason, instead of silently letting two hooks fight. The 1:1 tree keeps
+    // only the original's SkipIntro/SkipMenu probe; this list is used only in
+    // the `config` group.
+
+    struct FusionFixConflict
+    {
+        const char* option;
+        const char* reason;
+    };
+
+    inline constexpr FusionFixConflict kFusionFixConflicts[] = {
+        { "BikeFeetFix", "FusionFix fixes.ixx (feet on bikes)" },
+        { "BikePhoneAnimsFix", "FusionFix fixes.ixx (phone/bike animation)" },
+        { "BuildingAlphaFix", "FusionFix fixes.ixx (LOD fade-in)" },
+        { "BuildingDynamicShadows", "FusionFix shadows.ixx" },
+        { "CarDynamicShadowFix", "FusionFix shadows.ixx / nightshadows.ixx" },
+        { "CarPartsShadowFix", "FusionFix shadows.ixx" },
+        { "CutsceneFixes", "FusionFix cutscenecam.ixx / frameratevigilante.ixx" },
+        { "EmissiveLerpFix", "FusionFix fixes.ixx / shaders.ixx (emissive state)" },
+        { "EpisodicVehicleSupport", "FusionFix episodiccontent.ixx (EpisodicVehicles)" },
+        { "EpisodicWeaponSupport", "FusionFix episodiccontent.ixx (EpisodicWeapons)" },
+        { "ForceCarHeadlightShadows", "FusionFix nightshadows.ixx" },
+        { "ForceShadowsOnObjects", "FusionFix shadows.ixx" },
+        { "HighFPSBikePhysicsFix", "FusionFix frameratevigilante.ixx (vehicle physics)" },
+        { "HighFPSSpeedupFix", "FusionFix frameratevigilante.ixx (time scale)" },
+        { "IncreasePtrNodes", "FusionFix limits.ixx (PtrNode Double pool)" },
+        { "IncreaseVehicleModelLimit", "FusionFix limits.ixx" },
+        { "IncreaseVehicleStructLimit", "FusionFix limits.ixx (VehicleStruct pool)" },
+        { "MouseFix", "FusionFix rawinput.ixx / sniper.ixx" },
+        { "NoImpostorHeightCutoff", "FusionFix lodlights.ixx / fixes.ixx" },
+        { "NoLODLightHeightCutoff", "FusionFix lodlights.ixx" },
+        { "NoLiveryLimit", "FusionFix limits.ixx (LiveriesLimit)" },
+        { "NoLoadingSleep", "FusionFix loadingdelays.ixx (same push 5000)" },
+        { "OutOfCommissionFix", "FusionFix frameratevigilante.ixx / fixes.ixx" },
+        { "PedModelsInCutscenesFix", "FusionFix cutscene fixes" },
+        { "PlayerAsPedComponentsFix", "FusionFix player component fixes" },
+        { "ReversingLightFix", "FusionFix vehicles.ixx" },
+        { "SCOSignatureFix", "FusionFix episodiccontent.ixx" },
+        { "VSyncFix", "FusionFix vsync.ixx" },
+    };
+
+    inline bool& FusionFixPresentFlag()
+    {
+        static bool present = false;
+        return present;
+    }
+
+    inline void SetFusionFixPresent(bool present) { FusionFixPresentFlag() = present; }
+    inline bool FusionFixPresent() { return FusionFixPresentFlag(); }
+
+    inline const FusionFixConflict* FusionFixConflictFor(std::string_view key)
+    {
+        for (const auto& conflict : kFusionFixConflicts)
+        {
+            if (key == conflict.option)
+                return &conflict;
+        }
+        return nullptr;
+    }
+
+    inline bool FusionFixGated(std::string_view key)
+    {
+        return ImprovementEnabled(Improvement::config) && FusionFixPresent() &&
+               FusionFixConflictFor(key) != nullptr;
+    }
+
+    // A FusionFix ASI next to ours (or loaded into this process). The probe is
+    // only run inside the `config` group; the 1:1 tree's own SkipIntro/SkipMenu
+    // gate remains where it is.
+    inline bool DetectFusionFix(const std::filesystem::path& moduleDirectory)
+    {
+        if (GetModuleHandleW(L"GTAIV.EFLC.FusionFix.asi") != nullptr)
+            return true;
+        std::error_code ignored;
+        return std::filesystem::exists(moduleDirectory / L"GTAIV.EFLC.FusionFix.asi", ignored);
     }
 
     // One recovered table: the 512 name hashes the checker walks and the 512 values
@@ -350,10 +511,27 @@ namespace
             if (value == nullptr || value->empty())
                 continue;
 
-            // Unguarded, like the original's inlined std::stof: a value with no
-            // digits throws std::invalid_argument and an out-of-range one throws
-            // std::out_of_range out of the loader.
-            const float parsed = std::stof(*value);
+            // The value is parsed by std::stof with no guard in the 1:1 path. The
+            // config group uses the same prefix grammar without the throw: a row
+            // that does not parse keeps its hash and leaves its value at zero,
+            // which is what a missing value does, and one line records it.
+            float parsed = 0.0f;
+            if (ImprovementEnabled(Improvement::config))
+            {
+                errno = 0;
+                char* end = nullptr;
+                parsed = std::strtof(value->c_str(), &end);
+                if (end == value->c_str() || errno == ERANGE)
+                {
+                    Log::Print("config: invalid {} value for {}: \"{}\", row skipped",
+                        valueSuffix, "Car" + ordinal, *value);
+                    continue;
+                }
+            }
+            else
+            {
+                parsed = std::stof(*value);
+            }
             table.values[index - 1] = degreesToRadians
                 ? static_cast<float>(static_cast<double>(parsed) * kPi / kDegreesPerHalfTurn)
                 : parsed;
