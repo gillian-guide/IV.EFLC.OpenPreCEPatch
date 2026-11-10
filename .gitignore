@@ -16,3 +16,6 @@ dfa_close_child.probe
 dfa_close_roundtrip.bin
 out.before
 out.after
+
+__pycache__/
+*.pyc

@@ -70,6 +70,8 @@ target_sources(zp_modules PUBLIC
     source/game.ixx
     source/options.ixx
     source/loader.ixx
+    source/steam.ixx
+    source/warnings.ixx
     source/shared.ixx
     source/native.ixx
     source/stability.ixx
@@ -144,6 +146,31 @@ set_target_properties(zp_config_guard PROPERTIES CXX_SCAN_FOR_MODULES ON)
 target_link_libraries(zp_config_guard PRIVATE zp_modules)
 add_test(NAME zp_config_guard COMMAND zp_config_guard)
 set_tests_properties(zp_config_guard PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+# The Steam achievement bridge's recovered id/name table and its refusal in a
+# non-game process (no xlive import, no steam_api.dll).
+add_executable(zp_steam tests/steam.cpp)
+set_target_properties(zp_steam PROPERTIES CXX_SCAN_FOR_MODULES ON)
+target_link_libraries(zp_steam PRIVATE zp_modules)
+add_test(NAME zp_steam COMMAND zp_steam)
+set_tests_properties(zp_steam PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+# The startup-warning probes: the unsupported-version range, the named-mutex
+# single instance, and the one-time FusionFix notice file.
+add_executable(zp_warnings tests/warnings.cpp)
+set_target_properties(zp_warnings PROPERTIES CXX_SCAN_FOR_MODULES ON)
+target_link_libraries(zp_warnings PRIVATE zp_modules)
+add_test(NAME zp_warnings COMMAND zp_warnings)
+set_tests_properties(zp_warnings PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+# The build-applicability boundary: no key admits unknown, an excluded build is
+# refused and an included one admitted, and Loader::Enabled cannot be widened by
+# a present INI value.
+add_executable(zp_applicability tests/applicability.cpp)
+set_target_properties(zp_applicability PROPERTIES CXX_SCAN_FOR_MODULES ON)
+target_link_libraries(zp_applicability PRIVATE zp_modules)
+add_test(NAME zp_applicability COMMAND zp_applicability)
+set_tests_properties(zp_applicability PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
 # The two per-model light tables the loader preamble reads from
 # [PopupLightAngles] / [HeadlightConeOffsets]: the recovered grammar, defaults and
@@ -353,6 +380,8 @@ if(Python3_Interpreter_FOUND)
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_body_targets.py --check)
   add_test(NAME zp_ini_drift
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_ini.py --check)
+  add_test(NAME zp_applicability_drift
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_applicability.py --check)
   add_test(NAME zp_oracle_verified
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_oracle_verified.py)
   add_test(NAME zp_fault_dialogs

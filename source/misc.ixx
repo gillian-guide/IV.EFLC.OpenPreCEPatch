@@ -22,6 +22,7 @@ import loader;
 import native;
 import patch;
 import shared;
+import steam;
 
 // The remaining fixes: the bundled MiscFixes table, the mod-check stubs and the
 // drive-by FOV. One arm per key, each anchored to its own recovered signature (or,
@@ -861,6 +862,14 @@ namespace
             injector::WriteMemory<std::byte>(site, std::byte{ 0xEB }, true);
     }
 
+    // The Steam mirror lives at the GFWL import boundary; the option read and
+    // the group gate stay here with the other compatibility keys.
+    void InstallSteamAchievements()
+    {
+        if (OpenOptionEnabled("SteamAchievements", "1"))
+            (void)Steam::Install();
+    }
+
     void InstallPatch6and7RemoveModChecks()
     {
         // The original has one handler for two keys: `stoi(ini.get(
@@ -1080,6 +1089,7 @@ export void RegisterMisc()
         InstallPatch4RemoveModChecks();
         InstallCopSirensFlag();
         InstallGFWLProtectionDisabler();
+        InstallSteamAchievements();
         InstallPopupHeadlightsFlag();
         InstallVRAMFix();
         InstallFixPCIDKickbug();

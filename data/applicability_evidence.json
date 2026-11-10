@@ -1,0 +1,38 @@
+{
+  "comment": "Build-applicability evidence, source-derived. A key in recovered_gate has a recovered build comparison in the original handler (oPCEP docs/version-matrix.json, IDA evidence); every other key installs by pattern scan. semantic lists keys whose cell is a port decision rather than a recovered gate; none is current, because this tree kept the original catalogue masks instead of OpenPreCEPatch's narrowings.",
+  "builds": [
+    { "id": 1, "name": "1.0.0.0", "compact": 1000 },
+    { "id": 6, "name": "1.0.0.4", "compact": 1004 },
+    { "id": 5, "name": "1.0.4.0", "compact": 1040 },
+    { "id": 7, "name": "1.0.6.0", "compact": 1060 },
+    { "id": 15, "name": "1.0.6.1", "compact": 1061 },
+    { "id": 8, "name": "1.0.7.0", "compact": 1070 },
+    { "id": 9, "name": "1.0.8.0", "compact": 1080 },
+    { "id": 10, "name": "1.1.0.0", "compact": 1100 },
+    { "id": 11, "name": "1.1.1.0", "compact": 1110 },
+    { "id": 12, "name": "1.1.2.0", "compact": 1120 },
+    { "id": 13, "name": "1.1.3.0", "compact": 1130 },
+    { "id": 18, "name": "1.2.0.43", "compact": 12043 }
+  ],
+  "recovered_gate": [
+    "BenchmarkFix",
+    "DualVehicleHeadlights",
+    "EpisodicVehicleSupport",
+    "EpisodicWeaponSupport",
+    "LaunchWithPlayGTAIV",
+    "LoadDLCs",
+    "Patch6and7RemoveModChecks",
+    "Patch7RemoveModChecks",
+    "PipeBombDropIconSupport",
+    "PoliceEpisodicWeaponSupport",
+    "SuperLODFix",
+    "TBoGTHeliHeightLimit",
+    "VSyncFix"
+  ],
+  "semantic": [],
+  "notes": {
+    "RemoveRGSCLoginRequirement": "pattern first, with a 1.0.8.0 RVA fallback; the mask is the pattern's own scope",
+    "RemoveUselessChecks": "the recovered per-build RVA rows cover 1.0.4.0, 1.0.7.0 and 1.0.8.0",
+    "SuperLODFix": "recovered RVA rows on 1.0.7.0 and 1.0.8.0 only"
+  }
+}

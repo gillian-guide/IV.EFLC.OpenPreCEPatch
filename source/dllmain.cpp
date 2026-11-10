@@ -8,6 +8,7 @@ import loader;
 import options;
 import shared;
 import native;
+import warnings;
 import stability;
 import vehicles;
 import useless_checks;
@@ -36,6 +37,31 @@ namespace
         auto& game = Game::Get();
         game.Initialise(module);
 
+        if (ImprovementEnabled(Improvement::warnings))
+        {
+            if (!Warnings::ClaimSingleInstance(L"ZolikaPatch-opcep"))
+            {
+                Warnings::Show(L"ZolikaPatch",
+                    L"Another copy of ZolikaPatch is already initialized in this process. "
+                    L"This copy does nothing.");
+                return;
+            }
+            if (Warnings::IsUnsupportedVersion(game.FileVersion()))
+            {
+                Warnings::Show(L"ZolikaPatch",
+                    L"This game version is not supported by this build. Supported builds are "
+                    L"1.0.0.0 through 1.2.0.43 (1.2.0.43 is the only Complete Edition build).",
+                    0x8000FFFFu);
+                return;
+            }
+            if (!IsUALPresent())
+            {
+                Warnings::Show(L"ZolikaPatch",
+                    L"Old ASI Loader detected! Install Ultimate ASI Loader 6.9.0 or newer, or "
+                    L"the module may not load next to other ASIs.");
+            }
+        }
+
 #ifdef ZP_TRACE
         Log::Open(game.LogPath());
         Log::Print("{} {}", rsc_ProductName, rsc_ProductVersion);
@@ -43,11 +69,43 @@ namespace
 #endif
 
         const bool read = Config::Load();
-        if (ImprovementEnabled(Improvement::config))
+        if (ImprovementEnabled(Improvement::config) ||
+            ImprovementEnabled(Improvement::warnings))
         {
             // The OpenPreCEPatch overlap gate: one probe, recorded once, and
             // every overlapping option reads as off through Catalogue::Read.
+            // The warnings group needs the same answer for its notice.
             Config::SetFusionFixPresent(Config::DetectFusionFix(game.ModuleDirectory()));
+        }
+
+        if (ImprovementEnabled(Improvement::warnings) && Config::FusionFixPresent())
+        {
+            std::vector<std::string_view> gated;
+            for (const auto& conflict : Config::kFusionFixConflicts)
+            {
+                const auto* value = Config::Ini().Find("Options", conflict.option);
+                if (value == nullptr)
+                    continue;
+                const auto parsed = Config::ParseInt(*value);
+                if (parsed.ok && parsed.value == 1)
+                    gated.push_back(conflict.option);
+            }
+            if (!gated.empty())
+            {
+                bool existed = false;
+                const auto notice = Warnings::WriteFusionFixNotice(
+                    game.ModuleDirectory(), gated, existed);
+                if (!existed && !notice.empty())
+                {
+                    std::wstring text =
+                        L"GTAIV.EFLC.FusionFix.asi is installed. These enabled options are "
+                        L"disabled to avoid overlapping fixes:\r\n\r\n";
+                    for (const auto option : gated)
+                        text += L"  " + std::wstring(option.begin(), option.end()) + L"\r\n";
+                    text += L"\r\nSee " + notice.filename().wstring() + L" next to the ASI.";
+                    Warnings::Show(L"ZolikaPatch", text);
+                }
+            }
         }
         Loader::Current() = Classify(game.FileVersion());
         const auto build = Loader::Current();
