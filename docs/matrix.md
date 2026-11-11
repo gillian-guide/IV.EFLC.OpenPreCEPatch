@@ -24,7 +24,7 @@ its scoreboard state: `closed`, `open`, or `oracle-verified baseline omission`.
 
 | build | version | image | bytes | differing | missing | extra | residual |
 |---:|---|---|---:|---:|---:|---:|---|
-| 1 | 1.0.0.0 | `GTAIV_1000.exe` | 443 | 0 | 0 | 18 | extra 18: `SkipLauncher` 12 (oracle-verified baseline omission), `CarDynamicShadowFix` 6 (oracle-verified baseline omission), all oracle-verified baseline omissions |
+| 1 | 1.0.0.0 | `GTAIV_1000.exe` | 255 | - | - | - | missing 62: `MouseFix` 25 (closed), `IncreasePtrNodes` 7 (closed), `PopupHeadlightsFlag` 6 (closed), `NoPhysicsSleep` 4 (closed), `StartupTimeFix` 4 (closed), `MiscFixes` 3 (closed), `CopSirensFlag` 2 (closed), `SavegameFix` 2 (closed), `SkipLauncher` 2 (oracle-verified baseline omission), `AllowHashesForIDE` 1 (closed), `DrivebyFOVFix` 1 (closed), `FastLoading` 1 (closed), `NewSavesCompatibility` 1 (closed), `PedModelsInCutscenesFix` 1 (closed), `RemoveRGSCLoginRequirement` 1 (closed), `SkipIntro` 1 (closed), the omissions being oracle-verified baseline gaps; extra 6: `CarDynamicShadowFix` 6 (oracle-verified baseline omission), all oracle-verified baseline omissions |
 | 5 | 1.0.4.0 | `GTAIV_1040.exe` | 955 | 0 | 0 | 405 | extra 405: `SkipLauncher` 399 (oracle-verified baseline omission), `CarDynamicShadowFix` 6 (oracle-verified baseline omission), all oracle-verified baseline omissions |
 | 6 | 1.0.0.4 | `GTAIV_1004.exe` | 724 | 0 | 0 | 180 | extra 180: `SkipLauncher` 180 (oracle-verified baseline omission), all oracle-verified baseline omissions |
 | 7 | 1.0.6.0 | `GTAIV_1060.exe` | 983 | 0 | 0 | 63 | extra 63: `SkipLauncher` 63 (oracle-verified baseline omission), all oracle-verified baseline omissions |
@@ -33,6 +33,11 @@ its scoreboard state: `closed`, `open`, or `oracle-verified baseline omission`.
 | 11 | 1.1.1.0 | `EFLC_1110.exe` | 880 | 0 | 0 | 58 | extra 58: `SkipLauncher` 58 (oracle-verified baseline omission), all oracle-verified baseline omissions |
 | 12 | 1.1.2.0 | `EFLC_1120.exe` | 877 | 0 | 0 | 58 | extra 58: `SkipLauncher` 58 (oracle-verified baseline omission), all oracle-verified baseline omissions |
 | 13 | 1.1.3.0 | `EFLC_1130.exe` | 851 | 0 | 0 | 48 | extra 48: `SkipLauncher` 48 (oracle-verified baseline omission), all oracle-verified baseline omissions |
+
+A **faulted** full cell's partial rows are not a write-set scoreboard (the
+preserved 1.0.0.0 fault stops the install pass); its diff/missing/extra cells
+are `-`, the fault is reported below, and the per-option/isolated cells are the
+scoreboard for that build.
 
 ## Per-option cell
 
@@ -57,7 +62,7 @@ reported apart and never counted as closed; `fault` names the cell that died.
 ## The fault
 
 `GTAIV_1000.exe` (1.0.0.0) dies in the **full** cell with
-`0xC0000005 ACCESS_VIOLATION` after 4430 byte(s): the shipped INI reaches
+`0xC0000005 ACCESS_VIOLATION` after 2550 byte(s): the shipped INI reaches
 `NoImpostorHeightCutoff`, whose 1.0.0.0 pattern matches once and whose
 original writes `hits[1]` through an uninitialised vector entry. The
 per-option cell isolates that key (its row is `open` above); in the 1:1
@@ -68,7 +73,7 @@ configuration this is the original's fault, and
 `GTAIV_1000.exe` (1.0.0.0) dies in the per-option cell at
 `NoImpostorHeightCutoff`, 0xC0000005 ACCESS_VIOLATION: the original's own fault -- an uninitialised vector entry,
 write `66 89 06` at the original's `0x100536F1` -- which `docs/parity.md`
-records as deliberate and unguarded. The cell wrote 15329 byte(s) before it died, so its rows are not a scoreboard: the
+records as deliberate and unguarded. The cell wrote 9361 byte(s) before it died, so its rows are not a scoreboard: the
 first 48 keys ran, and the 51 after it
 were never reached. It is scored one key per subprocess instead, and
 `NoImpostorHeightCutoff` is the only key whose cell faults alone -- so no other cell faults on

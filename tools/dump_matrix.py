@@ -59,6 +59,8 @@ from parity_report import branch_bytes, load_oracle_verified, oracle_excuses  # 
 
 def exception_of(code: int) -> str:
     """The exception text for a naive exit code, or '' when the cell just ran."""
+    if code == 0xE0000001:
+        return "TIMEOUT (the cell did not exit)"
     if 0xC0000000 <= code <= 0xCFFFFFFF:
         return f"0x{code:08X} {EXCEPTIONS.get(code, 'exception')}"
     return ""
@@ -92,9 +94,19 @@ def keys() -> list:
 
 
 def run_dump(dump: Path, arguments) -> int:
-    """Run one cell; return its naive exit code. A non-exception failure aborts."""
-    result = subprocess.run([str(dump), *[str(item) for item in arguments]],
-                            capture_output=True, text=True, errors="replace")
+    """Run one cell; return its naive exit code. A non-exception failure aborts.
+
+    A cell that hangs is a fault outcome on the 1.0.0.0 out-of-range write: the
+    undefined access can fault or spin depending on the heap layout. Cap the
+    wait so one spinning child cannot stall the whole matrix; the sentinel is
+    reported as TIMEOUT and the isolated cells still attribute the key.
+    """
+    try:
+        result = subprocess.run([str(dump), *[str(item) for item in arguments]],
+                                capture_output=True, text=True, errors="replace",
+                                timeout=120)
+    except subprocess.TimeoutExpired:
+        return 0xE0000001
     code = result.returncode & 0xFFFFFFFF
     if code != 0 and not exception_of(code):
         raise SystemExit(f"zp_dump failed with exit {code} (not a fault):\n"
@@ -312,12 +324,17 @@ def print_table(results, table) -> None:
     print(f"{'build':>6} {'full':>7} {'diff':>5} {'miss':>5} {'extra':>5} "
           f"{'closed':>8} {'oracle':>7} {'fault':>26}")
     for build, full, cell, residual in results:
-        print(f"{build:>6} {full.wrote:>7} {len(full.differing):>5} {len(full.missing):>5} "
-              f"{len(full.extra):>5} {str(cell.closed) + '/' + str(len(table)):>8} "
+        scored = full.fault == ""
+        print(f"{build:>6} {full.wrote:>7} "
+              f"{(len(full.differing) if scored else '-'):>5} "
+              f"{(len(full.missing) if scored else '-'):>5} "
+              f"{(len(full.extra) if scored else '-'):>5} "
+              f"{str(cell.closed) + '/' + str(len(table)):>8} "
               f"{len(cell.oracle):>7} "
               f"{(cell.faulted[0][0] if cell.faulted else cell.fault or '-')[:26]:>26}")
         if full.fault:
-            print(f"       full cell FAULTED: {full.fault}, {full.partial} byte(s) kept")
+            print(f"       full cell FAULTED: {full.fault}, {full.partial} byte(s) kept "
+                  f"(partial not scored)")
         for key, text in cell.faulted:
             print(f"       per-option cell FAULTED at {key}: {text}"
                   f" ({cell.wrote} byte(s) kept, {cell.reached} key(s) reached before it)")
@@ -356,10 +373,18 @@ def markdown(results, table) -> str:
         "|---:|---|---|---:|---:|---:|---:|---|",
     ]
     for build, full, cell, residual in results:
+        scored = full.fault == ""
         lines.append(f"| {build} | {VERSIONS[build]} | `{BUILDS[build]}.exe` | {full.wrote} | "
-                     f"{len(full.differing)} | {len(full.missing)} | {len(full.extra)} | "
-                     f"{'; '.join(residual) if residual else 'none'} |")
+                     f"{len(full.differing) if scored else '-'} | "
+                     f"{len(full.missing) if scored else '-'} | "
+                     f"{len(full.extra) if scored else '-'} | "
+                     f"{'; '.join(residual) if residual else ('faulted: partial not scored' if not scored else 'none')} |")
     lines += [
+        "",
+        "A **faulted** full cell's partial rows are not a write-set scoreboard (the",
+        "preserved 1.0.0.0 fault stops the install pass); its diff/missing/extra cells",
+        "are `-`, the fault is reported below, and the per-option/isolated cells are the",
+        "scoreboard for that build.",
         "",
         "## Per-option cell",
         "",

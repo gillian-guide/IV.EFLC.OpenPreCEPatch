@@ -134,24 +134,36 @@ cell is the preserved original fault with the failsafe group off. With the group
 on that cell completes and the NoImpostor write is absent — the same input, two
 outcomes, which is the fault-parity contract.
 
-Measured on this tree (2026-11-10): all nine builds report `diff 0`; the 1.0.0.0
-full cell faults with `0xC0000005` after 443 bytes (the preserved
-NoImpostorHeightCutoff write through `hits[1]`), and the per-option cell faults
-at that key. The `extra` column is the two oracle-verified baseline omissions
-(`SkipLauncher`, and `CarDynamicShadowFix` on 1.0.0.0/1.0.4.0), exactly as in
-`parity_report.py`. There are no unexcused extra bytes and no differing byte on
-any cell.
+Measured on this tree (2026-11-11): the eight non-faulting builds report `diff 0`.
+The 1.0.0.0 full and per-option cells are the preserved
+NoImpostorHeightCutoff fault (`0xC0000005`; the P13 count check is off in the
+1:1 configuration). A faulted full cell's partial rows are **not scored** — the
+install pass stopped, so its diff/missing/extra cells are `-` and the fault is
+reported in the table; the per-option and isolated cells are that build's
+scoreboard (96/99 closed, `NoImpostorHeightCutoff` open by construction). The
+`extra` column on the healthy builds is the two oracle-verified baseline
+omissions (`SkipLauncher`, and `CarDynamicShadowFix` on 1.0.0.0/1.0.4.0),
+exactly as in `parity_report.py`. The run must not overlap a build: the matrix's
+per-cell subprocesses read `zp_dump.exe`, and a relink mid-run gives one cell a
+different body layout.
 
 ## 6. What is deliberately still unproven
 
 - `GFWLProtectionDisabler` and `SteamAchievements` need a live xlive.dll and a
   Steam client; only their decisions, tables and refusal paths are measured
   offline.
-- The `warnings` dialogs are exercised by their predicates, not by a UI run.
+- The `warnings` dialogs are exercised by their predicates and the embedded
+  manifest by `zp_pe_check`, not by a UI run.
+- `garage_entry` and `cutscene_entry` are proved at the write-set level (the
+  prologue delta and the callee relocation) but not by a live cutscene/garage
+  A/B.
 - The `nms` group's private heap and original-vtable capture are exercised on
   the process heap in `zp_nms_arena`; a live game run is still the only proof of
   the allocator swap.
 - The `ooc_cache` archive is compared by pointer/state reuse, not by a live
   mount.
+- `caches` covers the shared model lookup; the popup 512-entry angle scan and
+  the model-name table are inside unrolled asm bodies and their in-body
+  precompute is still unported.
 - The 18-cell matrix is written by the 1:1 configuration; no cell runs with a
   group on except the dedicated fault/delta cells above.

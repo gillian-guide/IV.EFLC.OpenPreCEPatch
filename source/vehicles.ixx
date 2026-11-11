@@ -6,6 +6,7 @@ module;
 // the transcribed pieces call (`_stricmp`, `strcpy_s`).
 #include <intrin.h>
 #include <bit>
+#include <cstdio>
 #include <cstring>
 
 export module vehicles;
@@ -34,7 +35,7 @@ extern "C"
     // dword_1015B5B8, defined in source/config.ixx: the original keeps it in `.data`
     // immediately after the [HeadlightConeOffsets] hash array, and the cone check's
     // walk reads it as the 513th hash, so this tree defines it as the next object after
-    // that array (docs/rebuilt.md §2g). This arm publishes the same value into it.
+    // that array (docs/rebuilt.md Â§2g). This arm publishes the same value into it.
     extern uint32_t zpatch_carparts_shadow_fn;
 
     // The collision body's node-walk test and the deadlock counter it compares.
@@ -49,7 +50,7 @@ extern "C"
     // resume, published from the site's own prologue before the E9 replaces it, and
     // defined in source/config.ixx as the second word of the [HeadlightConeOffsets]
     // block (the original keeps it between the cone's hashes and its offsets, and the
-    // cone walk can read it -- docs/rebuilt.md §2g).
+    // cone walk can read it -- docs/rebuilt.md Â§2g).
     uint32_t zpatch_fchs_param = 0;
     float zpatch_fchs_offset = 2.0f;
     extern uint32_t zpatch_fchs_resume;
@@ -1770,7 +1771,7 @@ export void RegisterVehicles()
     // slot 511 (dword_1015B5B8) -- so the proof compares that read too. The word is not
     // a copy: it is CarDynamicShadowFix's published shadow-function slot, defined
     // immediately after the array in source/config.ixx so the layout matches the
-    // original's .data (docs/rebuilt.md §2g). The offsets array is registered at its
+    // original's .data (docs/rebuilt.md Â§2g). The offsets array is registered at its
     // own base, which the original places 2,056 bytes into the block.
     Bodies::RegisterTable(reinterpret_cast<uintptr_t>(zpatch_headlight_cone_hashes),
         0x1015ADB8u, sizeof(zpatch_headlight_cone_hashes) + sizeof(uint32_t));  // 2052
@@ -2537,7 +2538,7 @@ static __declspec(naked) void CarDynamicShadowShimB()
 // in source/config.ixx). Our layout reproduces it as the same slot, with the check's
 // own resume word (0x1015B5BC) after it, so the walk reads the value the original's
 // does rather than a placeholder -- which is what makes this transcription possible
-// instead of a bounded walk (docs/rebuilt.md §2g). The two arrays are registered with
+// instead of a bounded walk (docs/rebuilt.md Â§2g). The two arrays are registered with
 // their original VAs; the hash table's registration is the extended 2,052 bytes
 // (512 words + the neighbour).
 //
@@ -2962,7 +2963,7 @@ static __declspec(naked) void SteerResolveEntry()
 // `cmova` -- and none of that blocks a transcription: the cookie is an absolute
 // slot, the check is a call slot, the .rdata constants are absolute slots, and the
 // two 512-slot wheelangle tables are indexed absolutes the table registry covers
-// (tests/bodies.tsv table rows `1015A538` / `10159D38`, docs/rebuilt.md §2c).
+// (tests/bodies.tsv table rows `1015A538` / `10159D38`, docs/rebuilt.md Â§2c).
 //
 // What the operands are:
 //   * `[0x1015A538 + esi*4]` / `[0x10159D38 + esi*4]` are the wheelangle model and

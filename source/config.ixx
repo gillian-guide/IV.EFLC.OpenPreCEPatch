@@ -309,12 +309,14 @@ export namespace Config
     inline bool Load()
     {
         std::error_code ignored;
-        const std::filesystem::path grouped(GroupedFileName);
-        if (ImprovementEnabled(Improvement::import) &&
-            std::filesystem::exists(grouped, ignored))
+        if (ImprovementEnabled(Improvement::import))
         {
-            Ini() = Feather::Load(grouped);
-            return true;
+            const std::filesystem::path grouped(GroupedFileName);
+            if (std::filesystem::exists(grouped, ignored))
+            {
+                Ini() = Feather::Load(grouped);
+                return true;
+            }
         }
 
         const std::filesystem::path flat(FileName);

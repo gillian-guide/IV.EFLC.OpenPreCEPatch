@@ -508,10 +508,26 @@ namespace
         }
         return substituted;
     }
+    // The install pass can fault on the preserved 1.0.0.0 arm. Catch it here so
+    // the bytes written before the fault are still dumped: a faulting cell is
+    // data, not an interruption, and the matrix scores its partial write set.
+    DWORD RunPipeline()
+    {
+        DWORD code = 0;
+        __try
+        {
+            Loader::Run();
+        }
+        __except (code = GetExceptionCode(), EXCEPTION_EXECUTE_HANDLER)
+        {
+        }
+        return code;
+    }
 }
 
 int main(int argc, char** argv)
 {
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
     // A faulting cell is data, not an interruption: a fault here must not raise a
     // Windows "Application Error" dialog on the machine that is running the harness
     // (the 1.0.0.0 cell faults on purpose, and a scan that writes through a stale
@@ -600,6 +616,7 @@ int main(int argc, char** argv)
 
     if (perOption)
     {
+        DWORD fault = 0;
         for (const auto& option : Catalogue::All)
         {
             // Every key off, this one on -- the arm-isolation oracle's document.
@@ -612,26 +629,45 @@ int main(int argc, char** argv)
 
             Config::Ini() = Feather::Parse(text);
             std::memcpy(image.bytes, image.pristine.data(), image.size);
-            Loader::Run();
-            Bodies::Canonicalise(image.bytes, image.pristine.data(), image.size,
-                reinterpret_cast<uintptr_t>(image.bytes), image.imageBase);
-            const auto substituted =
-                CanonicalisePublishedPointers(image, reinterpret_cast<uintptr_t>(image.bytes));
-            Dump(image, out, std::string(option.key) + " ", substituted);
+            fault = RunPipeline();
+            const std::string prefix = std::string(option.key) + " ";
+            if (fault == 0)
+            {
+                Bodies::Canonicalise(image.bytes, image.pristine.data(), image.size,
+                    reinterpret_cast<uintptr_t>(image.bytes), image.imageBase);
+                const auto substituted =
+                    CanonicalisePublishedPointers(image, reinterpret_cast<uintptr_t>(image.bytes));
+                Dump(image, out, prefix, substituted);
+            }
+            else
+            {
+                // The image is mid-install: dump the raw partial and stop; a
+                // later key would run on a half-written image.
+                Dump(image, out, prefix, {});
+                break;
+            }
         }
+        std::fclose(out);
+        std::printf("%s: %zu byte(s) changed, build %s\n", output.string().c_str(),
+            Changed(image), build.c_str());
+        return static_cast<int>(fault);
     }
-    else
+
+    const DWORD fault = RunPipeline();
+    if (fault == 0)
     {
-        Loader::Run();
         Bodies::Canonicalise(image.bytes, image.pristine.data(), image.size,
             reinterpret_cast<uintptr_t>(image.bytes), image.imageBase);
         const auto substituted =
             CanonicalisePublishedPointers(image, reinterpret_cast<uintptr_t>(image.bytes));
         Dump(image, out, "", substituted);
-        std::printf("%s: %zu byte(s) changed, build %s\n", output.string().c_str(), Changed(image), build.c_str());
     }
-
+    else
+    {
+        Dump(image, out, "", {});
+    }
     std::fclose(out);
-    std::printf("%s: %zu byte(s) changed, build %s\n", output.string().c_str(), Changed(image), build.c_str());
-    return 0;
+    std::printf("%s: %zu byte(s) changed, build %s\n", output.string().c_str(),
+        Changed(image), build.c_str());
+    return static_cast<int>(fault);
 }

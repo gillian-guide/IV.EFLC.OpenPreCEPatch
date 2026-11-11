@@ -98,7 +98,9 @@ python tools/check_oracle_verified.py
 dereference in a child under both configurations), `zp_config_guard` the config
 group's both-sides test, `zp_steam` the achievement table/refusal,
 `zp_warnings` the version/mutex/notice probes, `zp_applicability` the
-build-refusal rule, and `zp_ooc_init`/`zp_nms_arena` the cache and allocator
+build-refusal rule, `zp_caches` the model-lookup memo, `zp_import` the grouped
+INI creation/preference, `zp_dlc_path` the 0x104-byte path bound, and
+`zp_ooc_init`/`zp_nms_arena`/`zp_save_walk` the cache, allocator and save
 groups.
 
 ## Docs

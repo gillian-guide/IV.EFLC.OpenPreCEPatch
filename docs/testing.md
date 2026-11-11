@@ -40,6 +40,7 @@ These produce the tables in [matrix.md](matrix.md) and the scoreboard the projec
 | `tools/parity_report.py <build>` | the per-key scoreboard for one build: closed, open, and oracle-verified keys |
 | `tools/parity_matrix.py` | the per-key scoreboard across every supported build, one row per build |
 | `tools/dump_matrix.py` | the 18 cells: nine images in full and per-option mode, every residual attributed to a key |
+| `tests/dump_main.cpp` fault handling | the install pass runs under `__try`; the preserved 1.0.0.0 out-of-range write is caught, the bytes written before it are dumped, and the process exits with the exception code. `dump_matrix.py` caps a cell that spins (the same undefined access can fault or loop by heap layout) at 120 s and reports `TIMEOUT` |
 | `tools/full_diff.py <build>` | attributes a full-cell difference to the keys whose per-key cells touch the differing RVAs |
 | `tools/compare_dumps.py <baseline> <ours>` | diffs two dumps, optionally for one key |
 | `tools/single_key_matrix.py` | every key alone on every image, one process per cell; the matrix that attributes a fault to a key |

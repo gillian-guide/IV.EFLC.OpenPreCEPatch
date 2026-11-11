@@ -449,6 +449,19 @@ namespace
         if (!ExpectMatchCount(pattern, 2, "NoImpostorHeightCutoff literals"))
             return;
 
+        // 1.0.0.0 carries one hit. The original writes hits[0] and then writes
+        // hits[1] through an uninitialised vector entry, which faults. In a
+        // release build the out-of-range read can land on a valid address, so
+        // the same input would fault or silently write garbage by heap layout.
+        // Reproduce the original's sequence deterministically: the first NOP
+        // lands and the second access raises the access violation.
+        if (pattern.size() < 2)
+        {
+            injector::MakeNOP(pattern.get(0).get<std::byte>(0), 2, true);
+            RaiseException(EXCEPTION_ACCESS_VIOLATION, 0, 0, nullptr);
+            return;
+        }
+
         injector::MakeNOP(pattern.get(0).get<std::byte>(0), 2, true);
         injector::MakeNOP(pattern.get(1).get<std::byte>(0), 2, true);
     }

@@ -2267,6 +2267,15 @@ arm keeps that shape - no `pattern.size() > 1` guard - so on 1.0.0.0 the dump wr
 the first pair (which is exactly what the stored baseline's single pair records) and
 then faults `0xC0000005`, as the original does.
 
+In a release build that out-of-range read is undefined: depending on the heap
+layout it can land on a valid address (a silent stray write) or fault. To keep the
+outcome the original documents, when the scan finds fewer than two hits the arm
+writes the first NOP and then raises the access violation explicitly. The dump
+catches the fault, dumps the image as it stands, and exits with the exception
+code; a faulted full cell's partial rows are not scored (`dump_matrix.py` reports
+`-` for its diff/missing/extra), and the per-option/isolated cells are the
+scoreboard for that build.
+
 Consequence: `parity_report.py 1` and `dump_matrix.py` fault at that arm on
 1.0.0.0, so the 1.0.0.0 cell of the 18-cell matrix cannot be measured for keys that
 run after it. That is the fault being faithful, not the tree being broken; the

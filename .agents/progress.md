@@ -113,6 +113,18 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
 - `task_dialogs`: `TaskDialogIndirect` with the ASI's common-controls 6.0
   manifest + `CreateActCtx`; `zp_pe_check` finds the manifest. UI unproven.
 
+## 2026-11-11 — matrix fault capture
+
+- The 1.0.0.0 full cell's preserved NoImpostor fault is an out-of-range
+  `pattern.get(1)` (Debug: vector subscript out of range). In Release it is
+  undefined: it can fault or spin depending on the heap layout, and the dump
+  used to lose the 443-byte partial when the fault happened during install.
+- `tests/dump_main.cpp` now runs `Loader::Run` under `__try`, dumps the image as
+  it stands on the fault, and exits with the exception code. The full cell
+  writes 443 rows again (diff 0). `dump_matrix.py` caps a spinning cell at 120 s
+  and reports TIMEOUT, so one UB child cannot stall the matrix.
+- Re-ran the 18-cell matrix; see `docs/matrix.md`.
+
 ## Open items
 
 - 18-cell `dump_matrix.py` full run; record `differing`.
