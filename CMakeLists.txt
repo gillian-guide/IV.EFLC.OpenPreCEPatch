@@ -247,6 +247,13 @@ target_link_libraries(zp_dlc_full PRIVATE zp_modules)
 add_test(NAME zp_dlc_full COMMAND zp_dlc_full)
 set_tests_properties(zp_dlc_full PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
+# The checked FCHS walk: lookup/object guards and the table offset.
+add_executable(zp_fchs tests/fchs.cpp)
+set_target_properties(zp_fchs PROPERTIES CXX_SCAN_FOR_MODULES ON)
+target_link_libraries(zp_fchs PRIVATE zp_modules)
+add_test(NAME zp_fchs COMMAND zp_fchs)
+set_tests_properties(zp_fchs PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
 # The two per-model light tables the loader preamble reads from
 # [PopupLightAngles] / [HeadlightConeOffsets]: the recovered grammar, defaults and
 # faults, on documents only -- no game image and no ASI load.

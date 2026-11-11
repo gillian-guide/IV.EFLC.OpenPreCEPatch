@@ -1,4 +1,4 @@
-module;
+﻿module;
 
 #include <common.hxx>
 
@@ -229,7 +229,6 @@ namespace
 
     // The game waits ten ticks when the window is minimized; the original writes
     // six, so the arm does too.
-    constexpr std::byte kMinimizePauseTick{ 0x06 };
 
     // One site of the episode gate: the recovered signature, the offset from its
     // anchor the NOP starts at, and how many bytes it covers. A row NOPs either
@@ -385,40 +384,6 @@ namespace
         pattern = find_pattern("6A 14 ? ? ? ? ? 68 80 3E 00 00");
         if (!pattern.empty())
             injector::WriteMemory<uint32_t>(pattern.get_first(8), 64'000u, true);
-    }
-
-    // NoPhysicsSleep: the physics sleep threshold is the float the anchor's -38
-    // operand names (0.005f at game 0x1090B18, RVA 0xC90B18), so the arm writes a
-    // zero there. The operand is a live VA -- the loader has already relocated the
-    // image, and the offline dump relocates its copy -- so it is used as it was
-    // captured; rebasing it through the preferred base would move the write by the
-    // run's whole relocation distance.
-    void InstallNoPhysicsSleep()
-    {
-        if (!Loader::Enabled("NoPhysicsSleep"))
-            return;
-
-        auto pattern = find_pattern("0F 00 00 00 C7 41 14 14 00 00 00 C7 41 1C 00 00");
-        if (pattern.empty())
-            return;
-
-        injector::WriteMemory<uint32_t>(*pattern.get_first<uint32_t>(-38), 0u, true);
-    }
-
-    // DoNotPauseOnMinimize: the wait's tick count drops to six, and the branch
-    // that pauses the game when the window loses focus is NOPed.
-    void InstallDoNotPauseOnMinimize()
-    {
-        if (!Loader::Enabled("DoNotPauseOnMinimize"))
-            return;
-
-        auto pattern = find_pattern("6A 0A 56 50 FF D2 A1");
-        if (!pattern.empty())
-            injector::WriteMemory<std::byte>(pattern.get_first(1), kMinimizePauseTick, true);
-
-        pattern = find_pattern("75 ? 8B 0D ? ? ? ? 51 FF 15 ? ? ? ? 85 C0 75 ? 8B 15");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 2, true);
     }
 
     void InstallEpisodicWeaponSupport()

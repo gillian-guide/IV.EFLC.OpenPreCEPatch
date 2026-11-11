@@ -1,4 +1,4 @@
-﻿module;
+module;
 
 #include <common.hxx>
 // The /GS cookie the transcribed helpers' prologues read and their epilogues check
@@ -305,8 +305,8 @@ static void CollisionDeadlockShim();
 static void CarPartsShadowShim();
 static void CarDynamicShadowShim();
 static void CarDynamicShadowShimB();
-static void FchsCheckBody();
 static void FchsShimBody();
+void FchsCheckCpp() noexcept;
 static void CarDecalsSelectorShim();
 static void BikePhysicsDetour();
 static void DualHeadlightsNewBody();
@@ -1664,6 +1664,9 @@ export void RegisterVehicles()
     // bodies, so those are registered once here rather than in the shared installer.
     Bodies::Register(reinterpret_cast<uintptr_t>(&VehicleComponentBody), 0x10003F40u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&FchsShimBody), 0x1001ADB0u);
+    // The checked C++ check takes the transcribed check's reference, so the
+    // shim body's call stays canonical against the original.
+    Bodies::Register(reinterpret_cast<uintptr_t>(&FchsCheckCpp), 0x1001AD20u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&SteerDetourEaxBody), 0x100051B0u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&SteerDetourEdxBody), 0x100051E0u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&GarageColourBody), 0x10046B90u);
@@ -1714,7 +1717,7 @@ export void RegisterVehicles()
         reinterpret_cast<uintptr_t>(&NoliveryFormat),
         reinterpret_cast<uintptr_t>(&NoliveryResolve),
         reinterpret_cast<uintptr_t>(&SteerConsumerBody),
-        reinterpret_cast<uintptr_t>(&FchsCheckBody),
+        reinterpret_cast<uintptr_t>(&FchsCheckCpp),
     };
 }
 
@@ -2448,6 +2451,69 @@ static __declspec(naked) void CarDynamicShadowShimB()
     }
 }
 
+// A checked rebuild of abi_fchs_check: the same table walk, with the model
+// lookup and the object pointer guarded. A missing preamble or a null object
+// leaves the 2.0f seed instead of faulting.
+void FchsCheckCpp() noexcept
+{
+    zpatch_fchs_offset = 2.0f;
+    const auto object = static_cast<uintptr_t>(zpatch_fchs_param);
+    if (object == 0)
+        return;
+    const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
+        zpatch_model_lookup);
+    if (lookup == nullptr)
+        return;
+
+    const int16_t model = *reinterpret_cast<const int16_t*>(object + 0x2E);
+    for (size_t index = 0; index < 512; ++index)
+    {
+        const uint32_t hash = zpatch_headlight_cone_hashes[index];
+        if (hash == 0)
+            return;
+        int32_t resolved = -1;
+        lookup(hash, &resolved);
+        if (resolved == model)
+        {
+            zpatch_fchs_offset = zpatch_headlight_cone_values[index];
+            return;
+        }
+    }
+}
+
+export void SetFchsStateForTest(uintptr_t object, uintptr_t lookup) noexcept
+{
+    zpatch_fchs_param = static_cast<uint32_t>(object);
+    zpatch_model_lookup = lookup;
+}
+
+export void ClearFchsTableForTest() noexcept
+{
+    for (size_t index = 0; index < 512; ++index)
+    {
+        zpatch_headlight_cone_hashes[index] = 0;
+        zpatch_headlight_cone_values[index] = 0.0f;
+    }
+}
+
+export void SetFchsSlotForTest(size_t index, uint32_t hash, float offset) noexcept
+{
+    if (index >= 512)
+        return;
+    zpatch_headlight_cone_hashes[index] = hash;
+    zpatch_headlight_cone_values[index] = offset;
+}
+
+export void RunFchsCheckForTest() noexcept
+{
+    FchsCheckCpp();
+}
+
+export float FchsOffsetForTest() noexcept
+{
+    return zpatch_fchs_offset;
+}
+
 // abi_fchs_check, recovered VA 0x1001AD20 (46 instructions, 139 bytes,
 // 0x1001AD20..0x1001ADAA): ForceCarHeadlightShadows' per-model offset check,
 // transcribed instruction for instruction.
@@ -2478,66 +2544,6 @@ static __declspec(naked) void CarDynamicShadowShimB()
 //
 // Naked and internal: an external-linkage naked function is written to the module
 // and every importer fails (C2488).
-static __declspec(naked) void FchsCheckBody()
-{
-    __asm
-    {
-        push ebp
-        mov ebp, esp
-        sub esp, 8
-        mov eax, DWORD PTR [__security_cookie]
-        xor eax, ebp
-        mov DWORD PTR [ebp - 4], eax
-        mov eax, DWORD PTR [zpatch_headlight_cone_hashes]
-        push esi
-        xor esi, esi
-        mov DWORD PTR [zpatch_fchs_offset], 40000000h   // 2.0f, the .data seed
-        push edi
-        mov edi, DWORD PTR [zpatch_fchs_param]
-        test eax, eax
-        je fchs_done
-        __emit 0x0F
-        __emit 0x1F
-        __emit 0x00                  // nop dword ptr [eax]
-    fchs_loop:
-        lea ecx, [ebp - 8]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        push ecx
-        push eax
-        call DWORD PTR [zpatch_model_lookup]
-        movsx eax, WORD PTR [edi + 2Eh]
-        add esp, 8
-        cmp eax, DWORD PTR [ebp - 8]
-        je fchs_found
-        // The table's base plus four: ESI is the slot just consumed, so slot ESI+1 is
-        // at [esi*4+base+4], and at ESI=511 that is the word past the table.
-        mov eax, DWORD PTR [esi*4 + zpatch_headlight_cone_hashes + 4]
-        inc esi
-        test eax, eax
-        jne fchs_loop
-        pop edi
-        pop esi
-        mov ecx, DWORD PTR [ebp - 4]
-        xor ecx, ebp
-        call __security_check_cookie
-        mov esp, ebp
-        pop ebp
-        ret
-    fchs_found:
-        movss xmm0, DWORD PTR [esi*4 + zpatch_headlight_cone_values]
-        movss DWORD PTR [zpatch_fchs_offset], xmm0
-    fchs_done:
-        mov ecx, DWORD PTR [ebp - 4]
-        pop edi
-        xor ecx, ebp
-        pop esi
-        call __security_check_cookie
-        mov esp, ebp
-        pop ebp
-        ret
-    }
-}
-
 // abi_fchs_shim, recovered VA 0x1001ADB0 (9 instructions, 0x1001ADB0..0x1001ADCE):
 // the hook body the arm installs at the shadow function's entry (game 0x8F7590).
 // It stores the object the function was called with, runs the check between
@@ -2550,7 +2556,7 @@ static __declspec(naked) void FchsShimBody()
     {
         mov DWORD PTR [zpatch_fchs_param], ecx
         __emit 0x60  // pushad
-        call FchsCheckBody
+        call FchsCheckCpp
         __emit 0x61  // popad
         push ebp
         mov ebp, esp

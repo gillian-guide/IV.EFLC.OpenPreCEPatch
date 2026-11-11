@@ -45,7 +45,6 @@ car_dynamic_shadow_b 100068D0 ?CarDynamicShadowShimB@@YAXXZ 27
 table 1015ADB8 _zpatch_headlight_cone_hashes 2052
 table 1015B5C0 _zpatch_headlight_cone_values 2048
 force_headlight_shadows_shim 1001ADB0 ?FchsShimBody@@YAXXZ 9
-force_headlight_shadows_check 1001AD20 ?FchsCheckBody@@YAXXZ 46
 collision_deadlock_walk 10005D80 ?CollisionDeadlockShim@@YAXXZ 56
 bike_physics_detour 1001EF60 ?BikePhysicsDetour@@YAXXZ 14
 dual_headlights_new 100064F0 ?DualHeadlightsNewBody@@YAXXZ 78

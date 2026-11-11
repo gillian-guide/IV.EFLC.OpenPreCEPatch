@@ -7,9 +7,6 @@ module;
 #include <bit>
 #include <cstdlib>
 #include <cstring>
-// SHDeleteValueW: the FixPCIDKickbug arm's whole effect (the tree already links
-// shlwapi; this is the only symbol it takes from it).
-#include <shlwapi.h>
 
 export module misc;
 
@@ -154,27 +151,6 @@ extern "C"
     // original's own default.
 }
 
-// ---- VRAMFix -----------------------------------------------------------------
-//
-// The recovered catalogue attributes this key to the graphics module, but it is a
-// single-write install with no other site, so it lives here with the tree's other
-// one-off installers. (The reference tree keeps it in graphics.ixx; moving this
-// block there is only a move.)
-//
-// The original's handler 0x1004AAE0 scans
-// "8B 44 24 10 D9 2C 24 83 C4 1C C3" and writes an `E9` plus its rel32 to
-// 0x1004AAB0 at the match. The handler carries no build gate: the signature is
-// present on 1.0.4.0 / 1.0.0.4 / 1.0.6.0 / 1.0.7.0 / 1.1.1.0 / 1.1.2.0 and absent
-// on 1.0.0.0 / 1.0.8.0 / 1.1.3.0, which are the original's own clean skips. This
-// arm adds no gate either -- the scan is the gate.
-
-extern "C"
-{
-    uint32_t zpatch_vram_arg_a = 0;  // dword_1015D630
-    uint32_t zpatch_vram_arg_b = 0;  // dword_1015D634
-    uint8_t zpatch_vram_flag = 0;    // byte_1015D638
-}
-
 // The transcribed bodies are defined in the tail of this file. MSVC rejects a
 // __declspec(naked) declaration (C2488: "'naked' can only be applied to non-member
 // function definitions"), so the readable code above them names each body through a
@@ -193,7 +169,6 @@ static void PopupHeadlightsCheckBody();
 static void PopupHeadlightsBodyA();
 static void PopupHeadlightsBodyACached();
 static void PopupHeadlightsBodyB();
-static void VramFixShimBody();
 
 // `mov eax, imm32`: the MiscFixes token-activation row writes it. bytes.ixx does
 // not carry it, and that module is outside this task's edit scope, so the opcode
@@ -665,22 +640,6 @@ namespace
     }
 }
 
-// sub_1004AA80, rebuilt: the shim's verdict helper. The compiler's own compares
-// are `test eax,eax / js set`, `cmp dword_1015D630,0 / jne set` and
-// `cmp eax,3E800000h / jge clear` -- a signed compare of the second argument's
-// float bits against 0.25f. It is ordinary C++ because the original's frame (/GS
-// cookie, saved registers) is compiler output, not a hand-written stream.
-static void VramVerdict()
-{
-    const auto second = static_cast<int32_t>(zpatch_vram_arg_b);
-    zpatch_vram_flag = 0;
-    if (second < 0 || zpatch_vram_arg_a != 0
-        || second < static_cast<int32_t>(0x3E800000u))
-    {
-        zpatch_vram_flag = 1;
-    }
-}
-
 namespace
 {
     // DrivebyFOVFix: the site is the `movss xmm0,[esi+60h]` in front of the
@@ -1015,47 +974,6 @@ namespace
         if (!pattern.empty())
             injector::MakeJMP(pattern.get_first<std::byte>(-10),
                 reinterpret_cast<void*>(&IdeHookBody), true);
-    }
-
-    // FixPCIDKickbug: the original deletes the XLive PCID value and ignores the
-    // result:
-    //
-    //   100523C0: v332 = sub_1005C160(v469, "FixPCIDKickbug", "1");
-    //             if ( v334 == 1 )
-    //               SHDeleteValueW(HKEY_CURRENT_USER,
-    //                              L"Software\\Classes\\Software\\Microsoft\\XLive",
-    //                              L"PCID");
-    //
-    // No image byte is written and the call has no build gate; the result is not
-    // examined, exactly as the original ignores it. The registry value belongs to
-    // the user, not to the image, so the arm stays out of the offline dump (which
-    // attaches an image, not a loaded module) the same way LaunchWithPlayGTAIV
-    // does: the module guard is the only difference from the original's call.
-    void InstallFixPCIDKickbug()
-    {
-        if (!Loader::Enabled("FixPCIDKickbug"))
-            return;
-
-        if (Game::Get().Module() == nullptr)
-            return;
-
-        SHDeleteValueW(HKEY_CURRENT_USER,
-            L"Software\\Classes\\Software\\Microsoft\\XLive", L"PCID");
-    }
-
-    // VRAMFix: the matched function's entry becomes a jump to the shim.
-    void InstallVRAMFix()
-    {
-        if (!Loader::Enabled("VRAMFix"))
-            return;
-
-        auto pattern = find_pattern("8B 44 24 10 D9 2C 24 83 C4 1C C3");
-        if (pattern.empty())
-            return;
-
-        Bodies::Register(reinterpret_cast<uintptr_t>(&VramFixShimBody), 0x1004AAB0u);
-        injector::MakeJMP(pattern.get_first<std::byte>(0),
-            reinterpret_cast<void*>(&VramFixShimBody), true);
     }
 
     // The `popup_cache` group's C++ check: the same resolve-then-scan sequence
@@ -2183,31 +2101,3 @@ static __declspec(naked) void PopupHeadlightsBodyB()
     }
 }
 
-// sub_1004AAB0, recovered VA 0x1004AAB0 (13 instructions): the argument/verdict
-// shim. It stashes two of the replaced function's arguments, runs the verdict under
-// pushad/popad, returns INT_MAX when the verdict is set, then reproduces the
-// original tail whose `fldcw [esp]` reads the E9 site's return address as the FPU
-// control word (the preserved quirk).
-//
-// Naked and internal: an external-linkage naked function is written to the module
-// and every importer fails (C2488).
-static __declspec(naked) void VramFixShimBody()
-{
-    __asm
-    {
-        mov eax, DWORD PTR [esp + 14h]
-        mov DWORD PTR [zpatch_vram_arg_a], eax
-        mov eax, DWORD PTR [esp + 10h]
-        mov DWORD PTR [zpatch_vram_arg_b], eax
-        __emit 0x60  // pushad
-        call VramVerdict
-        __emit 0x61  // popad
-        cmp BYTE PTR [zpatch_vram_flag], 0
-        je vram_skip
-        mov eax, 7FFFFFFFh
-    vram_skip:
-        fldcw WORD PTR [esp]
-        add esp, 1Ch
-        ret
-    }
-}
