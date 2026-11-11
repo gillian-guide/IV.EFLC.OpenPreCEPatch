@@ -699,10 +699,9 @@ namespace
             zpatch_copsirens_resume_b = static_cast<uint32_t>(
                 reinterpret_cast<uintptr_t>(pattern.get_first(28)));
 
-        pattern = find_pattern("0C 83 88 94 00 00 00 04");
-        if (!pattern.empty())
+        if (auto* ide = CachedMatchFor("0C 83 88 94 00 00 00 04"))
             zpatch_ide_hook_slot = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first(-1)));
+                reinterpret_cast<uintptr_t>(ide - 1));
     }
 
     // PopupHeadlightsFlag's sites: the EAX anchor (jump, its +10 branch forced to
@@ -722,10 +721,9 @@ namespace
                 reinterpret_cast<uintptr_t>(pattern.get_first(12)));
         }
 
-        pattern = find_pattern("0C 83 88 94 00 00 00 04");
-        if (!pattern.empty())
+        if (auto* ide = CachedMatchFor("0C 83 88 94 00 00 00 04"))
             zpatch_ide_hook_slot = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first(-1)));
+                reinterpret_cast<uintptr_t>(ide - 1));
 
         pattern = find_pattern("0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1");
         if (!pattern.empty())
@@ -970,9 +968,8 @@ namespace
             injector::MakeJMP(pattern.get_first<std::byte>(22),
                 reinterpret_cast<void*>(&CopSirensShimBBody), true);
 
-        pattern = find_pattern("0C 83 88 94 00 00 00 04");
-        if (!pattern.empty())
-            injector::MakeJMP(pattern.get_first<std::byte>(-10),
+        if (auto* ide = CachedMatchFor("0C 83 88 94 00 00 00 04"))
+            injector::MakeJMP(ide - 10,
                 reinterpret_cast<void*>(&IdeHookBody), true);
     }
 
@@ -1082,9 +1079,8 @@ namespace
             installedA = true;
         }
 
-        pattern = find_pattern("0C 83 88 94 00 00 00 04");
-        if (!pattern.empty())
-            injector::MakeJMP(pattern.get_first<std::byte>(-10),
+        if (auto* ide = CachedMatchFor("0C 83 88 94 00 00 00 04"))
+            injector::MakeJMP(ide - 10,
                 reinterpret_cast<void*>(&IdeHookBody), true);
 
         pattern = find_pattern("0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1");

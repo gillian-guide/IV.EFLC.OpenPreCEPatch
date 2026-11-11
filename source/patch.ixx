@@ -94,6 +94,59 @@ export bool ExpectMatchCount(hook::pattern& pattern, size_t expected, const char
     return ExpectMatchCount(pattern.size(), expected, what);
 }
 
+// A deliberately small match cache for signatures shared by several arms
+// (the IDE slot and the three steer sites). It is opt-in per signature, so a
+// generic cross-tier cache is never used; a cached address is returned only
+// after a one-match probe at that address still succeeds. The dump resets it
+// between per-option cells.
+namespace CachedMatchDetail
+{
+    struct Entry
+    {
+        std::string signature;
+        uintptr_t match;
+    };
+    inline std::vector<Entry> entries;
+}
+
+export void ResetCachedMatchesForTest() noexcept
+{
+    CachedMatchDetail::entries.clear();
+}
+
+export std::byte* CachedMatchFor(std::string_view signature)
+{
+    const std::string normalised = NormaliseSignature(signature);
+    const auto [begin, end] = ImageScanRange();
+
+    for (const auto& entry : CachedMatchDetail::entries)
+    {
+        if (entry.signature != normalised)
+            continue;
+        const uintptr_t probeEnd = std::min<uintptr_t>(entry.match + 0x200, end);
+        hook::pattern probe(entry.match, probeEnd, normalised);
+        if (!probe.count_hint(1).empty())
+            return reinterpret_cast<std::byte*>(entry.match);
+        break;
+    }
+
+    hook::pattern pattern(begin, end, normalised);
+    if (pattern.count_hint(1).empty())
+        return nullptr;
+    const auto* match = pattern.get_first<std::byte>(0);
+    for (auto& entry : CachedMatchDetail::entries)
+    {
+        if (entry.signature == normalised)
+        {
+            entry.match = reinterpret_cast<uintptr_t>(match);
+            return const_cast<std::byte*>(match);
+        }
+    }
+    CachedMatchDetail::entries.push_back({ normalised, reinterpret_cast<uintptr_t>(match) });
+    return const_cast<std::byte*>(match);
+}
+
+
 // Install-time failsafes. A transcribed body is never rewritten: a missing
 // pointer, a site outside the image or an unresolved body refuses the install,
 // which is the un-patched game path.

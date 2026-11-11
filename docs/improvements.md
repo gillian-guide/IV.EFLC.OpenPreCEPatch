@@ -106,7 +106,7 @@ both installations.
 | **Default changes.** | oPCEP INI | **applied through the shipped INI.** The flat `ZolikaPatch.ini` remains the parity configuration. |
 | **NewFilesCompatibility scan guards.** | `loading.ixx` update bodies | **not ported.** The four update/registrar bodies are transcribed; their null-scan faults are preserved. |
 | **MiscFixes per-fix split.** | oPCEP INI | **not ported.** The bundle stays as the original's own option. |
-| **Multi-pattern scan pass/cache.** | `entry-points-audit.md` | **not ported.** A cross-tier cache would be unsound after an earlier install; the duplicate publish/install scans remain a measured startup cost. |
+| **Multi-pattern scan pass/cache.** | `entry-points-audit.md` | **partly applied.** The IDE slot and the three steer signatures go through `CachedMatchFor`, an opt-in single-match cache that probes the cached address before reuse; the dump resets it between per-option cells (`ResetCachedMatchesForTest`). A generic cache over every `find_pattern` is still rejected: an earlier install can invalidate a later arm's site. |
 | **FCHS body null guards.** | `graphics.ixx` | **not ported.** The 46-instruction checker is transcribed asm; its lookup is covered by the shared memo, its own guards are not added. |
 
 

@@ -753,26 +753,21 @@ namespace
     // the 1.0.6.0-and-later site, 140/144 on the older one).
     void PublishSteerSites()
     {
-        auto pattern = find_pattern("32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0");
-        if (!pattern.empty())
+        if (auto* match = CachedMatchFor("32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"))
         {
-            auto* match = pattern.get_first<std::byte>(0);
             zpatch_steer_resume = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + 16));
             zpatch_steer_part_call = Rel32Target(match, 423, 427);
         }
 
-        pattern = find_pattern("7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2");
-        if (!pattern.empty())
+        if (auto* match = CachedMatchFor("7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"))
         {
-            auto* match = pattern.get_first<std::byte>(0);
             zpatch_steer_resume = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + 16));
             zpatch_steer_part_call = Rel32Target(match, 140, 144);
         }
 
-        pattern = find_pattern("0C 83 88 94 00 00 00 04");
-        if (!pattern.empty())
+        if (auto* ide = CachedMatchFor("0C 83 88 94 00 00 00 04"))
             zpatch_ide_hook_slot = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(-1)));
+                reinterpret_cast<uintptr_t>(ide - 1));
     }
 
     // MovingSteeringWheelSupport / ShakingEngineBlock / MovingPlaneParts: the
@@ -1479,19 +1474,16 @@ namespace
             Failsafe::Missing("moving-parts model table", zpatch_steer_model_array == 0))
             return;
 
-        auto pattern = find_pattern("32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0");
-        if (!pattern.empty())
-            injector::MakeJMP(pattern.get_first<std::byte>(2),
+        if (auto* match = CachedMatchFor("32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"))
+            injector::MakeJMP(match + 2,
                 reinterpret_cast<void*>(&SteerDetourEaxBody), true);
 
-        pattern = find_pattern("7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2");
-        if (!pattern.empty())
-            injector::MakeJMP(pattern.get_first<std::byte>(2),
+        if (auto* match = CachedMatchFor("7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"))
+            injector::MakeJMP(match + 2,
                 reinterpret_cast<void*>(&SteerDetourEdxBody), true);
 
-        pattern = find_pattern("0C 83 88 94 00 00 00 04");
-        if (!pattern.empty())
-            injector::MakeJMP(pattern.get_first<std::byte>(-10),
+        if (auto* ide = CachedMatchFor("0C 83 88 94 00 00 00 04"))
+            injector::MakeJMP(ide - 10,
                 reinterpret_cast<void*>(Bodies::AddressFor(0x100040E0u)), true);
     }
 

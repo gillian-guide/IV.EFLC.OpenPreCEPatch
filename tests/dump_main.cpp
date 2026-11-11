@@ -623,6 +623,7 @@ int main(int argc, char** argv)
 
             Config::Ini() = Feather::Parse(text);
             std::memcpy(image.bytes, image.pristine.data(), image.size);
+            ResetCachedMatchesForTest();
             fault = RunPipeline();
             const std::string prefix = std::string(option.key) + " ";
             if (fault == 0)
