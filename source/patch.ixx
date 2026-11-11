@@ -56,10 +56,12 @@ export std::string NormaliseSignature(std::string_view recovered)
 // the vendor scanner covers for a module -- and it keeps working when the tools
 // have loaded a copy of that image instead of the image itself.
 //
-// The scanner caches hits per signature string for the life of the process: a
-// second scan of the same string answers from that cache whatever `count` asks
-// for. A signature that has to be scanned with two different counts is two
-// signatures.
+// Each call constructs a fresh scanner over the image's executable range
+// (~9.9 MB on 1.0.8.0) and scans until the count hint is reached; the vendored
+// scanner has no cross-call memo. The publish and install tiers therefore scan
+// a shared signature twice. That is a measured startup cost, not a free cache:
+// a cross-tier memo would be unsound because an earlier install can overwrite a
+// later arm's site.
 export template <size_t count = 1, typename... Args>
 hook::pattern find_pattern(Args... args)
 {

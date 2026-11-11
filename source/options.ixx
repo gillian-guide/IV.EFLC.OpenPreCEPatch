@@ -58,22 +58,29 @@ export namespace Catalogue
     // an overlapping option is off when a FusionFix ASI is installed, so two
     // hooks cannot fight over the same site. With the group off this is the
     // original read exactly.
+    inline int32_t Read(const Option& option)
+    {
+        if (Config::FusionFixGated(option.key))
+            return 0;
+        return Config::Integer(Config::Ini(), option.key, std::to_string(option.absent));
+    }
+
     inline int32_t Read(std::string_view key)
     {
-        if (Config::FusionFixGated(key))
-            return 0;
         const auto* option = Find(key);
-        const auto fallback = DefaultText(key, false);
-        return Config::Integer(Config::Ini(), key, fallback);
+        return option != nullptr ? Read(*option) : 0;
     }
 
     // A key applies when the current build is in its mask. An unknown build has
     // id 0, which no mask includes: an unsupported executable installs nothing.
+    inline bool AppliesTo(const Option& option, Build build)
+    {
+        return (option.builds & (1u << static_cast<uint32_t>(build))) != 0;
+    }
+
     inline bool AppliesTo(std::string_view key, Build build)
     {
         const auto* option = Find(key);
-        if (option == nullptr)
-            return false;
-        return (option->builds & (1u << static_cast<uint32_t>(build))) != 0;
+        return option != nullptr && AppliesTo(*option, build);
     }
 }

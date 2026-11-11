@@ -131,6 +131,18 @@ export namespace Bodies
         return false;
     }
 
+    // The inverse lookup the modules used to copy: the host address of a
+    // registered body reference, or 0 when it was not registered.
+    inline uintptr_t AddressFor(uint32_t reference)
+    {
+        for (const auto& entry : Registry())
+        {
+            if (entry.reference == reference)
+                return entry.address;
+        }
+        return 0;
+    }
+
     // Rewrites every E8/E9 the pass wrote whose target is a registered body. A
     // branch the pass did not write is left alone (its byte still equals the
     // pristine one).

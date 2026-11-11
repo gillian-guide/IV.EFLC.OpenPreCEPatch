@@ -1,4 +1,4 @@
-module;
+﻿module;
 
 #include <common.hxx>
 // The /GS cookie the transcribed helpers' prologues read and their epilogues check
@@ -34,7 +34,7 @@ extern "C"
     // dword_1015B5B8, defined in source/config.ixx: the original keeps it in `.data`
     // immediately after the [HeadlightConeOffsets] hash array, and the cone check's
     // walk reads it as the 513th hash, so this tree defines it as the next object after
-    // that array (docs/rebuilt.md Â§2g). This arm publishes the same value into it.
+    // that array (docs/rebuilt.md Ã‚Â§2g). This arm publishes the same value into it.
     extern uint32_t zpatch_carparts_shadow_fn;
 
     // The collision body's node-walk test and the deadlock counter it compares.
@@ -49,7 +49,7 @@ extern "C"
     // resume, published from the site's own prologue before the E9 replaces it, and
     // defined in source/config.ixx as the second word of the [HeadlightConeOffsets]
     // block (the original keeps it between the cone's hashes and its offsets, and the
-    // cone walk can read it -- docs/rebuilt.md Â§2g).
+    // cone walk can read it -- docs/rebuilt.md Ã‚Â§2g).
     uint32_t zpatch_fchs_param = 0;
     float zpatch_fchs_offset = 2.0f;
     extern uint32_t zpatch_fchs_resume;
@@ -338,11 +338,10 @@ static void NoliveryBodyE();
 // (source/model_names.inc) and the lookup below is a C++ rebuild of sub_10003F00,
 // whose blocking instruction is the indexed absolute `push [0x100DE770 + esi*4]`
 // in a compiler-generated /GS frame.
-static const char* const kSpawnsModelNames[] = {
-#include "model_names.inc"
-};
-static_assert(sizeof(kSpawnsModelNames) / sizeof(kSpawnsModelNames[0]) == 0x9637,
-    "the recovered model-name table is the original's 38455 entries");
+// The BPM arm in stability.ixx owns the single recovered copy of the name
+// table; the spawn diagnostic reads that same array instead of compiling a
+// second 865 KiB pointer table.
+extern const char* const kBadPlayerModelNames[0x9637];
 
 namespace
 {
@@ -354,8 +353,8 @@ namespace
         const auto hash_name = reinterpret_cast<HashFn>(zpatch_spawns_resolver);
         for (uint32_t index = 0; index < 0x9637u; ++index)
         {
-            if (hash_name(kSpawnsModelNames[index]) == hash)
-                return kSpawnsModelNames[index];
+            if (hash_name(kBadPlayerModelNames[index]) == hash)
+                return kBadPlayerModelNames[index];
         }
         return "**UNKNOWN**";
     }
@@ -519,15 +518,6 @@ namespace
     // shared IDE parser hook lives in source/misc.ixx, and a module interface cannot
     // export a naked function; the body registry is what makes it reachable (the same
     // route the BPM arm uses for the native layer's pieces).
-    uintptr_t RegisteredBody(uint32_t reference)
-    {
-        for (const auto& entry : Bodies::All())
-        {
-            if (entry.reference == reference)
-                return entry.address;
-        }
-        return 0;
-    }
 
     // The original loader preamble resolves these five entries unconditionally
     // (sub_100523C0, 0x10052EE6..0x10052F50), before any handler runs: the model-info
@@ -1552,7 +1542,7 @@ namespace
         pattern = find_pattern("0C 83 88 94 00 00 00 04");
         if (!pattern.empty())
             injector::MakeJMP(pattern.get_first<std::byte>(-10),
-                reinterpret_cast<void*>(RegisteredBody(0x100040E0u)), true);
+                reinterpret_cast<void*>(Bodies::AddressFor(0x100040E0u)), true);
     }
 
     void InstallMovingSteeringWheelSupport()
@@ -1761,7 +1751,7 @@ export void RegisterVehicles()
     // slot 511 (dword_1015B5B8) -- so the proof compares that read too. The word is not
     // a copy: it is CarDynamicShadowFix's published shadow-function slot, defined
     // immediately after the array in source/config.ixx so the layout matches the
-    // original's .data (docs/rebuilt.md Â§2g). The offsets array is registered at its
+    // original's .data (docs/rebuilt.md Ã‚Â§2g). The offsets array is registered at its
     // own base, which the original places 2,056 bytes into the block.
     Bodies::RegisterTable(reinterpret_cast<uintptr_t>(zpatch_headlight_cone_hashes),
         0x1015ADB8u, sizeof(zpatch_headlight_cone_hashes) + sizeof(uint32_t));  // 2052
@@ -2528,7 +2518,7 @@ static __declspec(naked) void CarDynamicShadowShimB()
 // in source/config.ixx). Our layout reproduces it as the same slot, with the check's
 // own resume word (0x1015B5BC) after it, so the walk reads the value the original's
 // does rather than a placeholder -- which is what makes this transcription possible
-// instead of a bounded walk (docs/rebuilt.md Â§2g). The two arrays are registered with
+// instead of a bounded walk (docs/rebuilt.md Ã‚Â§2g). The two arrays are registered with
 // their original VAs; the hash table's registration is the extended 2,052 bytes
 // (512 words + the neighbour).
 //
@@ -2953,7 +2943,7 @@ static __declspec(naked) void SteerResolveEntry()
 // `cmova` -- and none of that blocks a transcription: the cookie is an absolute
 // slot, the check is a call slot, the .rdata constants are absolute slots, and the
 // two 512-slot wheelangle tables are indexed absolutes the table registry covers
-// (tests/bodies.tsv table rows `1015A538` / `10159D38`, docs/rebuilt.md Â§2c).
+// (tests/bodies.tsv table rows `1015A538` / `10159D38`, docs/rebuilt.md Ã‚Â§2c).
 //
 // What the operands are:
 //   * `[0x1015A538 + esi*4]` / `[0x10159D38 + esi*4]` are the wheelangle model and

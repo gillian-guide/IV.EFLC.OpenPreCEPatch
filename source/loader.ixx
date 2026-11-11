@@ -39,9 +39,10 @@ export namespace Loader
     // mask.
     inline bool Enabled(std::string_view key)
     {
-        if (!Catalogue::AppliesTo(key, Current()))
+        const auto* option = Catalogue::Find(key);
+        if (option == nullptr || !Catalogue::AppliesTo(*option, Current()))
             return false;
-        return Catalogue::Read(key) == 1;
+        return Catalogue::Read(*option) == 1;
     }
 
     inline void Run()

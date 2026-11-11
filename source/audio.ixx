@@ -225,16 +225,7 @@ namespace
     // The address of a body another module transcribed, by its recovered VA. The
     // native layer publishes only its C entries -- a module interface cannot
     // export a naked function -- so the body registry is what makes its pieces
-    // reachable from here (the same helper stability.ixx uses).
-    uint32_t RegisteredBody(uint32_t reference)
-    {
-        for (const auto& entry : Bodies::All())
-        {
-            if (entry.reference == reference)
-                return static_cast<uint32_t>(entry.address);
-        }
-        return 0;
-    }
+    // reachable from here.
 
     // The game waits ten ticks when the window is minimized; the original writes
     // six, so the arm does too.
@@ -647,11 +638,11 @@ export void RegisterAudio()
     // The native-layer pieces the wrappers call, by their recovered VAs. Only one
     // body can carry a recovered VA, so these are the layer's transcriptions
     // reached through audio's forwarders.
-    zpatch_audio_context_init = RegisteredBody(0x100038C0u);
-    zpatch_audio_invoke_entry = RegisteredBody(0x100038E0u);
-    zpatch_audio_cleanup_dword = RegisteredBody(0x1005DE40u);
-    zpatch_audio_cleanup_bool = RegisteredBody(0x1005DE80u);
-    zpatch_audio_call_hash = RegisteredBody(0x1005B150u);
+    zpatch_audio_context_init = static_cast<uint32_t>(Bodies::AddressFor(0x100038C0u));
+    zpatch_audio_invoke_entry = static_cast<uint32_t>(Bodies::AddressFor(0x100038E0u));
+    zpatch_audio_cleanup_dword = static_cast<uint32_t>(Bodies::AddressFor(0x1005DE40u));
+    zpatch_audio_cleanup_bool = static_cast<uint32_t>(Bodies::AddressFor(0x1005DE80u));
+    zpatch_audio_call_hash = static_cast<uint32_t>(Bodies::AddressFor(0x1005B150u));
 
     Loader::PublishEvent() += []
     {

@@ -30,7 +30,7 @@ import shared;
 // this array through the original's indexed absolute operand, and the arm registers
 // the array with Bodies::RegisterTable so the whole-body proof compares the table's
 // contents instead of its displacement.
-static const char* const kBadPlayerModelNames[] = {
+extern const char* const kBadPlayerModelNames[0x9637] = {
 #include "model_names.inc"
 };
 static_assert(sizeof(kBadPlayerModelNames) / sizeof(kBadPlayerModelNames[0]) == 0x9637,
@@ -217,15 +217,6 @@ namespace
     // native-call layer publishes only its C entries, and a module interface cannot
     // export a naked function, so the body registry is what makes its pieces
     // reachable from here.
-    uint32_t RegisteredBody(uint32_t reference)
-    {
-        for (const auto& entry : Bodies::All())
-        {
-            if (entry.reference == reference)
-                return static_cast<uint32_t>(entry.address);
-        }
-        return 0;
-    }
 }
 
 namespace
@@ -464,10 +455,10 @@ namespace
         // The layer's transcribed pieces, by their recovered VAs. The wrapper is
         // the layer's copy of sub_1005B3F0; only one body can carry that recovered
         // VA, so this arm does not register a second one.
-        zpatch_bpm_context_init = RegisteredBody(0x100038C0u);
-        zpatch_bpm_cleanup_dword = RegisteredBody(0x1005DE40u);
-        zpatch_bpm_call_hash = RegisteredBody(0x1005B150u);
-        zpatch_bpm_call_bool = RegisteredBody(0x1005B3F0u);
+        zpatch_bpm_context_init = static_cast<uint32_t>(Bodies::AddressFor(0x100038C0u));
+        zpatch_bpm_cleanup_dword = static_cast<uint32_t>(Bodies::AddressFor(0x1005DE40u));
+        zpatch_bpm_call_hash = static_cast<uint32_t>(Bodies::AddressFor(0x1005B150u));
+        zpatch_bpm_call_bool = static_cast<uint32_t>(Bodies::AddressFor(0x1005B3F0u));
         zpatch_bpm_resolver = static_cast<uint32_t>(Shared::ValueResolver());
     }
 }
