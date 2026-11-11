@@ -1360,95 +1360,45 @@ namespace
         if (!pattern.empty())
             injector::MakeNOP(pattern.get_first(6), 2, true);
 
-        pattern = find_pattern("74 17 83 3D ?? ?? ?? ?? 02 75 0E F3 0F 10 05");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(2), 9, true);
-
-        pattern = find_pattern("7C 22 83 F8 28 75 1D");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 2, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 0F 8C 0E 05 00 00");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 13, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 75 08 3B 05");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 75 17 F3 0F 10 44 24 0C");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 75 1F 8B 44 24 04");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 75 21 8B 96 20 08 00 00");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 75 24 F6 87 6C 02 00 00 04");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 75 35 0F BF 46 2E");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 75 38 8B 16");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 7C 11 8B 4E");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(7), 2, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 7C 1F 8B");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(7), 2, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 7C 26 8B 85 40 0B 00 00");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 7C 35 0F BF 43 2E");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 7C 43");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(7), 2, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 7C 4A 0F BF 46 2E");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 13, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 89 44 24 38");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(11), 6, true);
-
-        // Row 21: the branch and the byte it would skip to (a second window at +17).
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 8A 0D");
-        if (!pattern.empty())
+        struct EpisodeWindow
         {
-            auto* match = pattern.get_first<std::byte>(0);
-            injector::MakeNOP(match, 7, true);
-            injector::MakeNOP(match + 17, 2, true);
-        }
-
-        // Row 22: the float load's branch.
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 F3 0F 10 05 ?? ?? ?? ?? F3 0F 11 44 24 20 75 4C");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(21), 2, true);
-
-        // Row 23: the loop head and its `jl` (a second window at +10).
-        pattern = find_pattern("8B 56 04 8B 4A 0C 89 4C 24 1C 7C 18");
-        if (!pattern.empty())
+            const char* signature;
+            int offset;
+            uint8_t length;
+            int secondOffset;
+            uint8_t secondLength;
+        };
+        static constexpr EpisodeWindow kEpisodeWindows[] = {
+            { "74 17 83 3D ?? ?? ?? ?? 02 75 0E F3 0F 10 05", 2, 9, 0, 0 },
+            { "7C 22 83 F8 28 75 1D", 0, 2, 0, 0 },
+            { "83 3D ?? ?? ?? ?? 02 0F 8C 0E 05 00 00", 0, 13, 0, 0 },
+            { "83 3D ?? ?? ?? ?? 02 75 08 3B 05", 0, 9, 0, 0 },
+            { "83 3D ?? ?? ?? ?? 02 75 17 F3 0F 10 44 24 0C", 0, 9, 0, 0 },
+            { "83 3D ?? ?? ?? ?? 02 75 1F 8B 44 24 04", 0, 9, 0, 0 },
+            { "83 3D ?? ?? ?? ?? 02 75 21 8B 96 20 08 00 00", 0, 9, 0, 0 },
+            { "83 3D ?? ?? ?? ?? 02 75 24 F6 87 6C 02 00 00 04", 0, 9, 0, 0 },
+            { "83 3D ?? ?? ?? ?? 02 75 35 0F BF 46 2E", 0, 9, 0, 0 },
+            { "83 3D ?? ?? ?? ?? 02 75 38 8B 16", 0, 9, 0, 0 },
+            { "83 3D ?? ?? ?? ?? 02 7C 11 8B 4E", 7, 2, 0, 0 },
+            { "83 3D ?? ?? ?? ?? 02 7C 1F 8B", 7, 2, 0, 0 },
+            { "83 3D ?? ?? ?? ?? 02 7C 26 8B 85 40 0B 00 00", 0, 9, 0, 0 },
+            { "83 3D ?? ?? ?? ?? 02 7C 35 0F BF 43 2E", 0, 9, 0, 0 },
+            { "83 3D ?? ?? ?? ?? 02 7C 43", 7, 2, 0, 0 },
+            { "83 3D ?? ?? ?? ?? 02 7C 4A 0F BF 46 2E", 0, 13, 0, 0 },
+            { "83 3D ?? ?? ?? ?? 02 89 44 24 38", 11, 6, 0, 0 },
+            { "83 3D ?? ?? ?? ?? 02 8A 0D", 0, 7, 17, 2 },
+            { "83 3D ?? ?? ?? ?? 02 F3 0F 10 05 ?? ?? ?? ?? F3 0F 11 44 24 20 75 4C", 21, 2, 0, 0 },
+            { "8B 56 04 8B 4A 0C 89 4C 24 1C 7C 18", -15, 7, 10, 2 },
+        };
+        for (const auto& row : kEpisodeWindows)
         {
+            pattern = find_pattern(row.signature);
+            if (pattern.empty())
+                continue;
             auto* match = pattern.get_first<std::byte>(0);
-            injector::MakeNOP(match - 15, 7, true);
-            injector::MakeNOP(match + 10, 2, true);
+            injector::MakeNOP(match + row.offset, row.length, true);
+            if (row.secondLength != 0)
+                injector::MakeNOP(match + row.secondOffset, row.secondLength, true);
         }
     }
 

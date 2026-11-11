@@ -1,23 +1,23 @@
 # IV.EFLC.OpenPreCEPatch
 
-This repository ships as **IV.EFLC.OpenPreCEPatch**: the ZolikaPatch 7.65 reimplementation with the OpenPreCEPatch improvements as opt-in groups. The ASI is `IV.EFLC.OpenPreCEPatch.asi`; its shipped configuration is OpenPreCEPatch's grouped `IV.EFLC.OpenPreCEPatch.ini` from `data/plugins/`, read from next to the ASI. The flat `ZolikaPatch.ini` stays in the repository as the parity/legacy configuration the oracle tools use.
+This repository ships as **IV.EFLC.OpenPreCEPatch**: an improvement/successor fork of ZolikaPatch 7.65 with the OpenPreCEPatch changes compiled in. The ASI is `IV.EFLC.OpenPreCEPatch.asi`; its shipped configuration is OpenPreCEPatch's grouped `IV.EFLC.OpenPreCEPatch.ini`, read from next to the ASI. There is no runtime improvement switch and no separate parity build. `tests/parity/ZolikaPatch.ini` is an internal regression fixture, not a shipped file.
 
 The implementation is written with C++23 module interface units, one plain translation unit for the startup driver, `Event<Args...>` tiers and a `Game` install context, with the vendored libraries pinned under `external/`. It is not Zolika1351's source. The shipped 32-bit ASI was the specification, and its loader, per-key install arms and hook bodies are written back as ordinary C++ with the recovered addresses, signatures, defaults and behaviour.
 
-The compiled ASI is a drop-in replacement for the original binary on every game version from 1.0.0.0 to 1.1.3.0, including EFLC, and on the 1.2.0.43 product version the catalogue also masks. It is Win32 only. Each catalogue key carries its shipped default, its absent-key default and the builds it applies to; `IV.EFLC.OpenPreCEPatch.ini` supplies the shipped values, and the flat `ZolikaPatch.ini` remains the parity configuration.
+The compiled ASI supports every game version from 1.0.0.0 to 1.1.3.0, including EFLC, and the 1.2.0.43 product version the catalogue also masks. It is Win32 only. Each catalogue key carries its shipped default, its absent-key default and the builds it applies to; `IV.EFLC.OpenPreCEPatch.ini` supplies the shipped values.
 
 ## Status
 
-Static evidence is complete as far as the oracle reaches.
+The retained arms are measured against the recovered binary; the successor changes are the product.
 
 |measurement|result|produced by|
 |-|-|-|
-|keys scored on 1.0.8.0|80 closed, 5 documented expected deltas, 0 open (85-key surface)|`python tools/parity\_report.py 9`|
+|retained keys on 1.0.8.0|80 closed, 5 documented improved deltas, 0 open (85-key surface)|`python tools/parity\_report.py 9`|
 |hook bodies proven whole|162 transcribed bodies, 0 failures|`python tools/verify\_bodies.py --original ../game\_refs/ZolikaPatch\_original.asi.off --candidate build/win-x86/Release/IV.EFLC.OpenPreCEPatch.asi --bodies tests/bodies.tsv --map build/win-x86/Release/IV.EFLC.OpenPreCEPatch.map`|
 |write set|retained-arm dump matrix; the full-cell diff also contains the bytes the 14 removed keys used to write (expected missing)|`python tools/dump_matrix.py --markdown <out>`|
 |tests|34 registered ctest targets|`ctest --preset release`|
 
-The five expected deltas are the improvements that deliberately change a retained arm's write set: GarageModelFix's prologue, BuildingAlphaFix's `jnz`-only removal, CutsceneFixes' callee, ImprovedShaderStreaming's two calls, and RemoveGFWLUpdatePopup's shipped default. They are reported apart from `open`, with the reason in `tools/parity_report.py` and `docs/improvements.md`. The 14 keys OpenPreCEPatch removed or moved to XLivelessAddon are out of the catalogue (SkipLauncher, SkipIntro, SkipMenu, BorderlessWindowed, DoNotPauseOnMinimize, LocalSettingsPath, VRAMFix and the seven dropped fixes).
+The five improved deltas are deliberate: GarageModelFix's prologue, BuildingAlphaFix's `jnz`-only removal, CutsceneFixes' callee, ImprovedShaderStreaming's two calls, and RemoveGFWLUpdatePopup's shipped default. They are reported apart from `open`. The 14 keys OpenPreCEPatch removed or moved to XLivelessAddon are out of the catalogue (SkipLauncher, SkipIntro, SkipMenu, BorderlessWindowed, DoNotPauseOnMinimize, LocalSettingsPath, VRAMFix and the seven dropped fixes).
 
 ## Features
 
@@ -43,7 +43,13 @@ cmake --build --preset release
 ctest --preset release
 ```
 
-The artifact is `build/win-x86/Release/IV.EFLC.OpenPreCEPatch.asi`; copy it next to `GTAIV.exe` or `EFLC.exe` with `IV.EFLC.OpenPreCEPatch.ini` (both are copied next to the build artifact). `ZolikaPatch.ini` can stay in the game root as a legacy fallback; it is the parity configuration, not the shipped one. The `Trace` configuration builds the same ASI with diagnostics enabled.
+The artifact is `build/win-x86/Release/IV.EFLC.OpenPreCEPatch.asi`; copy it next to `GTAIV.exe` or `EFLC.exe` with `IV.EFLC.OpenPreCEPatch.ini`. The release folder and zip are produced by:
+
+```
+cmake --build --preset release --target package
+```
+
+They land in `dist/IV.EFLC.OpenPreCEPatch/` and `dist/IV.EFLC.OpenPreCEPatch.zip`. The `Trace` configuration builds the same ASI with diagnostics enabled.
 
 ## Documentation
 
@@ -54,7 +60,7 @@ The artifact is `build/win-x86/Release/IV.EFLC.OpenPreCEPatch.asi`; copy it next
 |[features.md](docs/features.md)|every catalogue key, grouped by module, with its shipped and absent-key default and its build scope|
 |[hooking.md](docs/hooking.md)|how a body is transcribed, registered and proved, the C++ rebuilds and why, and the preserved-fault policy|
 |[testing.md](docs/testing.md)|every test and measurement tool, what each proves, and how to run them|
-|[parity.md](docs/parity.md)|the contracts pinned by tests, the preserved faults, and the oracle-verified rows|
+|[parity.md](docs/parity.md)|the retained arms' original behavior and the remaining fault evidence|
 
 ## Credits
 

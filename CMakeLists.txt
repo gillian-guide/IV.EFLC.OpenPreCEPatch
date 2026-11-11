@@ -366,6 +366,23 @@ set_target_properties(zp_dump PROPERTIES
 target_link_libraries(zp_dump PRIVATE zp_modules)
 add_dependencies(zp_dump ${ZP_NAME})
 
+# The release package: the ASI and the shipped grouped INI in one folder, plus
+# a zip. Built with `cmake --build --preset release --target package`.
+set(ZP_DIST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dist)
+file(MAKE_DIRECTORY ${ZP_DIST_DIR})
+add_custom_target(package
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${ZP_DIST_DIR}/IV.EFLC.OpenPreCEPatch
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:${ZP_NAME}>
+          ${ZP_DIST_DIR}/IV.EFLC.OpenPreCEPatch/IV.EFLC.OpenPreCEPatch.asi
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          ${CMAKE_CURRENT_SOURCE_DIR}/data/plugins/IV.EFLC.OpenPreCEPatch.ini
+          ${ZP_DIST_DIR}/IV.EFLC.OpenPreCEPatch/IV.EFLC.OpenPreCEPatch.ini
+  COMMAND ${CMAKE_COMMAND} -E tar cf ${ZP_DIST_DIR}/IV.EFLC.OpenPreCEPatch.zip
+          --format=zip IV.EFLC.OpenPreCEPatch
+  WORKING_DIRECTORY ${ZP_DIST_DIR}
+  DEPENDS ${ZP_NAME}
+  COMMENT "Packaging IV.EFLC.OpenPreCEPatch.asi + .ini into dist/")
+
 # The loader preamble's salt rule, pinned on the real images: the probe hits on
 # 1.0.8.0 (shipped `.data` values stand) and misses on 1.0.0.0 / 1.0.4.0 (the ten
 # fallback stores run). Not a game launch: the images are files. It maps each

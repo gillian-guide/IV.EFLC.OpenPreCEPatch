@@ -525,7 +525,7 @@ def main() -> int:
     # The full cell is the write set of the shipped INI, so it has to be the same
     # document the baseline was produced from. Per-option cells rebuild their own
     # documents (every key off, one key on) and ignore this file.
-    parser.add_argument("--ini", default=str(ROOT / "ZolikaPatch.ini"))
+    parser.add_argument("--ini", default=str(ROOT / "tests" / "parity" / "ZolikaPatch.ini"))
     parser.add_argument("--only", type=int)
     parser.add_argument("--check", action="store_true",
                         help="the cheap ctest form: build 9, both cells, pinned")

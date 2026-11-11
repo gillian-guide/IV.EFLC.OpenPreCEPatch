@@ -477,83 +477,9 @@ namespace
             injector::WriteMemory<std::byte>(pattern.get_first(0), Bytes::ShortJmp, true);
     }
 
-    // FreezeGunFix: the anchor's -21 is the entry of the weapon check, which is
-    // replaced by the shim.
-    void InstallFreezeGunFix()
-    {
-        if (!Loader::Enabled("FreezeGunFix"))
-            return;
-
-        auto pattern = find_pattern("2B C2 D1 F8 39 3C C6 7D 0D 83 CA FF");
-        if (pattern.empty())
-            return;
-
-        Bodies::Register(reinterpret_cast<uintptr_t>(&FreezeGunShim), 0x10036EB0u);
-        injector::MakeJMP(pattern.get_first(-21), reinterpret_cast<void*>(&FreezeGunShim), true);
-    }
-
-    // GroupHackFix: the group walk's entry becomes a jump into the shim, which
-    // repeats the anchor's first three instructions and the table compare.
-    void InstallGroupHackFix()
-    {
-        if (!Loader::Enabled("GroupHackFix"))
-            return;
-
-        auto pattern = find_pattern("33 C0 83 C1 04 8D 50 07 83 39 00 75 06 83 79 04");
-        if (pattern.empty())
-            return;
-
-        Bodies::Register(reinterpret_cast<uintptr_t>(&GroupHackShim), 0x10036E90u);
-        injector::MakeJMP(pattern.get_first(0), reinterpret_cast<void*>(&GroupHackShim), true);
-    }
-
-    // PathNodeCrashFix: the `mov dl,[eax+1Fh]; test dl,1` at the anchor's +53 is
-    // replaced by the shim, which rejects the sentinel.
-    void InstallPathNodeCrashFix()
-    {
-        if (!Loader::Enabled("PathNodeCrashFix"))
-            return;
-
-        auto pattern = find_pattern("8B 04 B1 0F B7 D0 81 FA FF FF 00 00");
-        if (pattern.empty())
-            return;
-
-        Bodies::Register(reinterpret_cast<uintptr_t>(&PathNodeShim), 0x1003D7B0u);
-        injector::MakeJMP(pattern.get_first(53), reinterpret_cast<void*>(&PathNodeShim), true);
-    }
-
-    // PlaneCrashFix: the anchor's +3 is the state store the body replays after its
-    // null check.
-    void InstallPlaneCrashFix()
-    {
-        if (!Loader::Enabled("PlaneCrashFix"))
-            return;
-
-        auto pattern = find_pattern("83 C4 04 88 58 26 8B 16 8B 82 F4 00 00 00");
-        if (pattern.empty())
-            return;
-
-        Bodies::Register(reinterpret_cast<uintptr_t>(&PlaneCrashShim), 0x1003D870u);
-        injector::MakeJMP(pattern.get_first(3), reinterpret_cast<void*>(&PlaneCrashShim), true);
-    }
-
-    // BlackscreenFix: the tail jump at the anchor's +81 becomes a jump into the shim.
-    void InstallBlackscreenFix()
-    {
-        if (!Loader::Enabled("BlackscreenFix"))
-            return;
-
-        auto pattern = find_pattern("75 54 8B 48 28 8B 40 2C");
-        if (pattern.empty())
-            return;
-
-        Bodies::Register(reinterpret_cast<uintptr_t>(&BlackscreenShim), 0x10036EE0u);
-        injector::MakeJMP(pattern.get_first(81), reinterpret_cast<void*>(&BlackscreenShim), true);
-    }
-
-    // CrashMsgFix: the thunk loses its branch to the message getter; a call into the
-    // shim replaces it, and the shim calls the getter itself, replaces the '~'
-    // format markers in place and returns to the instruction after the thunk's call.
+    // CrashMsgFix: the thunk loses its branch to the message getter; a call into
+    // the shim replaces it, and the shim calls the getter itself, replaces the
+    // '~' format markers in place and returns after the thunk's call.
     void InstallCrashMsgFix()
     {
         if (!Loader::Enabled("CrashMsgFix"))
@@ -567,19 +493,38 @@ namespace
         injector::MakeCALL(site, reinterpret_cast<void*>(&CrashMsgShim), true);
     }
 
-    // WantedLevelCrashFix: the update's entry becomes the shim, which skips it for a
-    // null object.
-    void InstallWantedLevelCrashFix()
+    // The simple "scan, register the shim, jump" arms. The scan offset and the
+    // recovered body VA are the only per-key data; the loop keeps the original
+    // install order (Blackscreen, FreezeGun, GroupHack, PathNode, Plane, Wanted).
+    struct BranchArm
     {
-        if (!Loader::Enabled("WantedLevelCrashFix"))
-            return;
+        const char* key;
+        const char* signature;
+        int offset;
+        void (*body)();
+        uint32_t reference;
+    };
+    constexpr BranchArm kSimpleBranchArms[] = {
+        { "BlackscreenFix", "75 54 8B 48 28 8B 40 2C", 81, &BlackscreenShim, 0x10036EE0u },
+        { "FreezeGunFix", "2B C2 D1 F8 39 3C C6 7D 0D 83 CA FF", -21, &FreezeGunShim, 0x10036EB0u },
+        { "GroupHackFix", "33 C0 83 C1 04 8D 50 07 83 39 00 75 06 83 79 04", 0, &GroupHackShim, 0x10036E90u },
+        { "PathNodeCrashFix", "8B 04 B1 0F B7 D0 81 FA FF FF 00 00", 53, &PathNodeShim, 0x1003D7B0u },
+        { "PlaneCrashFix", "83 C4 04 88 58 26 8B 16 8B 82 F4 00 00 00", 3, &PlaneCrashShim, 0x1003D870u },
+        { "WantedLevelCrashFix", "8B 01 8B 90 28 01 00 00 FF D2 84 C0 0F 84 88 00 00 00", 0, &WantedLevelShim, 0x10050490u },
+    };
 
-        auto pattern = find_pattern("8B 01 8B 90 28 01 00 00 FF D2 84 C0 0F 84 88 00 00 00");
-        if (pattern.empty())
-            return;
-
-        Bodies::Register(reinterpret_cast<uintptr_t>(&WantedLevelShim), 0x10050490u);
-        injector::MakeJMP(pattern.get_first(0), reinterpret_cast<void*>(&WantedLevelShim), true);
+    void InstallSimpleBranchArms()
+    {
+        for (const auto& arm : kSimpleBranchArms)
+        {
+            if (!Loader::Enabled(arm.key))
+                continue;
+            auto pattern = find_pattern(arm.signature);
+            if (pattern.empty())
+                continue;
+            Bodies::Register(reinterpret_cast<uintptr_t>(arm.body), arm.reference);
+            injector::MakeJMP(pattern.get_first(arm.offset), arm.body, true);
+        }
     }
 
     // EpisodeSwitchFreezeFix: five sites, rewritten in the original's order: the ECX
@@ -976,14 +921,9 @@ export void RegisterStability()
     Loader::InstallEvent() += []
     {
         InstallMPNikoCrashFix();
-        InstallBlackscreenFix();
+        InstallSimpleBranchArms();
         InstallCrashMsgFix();
-        InstallFreezeGunFix();
-        InstallGroupHackFix();
-        InstallPathNodeCrashFix();
-        InstallPlaneCrashFix();
         InstallPlayerAsPedComponentsFix();
-        InstallWantedLevelCrashFix();
         InstallEpisodeSwitchFreezeFix();
         InstallSMPA60Fix();
         InstallSCOSignatureFix();

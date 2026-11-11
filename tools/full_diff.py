@@ -49,7 +49,7 @@ def main() -> int:
 
     dump = ROOT / "build" / "win-x86" / "Release" / "zp_dump.exe"
     exe = ROOT.parent / "game_refs" / f"{BUILDS[int(build)]}.exe"
-    ini = ROOT / "ZolikaPatch.ini"
+    ini = ROOT / "tests" / "parity" / "ZolikaPatch.ini"
     ours_path = ROOT / "build" / "win-x86" / f"full-b{build}.txt"
     subprocess.run([str(dump), "--exe", str(exe), "--build", build, str(ours_path), str(ini)],
                    check=True, capture_output=True)

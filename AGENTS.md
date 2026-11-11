@@ -13,8 +13,8 @@ shipped configuration is OpenPreCEPatch's grouped
 `data/plugins/IV.EFLC.OpenPreCEPatch.ini`, resolved next to the ASI and parsed
 through `Feather::LoadGrouped` (trailing `//`/`;` comments and over-256-byte
 lines are normalised; the original grammar and its 256-byte fault stay in
-`Feather::Load` for the flat file). The root `ZolikaPatch.ini` is the parity /
-legacy configuration the oracle tools use and is never the shipped file.
+`Feather::Load` for the flat file). The flat `tests/parity/ZolikaPatch.ini` is an
+internal regression fixture, not a shipped file.
 
 ## Current state
 
