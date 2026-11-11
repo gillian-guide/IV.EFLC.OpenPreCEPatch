@@ -151,4 +151,4 @@ The bundled `MiscFixes` table, the mod-check stubs, the flag keys, the menu inte
 
 ## Reading a key
 
-The defaults above come from `source/options.inc`, which `tools/gen_options.py` generates from the recovered behaviour inventory and `tools/gen_ini.py` serialises into the shipped INI; both files are drift-checked by `ctest`. The per-key evidence - contract rows, preserved faults, and the transcription decision for every body - is in [parity.md](parity.md), and the per-build scoreboard is [matrix.md](matrix.md).
+The defaults above come from `source/options.inc`, which `tools/gen_options.py` generates from the recovered behaviour inventory and `tools/gen_ini.py` serialises into the shipped INI; both files are drift-checked by `ctest`. The per-key evidence - contract rows, preserved faults, and the transcription decision for every body - is in [behavior.md](behavior.md), and the per-build scoreboard is [matrix.md](matrix.md).

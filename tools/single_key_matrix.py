@@ -8,7 +8,7 @@ is merely absent takes its default (most are `1`), so a one-line INI measures th
 whole default set, not one key. The matrix is what attributes a fault to a key.
 
 The one expected fault is `NoImpostorHeightCutoff` on 1.0.0.0: it reproduces the
-original's access violation (`docs/parity.md`, "A preserved fault that the tools
+original's access violation (`docs/behavior.md`, "A preserved fault that the tools
 cannot measure"), so that cell is recorded as evidence and does not fail the run.
 Any other non-zero exit does.
 

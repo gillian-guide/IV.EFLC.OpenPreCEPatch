@@ -1,4 +1,4 @@
-# Parity
+# Original behavior and fault evidence
 
 > **Distribution note (2026-11-11).** This tree ships as OpenPreCEPatch. The
 > improvements are compiled in, the 14 keys OpenPreCEPatch removed or moved to
@@ -549,7 +549,7 @@ place; the offline dump cannot see it, because nothing dereferences the slot the
   the operand of the `mov ecx, 0xF3E8E8` at match+77, which is the model-limit
   object the allocator is constructed with. The operand is a *live address*: the
   loader has already applied the image's relocations when the arm runs, so the cast
-  is the whole conversion (`GamePointer`, now identity). `docs/parity.md`'s
+  is the whole conversion (`GamePointer`, now identity). `docs/behavior.md`'s
   "captured operands are live addresses" section records the measurement and why the
   old preferred-base rebase was wrong in the game.
 - `EpisodicVehicleSupport`: on 1.0.7.0 and 1.0.8.0 it retargets two absolute
@@ -2984,7 +2984,7 @@ closed.
 **A row is per key and build.** Its shape is
 
 ```
-key <TAB> builds <TAB> why <TAB> the anchor in docs/parity.md <TAB> how it was measured
+key <TAB> builds <TAB> why <TAB> the anchor in docs/behavior.md <TAB> how it was measured
 ```
 
 `builds` is the comma-separated list of build ids the excuse covers, or `*` for every
@@ -3004,7 +3004,7 @@ oracle-verified (baseline incomplete)`.
 
 `tools/check_oracle_verified.py` (ctest `zp_oracle_verified`) keeps the class honest.
 A row must name a catalogue key, a build the catalogue mask allows *and* the measured
-evidence covers, an existing heading in this file (`docs/parity.md#...`), a real
+evidence covers, an existing heading in this file (`docs/behavior.md#...`), a real
 justification and a real measurement. The evidence is pinned to the omissions
 measured so far -- `SkipLauncher` on every build, `CarDynamicShadowFix` on 1.0.0.0
 and 1.0.4.0, `Patch7RemoveModChecks` on 1.0.6.0 and 1.0.7.0 -- and a row may not

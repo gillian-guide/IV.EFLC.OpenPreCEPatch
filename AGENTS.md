@@ -121,7 +121,7 @@ groups.
 
 ## Docs
 
-- `docs/parity.md` — the retained arms' behavior and the preserved original
+- `docs/behavior.md` — the retained arms' behavior and the preserved original
   faults, plus the failsafe table (key, original behaviour, guarded behaviour,
   measurement).
 - `docs/improvements.md` — the OpenPreCEPatch audit and each delta's

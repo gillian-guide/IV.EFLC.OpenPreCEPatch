@@ -60,7 +60,7 @@ They land in `dist/IV.EFLC.OpenPreCEPatch/` and `dist/IV.EFLC.OpenPreCEPatch.zip
 |[features.md](docs/features.md)|every catalogue key, grouped by module, with its shipped and absent-key default and its build scope|
 |[hooking.md](docs/hooking.md)|how a body is transcribed, registered and proved, the C++ rebuilds and why, and the preserved-fault policy|
 |[testing.md](docs/testing.md)|every test and measurement tool, what each proves, and how to run them|
-|[parity.md](docs/parity.md)|the retained arms' original behavior and the remaining fault evidence|
+|[behavior.md](docs/behavior.md)|the retained arms' original behavior and the remaining fault evidence|
 
 ## Credits
 

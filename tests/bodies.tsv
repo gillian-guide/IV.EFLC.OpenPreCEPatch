@@ -152,7 +152,7 @@ popup_headlights_check 10044310 ?PopupHeadlightsCheckBody@@YAXXZ 125
 # (original 0x100B5038) that are written as instruction streams. Its three arena
 # methods (0x10038360 allocate, 0x10038430 free, 0x100385A0 membership) carry the
 # compiler's frames, cmov sequences and hash-map code and are rebuilt in C++, so
-# they have no rows (docs/parity.md). nms_sync is the table's 0x100057F0 slot: the
+# they have no rows (docs/behavior.md). nms_sync is the table's 0x100057F0 slot: the
 # same two instructions as audio.ixx's better_mp_sync row, duplicated because a
 # table in this unit cannot name a body internal to another unit.
 nms_ctor 10038640 ?NmsCtorBody@@YAPAXXZ 17
@@ -167,21 +167,21 @@ nms_thunk18 10038620 ?NmsThunk18Body@@YAXXZ 5
 nms_noop_arg 10038630 ?NmsNoopArgBody@@YAXXZ 1
 # NewFilesCompatibility (source/loading.ixx): the registrar's replacement tail.
 # Its two update bodies (0x10051890, 0x100518D0) are compiled in the original and
-# are rebuilt in C++, so they have no rows (docs/parity.md).
+# are rebuilt in C++, so they have no rows (docs/behavior.md).
 newfiles_register 10051600 ?NewfilesRegisterBody@@YAXXZ 4
 # NewSavesCompatibility (source/loading.ixx): the savegame-load trampoline, eight
 # instructions to its tail jump. The prepare step (0x10051FD0), the converter
 # (0x10051B30) and the two read hooks it installs (0x10051A90, 0x10051AD0) are
 # compiled C in the original -- file IO, a std::string path build with the TLS
 # static-init guards and /GS frames -- and are rebuilt in C++, so they have no rows
-# (docs/parity.md).
+# (docs/behavior.md).
 new_saves_tramp 100521E0 ?NewSavesTrampoline@@YAXXZ 8
 # RestoreDeathMusic (source/audio.ixx): the gate body and the three native-script
 # wrappers it answers through, transcribed because the layer's own four pieces
 # (sub_100038C0/38E0, sub_1005DE40/DE80, sub_1005B150) are reached through
 # forwarders. The install body (sub_10050AD0, 75 instructions to its `ret`) is
 # rebuilt: it is compiler output with an EH4 frame whose clock/seed block calls the
-# CRT's image-internal helpers, so it has no row (docs/parity.md).
+# CRT's image-internal helpers, so it has no row (docs/behavior.md).
 death_music_gate 10050A50 ?DeathMusicGateBody@@YA_NXZ 41
 audio_call_two 1005B1E0 ?AudioCallTwoBody@@YIIII@Z 48
 audio_call_zero_bool 1005B360 ?AudioCallZeroBoolBody@@YIII@Z 44
@@ -202,7 +202,7 @@ mf_advance_windows 100241E0 ?MfAdvanceWindowsBody@@YAXXZ 138
 # LoadDLCs (source/loading.ixx): the loader callback's replacement and the DLC
 # manager's initialisation tail. The discovery pass the tail calls (0x10023150) is
 # a rebuild - compiled code with a /GS frame, TLS static-init guards and CRT calls -
-# so it has no row (docs/parity.md).
+# so it has no row (docs/behavior.md).
 load_dlcs_dummy 10023480 ?DlcDummyBody@@YAXXZ 2
 load_dlcs_struct_fixup 10023490 ?DlcStructFixupBody@@YAXXZ 19
 
@@ -255,7 +255,7 @@ cutscene_chain_b 100388C0 ?CutsceneChainBody@@YAXXZ 146
 # retargeted to (41 to its `ret`, 0x1004C350..0x1004C3BF). The key's remaining
 # rebuilt pieces are compiler output -- the init (sub_1004B750, EH + C++
 # containers) and the key's own handler (sub_1004C3F0, 4199 instructions with an
-# EH4 frame) -- and have no rows (docs/parity.md); the decoder pair is transcribed
+# EH4 frame) -- and have no rows (docs/behavior.md); the decoder pair is transcribed
 # below and the archive builder with its twelve helpers in the block at the end of
 # this file (docs/rebuilt.md 2h).
 ooc_branch 1004C3C0 ?OocBranchBody@@YAXXZ 7
@@ -321,7 +321,7 @@ ooc_entry_name 10057710 ?OocEntryNameBody@@YAXXZ 6
 # 0x10037C70 installs through sixteen `E8` detours (seventeen rows: the primary and
 # its short prefix name the same site). The probe's name/who/print helpers are
 # compiler output and rebuilt in C++; its formatter is the body source/stability.ixx
-# already proves. docs/parity.md.
+# already proves. docs/behavior.md.
 spawns_guard 100372F0 ?SpawnsGuardBody@@YAXXZ 16
 spawns_case_0x24 10037330 ?SpawnsCase0x24Body@@YAXXZ 9
 spawns_case_0xCA 10037360 ?SpawnsCase0xCABody@@YAXXZ 9
@@ -337,7 +337,7 @@ spawns_probe 10037510 ?SpawnsProbeBody@@YAXXZ 394
 
 # VRAMFix (source/misc.ixx): the argument/verdict shim the original's handler
 # 0x1004AAE0 jumps to from its single matched site. Its verdict helper is compiler
-# output and rebuilt in C++. docs/parity.md.
+# output and rebuilt in C++. docs/behavior.md.
 
 
 # AddOptionsInMenu / IVMenuAPI (source/menu.ixx): the writer 0x1001EDE0 and the

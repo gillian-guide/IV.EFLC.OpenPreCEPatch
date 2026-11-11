@@ -9,7 +9,7 @@ scoreboard stands, and which keys are behind the residual.
 Every cell is its own subprocess, and a cell that dies with a Windows exception is
 a recorded outcome, not an abort. That matters because one cell faults *by
 design*: `NoImpostorHeightCutoff` reproduces the original's 1.0.0.0 access
-violation (`docs/parity.md`), so build 1's per-option cell dies at that arm. A
+violation (`docs/behavior.md`), so build 1's per-option cell dies at that arm. A
 fault records:
 
   * the cell's exit code, printed as the exception code (`0xC0000005`);
@@ -434,7 +434,7 @@ def markdown(results, table) -> str:
         lines += [
             f"`{BUILDS[build]}.exe` ({VERSIONS[build]}) dies in the per-option cell at",
             f"`{key}`, {text}: the original's own fault -- an uninitialised vector entry,",
-            "write `66 89 06` at the original's `0x100536F1` -- which `docs/parity.md`",
+            "write `66 89 06` at the original's `0x100536F1` -- which `docs/behavior.md`",
             "records as deliberate and unguarded. The cell wrote "
             f"{cell.wrote} byte(s) before it died, so its rows are not a scoreboard: the",
             f"first {cell.reached} keys ran, and the {len(table) - cell.reached} after it",

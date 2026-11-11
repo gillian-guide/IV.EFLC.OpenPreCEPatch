@@ -98,4 +98,4 @@ The habit is that a guard is shown to fail on a case it should reject before it 
 
 ## What the suite does not establish
 
-Nothing here has run against a live game. The native-call layer, the rebuilt C++ consumers and the in-game paths are pinned by disassembly, instruction proofs, write-set equality and behavioural tests with stand-in callers - not by observation. The rebuilt pieces' residual risks are listed per piece in [rebuilt.md](rebuilt.md), the preserved faults in [parity.md](parity.md), and the one-page summary of what is and is not established is [review.md](review.md).
+Nothing here has run against a live game. The native-call layer, the rebuilt C++ consumers and the in-game paths are pinned by disassembly, instruction proofs, write-set equality and behavioural tests with stand-in callers - not by observation. The rebuilt pieces' residual risks are listed per piece in [rebuilt.md](rebuilt.md), the preserved faults in [behavior.md](behavior.md), and the one-page summary of what is and is not established is [review.md](review.md).

@@ -71,14 +71,14 @@ Each rebuild's evidence differs by class. Where a piece has observable behaviour
 
 ## Preserved faults
 
-The policy is one sentence: the shipped mod behaves like the original for every input, so a guard that changes a fault/no-fault outcome is a bug. Every preserved fault is recorded in [parity.md](parity.md) with its condition, VA and instruction, and many are measured rather than described:
+The policy is one sentence: the shipped mod behaves like the original for every input, so a guard that changes a fault/no-fault outcome is a bug. Every preserved fault is recorded in [behavior.md](behavior.md) with its condition, VA and instruction, and many are measured rather than described:
 
 - `NoImpostorHeightCutoff` reproduces the original's 1.0.0.0 access violation (`0x100536F1`), so that build's per-option cell dies there by design.
 - the NewFiles texture helpers fault on a scan miss because the original reads or calls through the null the scan left;
 - the DFA close-handle frame's filter is `EXCEPTION_CONTINUE_EXECUTION`, so a faulting `CloseHandle` is retried, never answered;
 - a non-numeric or out-of-range INI value throws out of the loader exactly as the original does, and a 256-byte line re-parses for ever.
 
-The sanctioned divergences are a config-level escape hatch that keeps the original code in place (the existing example is `RemoveBoundingBoxCulling=0`, whose `0` is the original's own default) and a divergence that is strictly unavoidable, such as an artefact of rebuilding a body rather than transcribing it. Each is recorded with its evidence in [parity.md](parity.md), which names all of them.
+The sanctioned divergences are a config-level escape hatch that keeps the original code in place (the existing example is `RemoveBoundingBoxCulling=0`, whose `0` is the original's own default) and a divergence that is strictly unavoidable, such as an artefact of rebuilding a body rather than transcribing it. Each is recorded with its evidence in [behavior.md](behavior.md), which names all of them.
 
 ## A transcribed body
 
