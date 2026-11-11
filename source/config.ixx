@@ -509,11 +509,9 @@ export namespace Config
     // FusionFix overlap gate
     // -----------------------------------------------------------------------
     //
-    // FusionFix replaces several of the same subsystems. OpenPreCEPatch disables
-    // an overlapping option when a FusionFix ASI is installed and records the
-    // reason, instead of silently letting two hooks fight. The 1:1 tree keeps
-    // only the original's SkipIntro/SkipMenu probe; this list is used only in
-    // the `config` group.
+    // FusionFix replaces several of the same subsystems. This distribution
+    // disables an overlapping option when a FusionFix ASI is installed and
+    // records the reason, instead of silently letting two hooks fight.
 
     struct FusionFixConflict
     {

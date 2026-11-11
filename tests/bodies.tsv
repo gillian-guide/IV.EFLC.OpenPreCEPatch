@@ -58,13 +58,10 @@ shader_streaming_filter_v 10045A10 ?ShaderStreamingFilterV@@YAXXZ 9
 combined_radio_freeze_fix 10005ED0 ?CombinedRadioFreezeFixBody@@YAXXZ 2
 better_mp_sync 100057F0 ?BetterMPSyncBody@@YAXXZ 2
 ped_models_in_cutscenes 10050870 ?PedModelsInCutscenesCheckBody@@YAXXZ 26
-local_settings_detour 100512F0 ?LocalSettingsDetourBody@@YAXXZ 7
-local_settings_fallback_detour 10051300 ?LocalSettingsFallbackBody@@YAXXZ 11
 gfwl_stub 100054E0 ?GfwlStubBody@@YAXXZ 8
 rgsc_login_removed 10038550 ?RgscLoginRemovedBody@@YAXXZ 2
 benchmark_a 10005650 ?BenchmarkBodyA@@YAXXZ 12
 benchmark_b 10005670 ?BenchmarkBodyB@@YAXXZ 12
-skip_intro 10045C30 ?SkipIntroBody@@YAXXZ 5
 savegame_fix_null 10038570 ?SavegameNullBody@@YAXXZ 2
 savegame_fix_close 10045580 ?SavegameCloseBody@@YAXXZ 7
 savegame_fix_copy 100455A0 ?SavegameCopyBody@@YAXXZ 28

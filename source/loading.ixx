@@ -1,4 +1,4 @@
-module;
+﻿module;
 
 #include <common.hxx>
 #include <cstdio>
@@ -87,38 +87,6 @@ extern "C"
     uintptr_t zpatch_savegame_create_mutex = 0;   // &CreateMutexA
 }
 
-// LocalSettingsPath, as the original handler sub_100513A0 applies it:
-//
-//   * two operand writes at the game's local-settings function (game 0x61E770):
-//     the `call dword ptr [SHGetFolderPathA]` slot becomes this module's four-byte
-//     call slot (original off_10158064, which pointed the game at its replacement
-//     path helper sub_10051320), and the `push "Rockstar Games\GTA IV"` argument
-//     becomes the "\GTA IV" suffix this module owns;
-//   * a jump at the epilogue of the wide path initializer (game 0x856EE6) to the
-//     detour body, and the same at the fallback epilogue (a site that does not
-//     exist on 1.0.8.0);
-//   * five captured game pointers the detour's step helper rewrites.
-
-namespace
-{
-    // The size the original's strcpy_s/wcscpy_s copies pass, and the size of the
-    // CWD buffer its replacement path helper formats into.
-    constexpr std::size_t kLocalPathCapacity = 0x200u;
-    constexpr std::size_t kLocalCwdCapacity = 260u;
-
-    // The published state, in C linkage because the detour body's helper reads the
-    // slots the way the original's bodies read its own .bss.
-    char zpatch_local_ansi_cwd[kLocalCwdCapacity] = {};
-    char zpatch_local_iv_suffix[8] = "\\GTA IV";
-    uint32_t zpatch_local_saves_slot = 0;
-    char* zpatch_local_path_08 = nullptr;          // szPathLocalAppdata
-    wchar_t* zpatch_local_path_10 = nullptr;       // wszPathLocalAppdataW_EP
-    const int* zpatch_local_episode_ptr = nullptr; // __dwCurrentEpisode
-    char* zpatch_local_path_18 = nullptr;          // szPathLocalAppdata_EP
-    wchar_t* zpatch_local_path_1c = nullptr;       // wszPathLocalAppdataW
-}
-
-// ---------------------------------------------------------------------------
 // NewMemorySystem, as the original handler applies it: the allocator-initialisation
 // call at game 0x107A is retargeted to this module's vtable installer, and a jump
 // at 0x107F skips the five-slot clear the installer replaces, resuming at 0x108C.
@@ -275,14 +243,10 @@ static void GfwlStubBody();
 static void RgscLoginRemovedBody();
 static void BenchmarkBodyA();
 static void BenchmarkBodyB();
-static void SkipIntroBody();
-static void SkipMenuBody();
 static void SavegameNullBody();
 static void SavegameCloseBody();
 static void SavegameMutexBody();
 static void SavegameCopyBody();
-static void LocalSettingsDetourBody();
-static void LocalSettingsFallbackBody();
 static void NmsNoopRet0Body();
 static void* NmsCtorBody();
 static void NmsRejectPtrBody();
@@ -303,23 +267,6 @@ void* __cdecl DlcDiscoveryCpp(void* object);
 static void DlcDummyBody();
 static void DlcStructFixupBody();
 
-// The original's FusionFix probe (sub_10003E20): a loaded
-// GTAIV.EFLC.FusionFix.asi whose two signature dwords do not match the known
-// build closes SkipIntro/SkipMenu (FusionFix owns those fixes there). A loaded
-// module probes the dwords unconditionally, as the original does.
-static bool FusionFixGateClosed()
-{
-    const HMODULE module = GetModuleHandleW(L"GTAIV.EFLC.FusionFix.asi");
-    if (module == nullptr)
-        return false;
-
-    const auto* image = reinterpret_cast<const std::byte*>(module);
-    uint32_t first{};
-    uint32_t second{};
-    std::memcpy(&first, image + 0x20D3, sizeof(first));
-    std::memcpy(&second, image + 0x20D7, sizeof(second));
-    return first != 0xC7C47589u || second != 0x00002446u;
-}
 
 // sub_10005340's RemoveGFWLUpdatePopup branch: store the "update disabled" dword
 // into the four xlive.dll flag slots. `zpatch_xlive_base` is the module the
@@ -401,81 +348,10 @@ namespace
     }
 }
 
-// The detour body's helper (original sub_10050D10): rewrite the four settings and
-// save path buffers the initializer has just computed to the relative
-// "\saves\<episode>\" form. The first ANSI destination is hardcoded "GTA IV"; the
-// other three follow the episode counter. Called between pusha/popa, so it may
-// clobber the general registers.
-static void LocalSettingsStep()
-{
-    const int episode = zpatch_local_episode_ptr != nullptr ? *zpatch_local_episode_ptr : 0;
-    const char* ansiName = "GTA IV";
-    const wchar_t* wideName = L"GTA IV";
-    if (episode == 1)
-    {
-        ansiName = "TLaD";
-        wideName = L"TLaD";
-    }
-    else if (episode == 2)
-    {
-        ansiName = "TBoGT";
-        wideName = L"TBoGT";
-    }
-
-    char ansiIv[32];
-    char ansiEpisode[32];
-    wchar_t wideEpisode[32];
-    BuildAnsiPath(ansiIv, "GTA IV");
-    BuildAnsiPath(ansiEpisode, ansiName);
-    BuildWidePath(wideEpisode, wideName);
-
-    if (zpatch_local_path_18 != nullptr)
-        CopyText(zpatch_local_path_18, kLocalPathCapacity, ansiIv);
-    if (zpatch_local_path_08 != nullptr)
-        CopyText(zpatch_local_path_08, kLocalPathCapacity, ansiEpisode);
-    if (zpatch_local_path_1c != nullptr)
-        CopyWideText(zpatch_local_path_1c, kLocalPathCapacity, wideEpisode);
-    if (zpatch_local_path_10 != nullptr)
-        CopyWideText(zpatch_local_path_10, kLocalPathCapacity, wideEpisode);
-}
 
 namespace
 {
-    // The replacement for the game's SHGetFolderPathA call at 0x61E770 (the
-    // original's sub_10051320, __stdcall with five arguments): the fifth argument
-    // is the destination, which receives "<cwd>\saves". The original builds the
-    // text through the CRT and copies it with strcpy_s(dest, 0x104, ...); this
-    // writes the same bytes with a bounded loop.
-    int __stdcall LocalSettingsCopySaves(uint32_t, uint32_t, uint32_t, uint32_t, char* destination)
-    {
-        if (destination != nullptr)
-        {
-            std::size_t length = 0;
-            while (length + 1 < kLocalCwdCapacity && zpatch_local_ansi_cwd[length] != '\0')
-            {
-                destination[length] = zpatch_local_ansi_cwd[length];
-                ++length;
-            }
-            for (const char character : std::string_view("\\saves"))
-            {
-                if (length + 1 >= kLocalCwdCapacity)
-                    break;
-                destination[length++] = character;
-            }
-            destination[length] = '\0';
-        }
-        return 0;
-    }
 
-    // The original's static initializer captures the CWD and points its call slot
-    // at the replacement helper; the handler only retargets the game's call to that
-    // slot. Captured at load, before the game runs.
-    void CaptureLocalSettings()
-    {
-        GetCurrentDirectoryA(static_cast<DWORD>(kLocalCwdCapacity), zpatch_local_ansi_cwd);
-        zpatch_local_saves_slot =
-            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&LocalSettingsCopySaves));
-    }
 
     // The allocation registry. The original keeps the pointers it handed out in a
     // hash map (FNV-1a over the pointer's four bytes) behind the recursive
@@ -1483,34 +1359,6 @@ namespace
 
 namespace
 {
-    void PublishLocalSettingsPath()
-    {
-        if (!Loader::Enabled("LocalSettingsPath"))
-            return;
-
-        CaptureLocalSettings();
-
-        auto pattern = find_pattern("7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D6 5F 5E 5B C3");
-        if (!pattern.empty())
-        {
-            // The wide path initializer's epilogue: each operand pushes one game
-            // path buffer, or loads the episode counter.
-            zpatch_local_path_1c = GamePointer<wchar_t>(*pattern.get_first<uint32_t>(-178));
-            zpatch_local_path_10 = GamePointer<wchar_t>(*pattern.get_first<uint32_t>(-190));
-            zpatch_local_episode_ptr = GamePointer<const int>(*pattern.get_first<uint32_t>(-151));
-            zpatch_local_path_18 = GamePointer<char>(*pattern.get_first<uint32_t>(-444));
-            zpatch_local_path_08 = GamePointer<char>(*pattern.get_first<uint32_t>(-432));
-        }
-
-        pattern = find_pattern("7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D7 5F C3");
-        if (!pattern.empty())
-        {
-            // The alternate epilogue (absent on 1.0.8.0) stores the same two
-            // LocalAppdata buffers the wide pattern captures.
-            zpatch_local_path_18 = GamePointer<char>(*pattern.get_first<uint32_t>(-160));
-            zpatch_local_path_1c = GamePointer<wchar_t>(*pattern.get_first<uint32_t>(-55));
-        }
-    }
 
     void PublishNewMemorySystem()
     {
@@ -1754,63 +1602,7 @@ namespace
         }
     }
 
-    // SkipIntro: the anchor is the intro sequence's store; the arm jumps from the
-    // anchor's -6, and the body resumes at the anchor itself.
-    void InstallSkipIntro()
-    {
-        if (!Loader::Enabled("SkipIntro") || FusionFixGateClosed())
-            return;
 
-        auto pattern = find_pattern("89 91 ? ? ? ? 8D 44 24 ? 68 ? ? ? ? 50");
-        if (!pattern.empty())
-        {
-            auto* match = pattern.get_first<std::byte>(0);
-            zpatch_skip_intro_match = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match));
-            injector::MakeJMP(match - 6, reinterpret_cast<void*>(&SkipIntroBody), true);
-        }
-    }
-
-    // SkipMenu: each anchor's call is retargeted to the body, and the resume is
-    // the call's original target (the call's displacement is read before the
-    // site is overwritten).
-    void InstallSkipMenu()
-    {
-        if (!Loader::Enabled("SkipMenu") || FusionFixGateClosed())
-            return;
-
-        auto pattern = find_pattern("83 F8 03 75 ? A1 ? ? ? ? 80 88 ? ? ? ? ? 84 DB 74 0A 6A 00 E8 ? ? ? ? 83 C4 04 5F 5E");
-        if (!pattern.empty())
-        {
-            auto* match = pattern.get_first<std::byte>(0);
-            int32_t displacement{};
-            std::memcpy(&displacement, match + 24, sizeof(displacement));
-            zpatch_skip_menu_resume = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(match) + 28 + displacement);
-            injector::MakeCALL(match + 23, reinterpret_cast<void*>(&SkipMenuBody), true);
-        }
-
-        pattern = find_pattern("6A 00 E8 ? ? ? ? 83 C4 04 8B 8C 24 ? ? ? ? 5F 5E 5D 5B 33 CC E8 ? ? ? ? 81 C4 ? ? ? ? C3");
-        if (!pattern.empty())
-        {
-            auto* match = pattern.get_first<std::byte>(0);
-            int32_t displacement{};
-            std::memcpy(&displacement, match + 3, sizeof(displacement));
-            zpatch_skip_menu_resume = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(match) + 7 + displacement);
-            injector::MakeCALL(match + 2, reinterpret_cast<void*>(&SkipMenuBody), true);
-        }
-
-        pattern = find_pattern("6A 00 E8 ? ? ? ? 83 C4 04 8B 8C 24 ? ? ? ? 5F 5E 5B 33 CC E8 ? ? ? ? 8B E5 5D C3");
-        if (!pattern.empty())
-        {
-            auto* match = pattern.get_first<std::byte>(0);
-            int32_t displacement{};
-            std::memcpy(&displacement, match + 3, sizeof(displacement));
-            zpatch_skip_menu_resume = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(match) + 7 + displacement);
-            injector::MakeCALL(match + 2, reinterpret_cast<void*>(&SkipMenuBody), true);
-        }
-    }
 
     // SavegameFix: two anchors, eleven call retargets and one two-byte NOP, in
     // the original handler's write order. The call displacements are excluded
@@ -1844,41 +1636,6 @@ namespace
         }
     }
 
-    void InstallLocalSettingsPath()
-    {
-        if (!Loader::Enabled("LocalSettingsPath"))
-            return;
-
-        auto pattern = find_pattern("53 8B 5C 24 08 56 6A 00 6A 00");
-        if (!pattern.empty())
-        {
-            // +16 is the call's memory operand, +32 the pushed path-name operand.
-            // Both addresses point into this module; the write-set dump expresses
-            // them in the baseline's coordinates.
-            auto* match = pattern.get_first<std::byte>(0);
-            injector::WriteMemory<uint32_t>(match + 16,
-                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&zpatch_local_saves_slot)), true);
-            injector::WriteMemory<uint32_t>(match + 32,
-                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(zpatch_local_iv_suffix)), true);
-            Bodies::RegisterPublished(reinterpret_cast<uintptr_t>(match + 16));
-            Bodies::RegisterPublished(reinterpret_cast<uintptr_t>(match + 32));
-        }
-
-        pattern = find_pattern("7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D6 5F 5E 5B C3");
-        if (!pattern.empty())
-            injector::MakeJMP(pattern.get_first<std::byte>(14),
-                reinterpret_cast<void*>(&LocalSettingsDetourBody), true);
-
-        pattern = find_pattern("7C 0C 68 ? ? ? ? 68 ? ? ? ? FF D7 5F C3");
-        if (!pattern.empty())
-            injector::MakeJMP(pattern.get_first<std::byte>(-13),
-                reinterpret_cast<void*>(&LocalSettingsFallbackBody), true);
-
-        // The detour body's inline `call` is invisible to C++; naming the helper
-        // here keeps its out-of-line definition in the image.
-        const auto step = reinterpret_cast<uintptr_t>(&LocalSettingsStep);
-        (void)step;
-    }
 
     void InstallNewMemorySystem()
     {
@@ -2054,14 +1811,10 @@ export void RegisterLoading()
 
     // The hook bodies carry their recovered VAs so the dump can express every
     // branch in the original's coordinates.
-    Bodies::Register(reinterpret_cast<uintptr_t>(&LocalSettingsDetourBody), 0x100512F0u);
-    Bodies::Register(reinterpret_cast<uintptr_t>(&LocalSettingsFallbackBody), 0x10051300u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&GfwlStubBody), 0x100054E0u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&RgscLoginRemovedBody), 0x10038550u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&BenchmarkBodyA), 0x10005650u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&BenchmarkBodyB), 0x10005670u);
-    Bodies::Register(reinterpret_cast<uintptr_t>(&SkipIntroBody), 0x10045C30u);
-    Bodies::Register(reinterpret_cast<uintptr_t>(&SkipMenuBody), 0x10046610u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&SavegameNullBody), 0x10038570u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&SavegameCloseBody), 0x10045580u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&SavegameCopyBody), 0x100455A0u);
@@ -2210,47 +1963,7 @@ static __declspec(naked) void BenchmarkBodyB()
     }
 }
 
-// sub_10045C30, recovered VA 0x10045C30 (6 instructions): the intro-screen
-// detour. Entered through a jump from the anchor's -6 with the site's ECX and
-// EDX; it scales ECX by 400 and zeroes EDX below the 8000 threshold, which is
-// what skips the intro outright, then resumes at the anchor.
-static __declspec(naked) void SkipIntroBody()
-{
-    __asm
-    {
-        imul ecx, ecx, 190h
-        cmp edx, 1F40h
-        jge skip_intro_ok
-        xor edx, edx
-    skip_intro_ok:
-        jmp DWORD PTR [zpatch_skip_intro_match]
-    }
-}
 
-// sub_10046610, recovered VA 0x10046610 (12 instructions): the menu detour. The
-// site's call is retargeted to this body, whose first call with a zero argument
-// switches the menu id to 6 (one-shot through the flag), then tail-jumps to the
-// original call's target; the call's own return address stays on the stack, so
-// the target returns to the game's next instruction.
-static __declspec(naked) void SkipMenuBody()
-{
-    __asm
-    {
-        push ebp
-        mov ebp, esp
-        cmp BYTE PTR [zpatch_skip_menu_flag], 0
-        mov eax, DWORD PTR [ebp + 8]
-        jne skip_menu_go
-        test eax, eax
-        jne skip_menu_go
-        mov eax, 6
-        mov BYTE PTR [zpatch_skip_menu_flag], 1
-    skip_menu_go:
-        mov DWORD PTR [ebp + 8], eax
-        pop ebp
-        jmp DWORD PTR [zpatch_skip_menu_resume]
-    }
-}
 
 // sub_10038570, recovered VA 0x10038570 (2 instructions): the "no savegame"
 // path returns 0.
@@ -2348,48 +2061,7 @@ static __declspec(naked) void SavegameCopyBody()
     }
 }
 
-// sub_100512F0, recovered VA 0x100512F0 (7 instructions): the wide path
-// initializer's epilogue detour (game 0x856EE6). It runs the step helper between
-// pusha/popa and replays the three pops and the return the five-byte jump
-// swallowed. `pusha`/`popa` are emitted as bytes: the inline assembler renders
-// both mnemonics with a 0x66 operand-size prefix, which the original does not
-// have.
-static __declspec(naked) void LocalSettingsDetourBody()
-{
-    __asm
-    {
-        __emit 0x60  // pusha
-        call LocalSettingsStep
-        __emit 0x61  // popa
-        pop edi
-        pop esi
-        pop ebx
-        ret
-    }
-}
 
-// sub_10051300, recovered VA 0x10051300 (11 instructions): the fallback epilogue
-// detour (a site that does not exist on 1.0.8.0). It runs the same helper, then
-// re-issues the four-argument call the site held through ESI and replays the two
-// pops and the return. Register ESI is the call target on entry, so the body
-// saves it through pusha/popa and uses the live value.
-static __declspec(naked) void LocalSettingsFallbackBody()
-{
-    __asm
-    {
-        __emit 0x60  // pusha
-        call LocalSettingsStep
-        __emit 0x61  // popa
-        push 0
-        push 0
-        push 1Ch
-        push 0
-        call esi
-        pop esi
-        pop edi
-        ret
-    }
-}
 
 // sub_10038560, recovered VA 0x10038560 (1 instruction): the table's release
 // hook. It cleans no stack argument (`ret 0`), which is why it is written as an

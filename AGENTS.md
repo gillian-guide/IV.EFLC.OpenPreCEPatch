@@ -25,7 +25,7 @@ ForceDynamicShadowsEverywhere, HighQualityReflections, NoPhysicsSleep,
 RemoveBoundingBoxCulling, RemoveUselessChecks, BorderlessWindowed,
 DoNotPauseOnMinimize, LocalSettingsPath, SkipIntro, SkipLauncher, SkipMenu,
 VRAMFix). There is no runtime improvement switch; `git revert` of the integration
-commit is the rollback. The remaining 149-body proof passes for the retained
+commit is the rollback. The remaining 146-body proof passes for the retained
 bodies, `tools/parity_report.py 9` scores the retained keys, and the 35
 native/ctest targets pass. On top of that:
 
