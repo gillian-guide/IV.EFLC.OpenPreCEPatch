@@ -1,8 +1,10 @@
-# ZolikaPatch
+# IV.EFLC.OpenPreCEPatch
 
-This repository is an authentic reimplementation of ZolikaPatch 7.65 for GTA IV and EFLC, rewritted utilizing C++23 module interface units, one plain translation unit for the startup driver, `Event<Args...>` tiers and `Game` install context, and the vendored libraries pinned under `external/`. It is not Zolika1351's source. The shipped 32-bit ASI was the specification, and its loader, per-key install arms and hook bodies are written back as ordinary C++ with the recovered addresses, signatures, defaults and behaviour.
+This repository ships as **IV.EFLC.OpenPreCEPatch**: the ZolikaPatch 7.65 reimplementation with the OpenPreCEPatch improvements as opt-in groups. The ASI is `IV.EFLC.OpenPreCEPatch.asi`; its shipped configuration is OpenPreCEPatch's grouped `IV.EFLC.OpenPreCEPatch.ini` from `data/plugins/`, read from next to the ASI. The flat `ZolikaPatch.ini` stays in the repository as the parity/legacy configuration the oracle tools use.
 
-The compiled ASI is a drop-in replacement for the original binary on every game version from 1.0.0.0 to 1.1.3.0, including EFLC, and on the 1.2.0.43 product version the catalogue also masks. It is Win32 only. Each entry in `ZolikaPatch.ini` is a catalogue key carrying its shipped default, its absent-key default and the builds it applies to.
+The implementation is written with C++23 module interface units, one plain translation unit for the startup driver, `Event<Args...>` tiers and a `Game` install context, with the vendored libraries pinned under `external/`. It is not Zolika1351's source. The shipped 32-bit ASI was the specification, and its loader, per-key install arms and hook bodies are written back as ordinary C++ with the recovered addresses, signatures, defaults and behaviour.
+
+The compiled ASI is a drop-in replacement for the original binary on every game version from 1.0.0.0 to 1.1.3.0, including EFLC, and on the 1.2.0.43 product version the catalogue also masks. It is Win32 only. Each catalogue key carries its shipped default, its absent-key default and the builds it applies to; `IV.EFLC.OpenPreCEPatch.ini` supplies the shipped values, and the flat `ZolikaPatch.ini` remains the parity configuration.
 
 ## Status
 
@@ -11,9 +13,9 @@ Static evidence is complete as far as the oracle reaches.
 |measurement|result|produced by|
 |-|-|-|
 |keys closed on 1.0.8.0|98 of 99; the 99th (`SkipLauncher`) is implemented in full and measured against the oracle|`python tools/parity\_report.py 9`|
-|hook bodies proven whole|175 transcribed bodies, 0 failures|`python tools/verify\_bodies.py --original ../game\_refs/ZolikaPatch\_original.asi.off --candidate build/win-x86/Release/ZolikaPatch.asi --bodies tests/bodies.tsv --map build/win-x86/Release/ZolikaPatch.map`|
-|write set|18 cells (9 images, full and per-option), `differing 0` on every image|`python tools/dump_matrix.py --markdown <out>`|
-|tests|22 registered ctest targets|`ctest --preset release`|
+|hook bodies proven whole|175 transcribed bodies, 0 failures|`python tools/verify\_bodies.py --original ../game\_refs/ZolikaPatch\_original.asi.off --candidate build/win-x86/Release/IV.EFLC.OpenPreCEPatch.asi --bodies tests/bodies.tsv --map build/win-x86/Release/IV.EFLC.OpenPreCEPatch.map`|
+|write set|the eight non-faulting builds are `differing 0` in full and per-option mode; 1.0.0.0 is the preserved `NoImpostorHeightCutoff` fault, whose partial full cell is not scored|`python tools/dump_matrix.py --markdown <out>`|
+|tests|34 registered ctest targets|`ctest --preset release`|
 |baseline omissions|3 documented per-build rows|`python tools/check\_oracle\_verified.py`|
 
 `SkipLauncher` is open by construction, not by omission. The stored baseline records the reference tree's 7-row arm, which nothing in that tree calls; the original scans 25 rows and runs the DFA and ROM stages. The key is therefore reported as oracle-verified rather than closed, and its recovered rows replay to an identical write set on all nine images. The three omissions are recorded per key and build in `tests/oracle\_verified.tsv`, and the 1.0.0.0 per-option cell faults at `NoImpostorHeightCutoff` because the original faults there and the tree reproduces the fault instead of guarding it.
@@ -41,7 +43,7 @@ cmake --build --preset release
 ctest --preset release
 ```
 
-The artifact is `build/win-x86/Release/ZolikaPatch.asi`; copy it next to `GTAIV.exe` or `EFLC.exe` with `ZolikaPatch.ini`. The `Trace` configuration builds the same ASI with diagnostics enabled.
+The artifact is `build/win-x86/Release/IV.EFLC.OpenPreCEPatch.asi`; copy it next to `GTAIV.exe` or `EFLC.exe` with `IV.EFLC.OpenPreCEPatch.ini` (both are copied next to the build artifact). `ZolikaPatch.ini` can stay in the game root as a legacy fallback; it is the parity configuration, not the shipped one. The `Trace` configuration builds the same ASI with diagnostics enabled.
 
 ## Documentation
 

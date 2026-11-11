@@ -10,6 +10,7 @@ module;
 export module config;
 
 import common;
+import game;
 import improvements;
 
 // The INI boundary. The original reads ZolikaPatch.ini through feather-ini-parser
@@ -166,6 +167,83 @@ export namespace Feather
         return Parse(normalised);
     }
 
+    // The shipped OpenPreCEPatch file is the grouped INI, with trailing `//`
+    // comments and a few lines longer than the original's 256-byte getline
+    // buffer. The original grammar is a preserved fault for that flat file; the
+    // shipped file is normalised first (comments removed, CRLF folded), so no
+    // line reaches the 255-byte failbit path and section headers keep their
+    // names. Values are untouched: the comments are the only difference.
+    inline std::string WithoutComments(std::string_view text)
+    {
+        std::string out;
+        out.reserve(text.size());
+        size_t start = 0;
+        for (;;)
+        {
+            const size_t end = text.find('\n', start);
+            std::string_view line = text.substr(
+                start, (end == std::string_view::npos ? text.size() : end) - start);
+            if (!line.empty() && line.back() == '\r')
+                line.remove_suffix(1);
+            if (const size_t comment = line.find("//"); comment != std::string_view::npos)
+                line = line.substr(0, comment);
+            while (!line.empty() && (line.back() == ' ' || line.back() == '\t'))
+                line.remove_suffix(1);
+            // OpenPreCEPatch's header uses `;` comments. The original grammar
+            // only knows `#`/`//`, so a `;` line containing `=` would be a key
+            // before the first section and would fault; the shipped file's
+            // comment lines are dropped here.
+            if (!line.empty() && line.front() == ';')
+                line = {};
+            if (!line.empty() && line.front() != '[')
+            {
+                if (const size_t equals = line.find('='); equals != std::string_view::npos)
+                {
+                    std::string_view key = line.substr(0, equals);
+                    std::string_view value = line.substr(equals + 1);
+                    while (!key.empty() && (key.back() == ' ' || key.back() == '\t'))
+                        key.remove_suffix(1);
+                    while (!value.empty() && (value.front() == ' ' || value.front() == '\t'))
+                        value = value.substr(1);
+                    while (!value.empty() && (value.back() == ' ' || value.back() == '\t'))
+                        value.remove_suffix(1);
+                    out.append(key);
+                    out.push_back('=');
+                    out.append(value);
+                    out.push_back('\n');
+                    if (end == std::string_view::npos)
+                        break;
+                    start = end + 1;
+                    continue;
+                }
+            }
+            out.append(line);
+            out.push_back('\n');
+            if (end == std::string_view::npos)
+                break;
+            start = end + 1;
+        }
+        return out;
+    }
+
+    inline Document LoadGrouped(const std::filesystem::path& path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        if (!file)
+            return Document{};
+
+        std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        std::string normalised;
+        normalised.reserve(text.size());
+        for (size_t index = 0; index < text.size(); ++index)
+        {
+            if (text[index] == '\r' && index + 1 < text.size() && text[index + 1] == '\n')
+                continue;
+            normalised.push_back(text[index]);
+        }
+        return Parse(WithoutComments(normalised));
+    }
+
     // The value the original would hand to std::stoi: the stored string, or the
     // caller's default text when the key is absent or empty.
     inline const std::string& Value(const Document& document, std::string_view section, std::string_view key, const std::string& fallback)
@@ -206,15 +284,32 @@ export namespace Feather
 // `0x1005286E..0x10052893`). The offset is stored as parsed.
 export namespace Config
 {
-    // The original's file name, opened relative to the process working directory
-    // exactly as it is written here.
-    inline constexpr std::string_view FileName = "ZolikaPatch.ini";
+    // The shipped file, OpenPreCEPatch's grouped INI, next to the ASI.
+    inline constexpr std::string_view FileName = "IV.EFLC.OpenPreCEPatch.ini";
 
-    // The `import` group's first-run grouped file. It never replaces the flat
-    // file; `Load` prefers it when it exists, so a user can delete it to return
-    // to the flat INI.
-    inline constexpr std::string_view GroupedFileName = "ZolikaPatch.grouped.ini";
+    // The original flat file, still accepted as the legacy/parity configuration.
+    inline constexpr std::string_view LegacyFileName = "ZolikaPatch.ini";
+
+    // The `import` group renders the legacy flat document into the shipped
+    // grouped file; deleting that file returns to the legacy one.
+    inline constexpr std::string_view GroupedFileName = FileName;
     using SectionResolver = std::string_view (*)(std::string_view key);
+
+    // A file name resolved next to the ASI first, then the process working
+    // directory. The game's working directory is the game root; the ASI and its
+    // INI live in plugins/, as OpenPreCEPatch's do.
+    inline std::filesystem::path Resolve(std::string_view name)
+    {
+        const auto module = Game::Get().ModulePath();
+        if (!module.empty())
+        {
+            const auto beside = module.parent_path() / name;
+            std::error_code ignored;
+            if (std::filesystem::exists(beside, ignored))
+                return beside;
+        }
+        return std::filesystem::path(name);
+    }
 
     // OpenPreCEPatch's no-throw read. `strtol`'s base-10 prefix grammar: leading
     // whitespace, an optional sign, decimal digits, stop at the first other byte.
@@ -306,22 +401,29 @@ export namespace Config
 
     // Reads the file once. A missing file leaves the document empty, which is the
     // original's behaviour: every option then keeps its default.
+    inline std::filesystem::path TargetPath(std::string_view name)
+    {
+        const auto module = Game::Get().ModulePath();
+        return module.empty() ? std::filesystem::path(name)
+                              : module.parent_path() / name;
+    }
+
     inline bool Load()
     {
         std::error_code ignored;
-        if (ImprovementEnabled(Improvement::import))
+        const std::filesystem::path shipped = Resolve(FileName);
+        if (std::filesystem::exists(shipped, ignored))
         {
-            const std::filesystem::path grouped(GroupedFileName);
-            if (std::filesystem::exists(grouped, ignored))
-            {
-                Ini() = Feather::Load(grouped);
-                return true;
-            }
+            Ini() = Feather::LoadGrouped(shipped);
+            return true;
         }
 
-        const std::filesystem::path flat(FileName);
-        const bool exists = std::filesystem::exists(flat, ignored);
-        Ini() = Feather::Load(flat);
+        // No shipped grouped file: accept the original flat one, so an old
+        // install (and the parity tools) keeps working. The `import` group can
+        // render this legacy document into the shipped file on the next start.
+        const std::filesystem::path legacy = Resolve(LegacyFileName);
+        const bool exists = std::filesystem::exists(legacy, ignored);
+        Ini() = Feather::Load(legacy);
         return exists;
     }
 
@@ -355,12 +457,14 @@ export namespace Config
     }
 
     inline bool WriteGrouped(const Feather::Document& document, SectionResolver resolve,
-        const std::filesystem::path& path = std::filesystem::path(GroupedFileName))
+        const std::filesystem::path& path = {})
     {
         const std::string text = GroupedText(document, resolve);
         if (text.empty())
             return false;
-        std::ofstream file(path, std::ios::out | std::ios::trunc | std::ios::binary);
+        const std::filesystem::path target =
+            path.empty() ? TargetPath(GroupedFileName) : path;
+        std::ofstream file(target, std::ios::out | std::ios::trunc | std::ios::binary);
         if (!file.is_open())
             return false;
         file << text;

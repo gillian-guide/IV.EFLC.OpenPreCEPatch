@@ -1,4 +1,4 @@
-#include <common.hxx>
+﻿#include <common.hxx>
 
 #include <cstdio>
 #include <fstream>
@@ -59,7 +59,7 @@ namespace
 
         SetImprovementsForTest(0);
         Check(Config::Load(), "import: the flat file is read with the group off");
-        Check(!std::filesystem::exists("ZolikaPatch.grouped.ini"),
+        Check(!std::filesystem::exists("IV.EFLC.OpenPreCEPatch.ini"),
             "import: the group-off run creates no grouped file");
         Check(Catalogue::Read("GarageModelFix") == 1,
             "import: the flat value is the one the group-off run uses");
@@ -69,10 +69,10 @@ namespace
         Check(Config::Load(), "import: the flat file is read on the first grouped run");
         Check(Config::WriteGrouped(Config::Ini(), SectionOf),
             "import: the grouped file is written");
-        Check(std::filesystem::exists("ZolikaPatch.grouped.ini"),
+        Check(std::filesystem::exists("IV.EFLC.OpenPreCEPatch.ini"),
             "import: the grouped file exists");
 
-        std::ifstream grouped("ZolikaPatch.grouped.ini");
+        std::ifstream grouped("IV.EFLC.OpenPreCEPatch.ini");
         const std::string text((std::istreambuf_iterator<char>(grouped)),
             std::istreambuf_iterator<char>());
         Check(text.find("[STABILITY]") != std::string::npos &&

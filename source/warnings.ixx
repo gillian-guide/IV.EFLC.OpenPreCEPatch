@@ -124,7 +124,7 @@ namespace Warnings
             return true;
 
         const std::wstring mutexName =
-            std::wstring(L"Local\\") + (name != nullptr ? name : L"ZolikaPatch-opcep") +
+            std::wstring(L"Local\\") + (name != nullptr ? name : L"IV.EFLC.OpenPreCEPatch") +
             L"-" + std::to_wstring(GetCurrentProcessId());
         g_singleInstance = CreateMutexW(nullptr, TRUE, mutexName.c_str());
         if (g_singleInstance == nullptr)
@@ -152,7 +152,7 @@ namespace Warnings
     std::filesystem::path WriteFusionFixNotice(const std::filesystem::path& directory,
         std::span<const std::string_view> gatedOptions, bool& existed) noexcept
     {
-        const auto path = directory / L"ZolikaPatch.fusionfix-notice.txt";
+        const auto path = directory / L"IV.EFLC.OpenPreCEPatch.fusionfix-notice.txt";
         std::error_code ignored;
         existed = std::filesystem::exists(path, ignored);
 
@@ -160,7 +160,7 @@ namespace Warnings
         if (!file.is_open())
             return {};
 
-        file << "ZolikaPatch options enabled in the INI but disabled because "
+        file << "IV.EFLC.OpenPreCEPatch options enabled in the INI but disabled because "
                 "GTAIV.EFLC.FusionFix.asi is installed:\r\n\r\n";
         for (const auto option : gatedOptions)
             file << "  " << option << "\r\n";

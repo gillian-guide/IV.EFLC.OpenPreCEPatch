@@ -422,6 +422,7 @@ int main(int argc, char** argv)
     TestBodyCanonicalisation();
     TestEvents();
 
+
     if (argc > 1)
         TestLoads(std::filesystem::path(argv[1]));
     else

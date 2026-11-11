@@ -6,12 +6,20 @@ oracle is still `../game_refs/ZolikaPatch_original.asi.off`; the reference for
 *what* to add is `../openprecepatch/source/` and its docs. The old `../readable/`
 tree is a secondary reference only and its source is never copied.
 
+**Distribution identity.** The artifact is `IV.EFLC.OpenPreCEPatch.asi` and the
+shipped configuration is OpenPreCEPatch's grouped
+`data/plugins/IV.EFLC.OpenPreCEPatch.ini`, resolved next to the ASI and parsed
+through `Feather::LoadGrouped` (trailing `//`/`;` comments and over-256-byte
+lines are normalised; the original grammar and its 256-byte fault stay in
+`Feather::Load` for the flat file). The root `ZolikaPatch.ini` is the parity /
+legacy configuration the oracle tools use and is never the shipped file.
+
 ## Current state
 
 The 99-key catalogue from `readable-fusion` is intact and proved on 1.0.8.0:
 98 keys closed, one oracle-verified by construction (`SkipLauncher`), the
 transcribed bodies still compare instruction-for-instruction,
-`tools/parity_report.py 9` is unchanged, and the 33 native/ctest targets pass.
+`tools/parity_report.py 9` is unchanged, and the 34 native/ctest targets pass.
 On top of that:
 
 - `source/improvements.ixx` is the `OPCEP_IMPROVEMENTS` switch. Unset means the
@@ -39,8 +47,8 @@ On top of that:
 - The three OpenPreCEPatch-only compatibility features are in the `opcep`
   group: `GFWLProtectionDisabler` (`misc.ixx`), `SteamAchievements`
   (`source/steam.ixx`) and the unified `RemoveModChecks` alias. They are outside
-  the recovered 99-key catalogue, so the scoreboard and the shipped INI keep
-  their 1:1 shape.
+  the recovered 99-key catalogue; the shipped INI carries their keys, and the
+  group decides whether they act.
 
 ## Non-negotiables
 
@@ -78,8 +86,9 @@ ctest --preset release
 ```
 
 Win32/MSVC only, static CRT, base `0x10000000`, windowed subsystem. The
-artifact is `build/win-x86/Release/ZolikaPatch.asi`; `Trace` builds the same
-artifact with tracing on.
+artifact is `build/win-x86/Release/IV.EFLC.OpenPreCEPatch.asi`, with
+`IV.EFLC.OpenPreCEPatch.ini` copied beside it; `Trace` builds the same ASI with
+tracing on.
 
 Measurement tools, in the order the evidence is built:
 
@@ -101,7 +110,8 @@ group's both-sides test, `zp_steam` the achievement table/refusal,
 build-refusal rule, `zp_caches` the model-lookup memo, `zp_import` the grouped
 INI creation/preference, `zp_dlc_path` the 0x104-byte path bound, and
 `zp_ooc_init`/`zp_nms_arena`/`zp_save_walk` the cache, allocator and save
-groups.
+groups, and `zp_shipped_ini` the shipped grouped file's comment/over-256-byte
+normalisation.
 
 ## Docs
 

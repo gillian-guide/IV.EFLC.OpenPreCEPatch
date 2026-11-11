@@ -1,4 +1,5 @@
 #include <common.hxx>
+#include <cstdio>
 
 import common;
 import config;
@@ -39,16 +40,16 @@ namespace
 
         if (ImprovementEnabled(Improvement::warnings))
         {
-            if (!Warnings::ClaimSingleInstance(L"ZolikaPatch-opcep"))
+            if (!Warnings::ClaimSingleInstance(L"IV.EFLC.OpenPreCEPatch"))
             {
-                Warnings::Show(L"ZolikaPatch",
-                    L"Another copy of ZolikaPatch is already initialized in this process. "
+                Warnings::Show(L"IV.EFLC.OpenPreCEPatch",
+                    L"Another copy of IV.EFLC.OpenPreCEPatch is already initialized in this process. "
                     L"This copy does nothing.");
                 return;
             }
             if (Warnings::IsUnsupportedVersion(game.FileVersion()))
             {
-                Warnings::Show(L"ZolikaPatch",
+                Warnings::Show(L"IV.EFLC.OpenPreCEPatch",
                     L"This game version is not supported by this build. Supported builds are "
                     L"1.0.0.0 through 1.2.0.43 (1.2.0.43 is the only Complete Edition build).",
                     0x8000FFFFu);
@@ -56,7 +57,7 @@ namespace
             }
             if (!IsUALPresent())
             {
-                Warnings::Show(L"ZolikaPatch",
+                Warnings::Show(L"IV.EFLC.OpenPreCEPatch",
                     L"Old ASI Loader detected! Install Ultimate ASI Loader 6.9.0 or newer, or "
                     L"the module may not load next to other ASIs.");
             }
@@ -71,13 +72,14 @@ namespace
         const bool read = Config::Load();
         if (ImprovementEnabled(Improvement::import))
         {
-            // First-run creation: render the flat document once into the grouped
-            // file. The current run keeps reading the flat document; the next
-            // run prefers the grouped one, and deleting it returns to the flat
-            // INI. The flat file is never modified.
+            // First-run creation: render the legacy flat document once into the
+            // shipped grouped file. The current run keeps reading the legacy
+            // document; the next run prefers the grouped one.
             std::error_code ignored;
-            if (!std::filesystem::exists(Config::GroupedFileName, ignored) &&
-                std::filesystem::exists(Config::FileName, ignored))
+            const auto shipped = Config::Resolve(Config::GroupedFileName);
+            const auto legacy = Config::Resolve(Config::LegacyFileName);
+            if (!std::filesystem::exists(shipped, ignored) &&
+                std::filesystem::exists(legacy, ignored))
             {
                 const auto resolve = [](std::string_view key) -> std::string_view
                 {
@@ -132,7 +134,7 @@ namespace
                     for (const auto option : gated)
                         text += L"  " + std::wstring(option.begin(), option.end()) + L"\r\n";
                     text += L"\r\nSee " + notice.filename().wstring() + L" next to the ASI.";
-                    Warnings::Show(L"ZolikaPatch", text);
+                    Warnings::Show(L"IV.EFLC.OpenPreCEPatch", text);
                 }
             }
         }

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(ZolikaPatch LANGUAGES CXX)
+project(IV.EFLC.OpenPreCEPatch LANGUAGES CXX)
 
 # A Win32 ASI: 32-bit, MSVC, static CRT, fixed image base, windowed subsystem.
 if(NOT MSVC)
@@ -23,7 +23,7 @@ set(CMAKE_CXX_FLAGS_TRACE "${CMAKE_CXX_FLAGS_RELEASE}" CACHE STRING "" FORCE)
 set(CMAKE_EXE_LINKER_FLAGS_TRACE "${CMAKE_EXE_LINKER_FLAGS_RELEASE}" CACHE STRING "" FORCE)
 set(CMAKE_SHARED_LINKER_FLAGS_TRACE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE}" CACHE STRING "" FORCE)
 
-set(ZP_NAME "ZolikaPatch")
+set(ZP_NAME "IV.EFLC.OpenPreCEPatch")
 set(ZP_VERSION_MAJOR 7)
 set(ZP_VERSION_MINOR 65)
 set(ZP_VERSION_BUILD 0)
@@ -104,6 +104,15 @@ set_target_properties(${ZP_NAME} PROPERTIES
   PREFIX ""
   SUFFIX ".asi")
 target_link_libraries(${ZP_NAME} PRIVATE zp_modules)
+
+# The shipped INI is OpenPreCEPatch's grouped file, from data/plugins. It is
+# copied next to the ASI on every build; the flat ZolikaPatch.ini at the repo
+# root stays the parity/oracle configuration used by the tools.
+add_custom_command(TARGET ${ZP_NAME} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          ${CMAKE_CURRENT_SOURCE_DIR}/data/plugins/IV.EFLC.OpenPreCEPatch.ini
+          $<TARGET_FILE_DIR:${ZP_NAME}>/IV.EFLC.OpenPreCEPatch.ini
+  COMMENT "Copying IV.EFLC.OpenPreCEPatch.ini next to the ASI")
 # A linker map is a development aid: the transcribed bodies are proved against
 # the original ASI at the addresses it records, so the map is what gives a body
 # its candidate VA. It is not shipped and changes no byte of the image.
@@ -195,6 +204,16 @@ set_target_properties(zp_dlc_path PROPERTIES CXX_SCAN_FOR_MODULES ON)
 target_link_libraries(zp_dlc_path PRIVATE zp_modules)
 add_test(NAME zp_dlc_path COMMAND zp_dlc_path)
 set_tests_properties(zp_dlc_path PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+# The shipped OpenPreCEPatch INI: grouped sections, trailing comments and
+# over-256-byte lines are normalised by Feather::LoadGrouped; the flat parity
+# file keeps the original grammar (and its preserved 256-byte fault).
+add_executable(zp_shipped_ini tests/shipped_ini.cpp)
+set_target_properties(zp_shipped_ini PROPERTIES CXX_SCAN_FOR_MODULES ON)
+target_link_libraries(zp_shipped_ini PRIVATE zp_modules)
+target_compile_definitions(zp_shipped_ini PRIVATE ZP_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+add_test(NAME zp_shipped_ini COMMAND zp_shipped_ini)
+set_tests_properties(zp_shipped_ini PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
 # The two per-model light tables the loader preamble reads from
 # [PopupLightAngles] / [HeadlightConeOffsets]: the recovered grammar, defaults and

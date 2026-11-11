@@ -113,6 +113,21 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
 - `task_dialogs`: `TaskDialogIndirect` with the ASI's common-controls 6.0
   manifest + `CreateActCtx`; `zp_pe_check` finds the manifest. UI unproven.
 
+## 2026-11-11 — distribution identity
+
+- Artifact/project: `IV.EFLC.OpenPreCEPatch.asi`; version resource follows the
+  target name. The shipped INI is OpenPreCEPatch's grouped
+  `data/plugins/IV.EFLC.OpenPreCEPatch.ini`, copied beside the build artifact.
+- `Config::Load` resolves the INI next to the ASI first, then the working
+  directory; the flat `ZolikaPatch.ini` remains the legacy/parity file.
+- `Feather::LoadGrouped` normalises the shipped file before the original
+  grammar: strips trailing `//` comments, drops `;` header lines (a `;` line
+  containing `=` would be a key before the first section and fault), trims
+  `key = value`, and therefore keeps every line under the 256-byte buffer.
+  `Feather::Load` (flat) keeps the original grammar and its 256-byte fault.
+- `zp_shipped_ini` proves the grouped file parses (8 checks); `zp_tests` loads
+  the renamed ASI with the shipped INI; 34/34 Release.
+
 ## 2026-11-11 — matrix fault capture
 
 - The 1.0.0.0 full cell's preserved NoImpostor fault is an out-of-range
