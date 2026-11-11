@@ -191,9 +191,44 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
   and reports TIMEOUT, so one UB child cannot stall the matrix.
 - Re-ran the 18-cell matrix; see `docs/matrix.md`.
 
+## 2026-11-12 - LaunchWithPlayGTAIV restored (the SRLC10 failure)
+
+- Cause of `GTA IV FATAL ERROR: SRLC10` with the two Fusion rewrites: commit
+  `d6a83f3` deleted `source/launcher.ixx` when the launcher/SecuROM stages moved
+  to XLivelessAddon, but that file also carried `LaunchWithPlayGTAIV` -- still a
+  catalogue key (absent default 0, shipped INI 1) with no arm left to install it.
+  GTA IV 1.0.8.0's SecuROM init (`sub_48FC30`) lowercases its parent process's
+  module path and searches it for the lowercased text of the `LaunchGTAIV.exe`
+  literal at `0xE5A5E4`; started by `PlayGTAIV.exe` that search fails, so it calls
+  `lmsgboxExit("SRLC10")` ("Game needs to be launched using LaunchGTAIV.exe"),
+  whose own exit path writes null at `0x456D16` -- the reported crash. The old
+  oPCEP binary carries the arm (sites `0xA508F8`/`0xA5A5E4`, payload
+  `playGTAIV.exe\0e\0` at file `0x562F4`/`0x562FC`), which is why the control pair
+  passes; the companion never had the arm (its `SkipLauncher` is the DFA/ROM
+  stage only, 1:1 with the old addon), so it is not implicated.
+- `source/launcher.ixx` restored with that arm alone: whole-image scan (both slots
+  are `.rdata`, outside `find_pattern`'s executable range), the recovered sites
+  per build, the P13 rule (exactly the build's two occurrences, at the recovered
+  RVAs) and the handler's `PlayGTAIV.exe` process walk. `Launcher::SetProbeOverride`
+  is the dump/test seam; the shipped ASI never calls it.
+- `tests/launcher.cpp` (`zp_launcher`, 30 checks) and
+  `tools/check_launcher_dump.py` (`zp_launcher_dump`: nine images -- the five
+  gated builds write both recovered slots, 1.0.0.4 and EFLC write nothing, because
+  the handler's switch has no case) plus `--only`/`--launcher-probe` in `zp_dump`.
+- Release 37/37; `parity_report.py 9`: 80 closed, 5 expected deltas, 0 open.
+- Not verified: the live 2x2 launch matrix (the game was not started on the
+  user's behalf).
+
 ## Open items
 
 - 18-cell `dump_matrix.py` full run; record `differing`.
+- The live 2x2 launch matrix (old/new oPCEP x old/new XLivelessAddon) against
+  `PlayGTAIV.exe`: expected (a) pass, (b) pass, (c) pass, (d) pass with this fix;
+  the launch, the SRC10 dialog detection and the process kill are the user's to
+  run.
+- `docs/features.md` still describes the 99-key parent catalogue (it lists the 14
+  keys this distribution removed or moved); it is inherited and predates
+  `d6a83f3`, and no tool regenerates it.
 - Live xlive/Steam validation for `opcep`; a live game run for `nms`.
 - Candidates not ported, with reasons in `docs/improvements.md` §4: NewSaves
   hardening, garage/cutscene/NMS-thunk entry rewrites, asm-body caches,

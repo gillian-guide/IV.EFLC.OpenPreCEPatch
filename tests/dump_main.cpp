@@ -16,6 +16,7 @@ import native;
 import stability;
 import vehicles;
 import graphics;
+import launcher;
 import loading;
 import audio;
 import misc;
@@ -536,6 +537,8 @@ int main(int argc, char** argv)
     std::filesystem::path ini = "ZolikaPatch.ini";
     bool perOption = false;
     bool oocSelfTest = false;
+    bool launcherProbe = false;
+    std::string only;
     std::vector<std::string> failsafeMissing;
 
     for (int index = 1; index < argc; ++index)
@@ -547,6 +550,10 @@ int main(int argc, char** argv)
             build = argv[++index];
         else if (argument == "--per-option")
             perOption = true;
+        else if (argument == "--only" && index + 1 < argc)
+            only = argv[++index];
+        else if (argument == "--launcher-probe")
+            launcherProbe = true;
         else if (argument == "--failsafe-missing" && index + 1 < argc)
             failsafeMissing.emplace_back(argv[++index]);
         else if (argument == "--ooc-selftest")
@@ -576,7 +583,8 @@ int main(int argc, char** argv)
     if (output.empty())
     {
         std::printf("usage: zp_dump [--exe <image>] [--build <compact>] [--per-option]\n"
-                    "               [--failsafe-missing <name>] <out> [ini]\n"
+                    "               [--only <key>] [--launcher-probe] [--failsafe-missing <name>]\n"
+                    "               <out> [ini]\n"
                     "       zp_dump --ooc-selftest\n");
         return 2;
     }
@@ -587,6 +595,12 @@ int main(int argc, char** argv)
 
     auto& game = Game::Get();
     game.AttachImage(reinterpret_cast<uintptr_t>(image.bytes), image.size, executable, {});
+    // The dump has no `PlayGTAIV.exe` parent process to find, so a cell that wants
+    // the launcher's write set asks for the launched-through-the-launcher answer
+    // explicitly (`--launcher-probe`, `zp_launcher_dump`). The default cells keep
+    // the gate off, which is the baseline's own convention for this arm.
+    if (launcherProbe)
+        Launcher::SetProbeOverride(1);
     Loader::Current() = FromId(static_cast<uint32_t>(std::atoi(build.c_str())));
     if (!std::filesystem::exists(ini))
         std::printf("no ini at %s: every option keeps its default\n", ini.string().c_str());
@@ -603,10 +617,43 @@ int main(int argc, char** argv)
     RegisterStability();
     RegisterVehicles();
     RegisterGraphics();
+    RegisterLauncher();
     RegisterLoading();
     RegisterAudio();
     RegisterMisc();
     RegisterOoc();
+
+    // One key's cell: every other key off, this one on -- the same document
+    // `--per-option` builds, for a check that reads a single arm's write set
+    // without paying for the whole matrix.
+    if (!only.empty())
+    {
+        std::string text = "[Options]\n";
+        for (const auto& other : Catalogue::All)
+            text += std::string(other.key) + "=0\n";
+        text += only + "=1\n";
+
+        Config::Ini() = Feather::Parse(text);
+        std::memcpy(image.bytes, image.pristine.data(), image.size);
+        ResetCachedMatchesForTest();
+        const DWORD fault = RunPipeline();
+        if (fault == 0)
+        {
+            Bodies::Canonicalise(image.bytes, image.pristine.data(), image.size,
+                reinterpret_cast<uintptr_t>(image.bytes), image.imageBase);
+            const auto substituted =
+                CanonicalisePublishedPointers(image, reinterpret_cast<uintptr_t>(image.bytes));
+            Dump(image, out, "", substituted);
+        }
+        else
+        {
+            Dump(image, out, "", {});
+        }
+        std::fclose(out);
+        std::printf("%s: %zu byte(s) changed, build %s, only %s\n", output.string().c_str(),
+            Changed(image), build.c_str(), only.c_str());
+        return static_cast<int>(fault);
+    }
 
     if (perOption)
     {

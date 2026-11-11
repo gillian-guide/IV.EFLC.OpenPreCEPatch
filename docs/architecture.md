@@ -30,7 +30,7 @@ This tree is one 32-bit ASI built from C++23 module units, in the shape GTAIV.EF
 | `source/common.hxx` | the include header every unit starts from |
 | `external/injector/`, `external/hooking/` | the pinned memory-write library and signature scanner |
 
-The catalogue's `module` field names one of six feature modules - `stability`, `vehicles`, `graphics`, `loading`, `audio` and `misc` - which own 18, 21, 16, 18, 13 and 13 keys: the 99-key catalogue. A feature module owns its patterns, its published slots, its config reads, its arms and its bodies, and the catalogue itself is generated data. The other units are infrastructure, or the implementation behind a single key: `useless_checks` carries `RemoveUselessChecks` (a `misc` key), `menu` carries `AddOptionsInMenu` (`misc`), `launcher` backs the `SkipLauncher` and `LaunchWithPlayGTAIV` stages, and `ooc` carries `OutOfCommissionFix` (an `audio` key).
+The catalogue's `module` field names one of six feature modules - `stability`, `vehicles`, `graphics`, `audio`, `loading` and `misc` - which own 18, 21, 11, 11, 14 and 10 keys: the 85-key catalogue. A feature module owns its patterns, its published slots, its config reads, its arms and its bodies, and the catalogue itself is generated data. The other units are infrastructure, or the implementation behind a single key: `launcher` carries `LaunchWithPlayGTAIV` (a `misc` key) and `ooc` carries `OutOfCommissionFix` (an `audio` key). The launcher/SecuROM stages of the original distribution (`SkipLauncher`, the DFA and ROM stages) belong to XLivelessAddon, not this tree.
 
 ## Startup
 

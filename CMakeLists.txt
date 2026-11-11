@@ -77,6 +77,7 @@ target_sources(zp_modules PUBLIC
     source/stability.ixx
     source/vehicles.ixx
     source/graphics.ixx
+    source/launcher.ixx
     source/loading.ixx
     source/audio.ixx
     source/misc.ixx
@@ -145,6 +146,15 @@ set_target_properties(zp_failsafe PROPERTIES CXX_SCAN_FOR_MODULES ON)
 target_link_libraries(zp_failsafe PRIVATE zp_modules)
 add_test(NAME zp_failsafe COMMAND zp_failsafe)
 set_tests_properties(zp_failsafe PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+# The launcher path: the payload, the recovered sites, the key's mask against the
+# handler's five-build switch, and the two-slot write rule on synthetic images.
+# The real images are covered by `zp_launcher_dump` below.
+add_executable(zp_launcher tests/launcher.cpp)
+set_target_properties(zp_launcher PROPERTIES CXX_SCAN_FOR_MODULES ON)
+target_link_libraries(zp_launcher PRIVATE zp_modules)
+add_test(NAME zp_launcher COMMAND zp_launcher)
+set_tests_properties(zp_launcher PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
 # The `config` group: the no-throw read, the saturation, the guarded vehicle
 # table and the FusionFix overlap gate, each against the 1:1 throw/gate-off side.
@@ -413,6 +423,13 @@ find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs/GTAIV.exe)
   add_test(NAME zp_dump_empty
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_empty_dump.py
+            $<TARGET_FILE:zp_dump> ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs)
+  # The launcher path end to end: the real images through the pipeline the ASI
+  # runs, and the two recovered slots written with the oracle's payload on the five
+  # gated builds and nowhere else. This is the regression for
+  # "PlayGTAIV.exe -> GTA IV FATAL ERROR: SRLC10".
+  add_test(NAME zp_launcher_dump
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_launcher_dump.py
             $<TARGET_FILE:zp_dump> ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs)
 endif()
 

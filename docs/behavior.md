@@ -126,7 +126,7 @@ write outside the image and `Body` refuses a jump to an unresolved body.
 | `BuildingDynamicShadows` | the shim compares against two published model hashes; a one-hit scan leaves the second at zero | the publish refuses the pair and the install keeps the game's path | `failsafe` | `zp_failsafe` proves the count decision; the 1:1 dump still writes the arm |
 | `EpisodicVehicleSupport` | two multi-hit rows write every hit; a short scan silently drops a window | each row is installed only with its recovered count | `failsafe` | `zp_failsafe` proves the count decision; the 1:1 dump still writes both rows |
 | `BenchmarkFix` | two entries; a one-hit scan leaves body B's resume zero | the pair is installed only with two hits | `failsafe` | `zp_failsafe` proves the count decision; 1.0.8.0 is outside the key's mask |
-| `LaunchWithPlayGTAIV` | rewrites every `LaunchGTAIV.exe` name slot it finds | exactly two slots, else the arm leaves the image untouched | `failsafe` | `zp_launcher_slots` pins the 1:1 two-slot write; `zp_failsafe` proves the count decision |
+| `LaunchWithPlayGTAIV` | the game's SecuROM init (sub_48FC30) searches its parent process's module path for the `LaunchGTAIV.exe` literal; a `PlayGTAIV.exe` launch fails it and leaves through `lmsgboxExit("SRLC10")` | exactly the two recovered slots of the build, each at its recovered RVA, else the arm leaves the image untouched | `failsafe` | `zp_launcher` pins the payload, the sites, the probe and the two-slot rule; `zp_launcher_dump` proves the write set on all nine images through the real pipeline |
 
 The 1:1 configuration is not affected by any row above: `tools/parity_report.py`
 and the 18-cell matrix run without `OPCEP_IMPROVEMENTS`, and
@@ -216,13 +216,13 @@ feature key, is closed by the converter recorded in its own section below;
   its three native wrappers, `MouseFix`'s eight pieces) and fourteen
   (`NewMemorySystem`'s eleven small table methods, `NewFilesCompatibility`'s
   registration tail, `LoadDLCs`' two bodies);
-- launcher: both arms implemented. `LaunchWithPlayGTAIV` rewrites the two launch
-  slots and `zp_launcher_slots` verifies them per build; `SkipLauncher` carries the
-  original's 25-row table, both collectors, the DFA file-API stage (IAT capture, six
-  installs, two collected jumps) and the ROM message-window stage (two installs, the
-  WM_ROM service and its two bodies). The write set matches the original's recovered
-  handlers byte for byte on all nine images (see the section below); the key reads
-  OPEN only because the stored baseline is a partial recording of this feature;
+- launcher: `LaunchWithPlayGTAIV` rewrites the two launch slots of the five builds
+  the handler's switch covers, and only when the process list holds a live
+  `PlayGTAIV.exe` (the handler's own sub_10003A10 walk). `zp_launcher` pins the
+  payload, the recovered sites, the probe and the two-slot rule, and
+  `zp_launcher_dump` measures the write set on all nine images through the real
+  pipeline. The companion owns the launcher/SecuROM stages (`SkipLauncher`, the DFA
+  and ROM stages), so this tree carries no DFA/ROM arm;
 - every signature an arm scans is now the original handler's own string, and its
   per-image hit set is pinned against it (`zp_signature_parity`). Four arms had been
   scanning a shortened copy that selected the original's site only on 1.0.8.0; see
@@ -2412,16 +2412,39 @@ then two 16-byte stores per case. Sites (game RVAs): 1.0.0.0
 `0xA508F8`/`0xA5A5E4`. The payload is `PlayGTAIV.exe\0e\0`
 (`50 6C 61 79 47 54 41 49 56 2E 65 78 65 00 65 00`), the same two
 `mov dword ptr [..], imm32` rows the compiler emitted from a 16-byte
-`strcpy_s`. Our arm already had the sites, the payload and the build list right
-(the 16-byte literal `LaunchGTAIV.exe\0` has exactly two hits, at exactly those
-RVAs, on the five cases; 1.0.0.4 also has two and EFLC one, and the switch has no
-case there), but it substituted `Game::Module()==nullptr` for the handler's
-process check: a direct `GTAIV.exe` launch rewrote slots the original leaves
-alone. It now runs `PlayGtaivLauncherRunning()` (`CreateToolhelp32Snapshot` /
-`Process32First` / `wcscmp "...PlayGTAIV.exe"` / `Process32Next`) first and keeps
-the module guard as the offline-dump guard, so the game behaviour is the
-handler's and the pinned-base dump stays inert on all nine builds (0 rows: the
-dump attaches an image, not a loaded module, so the whole arm is outside it).
+`strcpy_s`.
+
+`source/launcher.ixx` carries the arm. The 16-byte literal
+`LaunchGTAIV.exe\0` has exactly two hits, at exactly those RVAs, on the five
+cases; 1.0.0.4 also has two and the EFLC builds one, and the switch has no case
+there -- so the key's build mask is load-bearing, not decoration. Two details are
+worth recording:
+
+- **The scan covers the whole image.** Both slots are `.rdata` data (RVA
+  `0xA508F8`/`0xA5A5E4` on 1.0.8.0), outside the executable range `find_pattern`
+  covers, so the arm scans `ImageBase()..+ImageSize()` with the vendor scanner.
+  A `find_pattern` literal of the same text resolves nothing at run time.
+- **The rule is the recovered sites, not "every hit".** The arm writes only when
+  the scan finds exactly the build's two occurrences and each of them is one of
+  the recovered RVAs; a shorter or longer view, or a hit at another offset, is a
+  skipped arm (the P13 rule). The scan reports its hits in RVA order while the
+  recovered table keeps the switch's order (1.0.0.0 and 1.0.4.0 store the higher
+  RVA first), so the comparison is a set comparison.
+
+The gate is the handler's own process walk (`CreateToolhelp32Snapshot` /
+`Process32First` / `wcscmp "...PlayGTAIV.exe"` / `Process32Next`), not a module
+guard: a direct `GTAIV.exe` launch leaves both slots alone, exactly like the
+original. The offline harness has no such process, so `zp_dump` can pin the
+walk's answer with `--launcher-probe`; the default cells keep the gate off, which
+is what the stored baselines record. `zp_launcher` pins the payload, the sites,
+the probe and the two-slot rule; `zp_launcher_dump` runs the arm through the real
+pipeline on all nine images and checks the exact write set per build.
+
+This arm is what keeps a `PlayGTAIV.exe`-launched 1.0.8.0 out of
+`lmsgboxExit("SRLC10")`: the game lowercases its parent process's module path and
+searches it for the lowercased literal, so the rewritten slot makes the search
+succeed. Without the arm the dialog appears ("Game needs to be launched using
+LaunchGTAIV.exe") and the game's own exit path faults at `0x456D16`.
 
 ### `OverrideGTADatPathTo` and `DebugPrintSpawns`: no handler, no write
 

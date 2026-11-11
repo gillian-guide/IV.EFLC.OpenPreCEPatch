@@ -26,7 +26,7 @@ RemoveBoundingBoxCulling, RemoveUselessChecks, BorderlessWindowed,
 DoNotPauseOnMinimize, LocalSettingsPath, SkipIntro, SkipLauncher, SkipMenu,
 VRAMFix). There is no runtime improvement switch; `git revert` of the integration
 commit is the rollback. The remaining 146-body proof passes for the retained
-bodies, `tools/parity_report.py 9` scores the retained keys, and the 35
+bodies, `tools/parity_report.py 9` scores the retained keys, and the 37
 native/ctest targets pass. On top of that:
 
 - The install-time failsafes and the P13 count checks are unconditional
@@ -43,7 +43,11 @@ native/ctest targets pass. On top of that:
   callee; SCOSignatureFix scans the branch anchor; LoadDLCs uses the checked
   path discovery; NewMemorySystem uses the private heap and page map;
   NewSaves validates the walk; the warnings use TaskDialogIndirect; the model
-  lookup, Steam bridge, NMS and OOC caches are thread-safe.
+  lookup, Steam bridge, NMS and OOC caches are thread-safe; `launcher` rewrites
+  only the two recovered `LaunchGTAIV.exe` slots of the five gated builds (a
+  whole-image scan: the slots are `.rdata`), after the handler's `PlayGTAIV.exe`
+  process walk -- this is what keeps a `PlayGTAIV.exe`-launched 1.0.8.0 out of
+  the `lmsgboxExit("SRLC10")` dialog.
 - `docs/improvements.md` is the audit: every option OpenPreCEPatch adds, removes
   or moves, every changed default, and every implementation delta with its
   disposition. `docs/mma10.md` has the NewMemorySystem MMA10 evidence and fix.
@@ -108,7 +112,9 @@ python tools/check_relocated_literals.py --game ../game_refs
 python tools/check_oracle_verified.py
 ```
 
-`zp_failsafe` the guard unit test, `zp_config_guard` the config group's
+`zp_failsafe` the guard unit test, `zp_launcher` the launcher payload/sites/probe
+and two-slot rule, `zp_launcher_dump` that write set on the nine real images,
+`zp_config_guard` the config group's
 behavior, `zp_steam` the achievement table/refusal, `zp_warnings` the
 version/mutex/notice probes, `zp_applicability` the build-refusal rule,
 `zp_caches` the model-lookup memo, `zp_import` the grouped INI

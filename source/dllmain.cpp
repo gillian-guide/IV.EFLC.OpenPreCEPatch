@@ -13,6 +13,7 @@ import warnings;
 import stability;
 import vehicles;
 import graphics;
+import launcher;
 import loading;
 import audio;
 import misc;
@@ -164,6 +165,7 @@ namespace
         RegisterStability();
         RegisterVehicles();
         RegisterGraphics();
+        RegisterLauncher();
         RegisterLoading();
         RegisterAudio();
         RegisterMisc();
