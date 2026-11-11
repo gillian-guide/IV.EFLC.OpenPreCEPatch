@@ -24,7 +24,7 @@ its scoreboard state: `closed`, `open`, or `oracle-verified baseline omission`.
 
 | build | version | image | bytes | differing | missing | extra | residual |
 |---:|---|---|---:|---:|---:|---:|---|
-| 1 | 1.0.0.0 | `GTAIV_1000.exe` | 255 | - | - | - | missing 62: `MouseFix` 25 (closed), `IncreasePtrNodes` 7 (closed), `PopupHeadlightsFlag` 6 (closed), `NoPhysicsSleep` 4 (closed), `StartupTimeFix` 4 (closed), `MiscFixes` 3 (closed), `CopSirensFlag` 2 (closed), `SavegameFix` 2 (closed), `SkipLauncher` 2 (oracle-verified baseline omission), `AllowHashesForIDE` 1 (closed), `DrivebyFOVFix` 1 (closed), `FastLoading` 1 (closed), `NewSavesCompatibility` 1 (closed), `PedModelsInCutscenesFix` 1 (closed), `RemoveRGSCLoginRequirement` 1 (closed), `SkipIntro` 1 (closed), the omissions being oracle-verified baseline gaps; extra 6: `CarDynamicShadowFix` 6 (oracle-verified baseline omission), all oracle-verified baseline omissions |
+| 1 | 1.0.0.0 | `GTAIV_1000.exe` | 255 | - | - | - | faulted: partial not scored |
 | 5 | 1.0.4.0 | `GTAIV_1040.exe` | 955 | 0 | 0 | 405 | extra 405: `SkipLauncher` 399 (oracle-verified baseline omission), `CarDynamicShadowFix` 6 (oracle-verified baseline omission), all oracle-verified baseline omissions |
 | 6 | 1.0.0.4 | `GTAIV_1004.exe` | 724 | 0 | 0 | 180 | extra 180: `SkipLauncher` 180 (oracle-verified baseline omission), all oracle-verified baseline omissions |
 | 7 | 1.0.6.0 | `GTAIV_1060.exe` | 983 | 0 | 0 | 63 | extra 63: `SkipLauncher` 63 (oracle-verified baseline omission), all oracle-verified baseline omissions |

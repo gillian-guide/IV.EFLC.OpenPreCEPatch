@@ -374,11 +374,15 @@ def markdown(results, table) -> str:
     ]
     for build, full, cell, residual in results:
         scored = full.fault == ""
+        residual_text = (
+            "faulted: partial not scored" if not scored
+            else ('; '.join(residual) if residual else "none")
+        )
         lines.append(f"| {build} | {VERSIONS[build]} | `{BUILDS[build]}.exe` | {full.wrote} | "
                      f"{len(full.differing) if scored else '-'} | "
                      f"{len(full.missing) if scored else '-'} | "
                      f"{len(full.extra) if scored else '-'} | "
-                     f"{'; '.join(residual) if residual else ('faulted: partial not scored' if not scored else 'none')} |")
+                     f"{residual_text} |")
     lines += [
         "",
         "A **faulted** full cell's partial rows are not a write-set scoreboard (the",
