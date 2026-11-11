@@ -1,8 +1,17 @@
 # Parity
 
-What has to match the original ZolikaPatch 7.65 ASI, and the faults reproduced on
-purpose. A guard that turns one of these into a non-fault is a fidelity bug, not a
-fix.
+> **Distribution note (2026-11-11).** This tree ships as OpenPreCEPatch. The
+> improvements are compiled in, the 14 keys OpenPreCEPatch removed or moved to
+> XLivelessAddon are out, and the failsafes are unconditional. The sections
+> below document the retained arms' original behavior and the faults that still
+> exist in them; where they describe a `1:1` configuration or a group switch,
+> read `docs/improvements.md` for the current disposition. The shipped INI is
+> `data/plugins/IV.EFLC.OpenPreCEPatch.ini`; the flat `ZolikaPatch.ini` is the
+> parity/legacy configuration.
+
+What has to match the original ZolikaPatch 7.65 ASI for a retained arm, and the
+faults that are still reproduced on purpose. A guard that turns one of those into
+a non-fault is a fidelity bug, not a fix.
 
 ## Contracts pinned by tests
 
@@ -2258,30 +2267,19 @@ the 43 displacement bytes the scoreboard excludes by design.
   it would only matter for `SkipLauncher=0, MiscFixes=1` in the game, and that arm
   lives in `misc.ixx` rather than the launcher module.
 
-## A preserved fault that the tools cannot measure
+## NoImpostorHeightCutoff on 1.0.0.0
 
-`NoImpostorHeightCutoff` reproduces the original's fault on 1.0.0.0: the pattern
-matches once and the original writes `hits[1]` through an uninitialised vector
-entry (`mov eax,[ebp-0x6C]; mov esi,[eax+4]` at `0x100536F1`, write `66 89 06`). The
-arm keeps that shape - no `pattern.size() > 1` guard - so on 1.0.0.0 the dump writes
-the first pair (which is exactly what the stored baseline's single pair records) and
-then faults `0xC0000005`, as the original does.
+The original's 1.0.0.0 arm matches once and writes `hits[1]` through an
+uninitialised vector entry (`mov eax,[ebp-0x6C]; mov esi,[eax+4]` at
+`0x100536F1`, write `66 89 06`), which faults. In a release build that
+out-of-range read is undefined: it can land on a valid address or fault.
 
-In a release build that out-of-range read is undefined: depending on the heap
-layout it can land on a valid address (a silent stray write) or fault. To keep the
-outcome the original documents, when the scan finds fewer than two hits the arm
-writes the first NOP and then raises the access violation explicitly. The dump
-catches the fault, dumps the image as it stands, and exits with the exception
-code; a faulted full cell's partial rows are not scored (`dump_matrix.py` reports
-`-` for its diff/missing/extra), and the per-option/isolated cells are the
-scoreboard for that build.
-
-Consequence: `parity_report.py 1` and `dump_matrix.py` fault at that arm on
-1.0.0.0, so the 1.0.0.0 cell of the 18-cell matrix cannot be measured for keys that
-run after it. That is the fault being faithful, not the tree being broken; the
-reference tree guards it, which is why its baseline carries only the first pair.
-Guarding it here to make a tool happy would be the fault-avoidance divergence the
-policy forbids.
+This distribution compiles the P13 count check in, so the arm expects two hits
+and **refuses the partial install** on 1.0.0.0. The first pair is not written
+and the dump cell completes. That is the OpenPreCEPatch failsafe, not the
+original fault; `docs/improvements.md` records the disposition and the
+`parity_report.py` scoreboard keeps the retained keys apart from the five
+documented deltas.
 
 `tools/single_key_matrix.py` measures the fault as a recorded outcome instead of
 an abort. It writes every catalogue key `0` and exactly one key `1`, one

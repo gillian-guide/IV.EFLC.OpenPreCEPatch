@@ -12,18 +12,15 @@ Static evidence is complete as far as the oracle reaches.
 
 |measurement|result|produced by|
 |-|-|-|
-|keys closed on 1.0.8.0|98 of 99; the 99th (`SkipLauncher`) is implemented in full and measured against the oracle|`python tools/parity\_report.py 9`|
-|hook bodies proven whole|175 transcribed bodies, 0 failures|`python tools/verify\_bodies.py --original ../game\_refs/ZolikaPatch\_original.asi.off --candidate build/win-x86/Release/IV.EFLC.OpenPreCEPatch.asi --bodies tests/bodies.tsv --map build/win-x86/Release/IV.EFLC.OpenPreCEPatch.map`|
-|write set|the eight non-faulting builds are `differing 0` in full and per-option mode; 1.0.0.0 is the preserved `NoImpostorHeightCutoff` fault, whose partial full cell is not scored|`python tools/dump_matrix.py --markdown <out>`|
+|keys scored on 1.0.8.0|80 closed, 5 documented expected deltas, 0 open (85-key surface)|`python tools/parity\_report.py 9`|
+|hook bodies proven whole|162 transcribed bodies, 0 failures|`python tools/verify\_bodies.py --original ../game\_refs/ZolikaPatch\_original.asi.off --candidate build/win-x86/Release/IV.EFLC.OpenPreCEPatch.asi --bodies tests/bodies.tsv --map build/win-x86/Release/IV.EFLC.OpenPreCEPatch.map`|
+|write set|retained-arm dump matrix; the full-cell diff also contains the bytes the 14 removed keys used to write (expected missing)|`python tools/dump_matrix.py --markdown <out>`|
 |tests|34 registered ctest targets|`ctest --preset release`|
-|baseline omissions|3 documented per-build rows|`python tools/check\_oracle\_verified.py`|
 
-`SkipLauncher` is open by construction, not by omission. The stored baseline records the reference tree's 7-row arm, which nothing in that tree calls; the original scans 25 rows and runs the DFA and ROM stages. The key is therefore reported as oracle-verified rather than closed, and its recovered rows replay to an identical write set on all nine images. The three omissions are recorded per key and build in `tests/oracle\_verified.tsv`, and the 1.0.0.0 per-option cell faults at `NoImpostorHeightCutoff` because the original faults there and the tree reproduces the fault instead of guarding it.
+The five expected deltas are the improvements that deliberately change a retained arm's write set: GarageModelFix's prologue, BuildingAlphaFix's `jnz`-only removal, CutsceneFixes' callee, ImprovedShaderStreaming's two calls, and RemoveGFWLUpdatePopup's shipped default. They are reported apart from `open`, with the reason in `tools/parity_report.py` and `docs/improvements.md`. The 14 keys OpenPreCEPatch removed or moved to XLivelessAddon are out of the catalogue (SkipLauncher, SkipIntro, SkipMenu, BorderlessWindowed, DoNotPauseOnMinimize, LocalSettingsPath, VRAMFix and the seven dropped fixes).
 
 ## Features
 
-* Skip the launcher and the DRM checks, and launch through a (non-SecuROM) `PlayGTAIV.exe`.
-* Cut the 15-second startup wait and the loading times, and get to the main menu faster.
 * Fix the benchmark, Concrete Jungle, episode-switch, ROCKET, wanted-level, SuperLOD and SMPA60 crashes.
 * Fix the multiplayer crash methods, and block weapon-stripping and teleport trainers.
 * Fix the high-FPS problems: cutscenes, bike physics, the 300 FPS speedup, VSync, drive-by aim and the mouse deadzone.
@@ -31,7 +28,10 @@ Static evidence is complete as far as the oracle reaches.
 * Fix the emissive, reversing-light and LOD fade-in bugs, and add car, object and building shadows.
 * Load TBoGT and TLAD content from the EFLC folder layout, and add the APC/Buzzard, explosive and police weapons and the TBoGT aircraft height limit.
 * Add the popup-headlights, siren, plane-part, engine-block and steering-wheel support, and .ide hash support.
-* Restore the death music, shorten the intro, skip the main menu, move saves and settings into the game folder, add borderless windowed mode and fix the VRAM detection.
+* Restore the death music, and add the OpenPreCEPatch failsafes, caches, Steam achievement mirror and GFWL protection disabler.
+
+Launcher/menu/intro/borderless/VRAM/settings-path features moved to the
+XLivelessAddon companion and are not part of this ASI.
 
 ## Building
 

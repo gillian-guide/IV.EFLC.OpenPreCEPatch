@@ -26,6 +26,17 @@ BUILDS = {1: "GTAIV_1000", 5: "GTAIV_1040", 6: "GTAIV_1004", 7: "GTAIV_1060",
           8: "GTAIV_1070", 9: "GTAIV", 11: "EFLC_1110", 12: "EFLC_1120", 13: "EFLC_1130"}
 GAME_BASE = 0x400000
 
+# Keys whose retained arm deliberately writes a different set in this
+# distribution. They are measured, reported apart and never counted as open; the
+# reason is the one docs/improvements.md gives.
+IMPROVED_DELTAS = {
+    "GarageModelFix": "the prologue hook replaces the mid-body site (same fix, -0x20)",
+    "BuildingAlphaFix": "only the jnz is removed; the test stays",
+    "CutsceneFixes": "the shared callee is hooked once instead of the three sites",
+    "ImprovedShaderStreaming": "only the two LookupShader calls; the chain jumps are dropped",
+    "RemoveGFWLUpdatePopup": "the shipped oPCEP INI enables it; the parity flat file keeps the original 0",
+}
+
 
 def displacement_rvas(pristine: bytes, rvas):
     """The RVAs that are the displacement of a branch, read from the pristine image.
@@ -165,6 +176,7 @@ def main() -> int:
     closed = 0
     open_keys = 0
     excused = 0
+    deltas = 0
     oracle_verified = load_oracle_verified()
     for key in keys():
         want = rows(baseline_path, key)
@@ -192,13 +204,19 @@ def main() -> int:
                       f"missing {missing}, extra {extra}, differing {differing} "
                       f"- {entry[1]}")
                 continue
+            if key in IMPROVED_DELTAS:
+                deltas += 1
+                print(f"DELTA {key} [build {build}]: baseline {len(want)}, ours {len(have)}, "
+                      f"missing {missing}, extra {extra}, differing {differing} "
+                      f"- {IMPROVED_DELTAS[key]}")
+                continue
             open_keys += 1
             print(f"OPEN {key}: baseline {len(want)}, ours {len(have)}, "
                   f"missing {missing}, extra {extra}, differing {differing}")
         else:
             closed += 1
-    print(f"build {build}: {closed} key(s) closed, {open_keys} open, "
-          f"{excused} oracle-verified (baseline incomplete)")
+    print(f"build {build}: {closed} key(s) closed, {deltas} expected delta(s), "
+          f"{open_keys} open, {excused} oracle-verified (baseline incomplete)")
     return 0 if open_keys == 0 else 1
 
 

@@ -113,6 +113,27 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
 - `task_dialogs`: `TaskDialogIndirect` with the ASI's common-controls 6.0
   manifest + `CreateActCtx`; `zp_pe_check` finds the manifest. UI unproven.
 
+## 2026-11-11 — OpenPreCEPatch surface, integrated improvements, audits
+
+- The runtime `OPCEP_IMPROVEMENTS` switch is gone. Failsafes/P13 live in
+  `patch.ixx` and are unconditional; config parsing never throws; the improved
+  paths are the only paths.
+- Catalogue 99 -> 85: the 14 keys oPCEP removed or moved to XLivelessAddon are
+  out; `menu.ixx`, `launcher.ixx`, `useless_checks.ixx` and `tests/dfa_close.cpp`
+  deleted; the parity INI, applicability table and oracle rows regenerated.
+- Ported this round: UAL >= 6.9.0 version-resource threshold (`QueryLoaderVersion`,
+  `zp_loader_info`); full C++ DLC discovery on `std::filesystem`
+  (`DlcDiscoveryCpp`, `zp_dlc_full`); C++ popup check with resolve/angle memos
+  (`zp_popup_cache`); sorted 38,455-name model index (`zp_model_index`);
+  GFWL module-image guard (`zp_module_guard`).
+- Audit fixes: Steam init outside the state mutex and Steam calls outside it;
+  model memo is one 64-bit atomic; NMS page bitmap read under the registry lock;
+  NMS allocation arithmetic is 64-bit with an alignment bound; OOC first build
+  serialised; `PrepareArenaRegistry` uses `call_once`.
+- `parity_report.py 9`: 80 closed, 5 expected deltas, 0 open. 34/34 Release.
+- Docs: AGENTS identity/surface, README status, improvements sections 1-6 and
+  the parity distribution banner are current again.
+
 ## 2026-11-11 — distribution identity
 
 - Artifact/project: `IV.EFLC.OpenPreCEPatch.asi`; version resource follows the

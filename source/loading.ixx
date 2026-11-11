@@ -299,7 +299,7 @@ static void NewfilesRegisterBody();
 static void NewSavesReadHook();
 static void NewSavesSecondLoadHook();
 static void NewSavesTrampoline();
-static void DlcDiscovery();
+void* __cdecl DlcDiscoveryCpp(void* object);
 static void DlcDummyBody();
 static void DlcStructFixupBody();
 
@@ -1997,6 +1997,17 @@ namespace
 }
 
 // Registered like every other arm: the install tier owns the gate.
+export void* DlcDiscoveryForTest(void* object) noexcept
+{
+    return DlcDiscoveryCpp(object);
+}
+
+export void SetDlcRvasForTest(uint32_t registerRva, uint32_t applyRva) noexcept
+{
+    zpatch_dlc_register_rva = registerRva;
+    zpatch_dlc_apply_rva = applyRva;
+}
+
 export void RegisterLoading()
 {
     // The discovery pass's five imported entries, filled before any tier runs. The
@@ -2092,7 +2103,9 @@ export void RegisterLoading()
     // so it carries no proof row).
     Bodies::Register(reinterpret_cast<uintptr_t>(&DlcDummyBody), 0x10023480u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&DlcStructFixupBody), 0x10023490u);
-    Bodies::Register(reinterpret_cast<uintptr_t>(&DlcDiscovery), 0x10023150u);
+    // The C++ discovery takes the transcribed body's role; the reference keeps
+    // the fixup body's call target provable against the original.
+    Bodies::Register(reinterpret_cast<uintptr_t>(&DlcDiscoveryCpp), 0x10023150u);
 
     // The registrar's inline-asm `call` and the callbacks it names are invisible
     // to C++; naming them here keeps their out-of-line definitions in the image.
@@ -2705,250 +2718,116 @@ namespace
 //
 // Naked and internal: an external-linkage naked function is written to the module
 // and every importer fails (C2488).
-static __declspec(naked) void DlcDiscovery()
+// The 0x104-byte path plus the two tail fields the register call reads.
+constexpr size_t kDlcPathCapacity = 0x104u;
+constexpr size_t kDlcRequestFlagOffset = 0x158;
+constexpr size_t kDlcRequestModeOffset = 0x166;
+constexpr size_t kDlcRequestSize = 360;
+
+struct DlcRegisterRequest
+{
+    char path[kDlcPathCapacity];
+    uint8_t reserved[kDlcRequestFlagOffset - kDlcPathCapacity];
+    uint32_t flag;
+    uint8_t reserved2[kDlcRequestModeOffset -
+                       (kDlcRequestFlagOffset + sizeof(uint32_t))];
+    uint8_t mode;
+    uint8_t tail[kDlcRequestSize - (kDlcRequestModeOffset + sizeof(uint8_t))];
+};
+static_assert(sizeof(DlcRegisterRequest) == kDlcRequestSize);
+
+using DlcRegisterFn = void(__cdecl*)(int, const char*, int);
+using DlcApplyFn = void(__cdecl*)(void*, const char*);
+
+// The apply function returns its second value in EDX. Capture it for the one
+// caller that observes it (an existing \Episode254\).
+static __declspec(naked) void DlcApplyCapture(void* object, const char* path,
+    DlcApplyFn apply, uint32_t* out)
 {
     __asm
     {
         push ebp
         mov ebp, esp
-        and esp, 0FFFFFFF8h
-        sub esp, 2C4h
-        mov eax, DWORD PTR [__security_cookie]
-        xor eax, esp
-        mov DWORD PTR [esp + 2C0h], eax
-        mov eax, DWORD PTR [ebp + 8]
-        push ebx
-        push esi
-        push edi
-        push 104h
-        mov DWORD PTR [esp + 14h], eax
-        call DlcAlloc
-        add esp, 4
-        mov esi, eax
-        mov DWORD PTR [esp + 14h], esi
-        push 104h
-        push esi
-        push 0
-        call DWORD PTR [zpatch_dlc_get_module_file_name]
-        push esi
-        call DWORD PTR [zpatch_dlc_path_remove_file_spec]
-        mov ebx, DWORD PTR [zpatch_dlc_strcpy_s]
-        lea eax, [esp + 180h]
-        push esi
-        push 104h
-        push eax
-        call ebx
-        mov edi, DWORD PTR [zpatch_dlc_strcat_s]
-        lea eax, [esp + 18Ch]
-        add esp, 0Ch
-        push OFFSET zpatch_dlc_tlad_content
-        push 104h
-        push eax
-        call edi
-        add esp, 0Ch
-        lea eax, [esp + 180h]
-        push eax
-        call DWORD PTR [zpatch_dlc_path_file_exists]
-        test eax, eax
-        jne dlc_tlad_exists
-        push esi
-        lea eax, [esp + 184h]
-        push 104h
-        push eax
-        call ebx
-        add esp, 0Ch
-        lea eax, [esp + 180h]
-        push OFFSET zpatch_dlc_tlad_legacy
-        push 104h
-        push eax
-        call edi
-        add esp, 0Ch
-        // The original's `jne 0x1002320E` lands here, on the *second* probe: a
-        // "content" layout that exists is probed once more, and a failed probe still
-        // skips the registration. The fallback path reaches the same instruction by
-        // fallthrough, which is why the label sits on the probe and not on the
-        // register block.
-    dlc_tlad_exists:
-        lea eax, [esp + 180h]
-        push eax
-        call DWORD PTR [zpatch_dlc_path_file_exists]
-        test eax, eax
-        je dlc_next
-        mov ecx, DWORD PTR [zpatch_dlc_game_base]
-        lea eax, [esp + 18h]
-        mov esi, DWORD PTR [zpatch_dlc_register_rva]
-        push 168h
-        push 0
-        push eax
-        lea esi, [esi + ecx]
-        call DlcZeroBlock
-        add esp, 0Ch
-        lea eax, [esp + 180h]
-        push eax
-        lea eax, [esp + 1Ch]
-        push 104h
-        push eax
-        call ebx
-        add esp, 0Ch
-        mov BYTE PTR [esp + 17Eh], 1
-        lea eax, [esp + 18h]
-        mov DWORD PTR [esp + 170h], 1
-        push 1
-        push eax
-        push 2
-        call esi
-        mov ecx, DWORD PTR [esp + 10h]
-        lea eax, [esp + 18h]
-        push eax
-        mov eax, DWORD PTR [zpatch_dlc_apply_rva]
-        add eax, DWORD PTR [zpatch_dlc_game_base]
-        call eax
-        mov esi, DWORD PTR [esp + 14h]
-    dlc_next:
-        push esi
-        lea eax, [esp + 184h]
-        push 104h
-        push eax
-        call ebx
-        add esp, 0Ch
-        lea eax, [esp + 180h]
-        push OFFSET zpatch_dlc_tbogt_content
-        push 104h
-        push eax
-        call edi
-        add esp, 0Ch
-        lea eax, [esp + 180h]
-        push eax
-        call DWORD PTR [zpatch_dlc_path_file_exists]
-        test eax, eax
-        jne dlc_tbogt_exists
-        push esi
-        lea eax, [esp + 184h]
-        push 104h
-        push eax
-        call ebx
-        add esp, 0Ch
-        lea eax, [esp + 180h]
-        push OFFSET zpatch_dlc_tbogt_legacy
-        push 104h
-        push eax
-        call edi
-        add esp, 0Ch
-        // Same join as TLaD's: `jne 0x100232F8` lands on this second probe, and the
-        // fallback reaches it by fallthrough.
-    dlc_tbogt_exists:
-        lea eax, [esp + 180h]
-        push eax
-        call DWORD PTR [zpatch_dlc_path_file_exists]
-        test eax, eax
-        je dlc_episodes
-        mov ecx, DWORD PTR [zpatch_dlc_game_base]
-        lea eax, [esp + 18h]
-        mov esi, DWORD PTR [zpatch_dlc_register_rva]
-        push 168h
-        push 0
-        push eax
-        lea esi, [esi + ecx]
-        call DlcZeroBlock
-        add esp, 0Ch
-        lea eax, [esp + 180h]
-        push eax
-        lea eax, [esp + 1Ch]
-        push 104h
-        push eax
-        call ebx
-        add esp, 0Ch
-        mov BYTE PTR [esp + 17Eh], 1
-        lea eax, [esp + 18h]
-        mov DWORD PTR [esp + 170h], 1
-        push 1
-        push eax
-        push 4
-        call esi
-        mov ecx, DWORD PTR [esp + 10h]
-        lea eax, [esp + 18h]
-        push eax
-        mov eax, DWORD PTR [zpatch_dlc_apply_rva]
-        add eax, DWORD PTR [zpatch_dlc_game_base]
-        call eax
-        mov esi, DWORD PTR [esp + 14h]
-    dlc_episodes:
-        mov edi, 3
-    dlc_episode_loop:
-        push esi
-        lea eax, [esp + 184h]
-        push 104h
-        push eax
-        call ebx
-        add esp, 0Ch
-        lea eax, [esp + 288h]
-        push edi
-        push OFFSET zpatch_dlc_episode_format
-        push 40h
-        push eax
-        call DlcFormat
-        lea eax, [esp + 298h]
-        push eax
-        lea eax, [esp + 194h]
-        push 104h
-        push eax
-        call DWORD PTR [zpatch_dlc_strcat_s]
-        add esp, 1Ch
-        lea eax, [esp + 180h]
-        push eax
-        call DWORD PTR [zpatch_dlc_path_file_exists]
-        test eax, eax
-        je dlc_episode_next
-        mov ecx, DWORD PTR [zpatch_dlc_game_base]
-        lea eax, [esp + 18h]
-        mov esi, DWORD PTR [zpatch_dlc_register_rva]
-        push 168h
-        push 0
-        push eax
-        lea esi, [esi + ecx]
-        call DlcZeroBlock
-        add esp, 0Ch
-        lea eax, [esp + 180h]
-        push eax
-        lea eax, [esp + 1Ch]
-        push 104h
-        push eax
-        call ebx
-        add esp, 0Ch
-        mov BYTE PTR [esp + 17Eh], 1
-        lea eax, [esp + 18h]
-        mov DWORD PTR [esp + 170h], 1
-        push 1
-        push eax
-        lea eax, [edi + edi]
-        push eax
-        call esi
-        mov ecx, DWORD PTR [esp + 10h]
-        lea eax, [esp + 18h]
-        push eax
-        mov eax, DWORD PTR [zpatch_dlc_apply_rva]
-        add eax, DWORD PTR [zpatch_dlc_game_base]
-        call eax
-        mov esi, DWORD PTR [esp + 14h]
-    dlc_episode_next:
-        inc edi
-        cmp edi, 0FFh
-        jl dlc_episode_loop
-        mov eax, DWORD PTR [esp + 10h]
-        mov ecx, DWORD PTR [esp + 2CCh]
-        pop edi
-        pop esi
-        pop ebx
-        xor ecx, esp
-        mov BYTE PTR [eax + 166h], 2
-        call __security_check_cookie
+        push DWORD PTR [ebp + 0Ch]
+        call DWORD PTR [ebp + 10h]
+        mov eax, DWORD PTR [ebp + 14h]
+        mov DWORD PTR [eax], edx
         mov esp, ebp
         pop ebp
         ret
     }
 }
 
-// sub_10023480, recovered VA 0x10023480 (2 instructions): the loader callback's
+// The discovery post step, rebuilt on the checked path API: it enumerates
+// \dlc\tlad\content\ / \TLAD\, \dlc\TBoGT\content\ / \TBoGT\ and
+// \Episode3\..\Episode254\ next to the executable, registers each existing
+// folder once through the published game RVAs, applies it to the object, and
+// sets the object's post-discovery mode byte. The original's EDX result is kept.
+void* __cdecl DlcDiscoveryCpp(void* object)
+{
+    char modulePath[kDlcPathCapacity]{};
+    const DWORD moduleLength = GetModuleFileNameA(nullptr, modulePath, sizeof(modulePath));
+    if (moduleLength == 0 || moduleLength >= sizeof(modulePath))
+        return object;
+    if (zpatch_dlc_register_rva == 0 || zpatch_dlc_apply_rva == 0)
+        return object;
+
+    std::error_code ignored;
+    std::filesystem::path base(modulePath);
+    base.remove_filename();
+    const auto gameBase = reinterpret_cast<uintptr_t>(GetModuleHandleA(nullptr));
+    const auto registerFn = reinterpret_cast<DlcRegisterFn>(
+        gameBase + zpatch_dlc_register_rva);
+    const auto applyFn = reinterpret_cast<DlcApplyFn>(
+        gameBase + zpatch_dlc_apply_rva);
+
+    uint32_t lastApplyEdx = 0;
+    bool episode254 = false;
+    const auto tryPaths = [&](const std::filesystem::path& primary,
+                              const std::filesystem::path& fallback, int id)
+    {
+        std::filesystem::path candidate = base / primary;
+        if (!std::filesystem::exists(candidate, ignored))
+        {
+            if (primary == fallback)
+                return;
+            candidate = base / fallback;
+            if (!std::filesystem::exists(candidate, ignored))
+                return;
+        }
+
+        const std::string text = candidate.string();
+        DlcRegisterRequest request{};
+        if (text.size() >= sizeof(request.path))
+            return;
+        strcpy_s(request.path, sizeof(request.path), text.c_str());
+        request.mode = 1;
+        request.flag = 1;
+        registerFn(id, request.path, 1);
+        DlcApplyCapture(object, request.path, applyFn, &lastApplyEdx);
+        if (id == 2 * 254)
+            episode254 = true;
+    };
+
+    tryPaths("dlc\\tlad\\content\\", "TLAD\\", 2);
+    tryPaths("dlc\\TBoGT\\content\\", "TBoGT\\", 4);
+    for (int index = 3; index < 255; ++index)
+    {
+        char suffix[64]{};
+        std::snprintf(suffix, sizeof(suffix), "\\Episode%d\\", index);
+        tryPaths(std::filesystem::path(suffix + 1), std::filesystem::path(suffix + 1), 2 * index);
+    }
+
+    *reinterpret_cast<uint8_t*>(static_cast<uint8_t*>(object) + 0xA4) = 1;
+    *reinterpret_cast<uint8_t*>(static_cast<uint8_t*>(object) + 0x166) = 2;
+    if (episode254)
+        __asm mov edx, lastApplyEdx
+    else
+        __asm mov edx, 40h
+    return object;
+}
+
+
 // replacement. It sets only AL, so a caller's `test al, al` sees success while the
 // upper 24 bits of EAX stay whatever the caller had.
 static __declspec(naked) void DlcDummyBody()
@@ -2987,7 +2866,7 @@ static __declspec(naked) void DlcStructFixupBody()
         mov ecx, esi
         call DWORD PTR [zpatch_dlc_load_callback]
         push esi
-        call DlcDiscovery
+        call DlcDiscoveryCpp
         pop esi
         mov BYTE PTR [esi + 0A4h], 1
         jmp dlc_fixup_exit

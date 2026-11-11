@@ -240,6 +240,13 @@ target_link_libraries(zp_loader_info PRIVATE zp_modules)
 add_test(NAME zp_loader_info COMMAND zp_loader_info)
 set_tests_properties(zp_loader_info PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
+# The full C++ DLC discovery: checked paths, one layout per DLC, registration.
+add_executable(zp_dlc_full tests/dlc_full.cpp)
+set_target_properties(zp_dlc_full PROPERTIES CXX_SCAN_FOR_MODULES ON)
+target_link_libraries(zp_dlc_full PRIVATE zp_modules)
+add_test(NAME zp_dlc_full COMMAND zp_dlc_full)
+set_tests_properties(zp_dlc_full PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
 # The two per-model light tables the loader preamble reads from
 # [PopupLightAngles] / [HeadlightConeOffsets]: the recovered grammar, defaults and
 # faults, on documents only -- no game image and no ASI load.

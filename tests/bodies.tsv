@@ -298,7 +298,6 @@ new_saves_second_hook 10051AD0 ?NewSavesSecondLoadHook@@YAXXZ 33
 # rebuilt piece that was transcribable, so it is transcribed. Its IAT operands are
 # the five slots the arm fills; its two `call` targets are the allocation/memset
 # forwarders and the shared formatter. docs/rebuilt.md.
-dlc_discovery 10023150 ?DlcDiscovery@@YAXXZ 223
 
 # The OOC archive builder (source/ooc.ixx) and its twelve internal helpers: what was
 # the last class-D piece. Its stream has no exception frame and no TLS static-init
