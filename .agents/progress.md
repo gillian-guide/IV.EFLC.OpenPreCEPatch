@@ -113,6 +113,20 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
 - `task_dialogs`: `TaskDialogIndirect` with the ASI's common-controls 6.0
   manifest + `CreateActCtx`; `zp_pe_check` finds the manifest. UI unproven.
 
+## 2026-11-11 — release packaging and the remaining refactors
+
+- Root `IV.EFLC.OpenPreCEPatch.ini` is the shipped file; the flat parity INI
+  moved to `tests/parity/ZolikaPatch.ini` and the tools default there.
+- `cmake --build --preset release --target package` writes
+  `dist/IV.EFLC.OpenPreCEPatch/` and the zip.
+- The Episode NOP windows and the simple stability scan/register/jump arms are
+  data tables; `FchsCheckCpp` replaces the FCHS asm with null object/lookup
+  guards (`zp_fchs`); VRAMFix/FixPCIDKickbug/NoPhysicsSleep/DoNotPauseOnMinimize
+  code is deleted.
+- 149 bodies, 35 tests, Release/Trace green; parity 80 closed / 5 deltas / 0
+  open. The remaining unreferenced graphics/loading arms and the duplicate
+  publish/install scan cost (#8) are still open.
+
 ## 2026-11-11 — OpenPreCEPatch surface, integrated improvements, audits
 
 - The runtime `OPCEP_IMPROVEMENTS` switch is gone. Failsafes/P13 live in
