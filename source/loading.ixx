@@ -1132,6 +1132,13 @@ export namespace Loading
     };
 
     export SaveWalkDecision WalkSaveFile(const char* path);
+
+    // The `dlc_path` group's bound: the discovery body's path buffer is 0x104
+    // bytes including the terminator.
+    inline bool DlcPathFits(std::string_view path)
+    {
+        return !path.empty() && path.size() < 0x104;
+    }
 }
 
 namespace
@@ -1967,6 +1974,20 @@ namespace
     {
         if (!Loader::Enabled("LoadDLCs"))
             return;
+
+        if (ImprovementEnabled(Improvement::dlc_path))
+        {
+            // The discovery body builds every candidate path in a 0x104-byte
+            // buffer; a module path that already fills it truncates silently and
+            // registers the wrong content directory. Skip the arm instead.
+            char modulePath[0x104] = {};
+            const DWORD length = GetModuleFileNameA(nullptr, modulePath, sizeof(modulePath));
+            if (length == 0 || !Loading::DlcPathFits(std::string_view(modulePath, length)))
+            {
+                Log::Print("dlc_path: module path length {} does not fit 0x104; skipped", length);
+                return;
+            }
+        }
 
         const DlcBuild* const row = DlcBuildFor(Loader::Current());
         if (row == nullptr)

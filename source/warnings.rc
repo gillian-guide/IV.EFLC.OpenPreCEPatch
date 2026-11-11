@@ -1,0 +1,6 @@
+#include <windows.h>
+
+// The common-controls 6.0 dependency the task dialogs in warnings.ixx activate
+// with CreateActCtx. The game executable itself has no such manifest, so the
+// ASI carries one for its own module.
+1 RT_MANIFEST "warnings.manifest"

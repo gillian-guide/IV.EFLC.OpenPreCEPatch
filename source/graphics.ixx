@@ -653,6 +653,100 @@ namespace
         injector::MakeJMP(match + 266, match + 1158, true);
     }
 
+    // The cutscene_entry group: one hook at the shared camera callee instead of
+    // the three sites. The callee is relocated into private memory, its 13
+    // direct calls are re-pointed, and the branch fix is baked into the copy.
+    // Any shape mismatch falls back to the three original sites, so the fix is
+    // never lost.
+    namespace
+    {
+        constexpr size_t kCutsceneCalleeSize = 0x2D2u;
+        constexpr uint32_t kCutscenePokeOffset = 0x4Fu;
+        constexpr uint32_t kCutsceneBranchOffset = 0x200u;
+        constexpr uint32_t kCutsceneCalls[] = {
+            0x00Eu, 0x01Du, 0x092u, 0x0E9u, 0x0F1u, 0x101u, 0x118u,
+            0x127u, 0x13Cu, 0x233u, 0x24Cu, 0x286u, 0x29Au,
+        };
+
+        bool RelocateCalls(uint8_t* destination, const uint8_t* source,
+            std::span<const uint32_t> offsets) noexcept
+        {
+            for (const uint32_t offset : offsets)
+            {
+                int32_t displacement{};
+                std::memcpy(&displacement, source + offset + 1, sizeof(displacement));
+                const auto target = reinterpret_cast<uintptr_t>(source + offset + 5) +
+                                    static_cast<intptr_t>(displacement);
+                const auto next = reinterpret_cast<uintptr_t>(destination + offset + 5);
+                const auto relative = static_cast<intptr_t>(target) -
+                                      static_cast<intptr_t>(next);
+                if (relative < INT32_MIN || relative > INT32_MAX)
+                    return false;
+                const auto narrowed = static_cast<int32_t>(relative);
+                std::memcpy(destination + offset + 1, &narrowed, sizeof(narrowed));
+            }
+            return true;
+        }
+
+        void* AllocateNearImage(size_t size) noexcept
+        {
+            const auto base = Game::Get().ImageBase();
+            const auto imageSize = Game::Get().ImageSize();
+            constexpr uintptr_t kStep = 0x1000000u;
+            constexpr uintptr_t kReach = 0x40000000u;
+            constexpr uintptr_t kPageMask = 0xFFFFu;
+            const uintptr_t first = (base + imageSize + kPageMask) & ~kPageMask;
+            for (uintptr_t candidate = first; candidate < first + kReach; candidate += kStep)
+            {
+                if (void* const block = VirtualAlloc(reinterpret_cast<void*>(candidate), size,
+                        MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))
+                    return block;
+            }
+            const uintptr_t lower = base > kReach ? base - kReach : kStep;
+            for (uintptr_t candidate = first - kStep;
+                 candidate > lower && candidate > kStep; candidate -= kStep)
+            {
+                if (void* const block = VirtualAlloc(reinterpret_cast<void*>(candidate), size,
+                        MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))
+                    return block;
+            }
+            return nullptr;
+        }
+
+        uint8_t* CutsceneCalleeCopy(uintptr_t callee) noexcept
+        {
+            static constexpr uint8_t kPrologue[5] = { 0x55u, 0x8Bu, 0xECu, 0x83u, 0xE4u };
+            static constexpr uint8_t kPokeSite[5] = { 0xC6u, 0x44u, 0x24u, 0x1Cu, 0x01u };
+            static constexpr uint8_t kBranchSite[8] = {
+                0x74u, 0x24u, 0x8Bu, 0x44u, 0x24u, 0x2Cu, 0x83u, 0xF8u,
+            };
+            const auto& game = Game::Get();
+            if (callee == 0 || !game.Contains(callee) ||
+                !game.Contains(callee + kCutsceneCalleeSize - 1))
+                return nullptr;
+
+            const auto* source = reinterpret_cast<const uint8_t*>(callee);
+            if (std::memcmp(source, kPrologue, sizeof(kPrologue)) != 0 ||
+                std::memcmp(source + 0x4Au, kPokeSite, sizeof(kPokeSite)) != 0 ||
+                std::memcmp(source + kCutsceneBranchOffset, kBranchSite,
+                    sizeof(kBranchSite)) != 0)
+                return nullptr;
+
+            auto* copy = static_cast<uint8_t*>(AllocateNearImage(kCutsceneCalleeSize));
+            if (copy == nullptr)
+                return nullptr;
+            if (!RelocateCalls(copy, source, kCutsceneCalls))
+            {
+                VirtualFree(copy, 0, MEM_RELEASE);
+                return nullptr;
+            }
+            // The copy's `jz` at +0x200 becomes the unconditional `jmp`, with
+            // the original displacement kept.
+            copy[kCutsceneBranchOffset] = static_cast<uint8_t>(Bytes::ShortJmp);
+            return copy;
+        }
+    } // namespace
+
     // CutsceneFixes: chain B's two camera call sites become calls into
     // sub_100388C0, and chain A's `je` in the camera function becomes the
     // unconditional `jmp` that skips its "target found" test. Each caller's
@@ -670,6 +764,23 @@ namespace
         // original's sub_10003980; recording that VA keeps the registered branch in
         // the original's coordinates.
         Bodies::Register(reinterpret_cast<uintptr_t>(&CutsceneResolveEntry), 0x10003980u);
+
+        if (ImprovementEnabled(Improvement::cutscene_entry) && zpatch_cutscene_target != 0)
+        {
+            const auto callee = static_cast<uintptr_t>(zpatch_cutscene_target);
+            if (uint8_t* copy = CutsceneCalleeCopy(callee))
+            {
+                zpatch_cutscene_target = static_cast<uint32_t>(
+                    reinterpret_cast<uintptr_t>(copy));
+                zpatch_cutscene_poke = static_cast<uint32_t>(
+                    reinterpret_cast<uintptr_t>(copy) + kCutscenePokeOffset);
+                injector::MakeJMP(reinterpret_cast<void*>(callee),
+                    reinterpret_cast<void*>(&CutsceneChainBody), true);
+                Log::Print("cutscene: hooked callee {:08X}, copy {:08X}", callee,
+                    reinterpret_cast<uintptr_t>(copy));
+                return;
+            }
+        }
 
         auto pattern = find_pattern("8B 4C 24 2C 5F 5E 5B 33 CC B0 01 E8");
         if (!pattern.empty())

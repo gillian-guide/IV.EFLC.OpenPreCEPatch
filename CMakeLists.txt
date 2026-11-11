@@ -97,7 +97,8 @@ target_link_libraries(zp_modules PUBLIC version shlwapi)
 
 add_library(${ZP_NAME} SHARED
   source/dllmain.cpp
-  source/resources/version.rc)
+  source/resources/version.rc
+  source/warnings.rc)
 set_target_properties(${ZP_NAME} PROPERTIES
   CXX_SCAN_FOR_MODULES ON
   PREFIX ""
@@ -171,6 +172,29 @@ set_target_properties(zp_applicability PROPERTIES CXX_SCAN_FOR_MODULES ON)
 target_link_libraries(zp_applicability PRIVATE zp_modules)
 add_test(NAME zp_applicability COMMAND zp_applicability)
 set_tests_properties(zp_applicability PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+# The `caches` group's model-lookup memo: hit/miss, no negative caching, missing
+# original.
+add_executable(zp_caches tests/caches.cpp)
+set_target_properties(zp_caches PROPERTIES CXX_SCAN_FOR_MODULES ON)
+target_link_libraries(zp_caches PRIVATE zp_modules)
+add_test(NAME zp_caches COMMAND zp_caches)
+set_tests_properties(zp_caches PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+# The `import` group: flat-to-grouped first-run creation and the grouped-file
+# preference, on a temporary working directory.
+add_executable(zp_import tests/import.cpp)
+set_target_properties(zp_import PROPERTIES CXX_SCAN_FOR_MODULES ON)
+target_link_libraries(zp_import PRIVATE zp_modules)
+add_test(NAME zp_import COMMAND zp_import)
+set_tests_properties(zp_import PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+# The `dlc_path` group's 0x104-byte discovery-path bound.
+add_executable(zp_dlc_path tests/dlc_path.cpp)
+set_target_properties(zp_dlc_path PROPERTIES CXX_SCAN_FOR_MODULES ON)
+target_link_libraries(zp_dlc_path PRIVATE zp_modules)
+add_test(NAME zp_dlc_path COMMAND zp_dlc_path)
+set_tests_properties(zp_dlc_path PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
 # The two per-model light tables the loader preamble reads from
 # [PopupLightAngles] / [HeadlightConeOffsets]: the recovered grammar, defaults and

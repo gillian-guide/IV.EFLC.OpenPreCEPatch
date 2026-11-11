@@ -96,6 +96,23 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
   the save unpatched. `zp_save_walk` proves the same corrupt files throw under
   1:1 and are `rejected` under the group (264 checks).
 
+## 2026-11-11 — remaining changed implementations
+
+- `sco_anchor`: branch-anchored SCOSignatureFix scan (`89 3D … 85 ED 74 1E`, +8),
+  fallback to the recovered `-32` arm; same byte on 1.0.8.0.
+- `garage_entry`: prologue hook at 0xC68B90 (match - 0x20), xmm0 reloaded, resume
+  at +8; 5-byte E9 moves exactly -0x20.
+- `cutscene_entry`: one hook at the shared callee 0xC9A640 with a relocated copy
+  (13 calls re-pointed, branch fix baked); 3 sites -> 1; falls back on shape or
+  allocation miss.
+- `caches`: direct-mapped shared model-lookup memo (positive results only);
+  `zp_caches` 8 checks. Popup/model-name in-body precompute remains out (asm).
+- `dlc_path`: 0x104-byte module-path bound; `zp_dlc_path` 4 checks.
+- `import`: first-run `ZolikaPatch.grouped.ini` creation, grouped preference,
+  flat file untouched; `zp_import` 11 checks.
+- `task_dialogs`: `TaskDialogIndirect` with the ASI's common-controls 6.0
+  manifest + `CreateActCtx`; `zp_pe_check` finds the manifest. UI unproven.
+
 ## Open items
 
 - 18-cell `dump_matrix.py` full run; record `differing`.

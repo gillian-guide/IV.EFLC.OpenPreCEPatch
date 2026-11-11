@@ -131,6 +131,59 @@ def main():
     check(any(len(run) == 6 for run in nop_runs),
         "alpha: the kept six bytes are NOPs", [(run, hex(on[run[0]])) for run in runs(on)])
 
+    # SCOSignatureFix: the extended anchor writes the same byte as the -32
+    # anchor on 1.0.8.0, so the write set must be identical.
+    keys = {"SCOSignatureFix": 1}
+    off_code, off_path = cell.run("sco.off", image, 9, "except:failsafe", keys)
+    on_code, on_path = cell.run("sco.on", image, 9, "sco", keys)
+    check(off_code == 0 and on_code == 0, "sco: both runs complete")
+    check(parse_dump(off_path) == parse_dump(on_path),
+        "sco: the branch-anchored scan writes the same byte as the -32 arm")
+
+    # GarageModelFix: the prologue entry moves the same 5-byte E9 from the
+    # mid-body site (0x868BB0) to the function entry (0x868B90).
+    keys = {"GarageModelFix": 1}
+    off_code, off_path = cell.run("garage.off", image, 9, "except:failsafe", keys)
+    on_code, on_path = cell.run("garage.on", image, 9, "garage_entry", keys)
+    off = parse_dump(off_path) if off_path.exists() else {}
+    on = parse_dump(on_path) if on_path.exists() else {}
+    removed = set(off) - set(on)
+    added = set(on) - set(off)
+    check(off_code == 0 and on_code == 0, "garage: both runs complete")
+    check(len(removed) == 5 and len(added) == 5,
+        "garage: the same 5-byte jump moves", (sorted(removed), sorted(added)))
+    check(added and removed and min(added) - min(removed) == -0x20,
+        "garage: the new site is the prologue, 0x20 bytes before the anchor")
+    check(off[min(removed)] == 0xE9 and on[min(added)] == 0xE9,
+        "garage: both writes are E9 jumps")
+
+    # CutsceneFixes: the 3 sites (two call displacements + the branch byte) are
+    # replaced by one 5-byte E9 at the shared callee 0x89A640 on 1.0.8.0.
+    keys = {"CutsceneFixes": 1}
+    off_code, off_path = cell.run("cutscene.off", image, 9, "except:failsafe", keys)
+    on_code, on_path = cell.run("cutscene.on", image, 9, "cutscene_entry", keys)
+    off = parse_dump(off_path) if off_path.exists() else {}
+    on = parse_dump(on_path) if on_path.exists() else {}
+    removed = set(off) - set(on)
+    added = set(on) - set(off)
+    check(off_code == 0 and on_code == 0, "cutscene: both runs complete")
+    check(len(added) == 5 and on.get(min(added, default=0)) == 0xE9,
+        "cutscene: one 5-byte E9 at the callee", sorted(added))
+    check(min(added, default=0) == 0x89A640,
+        "cutscene: the hook is the shared callee", hex(min(added, default=0)))
+    check(len(removed) == 9,
+        "cutscene: the three original sites are gone", sorted(removed))
+    check(0x89A840 in removed and off[0x89A840] == 0xEB,
+        "cutscene: the branch byte is no longer rewritten")
+
+    # LoadDLCs' path guard: with a normal install path the write set is identical.
+    keys = {"LoadDLCs": 1}
+    off_code, off_path = cell.run("dlc.off", image, 9, "except:failsafe", keys)
+    on_code, on_path = cell.run("dlc.on", image, 9, "dlc_path", keys)
+    check(off_code == 0 and on_code == 0, "dlc_path: both runs complete")
+    check(parse_dump(off_path) == parse_dump(on_path),
+        "dlc_path: a fitting module path leaves the write set identical")
+
     print(f"{checks} check(s), {failures} failure(s)")
     return 0 if failures == 0 else 1
 

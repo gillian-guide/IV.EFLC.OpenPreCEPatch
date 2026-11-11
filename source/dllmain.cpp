@@ -69,6 +69,35 @@ namespace
 #endif
 
         const bool read = Config::Load();
+        if (ImprovementEnabled(Improvement::import))
+        {
+            // First-run creation: render the flat document once into the grouped
+            // file. The current run keeps reading the flat document; the next
+            // run prefers the grouped one, and deleting it returns to the flat
+            // INI. The flat file is never modified.
+            std::error_code ignored;
+            if (!std::filesystem::exists(Config::GroupedFileName, ignored) &&
+                std::filesystem::exists(Config::FileName, ignored))
+            {
+                const auto resolve = [](std::string_view key) -> std::string_view
+                {
+                    const auto* option = Catalogue::Find(key);
+                    if (option == nullptr)
+                        return "Options";
+                    // The section names follow OpenPreCEPatch's shipped INI
+                    // where a key's owning module is not the oPCEP section.
+                    if (key == "BenchmarkFix" || option->module == "stability")
+                        return "STABILITY";
+                    if (key == "OutOfCommissionFix" || key == "CutsceneFixes")
+                        return "FIXES";
+                    if (option->module == "vehicles") return "VEHICLES";
+                    if (option->module == "graphics") return "GRAPHICS";
+                    if (option->module == "loading") return "COMPATIBILITY";
+                    return "MISC";
+                };
+                (void)Config::WriteGrouped(Config::Ini(), resolve);
+            }
+        }
         if (ImprovementEnabled(Improvement::config) ||
             ImprovementEnabled(Improvement::warnings))
         {

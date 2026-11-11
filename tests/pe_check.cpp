@@ -116,6 +116,43 @@ namespace
         Check(libraries > 0, "imports: the import table has at least one library");
         Check(!foundCrt, "imports: no CRT redistributable DLL (static runtime)", crt);
     }
+    // The task-dialog group needs the ASI's own common-controls 6.0 manifest;
+    // the game executable has none. The resource type is RT_MANIFEST (24), id 1.
+    // Loading the artifact as a data file maps it without running DllMain, and
+    // the image-resource flag makes FindResource work on the mapped copy.
+    void CheckManifest(const char* path)
+    {
+        HMODULE module = LoadLibraryExW(std::wstring(path, path + std::strlen(path)).c_str(),
+            nullptr, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+        if (module == nullptr)
+        {
+            Check(false, "manifest: the ASI can be mapped as a data file");
+            return;
+        }
+
+        const HRSRC resource = FindResourceW(module, MAKEINTRESOURCEW(1),
+            MAKEINTRESOURCEW(24));
+        if (resource == nullptr)
+        {
+            Check(false, "manifest: the ASI carries an RT_MANIFEST resource");
+            FreeLibrary(module);
+            return;
+        }
+        const HGLOBAL data = LoadResource(module, resource);
+        const void* const bytes = data != nullptr ? LockResource(data) : nullptr;
+        const DWORD size = SizeofResource(module, resource);
+        if (bytes == nullptr || size == 0)
+        {
+            Check(false, "manifest: the manifest blob is readable");
+            FreeLibrary(module);
+            return;
+        }
+
+        const std::string_view text(static_cast<const char*>(bytes), size);
+        Check(text.find("Common-Controls") != std::string_view::npos,
+            "manifest: the ASI embeds the common-controls 6.0 dependency");
+        FreeLibrary(module);
+    }
 }
 
 int main(int argc, char** argv)
@@ -158,6 +195,7 @@ int main(int argc, char** argv)
         std::to_string(nt->OptionalHeader.Subsystem));
 
     CheckImports(file, nt);
+    CheckManifest(argv[1]);
 
     std::printf("%d check(s), %d failure(s)\n", checks, failures);
     return failures == 0 ? 0 : 1;

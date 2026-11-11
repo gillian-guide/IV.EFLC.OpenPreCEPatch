@@ -155,6 +155,12 @@ extern "C"
     // dword_10159CD4 / dword_10159CD0: the two sites' resumes (match+6, match+5).
     uint32_t zpatch_garage_resume_a = 0;
     uint32_t zpatch_garage_resume_b = 0;
+    // The garage_entry group's prologue form: the 0xC68B90 entry is 0x20 bytes
+    // before the mid-body anchor and starts with `movss xmm0, ds:X` (8 bytes).
+    // Resume = prologue + 8; the float the skipped instruction loads is
+    // published as a value so the body can reload it after the helper call.
+    uint32_t zpatch_garage_entry_resume_a = 0;
+    float zpatch_garage_scale = 0.0f;
     // byte_10159B85: the original's DllMain sets it to 1 when CitizenIV.exe is
     // loaded (0x10055DFB..0x10055E17); the garage helper then skips the colour copy.
     uint8_t zpatch_garage_citizen = 0;
@@ -305,6 +311,7 @@ static void CarDecalsSelectorShim();
 static void BikePhysicsDetour();
 static void DualHeadlightsNewBody();
 static void DualHeadlightsOldBody();
+static void GarageEntryBodyA();
 static void* __fastcall VehicleComponentBody(void*, const char*);
 static void SteerResolveEntry();
 static void SteerConsumerBody();
@@ -815,8 +822,27 @@ namespace
 
         auto pattern = find_pattern("8B 57 20 D9 42 34 D9 5E 04 8B 47 20");
         if (!pattern.empty())
+        {
+            auto* match = pattern.get_first<std::byte>(0);
             zpatch_garage_resume_a = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(6)));
+                reinterpret_cast<uintptr_t>(match + 6));
+
+            // The opt-in prologue form: match - 0x20 is the function entry,
+            // whose first instruction is `movss xmm0, ds:<float>` (F3 0F 10 05).
+            const auto* prologue = match - 0x20;
+            if (prologue[0] == std::byte{ 0xF3 } && prologue[1] == std::byte{ 0x0F } &&
+                prologue[2] == std::byte{ 0x10 } && prologue[3] == std::byte{ 0x05 })
+            {
+                const auto target = *reinterpret_cast<const uint32_t*>(prologue + 4);
+                if (target != 0 && Game::Get().Contains(target))
+                {
+                    zpatch_garage_entry_resume_a = static_cast<uint32_t>(
+                        reinterpret_cast<uintptr_t>(match - 0x18));
+                    zpatch_garage_scale = *reinterpret_cast<const float*>(
+                        static_cast<uintptr_t>(target));
+                }
+            }
+        }
 
         pattern = find_pattern("0F B7 0E 50 51 E8");
         if (!pattern.empty())
@@ -1572,8 +1598,23 @@ namespace
 
         auto pattern = find_pattern("8B 57 20 D9 42 34 D9 5E 04 8B 47 20");
         if (!pattern.empty())
-            injector::MakeJMP(pattern.get_first<std::byte>(0),
-                reinterpret_cast<void*>(&GarageBodyA), true);
+        {
+            auto* match = pattern.get_first<std::byte>(0);
+            if (ImprovementEnabled(Improvement::garage_entry) &&
+                zpatch_garage_entry_resume_a != 0)
+            {
+                // The prologue hook: the body replays the store helper with the
+                // prologue's own ECX/[esp+4], reloads the skipped xmm0 and
+                // resumes after the 8-byte movss. A shape miss falls back to the
+                // recovered mid-body site.
+                injector::MakeJMP(match - 0x20,
+                    reinterpret_cast<void*>(&GarageEntryBodyA), true);
+            }
+            else
+            {
+                injector::MakeJMP(match, reinterpret_cast<void*>(&GarageBodyA), true);
+            }
+        }
 
         pattern = find_pattern("0F B7 0E 50 51 E8");
         if (!pattern.empty())
@@ -1697,6 +1738,9 @@ export void RegisterVehicles()
     Bodies::Register(reinterpret_cast<uintptr_t>(&GarageColourBody), 0x10046B90u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&GarageLookupBody), 0x10046BD0u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&GarageBodyA), 0x10046C80u);
+    // The prologue form shares the recovered body A VA: the offline dump
+    // canonicalises either path's branch to the same reference.
+    Bodies::Register(reinterpret_cast<uintptr_t>(&GarageEntryBodyA), 0x10046C80u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&GarageBodyB), 0x10046CA0u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&NoliveryHashBody), 0x1003D220u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&NoliveryCountBody), 0x1003D270u);
@@ -3472,6 +3516,31 @@ static __declspec(naked) void GarageBodyA()
         mov edx, DWORD PTR [edi + 20h]
         fld DWORD PTR [edx + 34h]
         jmp DWORD PTR [zpatch_garage_resume_a]
+    }
+}
+
+// The garage_entry group's prologue form of body A, installed at 0xC68B90
+// (match - 0x20) instead of 0xC68BB0. At the function entry ECX is the object
+// and [esp+4] the vehicle; after pushad they are at [esp+0x18] and [esp+0x24].
+// The skipped first instruction is `movss xmm0, ds:<float>` (8 bytes), so the
+// body reloads that constant and resumes at entry+8 (match - 0x18).
+static __declspec(naked) void GarageEntryBodyA()
+{
+    __asm
+    {
+        __emit 0x60  // pusha
+        mov ecx, DWORD PTR [esp + 18h]
+        mov edx, DWORD PTR [esp + 24h]
+        call GarageColourBody
+        __emit 0x61  // popa
+        push eax
+        mov eax, OFFSET zpatch_garage_scale
+        __emit 0F3h
+        __emit 00Fh
+        __emit 010h
+        __emit 000h  // movss xmm0, DWORD PTR [eax]
+        pop eax
+        jmp DWORD PTR [zpatch_garage_entry_resume_a]
     }
 }
 

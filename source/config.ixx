@@ -210,6 +210,12 @@ export namespace Config
     // exactly as it is written here.
     inline constexpr std::string_view FileName = "ZolikaPatch.ini";
 
+    // The `import` group's first-run grouped file. It never replaces the flat
+    // file; `Load` prefers it when it exists, so a user can delete it to return
+    // to the flat INI.
+    inline constexpr std::string_view GroupedFileName = "ZolikaPatch.grouped.ini";
+    using SectionResolver = std::string_view (*)(std::string_view key);
+
     // OpenPreCEPatch's no-throw read. `strtol`'s base-10 prefix grammar: leading
     // whitespace, an optional sign, decimal digits, stop at the first other byte.
     // Out-of-range saturates instead of throwing, so the only consumer (`== 1`)
@@ -303,9 +309,60 @@ export namespace Config
     inline bool Load()
     {
         std::error_code ignored;
-        const bool exists = std::filesystem::exists(std::filesystem::path(FileName), ignored);
-        Ini() = Feather::Load(std::filesystem::path(FileName));
+        const std::filesystem::path grouped(GroupedFileName);
+        if (ImprovementEnabled(Improvement::import) &&
+            std::filesystem::exists(grouped, ignored))
+        {
+            Ini() = Feather::Load(grouped);
+            return true;
+        }
+
+        const std::filesystem::path flat(FileName);
+        const bool exists = std::filesystem::exists(flat, ignored);
+        Ini() = Feather::Load(flat);
         return exists;
+    }
+
+    // The grouped rendering of a flat document: each `[Options]` key goes to the
+    // section the resolver names; a key the resolver does not know stays under
+    // `[Options]`. `WriteGrouped` is the first-run creation the `import` group
+    // uses; `Load` then prefers the group file, and deleting it returns to the
+    // flat INI.
+    inline std::string GroupedText(const Feather::Document& document, SectionResolver resolve)
+    {
+        const auto options = document.Section("Options");
+        if (options == nullptr)
+            return {};
+
+        std::map<std::string, std::vector<std::pair<std::string, std::string>>> sections;
+        for (const auto& [key, value] : *options)
+        {
+            const std::string_view section = resolve != nullptr ? resolve(key) : "Options";
+            sections[std::string(section)].emplace_back(key, value);
+        }
+
+        std::string text;
+        for (const auto& [section, entries] : sections)
+        {
+            text += "[" + section + "]\n";
+            for (const auto& [key, value] : entries)
+                text += key + "=" + value + "\n";
+            text += "\n";
+        }
+        return text;
+    }
+
+    inline bool WriteGrouped(const Feather::Document& document, SectionResolver resolve,
+        const std::filesystem::path& path = std::filesystem::path(GroupedFileName))
+    {
+        const std::string text = GroupedText(document, resolve);
+        if (text.empty())
+            return false;
+        std::ofstream file(path, std::ios::out | std::ios::trunc | std::ios::binary);
+        if (!file.is_open())
+            return false;
+        file << text;
+        return file.good();
     }
 
     inline int32_t Integer(const Feather::Document& document, std::string_view key, std::string_view fallback)

@@ -10,6 +10,7 @@ export module shared;
 
 import bodies;
 import common;
+import improvements;
 import patch;
 
 // The helper library the original ASI keeps beside its bodies: the name hasher /
@@ -42,6 +43,14 @@ export namespace Shared
     // resume from the site it is about to overwrite.
     void PublishPlayerPedComponentsResume(uint32_t resume);
 
+    // The cached model lookup the `caches` group publishes as
+    // `zpatch_model_lookup`; the original function stays in
+    // `zpatch_model_lookup_original`. A successful positive index is memoised;
+    // a negative result is not (a model not loaded yet must be found later).
+    void SetModelLookupForTest(uintptr_t original, bool cache);
+    int CachedLookupForTest(uint32_t hash, int32_t* out);
+    void ResetLookupCacheForTest();
+
     // Runs once, before any arm: it resolves the shared game lookup and publishes
     // the bodies' recovered addresses. Called from the startup drivers next to the
     // other Register functions.
@@ -59,6 +68,10 @@ extern "C"
     // pattern the original scans for; a scan that misses keeps the previous value,
     // as its `cmovnz` at 0x10052ED9 does, which for a first run is 0.
     uintptr_t zpatch_model_lookup = 0;
+
+    // The `caches` group's original, saved before the cached wrapper replaces
+    // the published slot.
+    uintptr_t zpatch_model_lookup_original = 0;
 
     // The two CRT imports the resolver calls, through its IAT slots 0x100633A0
     // (`_strnicmp`) and 0x100632D0 (`strtoul`). They stay pointer slots because the
@@ -113,6 +126,76 @@ namespace Shared
     }
 }
 
+namespace
+{
+    // A direct-mapped memo of successful model lookups. The table is static
+    // after startup, so a hit cannot go stale; a collision just re-resolves.
+    struct LookupCacheEntry
+    {
+        uint32_t hash;
+        int32_t index;
+        uint32_t valid;
+    };
+    constexpr size_t kLookupCacheSlots = 1024;
+    LookupCacheEntry g_lookup_cache[kLookupCacheSlots] = {};
+
+    int __cdecl CachedModelLookup(uint32_t hash, int32_t* out) noexcept
+    {
+        const size_t slot = (static_cast<size_t>(hash) * 2654435761u) >>
+                            (32 - 10);  // 1024 slots
+        auto& entry = g_lookup_cache[slot];
+        if (entry.valid != 0 && entry.hash == hash)
+        {
+            if (out != nullptr)
+                *out = entry.index;
+            return 1;
+        }
+
+        const auto original = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
+            zpatch_model_lookup_original);
+        if (original == nullptr)
+        {
+            if (out != nullptr)
+                *out = -1;
+            return 0;
+        }
+
+        int32_t index = -1;
+        const int answer = original(hash, &index);
+        if (answer != 0 && index > 0)
+        {
+            entry.hash = hash;
+            entry.index = index;
+            entry.valid = 1;
+        }
+        if (out != nullptr)
+            *out = index;
+        return answer;
+    }
+}
+
+namespace Shared
+{
+    void SetModelLookupForTest(uintptr_t original, bool cache)
+    {
+        zpatch_model_lookup_original = original;
+        zpatch_model_lookup = cache
+            ? reinterpret_cast<uintptr_t>(&CachedModelLookup)
+            : original;
+    }
+
+    int CachedLookupForTest(uint32_t hash, int32_t* out)
+    {
+        return CachedModelLookup(hash, out);
+    }
+
+    void ResetLookupCacheForTest()
+    {
+        for (auto& entry : g_lookup_cache)
+            entry = {};
+    }
+}
+
 namespace Shared
 {
     void Register()
@@ -127,6 +210,10 @@ namespace Shared
         auto pattern = find_pattern("8B 44 24 04 89 44 24 04 66 A1 ? ? ? ? 66 85 C0 76 3E");
         if (!pattern.empty())
             zpatch_model_lookup = reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(0));
+
+        zpatch_model_lookup_original = zpatch_model_lookup;
+        if (ImprovementEnabled(Improvement::caches))
+            zpatch_model_lookup = reinterpret_cast<uintptr_t>(&CachedModelLookup);
 
         Bodies::Register(reinterpret_cast<uintptr_t>(&ValueResolverBody), 0x10003E50u);
         Bodies::Register(reinterpret_cast<uintptr_t>(&PlayerPedComponentsShimBody), 0x1003D9A0u);

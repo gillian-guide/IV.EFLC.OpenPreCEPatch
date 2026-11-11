@@ -76,6 +76,30 @@ export enum class Improvement : uint32_t
     // reading uninitialised bytes; payloads are seeked over instead of read.
     hardening = 1u << 8,
 
+    // SCOSignatureFix scans a signature that ends on the `jz` it flips, instead
+    // of a downstream anchor and a fixed -32 offset.
+    sco_anchor = 1u << 9,
+
+    // GarageModelFix hooks the function prologue (0xC68B90) instead of the
+    // mid-body site (0xC68BB0); the body reloads the skipped xmm0.
+    garage_entry = 1u << 10,
+
+    // CutsceneFixes hooks the shared camera callee once, with a relocated copy
+    // of it, instead of the three original sites.
+    cutscene_entry = 1u << 11,
+
+    // The model/garage/popup lookup caches (see docs/improvements.md).
+    caches = 1u << 12,
+
+    // LoadDLCs' discovery path is built with the checked path API.
+    dlc_path = 1u << 13,
+
+    // First-run grouped INI creation and legacy import.
+    import = 1u << 14,
+
+    // FusionFix-style task dialogs for the startup warnings.
+    task_dialogs = 1u << 15,
+
     // The folded groups: what `all` means. `except:<group>` complements this set.
     // Only the failsafe is folded today: every other group changes a user-visible
     // outcome and is named explicitly, so `all` stays the default-on failsafe and
@@ -214,6 +238,22 @@ namespace
         { "hardening", Improvement::hardening },
         { "saves", Improvement::hardening },
         { "newsaves", Improvement::hardening },
+        { "sco", Improvement::sco_anchor },
+        { "sco_anchor", Improvement::sco_anchor },
+        { "garage_entry", Improvement::garage_entry },
+        { "garage-entry", Improvement::garage_entry },
+        { "garage", Improvement::garage_entry },
+        { "cutscene_entry", Improvement::cutscene_entry },
+        { "cutscene-entry", Improvement::cutscene_entry },
+        { "cutscene", Improvement::cutscene_entry },
+        { "caches", Improvement::caches },
+        { "cache", Improvement::caches },
+        { "dlc_path", Improvement::dlc_path },
+        { "dlc-path", Improvement::dlc_path },
+        { "import", Improvement::import },
+        { "ini_import", Improvement::import },
+        { "task_dialogs", Improvement::task_dialogs },
+        { "task-dialogs", Improvement::task_dialogs },
         { "all", Improvement::all },
     };
 
@@ -344,6 +384,14 @@ const char* ImprovementName(Improvement group) noexcept
     case Improvement::config: return "config";
     case Improvement::warnings: return "warnings";
     case Improvement::ooc_cache: return "ooc_cache";
+    case Improvement::hardening: return "hardening";
+    case Improvement::sco_anchor: return "sco_anchor";
+    case Improvement::garage_entry: return "garage_entry";
+    case Improvement::cutscene_entry: return "cutscene_entry";
+    case Improvement::caches: return "caches";
+    case Improvement::dlc_path: return "dlc_path";
+    case Improvement::import: return "import";
+    case Improvement::task_dialogs: return "task_dialogs";
     case Improvement::none: return "none";
     }
     return "unknown";

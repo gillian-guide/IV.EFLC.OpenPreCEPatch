@@ -2,6 +2,7 @@ module;
 
 #include <common.hxx>
 
+#include <commctrl.h>
 #include <cstdlib>
 
 export module warnings;
@@ -9,6 +10,7 @@ export module warnings;
 import common;
 import config;
 import game;
+import improvements;
 
 // OpenPreCEPatch's startup warnings, ported as a selectable group.
 //
@@ -49,6 +51,61 @@ export namespace Warnings
 namespace
 {
     HANDLE g_singleInstance = nullptr;
+
+    using TaskDialogIndirectFn =
+        HRESULT(WINAPI*)(const TASKDIALOGCONFIG*, int*, int*, BOOL*);
+
+    // The FusionFix-shaped presentation: TaskDialogIndirect with the ASI's own
+    // common-controls 6.0 manifest activated around the call. The game
+    // executable carries no such manifest, so without the private ActCtx the
+    // task dialog cannot be created. A failure falls back to MessageBoxW.
+    bool ShowTaskDialog(const wchar_t* title, const std::wstring& text) noexcept
+    {
+        const HMODULE comctl = LoadLibraryW(L"comctl32.dll");
+        if (comctl == nullptr)
+            return false;
+        const auto taskDialog = reinterpret_cast<TaskDialogIndirectFn>(
+            GetProcAddress(comctl, "TaskDialogIndirect"));
+        if (taskDialog == nullptr)
+        {
+            FreeLibrary(comctl);
+            return false;
+        }
+
+        HMODULE self = nullptr;
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&ShowTaskDialog), &self);
+
+        ACTCTXW activation{};
+        activation.cbSize = sizeof(activation);
+        activation.dwFlags = ACTCTX_FLAG_RESOURCE_NAME_VALID | ACTCTX_FLAG_HMODULE_VALID;
+        activation.lpResourceName = MAKEINTRESOURCEW(1);
+        activation.hModule = self;
+        const HANDLE context = CreateActCtxW(&activation);
+        ULONG_PTR cookie = 0;
+        const bool active = context != INVALID_HANDLE_VALUE &&
+                            ActivateActCtx(context, &cookie) != FALSE;
+
+        TASKDIALOGCONFIG config{};
+        config.cbSize = sizeof(config);
+        config.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION;
+        config.dwCommonButtons = TDCBF_OK_BUTTON;
+        config.pszWindowTitle = title;
+        config.pszMainIcon = MAKEINTRESOURCEW(-1);  // TD_WARNING_ICON
+        config.pszMainInstruction = title;
+        config.pszContent = text.c_str();
+
+        int button = 0;
+        const HRESULT answer = taskDialog(&config, &button, nullptr, nullptr);
+
+        if (active)
+            DeactivateActCtx(0, cookie);
+        if (context != INVALID_HANDLE_VALUE)
+            ReleaseActCtx(context);
+        FreeLibrary(comctl);
+        return SUCCEEDED(answer);
+    }
 }
 
 namespace Warnings
@@ -83,7 +140,11 @@ namespace Warnings
 
     void Show(const wchar_t* title, const std::wstring& text, uint32_t exitCode) noexcept
     {
-        MessageBoxW(nullptr, text.c_str(), title, MB_OK | MB_ICONWARNING);
+        bool shown = false;
+        if (ImprovementEnabled(Improvement::task_dialogs))
+            shown = ShowTaskDialog(title, text);
+        if (!shown)
+            MessageBoxW(nullptr, text.c_str(), title, MB_OK | MB_ICONWARNING);
         if (exitCode != 0)
             TerminateProcess(GetCurrentProcess(), exitCode);
     }

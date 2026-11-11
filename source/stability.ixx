@@ -695,15 +695,32 @@ namespace
     }
 
     // SCOSignatureFix: the instruction 32 bytes before the anchor becomes a short
-    // jump, so the signature check that follows is skipped.
+    // jump, so the signature check that follows is skipped. The `sco_anchor`
+    // group instead scans a signature that ends on the `jz` itself; a build where
+    // the old -32 distance does not hold would otherwise flip an unrelated `jz`.
     void InstallSCOSignatureFix()
     {
         if (!Loader::Enabled("SCOSignatureFix"))
             return;
 
+        if (ImprovementEnabled(Improvement::sco_anchor))
+        {
+            // `mov ds:X,edi` (6 bytes) + `test ebp,ebp` (2) put the `jz` opcode
+            // at +8. If the shape is absent, fall through to the recovered arm.
+            auto anchored = find_pattern("89 3D ? ? ? ? 85 ED 74 1E");
+            if (!anchored.empty())
+            {
+                injector::WriteMemory<std::byte>(
+                    anchored.get_first<std::byte>(8), Bytes::ShortJmp, true);
+                return;
+            }
+        }
+
         auto pattern = find_pattern("8B 6C 24 1C 66 89 6E 14 64 8B 0D 2C 00 00 00 8B");
         if (!pattern.empty())
+        {
             injector::WriteMemory<std::byte>(pattern.get_first(-32), Bytes::ShortJmp, true);
+        }
     }
 
     // TryToSkipAllErrors: the error handler returns immediately instead of walking
