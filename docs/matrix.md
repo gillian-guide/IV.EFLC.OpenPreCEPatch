@@ -15,6 +15,13 @@ Each cell is its own subprocess. Every number is the scoreboard's comparison
 the baseline recorded one stand-in address for every body target and those bytes
 cannot be compared. `differing`, `missing` and `extra` count real bytes only.
 
+**Retained-surface note.** The baseline is the original ZolikaPatch dump. This
+distribution drops the 14 keys OpenPreCEPatch removed or moved to XLivelessAddon
+and has five documented improved deltas. The full cell's `missing` therefore
+contains those expected bytes (the residual names them), while `differing` is
+`0` on every build; the per-option `closed / 85` excludes the five deltas. This is
+the retained-arm check, not a 1:1 distribution score.
+
 ## Full cell
 
 `bytes` is what our cell writes; the rest is against the baseline. The residual
@@ -24,15 +31,15 @@ its scoreboard state: `closed`, `open`, or `oracle-verified baseline omission`.
 
 | build | version | image | bytes | differing | missing | extra | residual |
 |---:|---|---|---:|---:|---:|---:|---|
-| 1 | 1.0.0.0 | `GTAIV_1000.exe` | 255 | - | - | - | faulted: partial not scored |
-| 5 | 1.0.4.0 | `GTAIV_1040.exe` | 955 | 0 | 0 | 405 | extra 405: `SkipLauncher` 399 (oracle-verified baseline omission), `CarDynamicShadowFix` 6 (oracle-verified baseline omission), all oracle-verified baseline omissions |
-| 6 | 1.0.0.4 | `GTAIV_1004.exe` | 724 | 0 | 0 | 180 | extra 180: `SkipLauncher` 180 (oracle-verified baseline omission), all oracle-verified baseline omissions |
-| 7 | 1.0.6.0 | `GTAIV_1060.exe` | 983 | 0 | 0 | 63 | extra 63: `SkipLauncher` 63 (oracle-verified baseline omission), all oracle-verified baseline omissions |
-| 8 | 1.0.7.0 | `GTAIV_1070.exe` | 1004 | 0 | 0 | 63 | extra 63: `SkipLauncher` 63 (oracle-verified baseline omission), all oracle-verified baseline omissions |
-| 9 | 1.0.8.0 | `GTAIV.exe` | 947 | 0 | 0 | 57 | extra 57: `SkipLauncher` 57 (oracle-verified baseline omission), all oracle-verified baseline omissions |
-| 11 | 1.1.1.0 | `EFLC_1110.exe` | 880 | 0 | 0 | 58 | extra 58: `SkipLauncher` 58 (oracle-verified baseline omission), all oracle-verified baseline omissions |
-| 12 | 1.1.2.0 | `EFLC_1120.exe` | 877 | 0 | 0 | 58 | extra 58: `SkipLauncher` 58 (oracle-verified baseline omission), all oracle-verified baseline omissions |
-| 13 | 1.1.3.0 | `EFLC_1130.exe` | 851 | 0 | 0 | 48 | extra 48: `SkipLauncher` 48 (oracle-verified baseline omission), all oracle-verified baseline omissions |
+| 1 | 1.0.0.0 | `GTAIV_1000.exe` | 368 | 0 | 27 | 6 | missing 27: `BuildingAlphaFix` 7 (open), `BorderlessWindowed` 4 (closed), `NoPhysicsSleep` 4 (closed), `GarageModelFix` 2 (open), `ImprovedShaderStreaming` 2 (open), `NoImpostorHeightCutoff` 2 (open), `SkipLauncher` 2 (closed), `BadPlayerModelCrashFix` 1 (open), `MovingPlaneParts` 1 (open), `MovingSteeringWheelSupport` 1 (open), `SCOSignatureFix` 1 (open), `ShakingEngineBlock` 1 (open), `SkipIntro` 1 (closed), partly from open keys; extra 6: `CarDynamicShadowFix` 6 (oracle-verified baseline omission), all oracle-verified baseline omissions |
+| 5 | 1.0.4.0 | `GTAIV_1040.exe` | 427 | 0 | 29 | 7 | missing 29: `SkipLauncher` 9 (closed), `BuildingAlphaFix` 7 (open), `BorderlessWindowed` 4 (closed), `NoPhysicsSleep` 4 (closed), `ImprovedShaderStreaming` 2 (open), `GarageModelFix` 1 (open), `SkipIntro` 1 (closed), `VRAMFix` 1 (closed), partly from open keys; extra 7: `CarDynamicShadowFix` 6 (oracle-verified baseline omission), `GarageModelFix` 1 (open), partly from open keys |
+| 6 | 1.0.0.4 | `GTAIV_1004.exe` | 453 | 0 | 30 | 2 | missing 30: `SkipLauncher` 9 (closed), `BuildingAlphaFix` 7 (open), `BorderlessWindowed` 4 (closed), `NoPhysicsSleep` 4 (closed), `ImprovedShaderStreaming` 2 (open), `CutsceneFixes` 1 (open), `GarageModelFix` 1 (open), `SkipIntro` 1 (closed), `VRAMFix` 1 (closed), partly from open keys; extra 2: `CutsceneFixes` 1 (open), `GarageModelFix` 1 (open), all from open keys |
+| 7 | 1.0.6.0 | `GTAIV_1060.exe` | 819 | 0 | 29 | 2 | missing 29: `SkipLauncher` 8 (closed), `BuildingAlphaFix` 7 (open), `BorderlessWindowed` 4 (closed), `NoPhysicsSleep` 4 (closed), `ImprovedShaderStreaming` 2 (open), `CutsceneFixes` 1 (open), `GarageModelFix` 1 (open), `SkipIntro` 1 (closed), `VRAMFix` 1 (closed), partly from open keys; extra 2: `CutsceneFixes` 1 (open), `GarageModelFix` 1 (open), all from open keys |
+| 8 | 1.0.7.0 | `GTAIV_1070.exe` | 842 | 0 | 28 | 2 | missing 28: `SkipLauncher` 8 (closed), `BuildingAlphaFix` 7 (open), `NoPhysicsSleep` 4 (closed), `BorderlessWindowed` 3 (closed), `ImprovedShaderStreaming` 2 (open), `CutsceneFixes` 1 (open), `GarageModelFix` 1 (open), `SkipIntro` 1 (closed), `VRAMFix` 1 (closed), partly from open keys; extra 2: `CutsceneFixes` 1 (open), `GarageModelFix` 1 (open), all from open keys |
+| 9 | 1.0.8.0 | `GTAIV.exe` | 797 | 0 | 28 | 2 | missing 28: `SkipLauncher` 8 (closed), `BuildingAlphaFix` 7 (open), `BorderlessWindowed` 4 (closed), `NoPhysicsSleep` 4 (closed), `ImprovedShaderStreaming` 2 (open), `CutsceneFixes` 1 (open), `GarageModelFix` 1 (open), `SkipIntro` 1 (closed), partly from open keys; extra 2: `CutsceneFixes` 1 (open), `GarageModelFix` 1 (open), all from open keys |
+| 11 | 1.1.1.0 | `EFLC_1110.exe` | 755 | 0 | 29 | 2 | missing 29: `SkipLauncher` 8 (closed), `BuildingAlphaFix` 7 (open), `BorderlessWindowed` 4 (closed), `NoPhysicsSleep` 4 (closed), `ImprovedShaderStreaming` 2 (open), `CutsceneFixes` 1 (open), `GarageModelFix` 1 (open), `SkipIntro` 1 (closed), `VRAMFix` 1 (closed), partly from open keys; extra 2: `CutsceneFixes` 1 (open), `GarageModelFix` 1 (open), all from open keys |
+| 12 | 1.1.2.0 | `EFLC_1120.exe` | 752 | 0 | 29 | 2 | missing 29: `SkipLauncher` 8 (closed), `BuildingAlphaFix` 7 (open), `BorderlessWindowed` 4 (closed), `NoPhysicsSleep` 4 (closed), `ImprovedShaderStreaming` 2 (open), `CutsceneFixes` 1 (open), `GarageModelFix` 1 (open), `SkipIntro` 1 (closed), `VRAMFix` 1 (closed), partly from open keys; extra 2: `CutsceneFixes` 1 (open), `GarageModelFix` 1 (open), all from open keys |
+| 13 | 1.1.3.0 | `EFLC_1130.exe` | 739 | 0 | 28 | 2 | missing 28: `SkipLauncher` 8 (closed), `BuildingAlphaFix` 7 (open), `BorderlessWindowed` 4 (closed), `NoPhysicsSleep` 4 (closed), `ImprovedShaderStreaming` 2 (open), `CutsceneFixes` 1 (open), `GarageModelFix` 1 (open), `SkipIntro` 1 (closed), partly from open keys; extra 2: `CutsceneFixes` 1 (open), `GarageModelFix` 1 (open), all from open keys |
 
 A **faulted** full cell's partial rows are not a write-set scoreboard (the
 preserved 1.0.0.0 fault stops the install pass); its diff/missing/extra cells
@@ -49,37 +56,19 @@ reported apart and never counted as closed; `fault` names the cell that died.
 
 | build | version | closed / 99 | open | oracle | fault |
 |---:|---|---:|---|---|---|
-| 1 | 1.0.0.0 | 96 (isolated) | - | `CarDynamicShadowFix`, `SkipLauncher` | FAULTED at `NoImpostorHeightCutoff` (0xC0000005 ACCESS_VIOLATION) |
-| 5 | 1.0.4.0 | 97 | - | `CarDynamicShadowFix`, `SkipLauncher` | - |
-| 6 | 1.0.0.4 | 98 | - | `SkipLauncher` | - |
-| 7 | 1.0.6.0 | 96 | `Patch4RemoveModChecks` | `SkipLauncher`, `Patch7RemoveModChecks` | - |
-| 8 | 1.0.7.0 | 96 | `Patch4RemoveModChecks` | `SkipLauncher`, `Patch7RemoveModChecks` | - |
-| 9 | 1.0.8.0 | 98 | - | `SkipLauncher` | - |
-| 11 | 1.1.1.0 | 98 | - | `SkipLauncher` | - |
-| 12 | 1.1.2.0 | 98 | - | `SkipLauncher` | - |
-| 13 | 1.1.3.0 | 98 | - | `SkipLauncher` | - |
+| 1 | 1.0.0.0 | 74 | `BadPlayerModelCrashFix`, `SCOSignatureFix`, `GarageModelFix`, `MovingPlaneParts`, `MovingSteeringWheelSupport`, `ShakingEngineBlock`, `BuildingAlphaFix`, `ImprovedShaderStreaming`, `NoImpostorHeightCutoff`, `RemoveGFWLUpdatePopup` | `CarDynamicShadowFix` | - |
+| 5 | 1.0.4.0 | 80 | `GarageModelFix`, `BuildingAlphaFix`, `ImprovedShaderStreaming`, `RemoveGFWLUpdatePopup` | `CarDynamicShadowFix` | - |
+| 6 | 1.0.0.4 | 80 | `GarageModelFix`, `BuildingAlphaFix`, `CutsceneFixes`, `ImprovedShaderStreaming`, `RemoveGFWLUpdatePopup` | - | - |
+| 7 | 1.0.6.0 | 78 | `GarageModelFix`, `BuildingAlphaFix`, `CutsceneFixes`, `ImprovedShaderStreaming`, `RemoveGFWLUpdatePopup`, `Patch4RemoveModChecks` | `Patch7RemoveModChecks` | - |
+| 8 | 1.0.7.0 | 78 | `GarageModelFix`, `BuildingAlphaFix`, `CutsceneFixes`, `ImprovedShaderStreaming`, `RemoveGFWLUpdatePopup`, `Patch4RemoveModChecks` | `Patch7RemoveModChecks` | - |
+| 9 | 1.0.8.0 | 80 | `GarageModelFix`, `BuildingAlphaFix`, `CutsceneFixes`, `ImprovedShaderStreaming`, `RemoveGFWLUpdatePopup` | - | - |
+| 11 | 1.1.1.0 | 80 | `GarageModelFix`, `BuildingAlphaFix`, `CutsceneFixes`, `ImprovedShaderStreaming`, `RemoveGFWLUpdatePopup` | - | - |
+| 12 | 1.1.2.0 | 80 | `GarageModelFix`, `BuildingAlphaFix`, `CutsceneFixes`, `ImprovedShaderStreaming`, `RemoveGFWLUpdatePopup` | - | - |
+| 13 | 1.1.3.0 | 80 | `GarageModelFix`, `BuildingAlphaFix`, `CutsceneFixes`, `ImprovedShaderStreaming`, `RemoveGFWLUpdatePopup` | - | - |
 
 ## The fault
 
-`GTAIV_1000.exe` (1.0.0.0) dies in the **full** cell with
-`0xC0000005 ACCESS_VIOLATION` after 2550 byte(s): the shipped INI reaches
-`NoImpostorHeightCutoff`, whose 1.0.0.0 pattern matches once and whose
-original writes `hits[1]` through an uninitialised vector entry. The
-per-option cell isolates that key (its row is `open` above); in the 1:1
-configuration this is the original's fault, and
-`tools/check_failsafe_parity.py` shows the same cell completing with
-`OPCEP_IMPROVEMENTS=all` and the guarded write absent.
-
-`GTAIV_1000.exe` (1.0.0.0) dies in the per-option cell at
-`NoImpostorHeightCutoff`, 0xC0000005 ACCESS_VIOLATION: the original's own fault -- an uninitialised vector entry,
-write `66 89 06` at the original's `0x100536F1` -- which `docs/parity.md`
-records as deliberate and unguarded. The cell wrote 9361 byte(s) before it died, so its rows are not a scoreboard: the
-first 48 keys ran, and the 51 after it
-were never reached. It is scored one key per subprocess instead, and
-`NoImpostorHeightCutoff` is the only key whose cell faults alone -- so no other cell faults on
-that build. The isolated cells are not a different measurement: on builds 5
-and 9 they are byte-identical to the per-option rows for all 99 keys
-(`python tools/dump_matrix.py --selfcheck-isolated --only 5`).
+No cell faulted.
 
 ## What the matrix proves
 

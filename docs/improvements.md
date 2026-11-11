@@ -130,11 +130,12 @@ and in section 4. On 1.0.8.0 that is **80 closed / 5 delta / 0 open**.
 
 The 18-cell dump matrix is retained as the write-set check for the 85 retained
 keys. With the failsafes compiled in, the 1.0.0.0 NoImpostor cell no longer
-faults: the P13 guard refuses the partial install. The matrix's full-cell diff
-also contains the bytes the 14 removed keys used to write, which are expected
-missing, not a regression; the per-option and isolated cells are the retained
-keys' scoreboard. The run must not overlap a build: each cell reads
-`zp_dump.exe`, and a relink mid-run gives one cell a different body layout.
+faults: the P13 guard refuses the partial install. The regenerated matrix has
+`differing 0` on all nine builds; the full cell's `missing` rows are the bytes
+the 14 removed keys and the five deltas no longer write, which is expected, and
+the per-option cell reports 74-80 of 85 closed (the five deltas are the rest).
+The run must not overlap a build: each cell reads `zp_dump.exe`, and a relink
+mid-run gives one cell a different body layout.
 
 ## 6. What is deliberately still unproven
 
