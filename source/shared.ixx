@@ -10,7 +10,6 @@ export module shared;
 
 import bodies;
 import common;
-import improvements;
 import patch;
 
 // The helper library the original ASI keeps beside its bodies: the name hasher /
@@ -212,8 +211,7 @@ namespace Shared
             zpatch_model_lookup = reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(0));
 
         zpatch_model_lookup_original = zpatch_model_lookup;
-        if (ImprovementEnabled(Improvement::caches))
-            zpatch_model_lookup = reinterpret_cast<uintptr_t>(&CachedModelLookup);
+        zpatch_model_lookup = reinterpret_cast<uintptr_t>(&CachedModelLookup);
 
         Bodies::Register(reinterpret_cast<uintptr_t>(&ValueResolverBody), 0x10003E50u);
         Bodies::Register(reinterpret_cast<uintptr_t>(&PlayerPedComponentsShimBody), 0x1003D9A0u);

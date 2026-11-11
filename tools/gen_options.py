@@ -54,6 +54,27 @@ SHORTHANDS = {
 ROW = re.compile(r"^\|\s*`([A-Za-z0-9_]+)`\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|")
 MODULE = re.compile(r"^###\s+2\.\d+\s+`zp\.([a-z]+)`")
 
+# OpenPreCEPatch removed these keys from its own distribution, or moved them to
+# the XLivelessAddon companion. They are not part of this ASI's catalogue.
+REMOVED_KEYS = {
+    # removed by OpenPreCEPatch
+    "AddOptionsInMenu",
+    "FixPCIDKickbug",
+    "ForceDynamicShadowsEverywhere",
+    "HighQualityReflections",
+    "NoPhysicsSleep",
+    "RemoveBoundingBoxCulling",
+    "RemoveUselessChecks",
+    # moved to XLivelessAddon
+    "BorderlessWindowed",
+    "DoNotPauseOnMinimize",
+    "LocalSettingsPath",
+    "SkipIntro",
+    "SkipLauncher",
+    "SkipMenu",
+    "VRAMFix",
+}
+
 
 def mask_for(text):
     text = text.strip()
@@ -90,6 +111,8 @@ def parse():
         if not match or module is None:
             continue
         key, shipped, absent, builds = match.groups()
+        if key in REMOVED_KEYS:
+            continue
         shipped = shipped.replace("*", "").strip()
         absent = absent.replace("*", "").strip()
 
@@ -138,8 +161,10 @@ def main():
         print(f"skip: {INVENTORY} is absent, so the catalogue has nothing to be checked against")
         return
     rows = parse()
-    if len(rows) < 99:
-        raise SystemExit(f"only {len(rows)} option rows parsed -- the inventory layout changed")
+    expected = 99 - len(REMOVED_KEYS)
+    if len(rows) != expected:
+        raise SystemExit(f"{len(rows)} option rows parsed, expected {expected} "
+                         f"(the inventory layout changed)")
     text = render(rows)
     if "--check" in sys.argv:
         if not OUTPUT.exists() or OUTPUT.read_text(encoding="utf-8") != text:

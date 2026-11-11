@@ -15,7 +15,6 @@ import bytes;
 import common;
 import config;
 import game;
-import improvements;
 import loader;
 import patch;
 import shared;
@@ -734,13 +733,11 @@ namespace
         (void)flags;
         const uint32_t unit = align < 0x10u ? 0x10u : align;
         const uint32_t want = size < unit ? unit : size;
-        const bool hardened = ImprovementEnabled(Improvement::nms);
         // A 32-bit sum that wraps would HeapAlloc a tiny block and then fill
-        // `want` bytes past it. The original trusts the game not to ask; the
-        // group refuses the request instead.
-        if (hardened && want > UINT32_MAX - unit * 2u)
+        // `want` bytes past it; the request is refused instead.
+        if (want > UINT32_MAX - unit * 2u)
             return nullptr;
-        void* base = HeapAlloc(hardened ? NmsHeap() : GetProcessHeap(), 0, want + unit * 2u);
+        void* base = HeapAlloc(NmsHeap(), 0, want + unit * 2u);
         if (base == nullptr)
             return nullptr;
 
@@ -751,8 +748,7 @@ namespace
 
         EnterCriticalSection(&nms_registry_lock);
         (void)nms_allocations.Insert(aligned);
-        if (hardened)
-            MarkNmsPages(raw, static_cast<size_t>(want) + unit * 2u);
+        MarkNmsPages(raw, static_cast<size_t>(want) + unit * 2u);
         LeaveCriticalSection(&nms_registry_lock);
         return reinterpret_cast<void*>(aligned);
     }
@@ -770,7 +766,6 @@ namespace
         // that produced it. Reading NMS's distance word from a foreign block
         // would HeapFree an address that allocator never made; without a captured
         // original vtable the block is left alone instead of corrupted.
-        if (ImprovementEnabled(Improvement::nms))
         {
             EnterCriticalSection(&nms_registry_lock);
             const bool mine = nms_allocations.Contains(raw);
@@ -805,13 +800,6 @@ namespace
             HeapFree(NmsHeap(), 0, reinterpret_cast<void*>(base));
             return;
         }
-
-        const auto base = raw - *reinterpret_cast<const uint32_t*>(raw - 4u);
-        HeapFree(GetProcessHeap(), 0, reinterpret_cast<void*>(base));
-
-        EnterCriticalSection(&nms_registry_lock);
-        (void)nms_allocations.Erase(raw);
-        LeaveCriticalSection(&nms_registry_lock);
     }
 
     // sub_100385A0, recovered VA 0x100385A0: the "is this pointer mine" query
@@ -885,6 +873,7 @@ export namespace MemoryArena
         void* (__stdcall* allocate)(uint32_t size, uint32_t align, uint32_t flags);
         void (__stdcall* release)(void* pointer);
         uint8_t (__stdcall* contains)(uint32_t key);
+        HANDLE(__cdecl* heap)();
     };
 
     // The three entries, with the registry lock prepared; see Methods.
@@ -894,7 +883,7 @@ export namespace MemoryArena
 MemoryArena::Methods MemoryArena::Get()
 {
     PrepareArenaRegistry();
-    return { &NmsAllocateBody, &NmsFreeBody, &NmsContainsBody };
+    return { &NmsAllocateBody, &NmsFreeBody, &NmsContainsBody, &NmsHeap };
 }
 
 namespace
@@ -1240,22 +1229,14 @@ namespace
         if (fopen_s(&stream, path, "rb") != 0 || stream == nullptr)
             return Loading::SaveWalkEnd::noFile;
 
-        const bool hardened = ImprovementEnabled(Improvement::hardening);
-
         uint8_t header[kNewSavesHeaderSize];
-        if (hardened)
         {
-            // A short header is not a save this build can read; the 1:1 walk
-            // reads it unchecked and decides on whatever the stack held.
+            // A short header is not a save this build can read.
             if (std::fread(header, kNewSavesHeaderSize, 1, stream) != 1)
             {
                 std::fclose(stream);
                 return Loading::SaveWalkEnd::rejected;
             }
-        }
-        else
-        {
-            (void)std::fread(header, kNewSavesHeaderSize, 1, stream);
         }
 
         uint32_t magic = 0;
@@ -1271,45 +1252,29 @@ namespace
         uint8_t chunkHeader[kNewSavesChunkHeaderSize];
         for (std::size_t index = 0; index < kNewSavesChunkCount; ++index)
         {
-            if (hardened)
+            if (std::fread(chunkHeader, kNewSavesChunkHeaderSize, 1, stream) != 1)
             {
-                if (std::fread(chunkHeader, kNewSavesChunkHeaderSize, 1, stream) != 1)
-                {
-                    std::fclose(stream);
-                    return Loading::SaveWalkEnd::rejected;
-                }
-            }
-            else
-            {
-                (void)std::fread(chunkHeader, kNewSavesChunkHeaderSize, 1, stream);
+                std::fclose(stream);
+                return Loading::SaveWalkEnd::rejected;
             }
 
             uint32_t size = 0;
             std::memcpy(&size, chunkHeader + kNewSavesChunkSizeOffset, sizeof(size));
 
-            if (hardened && size < static_cast<uint32_t>(kNewSavesChunkHeaderSize))
+            if (size < static_cast<uint32_t>(kNewSavesChunkHeaderSize))
             {
                 std::fclose(stream);
                 return Loading::SaveWalkEnd::rejected;
             }
 
             const uint32_t payload = size - static_cast<uint32_t>(kNewSavesChunkHeaderSize);
-            if (hardened)
+            // The scan only needs the headers; seek over the payload. A failed
+            // seek means the file is shorter than its own chunk table.
+            if (payload > static_cast<uint32_t>(std::numeric_limits<long>::max()) ||
+                std::fseek(stream, static_cast<long>(payload), SEEK_CUR) != 0)
             {
-                // The scan only needs the headers; seek over the payload. A
-                // failed seek means the file is shorter than its own chunk table.
-                if (payload > static_cast<uint32_t>(std::numeric_limits<long>::max()) ||
-                    std::fseek(stream, static_cast<long>(payload), SEEK_CUR) != 0)
-                {
-                    std::fclose(stream);
-                    return Loading::SaveWalkEnd::rejected;
-                }
-            }
-            else
-            {
-                void* const payloadBlock = ::operator new(payload);
-                (void)std::fread(payloadBlock, 1, payload, stream);
-                std::free(payloadBlock);
+                std::fclose(stream);
+                return Loading::SaveWalkEnd::rejected;
             }
 
             std::memcpy(walk.chunks[index].id, chunkHeader, sizeof(walk.chunks[index].id));
@@ -1922,9 +1887,7 @@ namespace
             // first store; the jump resumes four instructions later at -16.
             // The group uses a body that captures the pre-swap vtable first; the
             // call's observable write is the same vtable dword.
-            void* body = ImprovementEnabled(Improvement::nms)
-                ? reinterpret_cast<void*>(&NmsApplyHardenedBody)
-                : reinterpret_cast<void*>(&NmsApplyBody);
+            void* body = reinterpret_cast<void*>(&NmsApplyHardenedBody);
             injector::MakeCALL(match - 34, body, true);
             injector::MakeJMP(match - 29, reinterpret_cast<void*>(match - 16), true);
         }
@@ -1975,7 +1938,6 @@ namespace
         if (!Loader::Enabled("LoadDLCs"))
             return;
 
-        if (ImprovementEnabled(Improvement::dlc_path))
         {
             // The discovery body builds every candidate path in a 0x104-byte
             // buffer; a module path that already fills it truncates silently and
@@ -2050,7 +2012,6 @@ export void RegisterLoading()
 
     Loader::PublishEvent() += []
     {
-        PublishLocalSettingsPath();
         CopyOverrideDatPath();
         PublishNewMemorySystem();
         PublishNewFilesCompatibility();
@@ -2061,15 +2022,12 @@ export void RegisterLoading()
     {
         InstallFastLoading();
         InstallNoLoadingSleep();
-        InstallLocalSettingsPath();
         InstallRemoveGFWLUpdatePopup();
         InstallRemoveRGSCLoginRequirement();
         InstallStartupTimeFix();
         InstallVSyncFix();
         InstallBenchmarkFix();
         InstallOverrideGTADatPath();
-        InstallSkipIntro();
-        InstallSkipMenu();
         InstallSavegameFix();
         InstallNewMemorySystem();
         InstallNewFilesCompatibility();
@@ -2104,10 +2062,7 @@ export void RegisterLoading()
     Bodies::Register(reinterpret_cast<uintptr_t>(&NmsSyncBody), 0x100057F0u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&NmsThunk18Body), 0x10038620u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&NmsNoopArgBody), 0x10038630u);
-    if (ImprovementEnabled(Improvement::nms))
-        Bodies::Register(reinterpret_cast<uintptr_t>(&NmsApplyHardenedBody), 0x10038670u);
-    else
-        Bodies::Register(reinterpret_cast<uintptr_t>(&NmsApplyBody), 0x10038670u);
+    Bodies::Register(reinterpret_cast<uintptr_t>(&NmsApplyHardenedBody), 0x10038670u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&NmsAllocateBody), 0x10038360u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&NmsFreeBody), 0x10038430u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&NmsContainsBody), 0x100385A0u);

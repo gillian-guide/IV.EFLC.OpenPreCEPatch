@@ -4,6 +4,7 @@ module;
 // The /GS cookie the transcribed second siren check reads and checks
 // (`__security_cookie`, `__security_check_cookie` in vcruntime.h).
 #include <intrin.h>
+#include <bit>
 #include <cstdlib>
 #include <cstring>
 // SHDeleteValueW: the FixPCIDKickbug arm's whole effect (the tree already links
@@ -17,7 +18,6 @@ import bytes;
 import common;
 import config;
 import game;
-import improvements;
 import loader;
 import native;
 import patch;
@@ -191,6 +191,7 @@ static void CopSirensShimBBody();
 static void IdeHookBody();
 static void PopupHeadlightsCheckBody();
 static void PopupHeadlightsBodyA();
+static void PopupHeadlightsBodyACached();
 static void PopupHeadlightsBodyB();
 static void VramFixShimBody();
 
@@ -822,21 +823,17 @@ namespace
     }
 
     // OpenPreCEPatch-only keys have no recovered catalogue row (the 99-key table
-    // is the original's INI), so they are read directly and only inside the
-    // `opcep` group. The read keeps the original's gate: the stored value must be
-    // exactly 1.
+    // is the original's INI), so they are read directly. The read keeps the
+    // original's gate: the stored value must be exactly 1.
     bool OpenOptionEnabled(std::string_view key, std::string_view fallback)
     {
-        if (!ImprovementEnabled(Improvement::opcep))
-            return false;
         // The any-section read accepts OpenPreCEPatch's grouped INI as well as the
         // original flat one; `[Options]` is searched first inside it.
         return Config::Integer(Config::Ini(), key, fallback) == 1;
     }
 
     // RemoveModChecks is OpenPreCEPatch's unified key: it replaces the three
-    // recovered per-patch keys without making an old INI unreadable. It is read
-    // only in the opcep group, so the 1:1 arms keep their own gates.
+    // recovered per-patch keys without making an old INI unreadable.
     bool ModChecksEnabled()
     {
         return Loader::Enabled("Patch4RemoveModChecks") ||
@@ -1030,6 +1027,93 @@ namespace
             reinterpret_cast<void*>(&VramFixShimBody), true);
     }
 
+    // The `popup_cache` group's C++ check: the same resolve-then-scan sequence
+    // as the transcribed check, with a direct-mapped memo on the model lookup and
+    // on the angle scan. The table arrays are static after load, so a hit cannot
+    // go stale; a collision just re-resolves.
+    namespace
+    {
+        constexpr uint32_t kPopupLightsHash = 0xEB9F21D3u;  // push 0EB9F21D3h
+        constexpr float kPopupHalfPi = 1.57079632679489661923f;
+
+        struct PopupMemoEntry
+        {
+            uint32_t key;
+            uint32_t value;
+            uint32_t valid;
+        };
+
+        PopupMemoEntry g_popupResolveMemo[512] = {};
+        PopupMemoEntry g_popupAngleMemo[512] = {};
+
+        uint32_t PopupAngleForModel(uint32_t modelHash) noexcept
+        {
+            const auto slot = static_cast<size_t>(modelHash) & 511u;
+            if (g_popupAngleMemo[slot].valid != 0 && g_popupAngleMemo[slot].key == modelHash)
+                return g_popupAngleMemo[slot].value;
+
+            uint32_t bits = std::bit_cast<uint32_t>(kPopupHalfPi);
+            for (size_t index = 0; index < Config::ModelTableSlots; ++index)
+            {
+                if (zpatch_popup_angle_hashes[index] != 0 &&
+                    zpatch_popup_angle_hashes[index] == modelHash)
+                    bits = std::bit_cast<uint32_t>(zpatch_popup_angle_values[index]);
+            }
+            g_popupAngleMemo[slot] = { modelHash, bits, 1 };
+            return bits;
+        }
+
+        void PopupCheckCached() noexcept
+        {
+            zpatch_popup_angle = kPopupHalfPi;
+            zpatch_popup_flag = 0;
+
+            const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
+                zpatch_model_lookup);
+            if (lookup == nullptr)
+                return;
+
+            const auto resolve = [](uint32_t hash) -> int32_t
+            {
+                const auto slot = static_cast<size_t>(hash) & 511u;
+                if (g_popupResolveMemo[slot].valid != 0 &&
+                    g_popupResolveMemo[slot].key == hash)
+                    return static_cast<int32_t>(g_popupResolveMemo[slot].value);
+
+                int32_t resolved = -1;
+                const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
+                    zpatch_model_lookup);
+                if (lookup == nullptr)
+                    return -1;
+                lookup(hash, &resolved);
+                g_popupResolveMemo[slot] = { hash,
+                    static_cast<uint32_t>(resolved), 1 };
+                return resolved;
+            };
+
+            int32_t resolved = resolve(kPopupLightsHash);
+            zpatch_popup_index = static_cast<uint32_t>(resolved);
+            if (resolved == static_cast<int32_t>(zpatch_popup_model))
+            {
+                zpatch_popup_flag = 1;
+                return;
+            }
+
+            for (uint32_t index = 0; index < Config::ModelTableSlots; ++index)
+            {
+                const uint32_t hash = zpatch_popuplights_models[index];
+                if (hash == 0)
+                    return;
+                resolved = resolve(hash);
+                if (resolved != static_cast<int32_t>(zpatch_popup_model))
+                    continue;
+                zpatch_popup_flag = 1;
+                zpatch_popup_angle = std::bit_cast<float>(PopupAngleForModel(hash));
+                return;
+            }
+        }
+    }
+
     void InstallPopupHeadlightsFlag()
     {
         if (!Loader::Enabled("PopupHeadlightsFlag"))
@@ -1040,7 +1124,8 @@ namespace
         if (!pattern.empty())
         {
             auto* match = pattern.get_first<std::byte>(0);
-            injector::MakeJMP(match, reinterpret_cast<void*>(&PopupHeadlightsBodyA), true);
+            void* body = reinterpret_cast<void*>(&PopupHeadlightsBodyACached);
+            injector::MakeJMP(match, body, true);
             injector::WriteMemory<std::byte>(match + 10, Bytes::ShortJmp, true);
             injector::WriteMemory<uint32_t>(match + 82,
                 static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&zpatch_popup_angle)), true);
@@ -1069,6 +1154,61 @@ namespace
     }
 }
 
+// Test seams for the popup cache body. They are outside the anonymous namespace
+// so the module can export them.
+export void ResetPopupCacheForTest() noexcept
+{
+    std::memset(g_popupResolveMemo, 0, sizeof(g_popupResolveMemo));
+    std::memset(g_popupAngleMemo, 0, sizeof(g_popupAngleMemo));
+}
+
+export void SetPopupLookupForTest(uintptr_t lookup) noexcept
+{
+    zpatch_model_lookup = lookup;
+}
+
+export void SetPopupModelForTest(uint32_t model) noexcept
+{
+    zpatch_popup_model = model;
+}
+
+export void ClearPopupTablesForTest() noexcept
+{
+    std::memset(zpatch_popuplights_models, 0, sizeof(zpatch_popuplights_models));
+    std::memset(zpatch_popup_angle_hashes, 0, sizeof(zpatch_popup_angle_hashes));
+    std::memset(zpatch_popup_angle_values, 0, sizeof(zpatch_popup_angle_values));
+}
+
+export void SetPopupTableSlotForTest(uint32_t index, uint32_t modelHash,
+    uint32_t angleHash, float angle) noexcept
+{
+    if (index >= Config::ModelTableSlots)
+        return;
+    zpatch_popuplights_models[index] = modelHash;
+    zpatch_popup_angle_hashes[index] = angleHash;
+    zpatch_popup_angle_values[index] = angle;
+}
+
+export void RunPopupCheckCachedForTest() noexcept
+{
+    PopupCheckCached();
+}
+
+export uint32_t PopupFlagForTest() noexcept
+{
+    return zpatch_popup_flag;
+}
+
+export uint32_t PopupIndexForTest() noexcept
+{
+    return zpatch_popup_index;
+}
+
+export float PopupAngleForTest() noexcept
+{
+    return zpatch_popup_angle;
+}
+
 // Registered like every other arm: the publish tier reads the site's original
 // bytes, the install tier owns the gate.
 export void RegisterMisc()
@@ -1093,8 +1233,6 @@ export void RegisterMisc()
         InstallGFWLProtectionDisabler();
         InstallSteamAchievements();
         InstallPopupHeadlightsFlag();
-        InstallVRAMFix();
-        InstallFixPCIDKickbug();
     };
 
     // The bodies' recovered VAs, so the dump expresses each arm's branch in the
@@ -1105,6 +1243,7 @@ export void RegisterMisc()
     Bodies::Register(reinterpret_cast<uintptr_t>(&CopSirensShimBBody), 0x10006330u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&IdeHookBody), 0x100040E0u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&PopupHeadlightsBodyA), 0x10044530u);
+    Bodies::Register(reinterpret_cast<uintptr_t>(&PopupHeadlightsBodyACached), 0x10044530u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&PopupHeadlightsBodyB), 0x10044560u);
 
     // The second siren check's table: the IDE parser hook's +siren list, which the
@@ -1962,6 +2101,27 @@ static __declspec(naked) void PopupHeadlightsBodyA()
         cmp eax, DWORD PTR [zpatch_popup_index]
         jmp DWORD PTR [zpatch_popup_resume_b]
     popup_body_a_resume_a:
+        jmp DWORD PTR [zpatch_popup_resume_a]
+    }
+}
+
+// The `popup_cache` group's variant of body A: same site contract and resumes,
+// but the check runs the C++ memoised resolver/angle scan. The recovered body
+// above stays compiled and is the default.
+static __declspec(naked) void PopupHeadlightsBodyACached()
+{
+    __asm
+    {
+        movsx eax, WORD PTR [esi + 2Eh]
+        __emit 0x60  // pusha
+        mov DWORD PTR [zpatch_popup_model], eax
+        call PopupCheckCached
+        __emit 0x61  // popa
+        cmp DWORD PTR [zpatch_popup_flag], 1
+        je popup_cached_resume_a
+        cmp eax, DWORD PTR [zpatch_popup_index]
+        jmp DWORD PTR [zpatch_popup_resume_b]
+    popup_cached_resume_a:
         jmp DWORD PTR [zpatch_popup_resume_a]
     }
 }

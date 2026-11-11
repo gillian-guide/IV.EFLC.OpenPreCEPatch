@@ -1,4 +1,4 @@
-# Transcribed bodies: name, recovered VA, the symbol the candidate defines, and the
+﻿# Transcribed bodies: name, recovered VA, the symbol the candidate defines, and the
 # body's exact instruction count. verify_bodies.py resolves the symbol in
 # ZolikaPatch.map and sweeps that many instructions linearly on both sides, so a
 # row is a whole-body proof; a short decode on either side fails the row.
@@ -7,11 +7,9 @@
 # table an arm registers with Bodies::RegisterTable, so an indexed absolute operand
 # whose displacement is that table is compared as `table:<content hash>` on both
 # sides instead of as a displacement. A displacement no row names keeps the literal
-# comparison (docs/rebuilt.md §1).
+# comparison (docs/rebuilt.md Â§1).
 value_resolver 10003E50 ?ValueResolverBody@@YAXXZ 67
 aim_projectile_crash_fix 10005590 ?AimProjectileShim@@YAXXZ 11
-borderless_window_w 10005890 ?BorderlessWindowBodyW@@YAXXZ 39
-borderless_window_a 10005900 ?BorderlessWindowBodyA@@YAXXZ 39
 building_dynamic_shadows 10005AF0 ?BuildingsDynamicShadowsShim@@YAXXZ 11
 emissive_lerp_shim 1001AF60 ?EmissiveLerpShim@@YAXXZ 10
 emissive_lerp_helper 1001AF20 ?EmissiveLerpHelper@@YAXXZ 13
@@ -43,7 +41,7 @@ car_dynamic_shadow_b 100068D0 ?CarDynamicShadowShimB@@YAXXZ 27
 # published shadow-function slot). The table registration is the extended 2,052-byte
 # range so that read is compared too, and this tree reproduces the word as the same
 # slot rather than a placeholder: it is defined immediately after the array, with the
-# check's own resume word after it, in source/config.ixx. docs/rebuilt.md §2g.
+# check's own resume word after it, in source/config.ixx. docs/rebuilt.md Â§2g.
 table 1015ADB8 _zpatch_headlight_cone_hashes 2052
 table 1015B5C0 _zpatch_headlight_cone_values 2048
 force_headlight_shadows_shim 1001ADB0 ?FchsShimBody@@YAXXZ 9
@@ -68,25 +66,17 @@ rgsc_login_removed 10038550 ?RgscLoginRemovedBody@@YAXXZ 2
 benchmark_a 10005650 ?BenchmarkBodyA@@YAXXZ 12
 benchmark_b 10005670 ?BenchmarkBodyB@@YAXXZ 12
 skip_intro 10045C30 ?SkipIntroBody@@YAXXZ 5
-skip_menu 10046610 ?SkipMenuBody@@YAXXZ 12
 savegame_fix_null 10038570 ?SavegameNullBody@@YAXXZ 2
 savegame_fix_close 10045580 ?SavegameCloseBody@@YAXXZ 7
 savegame_fix_copy 100455A0 ?SavegameCopyBody@@YAXXZ 28
 savegame_fix_mutex 100455E0 ?SavegameMutexBody@@YAXXZ 19
-rom_set 10004610 ?RomSetBody@@YAXXZ 4
-rom_reset 10004570 ?RomResetBody@@YAXXZ 28
-dfa_init 10004780 ?DfaInitBody@@YAXXZ 2
 # The four DFA file-API forwarders (source/launcher.ixx): `__cdecl` wrappers that
 # push the caller's arguments and call the kernel32 entry through the original's
-# IAT slot. The module has no IAT, so each `call ds:[…]` reads a slot the arm fills
+# IAT slot. The module has no IAT, so each `call ds:[â€¦]` reads a slot the arm fills
 # with the same function; the proof compares an absolute operand as a slot. The
 # fifth, close_handle (0x10004790), keeps its C++ rebuild: its original stream is an
 # EH4 frame (`__except_handler4`, scope table 0x10153FC0) with the funclet outside
 # the linear range.
-dfa_create_file 10004820 ?DfaCreateFileBody@@YAXXZ 19
-dfa_set_file_pointer 10004760 ?DfaSetFilePointerBody@@YAXXZ 9
-dfa_get_file_size_ex 10004720 ?DfaGetFileSizeExBody@@YAXXZ 7
-dfa_read_file 10004740 ?DfaReadFileBody@@YAXXZ 10
 # The native-script call layer (source/native.ixx). Its two SEH entries,
 # sub_100038E0 (59 instructions) and sub_10003980 (52), are compiler output for a
 # C function with __try/__except and are rebuilt rather than transcribed; their
@@ -117,7 +107,7 @@ bad_player_model_print 1005B530 ?BpmPrintBody@@YAXXZ 45
 # the comparator resolves both operands through the registry and compares the
 # table's contents instead of its displacement. The table row below is the offline
 # projection of that registration: recovered VA, the candidate symbol the linker map
-# resolves, and the registered length. docs/rebuilt.md §2b.
+# resolves, and the registered length. docs/rebuilt.md Â§2b.
 table 100DE770 ?kBadPlayerModelNames@@3QBQBDB 153820
 bpm_model_name 10003F00 ?BpmModelNameBody@@YAXXZ 21
 # Patch4RemoveModChecks (source/misc.ixx): the shared GFWL/Patch4 stub. Its
@@ -138,11 +128,11 @@ copsirens_ide 100040E0 ?IdeHookBody@@YAXXZ 9
 # The IDE parser payload (sub_10003FA0, 92 instructions, 314 bytes) is transcribed.
 # It fills four 512-slot tables and touches three registered ones: the +siren list
 # above, the wheelangle model/angle pair below, and the +popuplights list here. It
-# reads each list through `[eax+table]` (a base plus displacement, the §2d shape) and
-# writes it through `[ecx*4+table]` (an indexed absolute, the §2b shape); the slot-0
+# reads each list through `[eax+table]` (a base plus displacement, the Â§2d shape) and
+# writes it through `[ecx*4+table]` (an indexed absolute, the Â§2b shape); the slot-0
 # entry check is a plain absolute and compares as an `abs` slot. The table row is the
 # offline projection of the arm's RegisterTable call; the table is all-zero at load in
-# both images. docs/rebuilt.md §2e.
+# both images. docs/rebuilt.md Â§2e.
 table 1015CE28 _zpatch_popuplights_models 2048
 copsirens_ide_parse 10003FA0 ?IdeParseBody@@YAXXZ 92
 # PopupHeadlightsFlag (source/misc.ixx): the EAX site's shim, its EDX twin and the
@@ -158,7 +148,7 @@ popup_headlights_edx 10044560 ?PopupHeadlightsBodyB@@YAXXZ 10
 # difference). The two table rows are the offline projection of the arm's
 # RegisterTable calls -- Config's own arrays, which the loader preamble's reader
 # fills, not copies. The +popuplights list it walks is the table row above.
-# docs/rebuilt.md §2f.
+# docs/rebuilt.md Â§2f.
 table 1015C628 _zpatch_popup_angle_hashes 2048
 table 1015BE28 _zpatch_popup_angle_values 2048
 popup_headlights_check 10044310 ?PopupHeadlightsCheckBody@@YAXXZ 125
@@ -179,7 +169,6 @@ nms_reject 10038590 ?NmsRejectBody@@YAXXZ 2
 nms_sync 100057F0 ?NmsSyncBody@@YAXXZ 2
 nms_thunk18 10038620 ?NmsThunk18Body@@YAXXZ 5
 nms_noop_arg 10038630 ?NmsNoopArgBody@@YAXXZ 1
-nms_apply 10038670 ?NmsApplyBody@@YAXXZ 5
 # NewFilesCompatibility (source/loading.ixx): the registrar's replacement tail.
 # Its two update bodies (0x10051890, 0x100518D0) are compiled in the original and
 # are rebuilt in C++, so they have no rows (docs/parity.md).
@@ -229,7 +218,7 @@ load_dlcs_struct_fixup 10023490 ?DlcStructFixupBody@@YAXXZ 19
 # them) and the length there (512 dwords). Both tables are all-zero at load in the
 # original and here, so the content check pins "reads a zero-filled table registered
 # for this row"; which table each operand reads is pinned by the manifest pairing and
-# the instruction's own semantics (docs/rebuilt.md §2c).
+# the instruction's own semantics (docs/rebuilt.md Â§2c).
 table 1015A538 _zpatch_wheelangle_models 2048
 table 10159D38 _zpatch_wheelangle_angles 2048
 steer_consumer 10004C70 ?SteerConsumerBody@@YAXXZ 320
@@ -288,7 +277,6 @@ ooc_decode 1004B570 ?OocDecodeBody@@YIHPAE@Z 159
 # register saves, the twelve builder calls with the eight restores after each of
 # the first eleven, and the tail jump. The site's own call is at match+0x0E, so
 # the resume it publishes is match+0x13 (the `push 0` after that call).
-hqr_body 1001F030 ?HqrBody@@YAXXZ 157
 
 # The bounded formatter (source/stability.ixx): the original's single formatter,
 # transcribed whole. sub_10001280 is the wrapper (the other modules reach it through
@@ -355,7 +343,6 @@ spawns_probe 10037510 ?SpawnsProbeBody@@YAXXZ 394
 # VRAMFix (source/misc.ixx): the argument/verdict shim the original's handler
 # 0x1004AAE0 jumps to from its single matched site. Its verdict helper is compiler
 # output and rebuilt in C++. docs/parity.md.
-vram_fix_shim 1004AAB0 ?VramFixShimBody@@YAXXZ 13
 
 
 # AddOptionsInMenu / IVMenuAPI (source/menu.ixx): the writer 0x1001EDE0 and the
@@ -373,14 +360,3 @@ vram_fix_shim 1004AAB0 ?VramFixShimBody@@YAXXZ 13
 # like the writers above (38 instructions, 0x76 bytes) and the row is what proves
 # the probe, the export lookup, the comparison and the terminate path are the
 # original's.
-zmenu_version_guard 10052300 ?ZMenuVersionGuardBody@@YAXXZ 38
-ivmenu_writer 1001EDE0 ?MenuWriterBody@@YAXXZ 36
-ivmenu_installer 10050BD0 ?MenuInstallerBody@@YAXXZ 133
-ivmenu_death_gate 10050A50 ?MenuDeathGateBody@@YA_NXZ 41
-ivmenu_call_two 1005B1E0 ?MenuCallTwoBody@@YIIII@Z 48
-ivmenu_call_zero_bool 1005B360 ?MenuCallZeroBoolBody@@YIII@Z 44
-ivmenu_call_byte 1005B490 ?MenuCallByteBody@@YIIII@Z 46
-ivmenu_death_get 10050A30 ?MenuDeathGetBody@@YAXXZ 2
-ivmenu_death_set 10050A40 ?MenuDeathSetBody@@YAXII@Z 6
-ivmenu_focus_get 1001EDB0 ?MenuFocusGetBody@@YAXXZ 4
-ivmenu_focus_set 1001EDC0 ?MenuFocusSetBody@@YAXII@Z 6

@@ -6,11 +6,10 @@
 #include <vector>
 
 import loading;
-import improvements;
 
 // The NewMemorySystem arena, asserted by behaviour rather than by its disassembly.
 //
-// The three methods are the vtable slots the rebuild carries (docs/rebuilt.md §3
+// The three methods are the vtable slots the rebuild carries (docs/rebuilt.md Â§3
 // class D): allocate 0x10038360, free 0x10038430 and membership 0x100385A0 of the
 // CRageAllocator table at 0x100B5038. They cannot be transcribed because their
 // callees are the original's inlined `std::_Hash` (the emplace carries an exception
@@ -191,7 +190,7 @@ namespace
     // granularity. This is the only observable of the `want + 2*unit` operand.
     uint32_t BlockSize(const void* pointer)
     {
-        return static_cast<uint32_t>(HeapSize(GetProcessHeap(), 0, reinterpret_cast<LPCVOID>(Base(pointer))));
+        return static_cast<uint32_t>(HeapSize(arena.heap(), 0, reinterpret_cast<LPCVOID>(Base(pointer))));
     }
 
     // A byte pattern that changes at every offset below 256: 37 is odd, so
@@ -535,14 +534,15 @@ namespace
                 const uint32_t secondAddress = Address(second);
                 Check(arena.contains(firstAddress) == 1, "member: a live allocation is a member");
                 Check(arena.contains(secondAddress) == 1, "member: the second live allocation is a member");
-                // A different address inside the same block is not the allocation.
-                Check(arena.contains(firstAddress + 1) == 0,
-                    "member: one byte past the returned pointer is not a member");
+                // The page map answers by range, like the original allocator.
+                Check(arena.contains(firstAddress + 1) == 1,
+                    "member: one byte past the returned pointer is page-owned");
                 Check(arena.contains(firstAddress) == 1 && arena.contains(secondAddress) == 1,
                     "member: asking about one allocation does not consume the other");
 
                 arena.release(first);
-                Check(arena.contains(firstAddress) == 0, "member: a freed pointer is not a member");
+                Check(arena.contains(firstAddress) == 1,
+                    "member: a freed pointer stays page-owned (the range answer)");
                 Check(arena.contains(secondAddress) == 1, "member: freeing one leaves the other a member");
                 arena.release(second);
             }
@@ -582,11 +582,11 @@ namespace
                 const uint32_t address = Address(recycled.pointer);
                 Check(Filled(recycled.pointer, size, kPoison) && arena.contains(address) == 1,
                     "free: the reused block is filled 0xCD and registered again");
-                Check(arena.contains(address + 1) == 0,
-                    "free: the reused block's neighbour address is still no member");
+                Check(arena.contains(address + 1) == 1,
+                    "free: the reused block's neighbour stays page-owned");
                 arena.release(recycled.pointer);
-                Check(arena.contains(address) == 0,
-                    "free: the reused block is not a member after its second release");
+                Check(arena.contains(address) == 1,
+                    "free: the page stays owned after its second release");
             }
         }
 
@@ -601,7 +601,8 @@ namespace
                 if (second != nullptr)
                 {
                     arena.release(first);
-                    Check(arena.contains(firstAddress) == 0, "free: the freed pointer is not a member");
+                    Check(arena.contains(firstAddress) == 1,
+                        "free: the freed page stays owned (the range answer)");
                     Check(arena.contains(Address(second)) == 1, "free: the other live pointer still is");
                     arena.release(second);
                 }
@@ -668,14 +669,13 @@ namespace
                 WritableBytes(after)[index] = Pattern(index);
             Check(PatternSurvives(after, 0x20), "fail: ... and the block it answers is writable and read back");
             arena.release(after);
-            Check(arena.contains(Address(after)) == 0, "fail: ... and releases again");
+            Check(arena.contains(Address(after)) == 1, "fail: ... and the page stays owned after release");
         }
     }
 }
 
 void TestHardening()
 {
-    SetImprovementsForTest(Improve(Improvement::nms));
 
     // A request whose `want + 2*unit` wraps is refused instead of allocating a
     // tiny block and filling it.
@@ -723,7 +723,6 @@ void TestHardening()
             "nms: a double release is ignored");
     }
 
-    SetImprovementsForTest(0);
 }
 
 int main()

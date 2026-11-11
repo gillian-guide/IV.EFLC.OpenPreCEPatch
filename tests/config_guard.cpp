@@ -1,4 +1,4 @@
-#include <common.hxx>
+﻿#include <common.hxx>
 
 #include <cstdio>
 #include <limits>
@@ -7,7 +7,6 @@
 
 import common;
 import config;
-import improvements;
 import options;
 
 // The `config` group: OpenPreCEPatch's no-throw read, its out-of-range
@@ -54,31 +53,6 @@ namespace
     void TestInteger()
     {
         const auto document = Feather::Parse("[Options]\nA=abc\nB=999999999999\n");
-
-        SetImprovementsForTest(0);
-        bool invalid = false;
-        try
-        {
-            (void)Config::Integer(document, "A", "1");
-        }
-        catch (const std::invalid_argument&)
-        {
-            invalid = true;
-        }
-        Check(invalid, "1:1: a non-numeric value throws invalid_argument");
-
-        bool range = false;
-        try
-        {
-            (void)Config::Integer(document, "B", "1");
-        }
-        catch (const std::out_of_range&)
-        {
-            range = true;
-        }
-        Check(range, "1:1: an out-of-range value throws out_of_range");
-
-        SetImprovementsForTest(Improve(Improvement::config));
         Check(Config::Integer(document, "A", "7") == 7,
             "config: a non-numeric value uses the default");
         Check(Config::Integer(document, "B", "7") == std::numeric_limits<int32_t>::max(),
@@ -92,19 +66,6 @@ namespace
     void TestFloat()
     {
         const auto document = Feather::Parse("[Options]\nA=abc\n");
-        SetImprovementsForTest(0);
-        bool invalid = false;
-        try
-        {
-            (void)Config::Float(document, "Options", "A", "1.5");
-        }
-        catch (const std::invalid_argument&)
-        {
-            invalid = true;
-        }
-        Check(invalid, "1:1: a non-numeric float throws invalid_argument");
-
-        SetImprovementsForTest(Improve(Improvement::config));
         Check(Config::Float(document, "Options", "A", "1.5") == 1.5f,
             "config: a non-numeric float uses the default");
     }
@@ -115,19 +76,6 @@ namespace
             "[PopupLightAngles]\nCar1Name=police\nCar1Angle=abc\n");
         const auto resolve = [](const char*) -> uint32_t { return 0x1234u; };
 
-        SetImprovementsForTest(0);
-        bool invalid = false;
-        try
-        {
-            Config::ReadModelTables(document, resolve);
-        }
-        catch (const std::invalid_argument&)
-        {
-            invalid = true;
-        }
-        Check(invalid, "1:1: a bad [PopupLightAngles] value throws");
-
-        SetImprovementsForTest(Improve(Improvement::config));
         bool threw = false;
         try
         {
@@ -145,8 +93,6 @@ namespace
 
     void TestSections()
     {
-        SetImprovementsForTest(0);
-
         // A migrated OpenPreCEPatch INI keeps its grouped sections; the key is
         // found even though it is not under [Options].
         Config::Ini() = Feather::Parse("[STABILITY]\nAimProjectileCrashFix=0\n");
@@ -170,13 +116,6 @@ namespace
         Config::Ini() = Feather::Parse(
             "[Options]\nBikeFeetFix=1\nAimProjectileCrashFix=1\n");
 
-        SetImprovementsForTest(0);
-        Config::SetFusionFixPresent(true);
-        Check(Catalogue::Read("BikeFeetFix") == 1,
-            "1:1: the FusionFix overlap gate is not applied");
-        Config::SetFusionFixPresent(false);
-
-        SetImprovementsForTest(Improve(Improvement::config));
         Config::SetFusionFixPresent(true);
         Check(Catalogue::Read("BikeFeetFix") == 0,
             "config: a gated option reads as off with FusionFix present");
@@ -197,7 +136,6 @@ int main()
     TestSections();
     TestFusionFixGate();
 
-    SetImprovementsForTest(0);
     std::printf("%d check(s), %d failure(s)\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

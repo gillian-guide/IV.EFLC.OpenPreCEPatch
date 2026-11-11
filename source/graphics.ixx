@@ -8,7 +8,6 @@ import bodies;
 import bytes;
 import common;
 import game;
-import improvements;
 import loader;
 import patch;
 
@@ -369,16 +368,9 @@ namespace
         pattern = find_pattern("F7 46 24 00 00 00 40 0F 85");
         if (!pattern.empty())
         {
-            if (ImprovementEnabled(Improvement::alpha_nop))
-            {
-                // Only the `jnz` (six bytes) is removed; the `test` keeps setting
-                // the flags the following code reads.
-                injector::MakeNOP(pattern.get_first<std::byte>(7), 6, true);
-            }
-            else
-            {
-                injector::MakeNOP(pattern.get_first(0), 13, true);
-            }
+            // Only the `jnz` (six bytes) is removed; the `test` keeps setting
+            // the flags the following code reads.
+            injector::MakeNOP(pattern.get_first<std::byte>(7), 6, true);
         }
     }
 
@@ -641,29 +633,20 @@ namespace
         Bodies::Register(reinterpret_cast<uintptr_t>(&ShaderStreamingFindHpe), 0x10045A30u);
         Bodies::Register(reinterpret_cast<uintptr_t>(&ShaderStreamingFindV), 0x10045A80u);
 
-        // The OpenPreCEPatch compatibility change: only the two LookupShader calls
-        // are replaced. The two jumps over the remaining name chain are a pure
-        // speed-up, and the bytes they overwrite are inside the window
-        // LibertyCityPlates scans for addCustomShaderEffect; dropping them keeps
-        // that mod's address scan intact. The 1:1 arm keeps the original's four
-        // writes, so its write set is unchanged.
-        if (ImprovementEnabled(Improvement::shader))
-        {
-            // A build can match the surrounding bytes without the two call
-            // opcodes; writing a branch over an arbitrary instruction is worse
-            // than not applying the speed-up.
-            if (match[85] != std::byte{ 0xE8 } || match[253] != std::byte{ 0xE8 })
-                return;
-
-            injector::MakeCALL(match + 85, reinterpret_cast<void*>(&ShaderStreamingFindHpe), true);
-            injector::MakeCALL(match + 253, reinterpret_cast<void*>(&ShaderStreamingFindV), true);
+        // Only the two LookupShader calls are replaced. The two jumps over the
+        // remaining name chain are a pure speed-up, and the bytes they overwrite
+        // are inside the window LibertyCityPlates scans for
+        // addCustomShaderEffect; dropping them keeps that mod's address scan
+        // intact.
+        //
+        // A build can match the surrounding bytes without the two call opcodes;
+        // writing a branch over an arbitrary instruction is worse than not
+        // applying the speed-up.
+        if (match[85] != std::byte{ 0xE8 } || match[253] != std::byte{ 0xE8 })
             return;
-        }
 
         injector::MakeCALL(match + 85, reinterpret_cast<void*>(&ShaderStreamingFindHpe), true);
-        injector::MakeJMP(match + 98, match + 245, true);
         injector::MakeCALL(match + 253, reinterpret_cast<void*>(&ShaderStreamingFindV), true);
-        injector::MakeJMP(match + 266, match + 1158, true);
     }
 
     // The cutscene_entry group: one hook at the shared camera callee instead of
@@ -778,7 +761,7 @@ namespace
         // the original's coordinates.
         Bodies::Register(reinterpret_cast<uintptr_t>(&CutsceneResolveEntry), 0x10003980u);
 
-        if (ImprovementEnabled(Improvement::cutscene_entry) && zpatch_cutscene_target != 0)
+        if (zpatch_cutscene_target != 0)
         {
             const auto callee = static_cast<uintptr_t>(zpatch_cutscene_target);
             if (uint8_t* copy = CutsceneCalleeCopy(callee))
@@ -830,21 +813,16 @@ export void RegisterGraphics()
         PublishBuildingDynamicShadows();
         PublishCutsceneFixes();
         PublishEmissiveLerpFix();
-        PublishHighQualityReflections();
         PublishSuperLODFix();
     };
-    Loader::InstallEvent() += [] { InstallBorderlessWindowed(); };
     Loader::InstallEvent() += [] { InstallBuildingAlphaFix(); };
     Loader::InstallEvent() += [] { InstallBuildingDynamicShadows(); };
     Loader::InstallEvent() += [] { InstallCutsceneFixes(); };
     Loader::InstallEvent() += [] { InstallEmissiveLerpFix(); };
-    Loader::InstallEvent() += [] { InstallForceDynamicShadowsEverywhere(); };
     Loader::InstallEvent() += [] { InstallForceShadowsOnObjects(); };
-    Loader::InstallEvent() += [] { InstallHighQualityReflections(); };
     Loader::InstallEvent() += [] { InstallImprovedShaderStreaming(); };
     Loader::InstallEvent() += [] { InstallNoImpostorHeightCutoff(); };
     Loader::InstallEvent() += [] { InstallNoLODLightHeightCutoff(); };
-    Loader::InstallEvent() += [] { InstallRemoveBoundingBoxCulling(); };
     Loader::InstallEvent() += [] { InstallRemoveStaticCarShadows(); };
     Loader::InstallEvent() += [] { InstallRemoveStaticCutsceneCarShadows(); };
     Loader::InstallEvent() += [] { InstallSuperLODFix(); };

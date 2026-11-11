@@ -7,6 +7,7 @@ module;
 // the variadic list BadPlayerModelCrashFix's rebuilt formatter takes, and the CRT
 // calls BpmFormat and BpmZeroBlock make.
 #include <intrin.h>
+#include <algorithm>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -17,7 +18,6 @@ import bodies;
 import bytes;
 import common;
 import game;
-import improvements;
 import loader;
 import patch;
 import shared;
@@ -703,24 +703,14 @@ namespace
         if (!Loader::Enabled("SCOSignatureFix"))
             return;
 
-        if (ImprovementEnabled(Improvement::sco_anchor))
-        {
-            // `mov ds:X,edi` (6 bytes) + `test ebp,ebp` (2) put the `jz` opcode
-            // at +8. If the shape is absent, fall through to the recovered arm.
-            auto anchored = find_pattern("89 3D ? ? ? ? 85 ED 74 1E");
-            if (!anchored.empty())
-            {
-                injector::WriteMemory<std::byte>(
-                    anchored.get_first<std::byte>(8), Bytes::ShortJmp, true);
-                return;
-            }
-        }
-
-        auto pattern = find_pattern("8B 6C 24 1C 66 89 6E 14 64 8B 0D 2C 00 00 00 8B");
-        if (!pattern.empty())
-        {
-            injector::WriteMemory<std::byte>(pattern.get_first(-32), Bytes::ShortJmp, true);
-        }
+        // `mov ds:X,edi` (6 bytes) + `test ebp,ebp` (2) put the `jz` opcode
+        // at +8. The signature ends on the branch it flips, instead of scanning
+        // a downstream anchor and relying on a fixed -32 distance.
+        auto anchored = find_pattern("89 3D ? ? ? ? 85 ED 74 1E");
+        if (anchored.empty())
+            return;
+        injector::WriteMemory<std::byte>(
+            anchored.get_first<std::byte>(8), Bytes::ShortJmp, true);
     }
 
     // TryToSkipAllErrors: the error handler returns immediately instead of walking
@@ -784,6 +774,98 @@ namespace
     // BadPlayerModelCrashFix: the game's model-resolution entry becomes a jump to
     // the trampoline. The jump is made only after the resume above is published,
     // because the resume is read from the site the jump overwrites.
+    // The model-name table index used when the `model_index` group is on. The
+    // original walks all 38,455 names per diagnostic; the table is static, so
+    // the index is built once and binary-searched. The resolver is the same
+    // sub_10003E50 forwarder the body calls, so the hashes are identical.
+    struct ModelNameIndexEntry
+    {
+        uint32_t hash;
+        const char* name;
+    };
+
+    constexpr size_t kModelNameIndexCapacity = 0x9637;
+    ModelNameIndexEntry g_modelNameIndex[kModelNameIndexCapacity] = {};
+    size_t g_modelNameIndexCount = 0;
+    volatile LONG g_modelNameIndexState = 0;  // 0 uninitialised, 1 building, 2 ready
+    uintptr_t g_modelNameIndexResolverForTest = 0;
+
+    bool BuildModelNameIndex() noexcept
+    {
+        for (;;)
+        {
+            const LONG observed = InterlockedCompareExchange(&g_modelNameIndexState, 1, 0);
+            if (observed == 2)
+                return g_modelNameIndexCount != 0;
+            if (observed == 1)
+            {
+                Sleep(0);
+                continue;
+            }
+
+            const auto resolve = reinterpret_cast<uint32_t(__cdecl*)(const char*)>(
+                g_modelNameIndexResolverForTest != 0 ? g_modelNameIndexResolverForTest
+                                                     : zpatch_bpm_resolver);
+            if (resolve == nullptr)
+            {
+                InterlockedExchange(&g_modelNameIndexState, 0);
+                return false;
+            }
+
+            const size_t count = sizeof(kBadPlayerModelNames) / sizeof(kBadPlayerModelNames[0]);
+            for (size_t index = 0; index < count; ++index)
+                g_modelNameIndex[index] = { resolve(kBadPlayerModelNames[index]),
+                    kBadPlayerModelNames[index] };
+            // Stable: duplicate hashes keep the table's original first-match order.
+            std::stable_sort(g_modelNameIndex, g_modelNameIndex + count,
+                [](const ModelNameIndexEntry& left, const ModelNameIndexEntry& right)
+                { return left.hash < right.hash; });
+            g_modelNameIndexCount = count;
+            InterlockedExchange(&g_modelNameIndexState, 2);
+            return true;
+        }
+    }
+
+    // sub_10003F00's contract: ECX is the hash, EAX the name. A miss answers the
+    // same "**UNKNOWN**" the transcribed body does.
+    static const char* __fastcall BpmModelNameCached(uint32_t hash) noexcept
+    {
+        if (!BuildModelNameIndex())
+            return zpatch_bpm_unknown;
+
+        size_t low = 0;
+        size_t high = g_modelNameIndexCount;
+        while (low < high)
+        {
+            const size_t middle = low + (high - low) / 2;
+            if (g_modelNameIndex[middle].hash < hash)
+                low = middle + 1;
+            else
+                high = middle;
+        }
+        if (low < g_modelNameIndexCount && g_modelNameIndex[low].hash == hash)
+            return g_modelNameIndex[low].name;
+        return zpatch_bpm_unknown;
+    }
+
+    void ResetModelNameIndexStateForTest() noexcept
+    {
+        g_modelNameIndexCount = 0;
+        g_modelNameIndexResolverForTest = 0;
+        InterlockedExchange(&g_modelNameIndexState, 0);
+    }
+
+    void SetModelNameIndexResolverForTestImpl(uintptr_t resolver) noexcept
+    {
+        ResetModelNameIndexStateForTest();
+        g_modelNameIndexResolverForTest = resolver;
+    }
+
+    const char* ModelNameIndexedForTestImpl(uint32_t hash) noexcept
+    {
+        return BpmModelNameCached(hash);
+    }
+
     void InstallBadPlayerModelCrashFix()
     {
         if (!Loader::Enabled("BadPlayerModelCrashFix"))
@@ -830,7 +912,48 @@ namespace
 
         injector::MakeJMP(pattern.get_first<std::byte>(0),
             reinterpret_cast<void*>(&BpmTrampoline), true);
+
+        // The diagnostic call inside our own BpmCheckBody is a relative call
+        // in this module, not a game-image site. Redirect it to the indexed
+        // resolver.
+        {
+            auto* begin = reinterpret_cast<uint8_t*>(&BpmCheckBody);
+            bool patched = false;
+            for (size_t offset = 0; offset + 5 <= 0x200 && !patched; ++offset)
+            {
+                if (begin[offset] != 0xE8)
+                    continue;
+                int32_t displacement = 0;
+                std::memcpy(&displacement, begin + offset + 1, sizeof(displacement));
+                const auto target = reinterpret_cast<uintptr_t>(begin + offset + 5) +
+                                    static_cast<intptr_t>(displacement);
+                if (target != reinterpret_cast<uintptr_t>(&BpmModelNameBody))
+                    continue;
+                injector::MakeCALL(begin + offset,
+                    reinterpret_cast<void*>(&BpmModelNameCached), true);
+                patched = true;
+            }
+            if (!patched)
+                Log::Print("model_index: BpmCheckBody call site not found; body scan kept");
+        }
     }
+}
+
+// Test seams for the model-name index. They live outside the anonymous
+// namespace so the module can export them.
+export void ResetModelNameIndexForTest() noexcept
+{
+    ResetModelNameIndexStateForTest();
+}
+
+export void SetModelNameIndexResolverForTest(uintptr_t resolver) noexcept
+{
+    SetModelNameIndexResolverForTestImpl(resolver);
+}
+
+export const char* ModelNameIndexedForTest(uint32_t hash) noexcept
+{
+    return ModelNameIndexedForTestImpl(hash);
 }
 
 // Registered like every other arm: the publish tier reads every site the install

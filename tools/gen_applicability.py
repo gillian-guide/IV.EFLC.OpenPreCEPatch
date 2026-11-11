@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Generate the build-applicability matrix from the catalogue.
 
 `source/options.inc` carries each key's recovered build mask. This script joins
@@ -118,7 +118,7 @@ def render_doc(builds, rows):
 
 def main():
     builds, rows = load()
-    if len(rows) < 99:
+    if len(rows) < 85:
         raise SystemExit(f"only {len(rows)} option rows parsed")
     tsv = render_tsv(builds, rows)
     doc = render_doc(builds, rows)

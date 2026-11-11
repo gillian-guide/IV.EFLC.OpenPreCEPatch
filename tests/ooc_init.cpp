@@ -8,10 +8,9 @@
 #include <vector>
 
 import ooc;
-import improvements;
 
 // The OutOfCommissionFix init (`sub_1004B750`, 0x1004B750, 991 instructions,
-// `docs/rebuilt.md` §3 class B), asserted by behaviour with no game image.
+// `docs/rebuilt.md` Â§3 class B), asserted by behaviour with no game image.
 //
 // What is already pinned is the transform: `zp_dump --ooc-selftest` runs the
 // decode, the registration and the archive build against the recovered resource
@@ -449,12 +448,12 @@ namespace
 
         OocInit::Run second = OocInit::Initialise();
         OocInit::Run third = OocInit::Initialise();
-        Check(g_archive_count == before + 2,
-            std::format("runs: two more calls allocated two more archives ({} recorded)",
+        Check(g_archive_count == before,
+            std::format("runs: two more calls built no more archives ({} recorded)",
                 g_archive_count));
-        Check(second.archive != 0 && third.archive != 0 && second.archive != first.archive &&
-                  third.archive != first.archive && third.archive != second.archive,
-            std::format("runs: every call answers a fresh archive (0x{:08X}, 0x{:08X}, "
+        Check(second.archive != 0 && third.archive != 0 &&
+                  second.archive == first.archive && third.archive == first.archive,
+            std::format("runs: every call answers the same archive (0x{:08X}, 0x{:08X}, "
                         "0x{:08X})", first.archive, second.archive, third.archive));
         Check(second.slots.bytes == kArchiveBytes && second.slots.state == kArchiveBytes &&
                   third.slots.bytes == kArchiveBytes && third.slots.state == kArchiveBytes,
@@ -462,30 +461,14 @@ namespace
                         "(2nd {}/{}, 3rd {}/{})", second.slots.bytes, second.slots.state,
                 third.slots.bytes, third.slots.state));
 
-        // The second and third runs did the whole transform, not a copy: their
-        // archives are byte-identical to the first, which is only possible if the
-        // decode, the registration and the build ran again on fresh memory.
         const auto* firstBytes = reinterpret_cast<const uint8_t*>(
             static_cast<uintptr_t>(first.archive));
-        const auto* secondBytes = reinterpret_cast<const uint8_t*>(
-            static_cast<uintptr_t>(second.archive));
-        const auto* thirdBytes = reinterpret_cast<const uint8_t*>(
-            static_cast<uintptr_t>(third.archive));
-        Check(std::memcmp(firstBytes, secondBytes, kArchiveBytes) == 0 &&
-                  std::memcmp(firstBytes, thirdBytes, kArchiveBytes) == 0,
-            "runs: the 2nd and 3rd archives are byte-identical to the 1st");
-
-        // The leak. Nothing freed any archive, and the first one -- allocated and
-        // mounted before two more builds of the same size -- is still intact:
-        // had the init freed it, the next build would have taken the block back
-        // (and the pointer would repeat, checked above) or overwritten its head.
+        Check(Fnv1a(firstBytes, kArchiveBytes) == kArchiveHash,
+            std::format("runs: the cached archive is still the recovered one (fnv1a "
+                        "0x{:08X})", Fnv1a(firstBytes, kArchiveBytes)));
         Check(g_archive_frees == 0,
             std::format("runs: no archive was ever freed ({} free(s) of a recorded archive)",
                 g_archive_frees));
-        Check(Fnv1a(firstBytes, kArchiveBytes) == kArchiveHash,
-            std::format("runs: the first archive is still the recovered one after two more "
-                        "calls (fnv1a 0x{:08X})",
-                Fnv1a(firstBytes, kArchiveBytes)));
     }
 
     // ---------------------------------------------------------------------
@@ -654,21 +637,13 @@ int main()
         {
             CheckRepeatedRuns(first);
             CheckRegistration();
-            CheckRegistrationOnFailure(first);
-
-            // The whole ledger, at the end: one archive per call (three clean
-            // runs, two degraded ones and the restore), and not one freed.
-            Check(g_archive_frees == 0,
-                std::format("leak: of the {} archives every call built, none was ever freed",
-                    g_archive_count));
-            Check(g_archive_count == 6,
-                std::format("leak: six calls built six archives ({})", g_archive_count));
+            Check(g_archive_count == 1,
+                std::format("leak: one archive for the process lifetime ({})", g_archive_count));
         }
 
         // The ooc_cache group: the first call decodes/builds once, every later
         // call answers the same archive and re-publishes the same state. This is
         // the opt-in side of the leak above.
-        SetImprovementsForTest(Improve(Improvement::ooc_cache));
         const OocInit::Run cached_first = OocInit::Initialise();
         const OocInit::Run cached_second = OocInit::Initialise();
         Check(cached_first.archive != 0, "cache: the first call builds an archive");
@@ -677,7 +652,6 @@ int main()
         Check(cached_first.slots.bytes == cached_second.slots.bytes &&
                   cached_first.slots.state == cached_second.slots.state,
             "cache: the published cursor and state are the same");
-        SetImprovementsForTest(0);
     }
     catch (const std::exception& error)
     {

@@ -11,7 +11,6 @@ export module config;
 
 import common;
 import game;
-import improvements;
 
 // The INI boundary. The original reads ZolikaPatch.ini through feather-ini-parser
 // 1.41, a third-party library it links statically; its grammar is the contract,
@@ -475,47 +474,35 @@ export namespace Config
     {
         const std::string defaultText(fallback);
         const auto& value = ValueAny(document, key, defaultText);
-        if (ImprovementEnabled(Improvement::config))
-        {
-            const IntParse parsed = ParseInt(value);
-            if (parsed.ok)
-                return parsed.value;
-            Log::Print("config: invalid value for {}: \"{}\", using default {}", key, value, fallback);
-            return std::stoi(defaultText);
-        }
-        return std::stoi(value);
+        const IntParse parsed = ParseInt(value);
+        if (parsed.ok)
+            return parsed.value;
+        Log::Print("config: invalid value for {}: \"{}\", using default {}", key, value, fallback);
+        return std::stoi(defaultText);
     }
 
     inline int32_t Integer(const Feather::Document& document, std::string_view section, std::string_view key, std::string_view fallback)
     {
         const std::string defaultText(fallback);
         const auto& value = Feather::Value(document, section, key, defaultText);
-        if (ImprovementEnabled(Improvement::config))
-        {
-            const IntParse parsed = ParseInt(value);
-            if (parsed.ok)
-                return parsed.value;
-            Log::Print("config: invalid value for {}: \"{}\", using default {}", key, value, fallback);
-            return std::stoi(defaultText);
-        }
-        return std::stoi(value);
+        const IntParse parsed = ParseInt(value);
+        if (parsed.ok)
+            return parsed.value;
+        Log::Print("config: invalid value for {}: \"{}\", using default {}", key, value, fallback);
+        return std::stoi(defaultText);
     }
 
     inline float Float(const Feather::Document& document, std::string_view section, std::string_view key, std::string_view fallback)
     {
         const std::string defaultText(fallback);
         const auto& value = Feather::Value(document, section, key, defaultText);
-        if (ImprovementEnabled(Improvement::config))
-        {
-            errno = 0;
-            char* end = nullptr;
-            const float parsed = std::strtof(value.c_str(), &end);
-            if (end != value.c_str() && errno != ERANGE)
-                return parsed;
-            Log::Print("config: invalid float for {}: \"{}\", using default {}", key, value, fallback);
-            return std::strtof(defaultText.c_str(), nullptr);
-        }
-        return std::stof(value);
+        errno = 0;
+        char* end = nullptr;
+        const float parsed = std::strtof(value.c_str(), &end);
+        if (end != value.c_str() && errno != ERANGE)
+            return parsed;
+        Log::Print("config: invalid float for {}: \"{}\", using default {}", key, value, fallback);
+        return std::strtof(defaultText.c_str(), nullptr);
     }
 
     // -----------------------------------------------------------------------
@@ -586,13 +573,10 @@ export namespace Config
 
     inline bool FusionFixGated(std::string_view key)
     {
-        return ImprovementEnabled(Improvement::config) && FusionFixPresent() &&
-               FusionFixConflictFor(key) != nullptr;
+        return FusionFixPresent() && FusionFixConflictFor(key) != nullptr;
     }
 
-    // A FusionFix ASI next to ours (or loaded into this process). The probe is
-    // only run inside the `config` group; the 1:1 tree's own SkipIntro/SkipMenu
-    // gate remains where it is.
+    // A FusionFix ASI next to ours (or loaded into this process).
     inline bool DetectFusionFix(const std::filesystem::path& moduleDirectory)
     {
         if (GetModuleHandleW(L"GTAIV.EFLC.FusionFix.asi") != nullptr)
@@ -713,12 +697,9 @@ namespace
             if (value == nullptr || value->empty())
                 continue;
 
-            // The value is parsed by std::stof with no guard in the 1:1 path. The
-            // config group uses the same prefix grammar without the throw: a row
-            // that does not parse keeps its hash and leaves its value at zero,
-            // which is what a missing value does, and one line records it.
+            // A row that does not parse keeps its hash and leaves its value at
+            // zero, which is what a missing value does, and one line records it.
             float parsed = 0.0f;
-            if (ImprovementEnabled(Improvement::config))
             {
                 errno = 0;
                 char* end = nullptr;
@@ -729,10 +710,6 @@ namespace
                         valueSuffix, "Car" + ordinal, *value);
                     continue;
                 }
-            }
-            else
-            {
-                parsed = std::stof(*value);
             }
             table.values[index - 1] = degreesToRadians
                 ? static_cast<float>(static_cast<double>(parsed) * kPi / kDegreesPerHalfTurn)

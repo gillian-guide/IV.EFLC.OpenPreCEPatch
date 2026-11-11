@@ -10,7 +10,6 @@ export module warnings;
 import common;
 import config;
 import game;
-import improvements;
 
 // OpenPreCEPatch's startup warnings, ported as a selectable group.
 //
@@ -140,10 +139,7 @@ namespace Warnings
 
     void Show(const wchar_t* title, const std::wstring& text, uint32_t exitCode) noexcept
     {
-        bool shown = false;
-        if (ImprovementEnabled(Improvement::task_dialogs))
-            shown = ShowTaskDialog(title, text);
-        if (!shown)
+        if (!ShowTaskDialog(title, text))
             MessageBoxW(nullptr, text.c_str(), title, MB_OK | MB_ICONWARNING);
         if (exitCode != 0)
             TerminateProcess(GetCurrentProcess(), exitCode);

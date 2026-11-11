@@ -5,7 +5,6 @@
 
 import common;
 import config;
-import improvements;
 import options;
 
 // The `import` group: the flat INI is rendered once into the grouped file, the
@@ -57,16 +56,14 @@ namespace
             flat << "[Options]\nBenchmarkFix=0\nGarageModelFix=1\n";
         }
 
-        SetImprovementsForTest(0);
-        Check(Config::Load(), "import: the flat file is read with the group off");
+        Check(Config::Load(), "import: the legacy flat file is read when the shipped one is absent");
         Check(!std::filesystem::exists("IV.EFLC.OpenPreCEPatch.ini"),
-            "import: the group-off run creates no grouped file");
+            "import: loading alone creates no grouped file");
         Check(Catalogue::Read("GarageModelFix") == 1,
-            "import: the flat value is the one the group-off run uses");
+            "import: the legacy value is the one the first run uses");
 
-        SetImprovementsForTest(Improve(Improvement::import));
         Config::Ini() = {};
-        Check(Config::Load(), "import: the flat file is read on the first grouped run");
+        Check(Config::Load(), "import: the legacy file is read on the first grouped run");
         Check(Config::WriteGrouped(Config::Ini(), SectionOf),
             "import: the grouped file is written");
         Check(std::filesystem::exists("IV.EFLC.OpenPreCEPatch.ini"),
@@ -90,7 +87,6 @@ namespace
                   Catalogue::Read("BenchmarkFix") == 0,
             "import: values read identically from the grouped file");
 
-        SetImprovementsForTest(0);
         std::filesystem::current_path(original, ignored);
         std::filesystem::remove_all(directory, ignored);
     }

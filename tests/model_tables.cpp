@@ -286,34 +286,32 @@ namespace
 
     void TestFaults()
     {
-        // std::stof with no digits: the original's unguarded parse (its
-        // `_Xinvalid_argument("invalid stof argument")` at 0x100529BC).
+        // A value with no digits leaves the hash and a zero value; the row is
+        // skipped, not thrown.
         auto outcome = Read(Feather::Parse("[HeadlightConeOffsets]\nCar2Name=admiral\nCar2Offset=abc\n"));
-        const auto& table = Config::HeadlightConeOffsets();
-        Check(outcome.invalid, "faults: a value with no digits throws std::invalid_argument");
-        Check(table.hashes[1] == StubHash("admiral") && table.values[1] == 0.0f,
-            "faults: the hash was stored before the value was parsed (0x10052B0C before 0x10052C14)");
+        Check(outcome.clean(), "faults: a value with no digits does not throw");
+        Check(Config::HeadlightConeOffsets().hashes[1] == StubHash("admiral") &&
+                  Config::HeadlightConeOffsets().values[1] == 0.0f,
+            "faults: the hash is stored and the unparseable value stays zero");
 
-        // A space-only value is not empty to the parser, so it reaches std::stof
-        // and throws -- the same fault `Key= ` gives std::stoi on the options side.
+        // A space-only value is skipped the same way.
         outcome = Read(Feather::Parse("[HeadlightConeOffsets]\nCar2Name=x\nCar2Offset= \n"));
-        Check(outcome.invalid, "faults: a space-only value throws std::invalid_argument");
+        Check(outcome.clean(), "faults: a space-only value does not throw");
 
-        // strtof sets ERANGE: the original's `_Xout_of_range("stof argument out of
-        // range")` at 0x100529B1.
+        // strtof sets ERANGE: the row is skipped.
         outcome = Read(Feather::Parse("[HeadlightConeOffsets]\nCar2Name=x\nCar2Offset=1e999\n"));
-        Check(outcome.outOfRange, "faults: an out-of-range value throws std::out_of_range");
+        Check(outcome.clean(), "faults: an out-of-range value does not throw");
         Check(Config::HeadlightConeOffsets().hashes[1] == StubHash("x"),
-            "faults: ... and the hash was stored first there too");
+            "faults: ... and the hash was stored first");
 
-        // The angle section uses the same std::stof.
+        // The angle section uses the same guarded parse.
         outcome = Read(Feather::Parse("[PopupLightAngles]\nCar1Name=x\nCar1Angle=degrees\n"));
-        Check(outcome.invalid, "faults: a non-numeric Angle throws the same way");
+        Check(outcome.clean(), "faults: a non-numeric Angle is skipped");
 
-        // std::stof truncates at the first non-digit instead of throwing.
+        // strtof truncates at the first non-digit.
         outcome = Read(Feather::Parse("[HeadlightConeOffsets]\nCar2Name=admiral\nCar2Offset=5abc\n"));
         Check(outcome.clean() && Config::HeadlightConeOffsets().values[1] == 5.0f,
-            "truncation: '5abc' is 5.0f, as std::stof stops at the first non-digit");
+            "truncation: '5abc' is 5.0f, as strtof stops at the first non-digit");
         Check(Config::HeadlightConeOffsets().hashes[1] == StubHash("admiral"),
             "truncation: the row is stored normally");
     }
@@ -322,7 +320,7 @@ namespace
     {
         // The original reads [PopupLightAngles] first (0x10052419) and
         // [HeadlightConeOffsets] second (0x10052901), whatever order the file has.
-        // A throw in the first leaves the second untouched.
+        // A bad row in the first is skipped; the second is still read.
         auto outcome = Read(Feather::Parse(
             "[HeadlightConeOffsets]\n"
             "Car1Name=admiral\n"
@@ -331,13 +329,14 @@ namespace
             "Car1Name=admiral\n"
             "Car1Angle=bad\n"));
 
-        Check(outcome.invalid, "order: a malformed [PopupLightAngles] row throws");
+        Check(outcome.clean(), "order: a malformed [PopupLightAngles] row is skipped");
         Check(Config::PopupLightAngles().hashes[0] == StubHash("admiral"),
-            "order: the throwing section's hash is stored first");
-        Check(Empty(Config::HeadlightConeOffsets()),
-            "order: [HeadlightConeOffsets] is never reached, as in the original");
+            "order: the skipped row's hash is stored");
+        Check(Config::HeadlightConeOffsets().hashes[0] == StubHash("admiral") &&
+                  Config::HeadlightConeOffsets().values[0] == -5.0f,
+            "order: [HeadlightConeOffsets] is still read after the bad row");
 
-        // And when the second section is the one that throws, the first is already
+        // And when the second section has the bad row, the first is already
         // complete.
         outcome = Read(Feather::Parse(
             "[PopupLightAngles]\n"
@@ -346,10 +345,10 @@ namespace
             "[HeadlightConeOffsets]\n"
             "Car1Name=admiral\n"
             "Car1Offset=bad\n"));
-        Check(outcome.invalid && Config::PopupLightAngles().hashes[0] == StubHash("admiral"),
+        Check(outcome.clean() && Config::PopupLightAngles().hashes[0] == StubHash("admiral"),
             "order: [PopupLightAngles] is complete before [HeadlightConeOffsets] is read");
         Check(Config::HeadlightConeOffsets().hashes[0] == StubHash("admiral"),
-            "order: the second section's hash is stored before its throw");
+            "order: the second section's hash is stored, its value zero");
     }
 
     void TestFullTables()

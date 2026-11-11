@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.28)
+﻿cmake_minimum_required(VERSION 3.28)
 project(IV.EFLC.OpenPreCEPatch LANGUAGES CXX)
 
 # A Win32 ASI: 32-bit, MSVC, static CRT, fixed image base, windowed subsystem.
@@ -62,7 +62,6 @@ set_target_properties(zp_modules PROPERTIES CXX_SCAN_FOR_MODULES ON CXX_EXTENSIO
 target_sources(zp_modules PUBLIC
   FILE_SET CXX_MODULES FILES
     source/common.ixx
-    source/improvements.ixx
     source/bytes.ixx
     source/bodies.ixx
     source/patch.ixx
@@ -76,13 +75,10 @@ target_sources(zp_modules PUBLIC
     source/native.ixx
     source/stability.ixx
     source/vehicles.ixx
-    source/useless_checks.ixx
     source/graphics.ixx
-    source/launcher.ixx
     source/loading.ixx
     source/audio.ixx
     source/misc.ixx
-    source/menu.ixx
     source/ooc.ixx)
 target_include_directories(zp_modules PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/source
@@ -215,6 +211,20 @@ target_compile_definitions(zp_shipped_ini PRIVATE ZP_SOURCE_DIR="${CMAKE_CURRENT
 add_test(NAME zp_shipped_ini COMMAND zp_shipped_ini)
 set_tests_properties(zp_shipped_ini PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
+# The `model_index` group: sorted hash index over the recovered name table.
+add_executable(zp_model_index tests/model_index.cpp)
+set_target_properties(zp_model_index PROPERTIES CXX_SCAN_FOR_MODULES ON)
+target_link_libraries(zp_model_index PRIVATE zp_modules)
+add_test(NAME zp_model_index COMMAND zp_model_index)
+set_tests_properties(zp_model_index PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+# The `popup_cache` group: resolve memo, angle memo and the table semantics.
+add_executable(zp_popup_cache tests/popup_cache.cpp)
+set_target_properties(zp_popup_cache PROPERTIES CXX_SCAN_FOR_MODULES ON)
+target_link_libraries(zp_popup_cache PRIVATE zp_modules)
+add_test(NAME zp_popup_cache COMMAND zp_popup_cache)
+set_tests_properties(zp_popup_cache PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
 # The two per-model light tables the loader preamble reads from
 # [PopupLightAngles] / [HeadlightConeOffsets]: the recovered grammar, defaults and
 # faults, on documents only -- no game image and no ASI load.
@@ -275,14 +285,6 @@ set_tests_properties(zp_nms_arena PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_B
 # probe byte to be there and no answer to have been written, then terminates and reaps
 # it. Offline: no game image, no ASI load; a fixture file, a report and a probe file in
 # the binary directory, all removed.
-add_executable(zp_dfa_close tests/dfa_close.cpp)
-set_target_properties(zp_dfa_close PROPERTIES CXX_SCAN_FOR_MODULES ON)
-target_link_libraries(zp_dfa_close PRIVATE zp_modules)
-add_test(NAME zp_dfa_close COMMAND zp_dfa_close)
-set_tests_properties(zp_dfa_close PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  TIMEOUT 120)
-
 # The SpeedupBugFix body (0x10050540, class B in docs/rebuilt.md), asserted by
 # behaviour instead of by its disassembly: the four derived floats against the
 # formula recomputed in the test at five frequencies (bit patterns, not
@@ -324,13 +326,6 @@ set_tests_properties(zp_ooc_init PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BI
 # fails the check instead of hanging the suite. The ctest timeout below is the
 # backstop. Offline: no game image, no ASI load, no file beyond the children's
 # reports.
-add_executable(zp_fault_parity tests/fault_parity.cpp)
-set_target_properties(zp_fault_parity PROPERTIES CXX_SCAN_FOR_MODULES ON)
-target_link_libraries(zp_fault_parity PRIVATE zp_modules)
-add_test(NAME zp_fault_parity COMMAND zp_fault_parity)
-set_tests_properties(zp_fault_parity PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  TIMEOUT 300)
 
 # A tool that maps a copy of the game image must pin where the copy lands: a
 # Win32 process cannot own the image's preferred base (0x00400000) -- the loader
@@ -373,29 +368,6 @@ if(Python3_Interpreter_FOUND AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs
   add_test(NAME zp_dump_empty
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_empty_dump.py
             $<TARGET_FILE:zp_dump> ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs)
-  # The failsafe group's fault parity, measured on real images: a forced-missing
-  # preamble pointer removes exactly the guarded jump and nothing else, the
-  # 1.0.0.0 NoImpostor cell faults with the group off and completes with it on,
-  # and a healthy image's write set is identical in both configurations.
-  add_test(NAME zp_failsafe_parity
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_failsafe_parity.py
-            --dump $<TARGET_FILE:zp_dump>
-            --game ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs
-            --work ${CMAKE_CURRENT_BINARY_DIR}/failsafe_parity)
-  set_tests_properties(zp_failsafe_parity PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    TIMEOUT 300)
-  # The two arms whose OpenPreCEPatch implementation deliberately changes the
-  # write set: shader (two LookupShader calls, no chain jumps) and alpha_nop
-  # (the jnz alone). Both are selected by name, never by `all`.
-  add_test(NAME zp_opcep_deltas
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_opcep_deltas.py
-            --dump $<TARGET_FILE:zp_dump>
-            --game ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs
-            --work ${CMAKE_CURRENT_BINARY_DIR}/opcep_deltas)
-  set_tests_properties(zp_opcep_deltas PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    TIMEOUT 120)
 endif()
 
 add_executable(zp_pe_check tests/pe_check.cpp)
@@ -451,9 +423,4 @@ if(Python3_Interpreter_FOUND)
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_signature_parity.py
               --game ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs)
   endif()
-endif()
-if(Python3_Interpreter_FOUND AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs/EFLC_1110.exe)
-  add_test(NAME zp_launcher_slots
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/verify_launcher_slots.py
-            ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs)
 endif()

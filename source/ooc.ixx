@@ -16,7 +16,6 @@ export module ooc;
 
 import bodies;
 import common;
-import improvements;
 import loader;
 import patch;
 
@@ -272,12 +271,9 @@ static void OocRegister(uint8_t* table)
 // call re-runs all of this and leaks the previous archive: kept 1:1.
 static uint32_t OocInitialise()
 {
-    // OpenPreCEPatch's cache: the original's one-shot guard has no writer, so
-    // every call re-decodes, re-registers and leaks the previous archive. The
-    // `ooc_cache` group decodes and mounts once, then answers the same archive
-    // for the process lifetime. It is opt-in because it changes the original's
-    // repeated-call behaviour.
-    if (ImprovementEnabled(Improvement::ooc_cache))
+    // The original's one-shot guard has no writer, so every call re-decodes,
+    // re-registers and leaks the previous archive. Decode and mount once, then
+    // answer the same archive for the process lifetime.
     {
         static uint32_t cached_archive = 0;
         static uint32_t cached_state = 0;
@@ -305,18 +301,6 @@ static uint32_t OocInitialise()
         zpatch_ooc_state = cached_state;
         return cached_archive;
     }
-
-    // Unchecked, like the original: the decode writes through the block whether
-    // or not the allocation succeeded.
-    auto* table = static_cast<uint8_t*>(std::malloc(kOocTableSize));
-    static_cast<void>(OocDecodeBody(table));  // the original discards the answer
-    OocRegister(table);
-    // The builder clears the vector itself (its last call), and its final write
-    // cursor is the archive's byte count: the original's `mov ecx,
-    // dword_10159C78 / mov dword_10159BFC, ecx` after the call.
-    uint8_t* archive = static_cast<uint8_t*>(OocBuildArchiveBody());
-    zpatch_ooc_state = zpatch_ooc_offset;
-    return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(archive));
 }
 
 // fnv1a over a recovered block, for the self-check below only: it is the

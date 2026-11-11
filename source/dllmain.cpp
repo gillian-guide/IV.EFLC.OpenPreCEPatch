@@ -4,7 +4,6 @@
 import common;
 import config;
 import game;
-import improvements;
 import loader;
 import options;
 import shared;
@@ -12,13 +11,10 @@ import native;
 import warnings;
 import stability;
 import vehicles;
-import useless_checks;
 import graphics;
-import launcher;
 import loading;
 import audio;
 import misc;
-import menu;
 import ooc;
 
 extern "C" __declspec(dllexport) void InitializeASI();
@@ -38,7 +34,6 @@ namespace
         auto& game = Game::Get();
         game.Initialise(module);
 
-        if (ImprovementEnabled(Improvement::warnings))
         {
             if (!Warnings::ClaimSingleInstance(L"IV.EFLC.OpenPreCEPatch"))
             {
@@ -70,7 +65,6 @@ namespace
 #endif
 
         const bool read = Config::Load();
-        if (ImprovementEnabled(Improvement::import))
         {
             // First-run creation: render the legacy flat document once into the
             // shipped grouped file. The current run keeps reading the legacy
@@ -100,25 +94,18 @@ namespace
                 (void)Config::WriteGrouped(Config::Ini(), resolve);
             }
         }
-        if (ImprovementEnabled(Improvement::config) ||
-            ImprovementEnabled(Improvement::warnings))
         {
             // The OpenPreCEPatch overlap gate: one probe, recorded once, and
             // every overlapping option reads as off through Catalogue::Read.
-            // The warnings group needs the same answer for its notice.
             Config::SetFusionFixPresent(Config::DetectFusionFix(game.ModuleDirectory()));
         }
 
-        if (ImprovementEnabled(Improvement::warnings) && Config::FusionFixPresent())
+        if (Config::FusionFixPresent())
         {
             std::vector<std::string_view> gated;
             for (const auto& conflict : Config::kFusionFixConflicts)
             {
-                const auto* value = Config::Ini().Find("Options", conflict.option);
-                if (value == nullptr)
-                    continue;
-                const auto parsed = Config::ParseInt(*value);
-                if (parsed.ok && parsed.value == 1)
+                if (Config::Integer(Config::Ini(), conflict.option, "0") == 1)
                     gated.push_back(conflict.option);
             }
             if (!gated.empty())
@@ -163,16 +150,10 @@ namespace
         Native::Register();
         RegisterStability();
         RegisterVehicles();
-        RegisterUselessChecks();
         RegisterGraphics();
-        RegisterLauncher();
         RegisterLoading();
         RegisterAudio();
         RegisterMisc();
-        // The IVMenuAPI integration runs after the audio arm: AddOptionsInMenu's
-        // death-music installs are the second half of the original's
-        // `RestoreDeathMusic == 1 || sub_10052380()` OR.
-        RegisterMenu();
         RegisterOoc();
         Loader::Run();
 

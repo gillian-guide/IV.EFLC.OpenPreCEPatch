@@ -1,12 +1,12 @@
 module;
 
 #include <common.hxx>
+#include <cstring>
 
 export module patch;
 
 import common;
 import game;
-import improvements;
 
 // Signature scanning, byte/introspection helpers and the two patch primitives
 // that need more than a direct injector call. Everything else (MakeNOP,
@@ -74,14 +74,13 @@ hook::pattern find_pattern(Args... args)
 // does not have the shape the arm was recovered from, and installing the subset
 // that happens to match is worse than leaving the image alone.
 //
-// The 1:1 configuration is not guarded: with the failsafe group off this always
-// answers true, so an arm keeps the original's partial write (and, for
-// NoImpostorHeightCutoff on 1.0.0.0, the original's fault).
+// The multi-hit guard: an arm that expects a fixed number of sites refuses a
+// partial install. A build whose signature matches fewer sites does not have the
+// shape the arm was recovered from, and installing the subset that happens to
+// match is worse than leaving the image alone.
 export bool ExpectMatchCount(size_t found, size_t expected, const char* what) noexcept
 {
     if (found == expected)
-        return true;
-    if (!ImprovementEnabled(Improvement::failsafe))
         return true;
 
     Log::Print("arm {}: {} match(es), expected {}: skipped", what, found, expected);
@@ -91,6 +90,80 @@ export bool ExpectMatchCount(size_t found, size_t expected, const char* what) no
 export bool ExpectMatchCount(hook::pattern& pattern, size_t expected, const char* what) noexcept
 {
     return ExpectMatchCount(pattern.size(), expected, what);
+}
+
+// Install-time failsafes. A transcribed body is never rewritten: a missing
+// pointer, a site outside the image or an unresolved body refuses the install,
+// which is the un-patched game path.
+namespace FailsafeDetail
+{
+    constexpr size_t kForcedMissingSlots = 16;
+    inline const char* forcedMissing[kForcedMissingSlots] = {};
+    inline size_t forcedMissingCount = 0;
+}
+
+export void SetMissingForTest(const char* what) noexcept
+{
+    if (what == nullptr || FailsafeDetail::forcedMissingCount >= FailsafeDetail::kForcedMissingSlots)
+        return;
+    FailsafeDetail::forcedMissing[FailsafeDetail::forcedMissingCount++] = what;
+}
+
+export void ClearMissingForTest() noexcept
+{
+    FailsafeDetail::forcedMissingCount = 0;
+}
+
+export bool ForcedMissingForTest(const char* what) noexcept
+{
+    for (size_t index = 0; index < FailsafeDetail::forcedMissingCount; ++index)
+    {
+        const char* const forced = FailsafeDetail::forcedMissing[index];
+        if (forced != nullptr && what != nullptr && std::strcmp(forced, what) == 0)
+            return true;
+    }
+    return false;
+}
+
+export namespace Failsafe
+{
+    // Is the value a body would dereference missing? A true answer is a logged
+    // skip; a false answer keeps the instruction stream.
+    inline bool Missing(const char* what, bool missing) noexcept
+    {
+        if (!missing && !ForcedMissingForTest(what))
+            return false;
+
+        Log::Print("failsafe: {} is missing, continuing without the fix", what);
+        return true;
+    }
+
+    // An arm's write site: the address and the bytes it covers must lie inside
+    // the game image.
+    inline bool Site(const char* what, uintptr_t address, size_t bytes) noexcept
+    {
+        const auto& game = Game::Get();
+        const auto begin = game.ImageBase();
+        const auto end = begin + game.ImageSize();
+        const bool inside = bytes != 0 && address >= begin && address < end &&
+                            bytes <= end - address;
+        if (inside)
+            return true;
+
+        Log::Print("failsafe: {} site {:#010x}+{:#x} is outside the image; skipped",
+            what, address, bytes);
+        return false;
+    }
+
+    // An arm's destination body: a body that did not resolve is a jump to zero.
+    inline bool Body(const char* what, uintptr_t body) noexcept
+    {
+        if (body != 0)
+            return true;
+
+        Log::Print("failsafe: {} body did not resolve; skipped", what);
+        return false;
+    }
 }
 
 export template <size_t n>

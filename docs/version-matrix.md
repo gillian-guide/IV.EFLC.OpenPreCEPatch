@@ -12,7 +12,7 @@ outside its row installs nothing, and `unknown` (id 0) is in no row.
 | `G` | A port narrowing: the original is build-blind, the port gates the build. None today. |
 | `.` | Refused: the arm does not run on this build. |
 
-99 keys, 12 builds. Nine of the builds have an on-disk
+85 keys, 12 builds. Nine of the builds have an on-disk
 image here, so only 1.0.8.0 is exercised by the dump matrix; every other cell
 is recovered evidence, not a live result.
 
@@ -57,25 +57,19 @@ is recovered evidence, not a live result.
 | `PipeBombDropIconSupport` | vehicles | recovered | . | R | . | R | R | R | R | R | R | R | R | R | `0x0004BFC0` |
 | `ReversingLightFix` | vehicles | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `TeleportProtection` | vehicles | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
-| `BorderlessWindowed` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `BuildingAlphaFix` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `BuildingDynamicShadows` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `CutsceneFixes` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `EmissiveLerpFix` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
-| `ForceDynamicShadowsEverywhere` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `ForceShadowsOnObjects` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
-| `HighQualityReflections` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `ImprovedShaderStreaming` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `NoImpostorHeightCutoff` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `NoLODLightHeightCutoff` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
-| `RemoveBoundingBoxCulling` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `RemoveStaticCarShadows` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `RemoveStaticCutsceneCarShadows` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `SuperLODFix` | graphics | recovered | . | . | . | . | . | R | R | . | . | . | . | . | `0x00000300` |
-| `VRAMFix` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `CombinedRadioFreezeFix` | audio | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `RestoreDeathMusic` | audio | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
-| `DoNotPauseOnMinimize` | audio | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `MouseFix` | audio | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `EpisodicWeaponSupport` | audio | recovered | . | R | . | R | R | R | R | R | R | R | R | R | `0x0004BFC0` |
 | `OutOfCommissionFix` | audio | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
@@ -83,13 +77,11 @@ is recovered evidence, not a live result.
 | `PoliceEpisodicWeaponSupport` | audio | recovered | . | R | . | R | R | R | R | R | R | R | R | R | `0x0004BFC0` |
 | `TBoGTHeliHeightLimit` | audio | recovered | . | R | . | R | R | R | R | R | R | R | R | R | `0x0004BFC0` |
 | `IncreasePtrNodes` | audio | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
-| `NoPhysicsSleep` | audio | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `AllowHashesForIDE` | audio | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `BetterMPSync` | audio | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `BenchmarkFix` | loading | recovered | R | R | R | R | R | R | . | R | R | R | . | R | `0x00049DE2` |
 | `FastLoading` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `LoadDLCs` | loading | recovered | . | . | . | R | . | R | R | . | . | . | . | . | `0x00000380` |
-| `LocalSettingsPath` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `NewFilesCompatibility` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `NewMemorySystem` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `NewSavesCompatibility` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
@@ -99,9 +91,6 @@ is recovered evidence, not a live result.
 | `RemoveGFWLUpdatePopup` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `RemoveRGSCLoginRequirement` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `SavegameFix` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
-| `SkipIntro` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
-| `SkipLauncher` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
-| `SkipMenu` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `StartupTimeFix` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `VSyncFix` | loading | recovered | . | R | . | R | R | R | . | R | R | R | . | R | `0x00049DC0` |
 | `CopSirensFlag` | misc | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
@@ -111,9 +100,6 @@ is recovered evidence, not a live result.
 | `Patch6and7RemoveModChecks` | misc | recovered | . | . | . | R | . | R | . | . | . | . | . | . | `0x00000180` |
 | `Patch7RemoveModChecks` | misc | recovered | . | . | . | R | . | R | . | . | . | . | . | . | `0x00000180` |
 | `PopupHeadlightsFlag` | misc | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
-| `RemoveUselessChecks` | misc | pattern | . | . | A | . | . | A | A | . | . | . | . | . | `0x00000320` |
 | `SpeedupBugFix` | misc | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
-| `AddOptionsInMenu` | misc | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `DebugPrintSpawns` | misc | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
-| `FixPCIDKickbug` | misc | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `LaunchWithPlayGTAIV` | misc | recovered | R | . | R | R | . | R | R | . | . | . | . | . | `0x000003A2` |

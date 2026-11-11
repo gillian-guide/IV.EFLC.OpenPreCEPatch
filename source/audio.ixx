@@ -15,7 +15,6 @@ import bodies;
 import bytes;
 import common;
 import game;
-import improvements;
 import loader;
 import native;
 import patch;
@@ -666,8 +665,6 @@ export void RegisterAudio()
         InstallCombinedRadioFreezeFix();
         InstallBetterMPSync();
         InstallIncreasePtrNodes();
-        InstallNoPhysicsSleep();
-        InstallDoNotPauseOnMinimize();
         InstallEpisodicWeaponSupport();
         InstallPoliceEpisodicWeaponSupport();
         InstallTBoGTHeliHeightLimit();

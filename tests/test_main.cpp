@@ -1,4 +1,4 @@
-#include <common.hxx>
+﻿#include <common.hxx>
 #include <cstdio>
 #include <cstring>
 
@@ -190,47 +190,6 @@ namespace
         }
     }
 
-    void TestConfigFaults()
-    {
-        // The loader-level conversion is std::stoi, so a non-numeric value throws
-        // exactly what stoi throws -- the original's fault, preserved.
-        bool threw = false;
-        try
-        {
-            const auto document = Feather::Parse("[Options]\nA=abc\n");
-            (void)ReadInt(document, "A", "1");
-        }
-        catch (const std::invalid_argument&)
-        {
-            threw = true;
-        }
-        Check(threw, "ini fault: a non-numeric value throws std::invalid_argument");
-
-        threw = false;
-        try
-        {
-            const auto document = Feather::Parse("[Options]\nA= \n");
-            (void)ReadInt(document, "A", "1");
-        }
-        catch (const std::invalid_argument&)
-        {
-            threw = true;
-        }
-        Check(threw, "ini fault: a space-only value throws std::invalid_argument");
-
-        threw = false;
-        try
-        {
-            const auto document = Feather::Parse("[Options]\nA=99999999999\n");
-            (void)ReadInt(document, "A", "1");
-        }
-        catch (const std::out_of_range&)
-        {
-            threw = true;
-        }
-        Check(threw, "ini fault: an out-of-range value throws std::out_of_range");
-    }
-
     void TestMissingFile()
     {
         const auto document = Feather::Load(std::filesystem::path("this-file-does-not-exist.ini"));
@@ -279,7 +238,7 @@ namespace
 
     void TestCatalogue()
     {
-        Check(Catalogue::Count() >= 97, "catalogue: the recovered keys are present", std::to_string(Catalogue::Count()));
+        Check(Catalogue::Count() == 85, "catalogue: the shipped keys are present", std::to_string(Catalogue::Count()));
         const auto* carShadow = Catalogue::Find("CarDynamicShadowFix");
         Check(carShadow != nullptr && carShadow->shipped == 1 && carShadow->absent == 0,
             "catalogue: shipped and absent defaults are both recorded");
@@ -289,61 +248,6 @@ namespace
         Check(Catalogue::AppliesTo("MiscFixes", Build::v1080), "catalogue: an all-builds key applies to 1.0.8.0");
         Check(!Catalogue::AppliesTo("MiscFixes", Build::unknown), "catalogue: an unknown build applies nothing");
         Check(Catalogue::DefaultText("CarDynamicShadowFix", false) == "0", "catalogue: the absent default is the arm default");
-    }
-
-    // The one key whose gate is not `== 1`. The original's walker stores the
-    // parse's answer for `AddOptionsInMenu`: `0x1005332E test ecx,ecx` /
-    // `0x10053337 setnz byte_10158038`, over the inlined `std::stoi`
-    // (`push 0Ah ; Radix` / `call ds:strtol` / `cmp esi,[ebp-0C8h]` / `jnz` ->
-    // `_Xinvalid_argument`). So `2` enables the key and `-1` does too, while every
-    // other key keeps the house `== 1`; the mask and the absent-key default are
-    // unchanged. The second check is also the falsification of the gate this
-    // replaces: the house rule answers false for `2`, so an arm that asked it for
-    // this key would fail here (both of the arm's call sites ask
-    // `Loader::EnabledNonZero`, source/menu.ixx).
-    void TestOptionGates()
-    {
-        auto& ini = Config::Ini();
-        const auto savedIni = ini;
-        const auto savedBuild = Loader::Current();
-        Loader::Current() = Build::v1080;
-
-        // The conversion itself is std::stoi (base 10) on both sides of the seam:
-        // `2` parses to 2 and `-1` to -1, and neither is a throw.
-        ini = Feather::Parse("[Options]\nAddOptionsInMenu=2\nMiscFixes=2\n");
-        Check(Loader::EnabledNonZero("AddOptionsInMenu"),
-            "gate: AddOptionsInMenu=2 enables the key (the original stores != 0)");
-        Check(!Loader::Enabled("AddOptionsInMenu"),
-            "gate: ... and the old == 1 gate does not, which is the divergence it replaces");
-        Check(!Loader::Enabled("MiscFixes"),
-            "gate: an ordinary key still requires == 1, so MiscFixes=2 is off");
-
-        // `1` enables it, on the new rule and the old one alike.
-        ini = Feather::Parse("[Options]\nAddOptionsInMenu=1\nMiscFixes=1\n");
-        Check(Loader::EnabledNonZero("AddOptionsInMenu"), "gate: AddOptionsInMenu=1 enables the key");
-        Check(Loader::Enabled("MiscFixes"), "gate: an ordinary key with 1 is enabled");
-
-        // `0`: off, the value the two rules agree on.
-        ini = Feather::Parse("[Options]\nAddOptionsInMenu=0\n");
-        Check(!Loader::EnabledNonZero("AddOptionsInMenu"), "gate: AddOptionsInMenu=0 disables the key");
-
-        // `!= 0`, not `> 0`: a negative value is non-zero.
-        ini = Feather::Parse("[Options]\nAddOptionsInMenu=-1\n");
-        Check(Loader::EnabledNonZero("AddOptionsInMenu"), "gate: a negative value is non-zero, so it enables the key");
-
-        // The absent key keeps the catalogue's absent default (`"1"`, the walker's
-        // own 0x1005323F `push offset "1"`).
-        ini = Feather::Parse("[Options]\n");
-        Check(Loader::EnabledNonZero("AddOptionsInMenu"), "gate: an absent AddOptionsInMenu keeps the default 1");
-
-        // ... and the catalogue's build mask still applies on top of the parse.
-        ini = Feather::Parse("[Options]\nAddOptionsInMenu=2\n");
-        Loader::Current() = Build::unknown;
-        Check(!Loader::EnabledNonZero("AddOptionsInMenu"),
-            "gate: the build mask still refuses a key on an unknown build");
-
-        Loader::Current() = savedBuild;
-        ini = savedIni;
     }
 
     void TestBodyCanonicalisation()
@@ -413,12 +317,10 @@ int main(int argc, char** argv)
     std::setvbuf(stdout, nullptr, _IONBF, 0);
 
     TestConfigGrammar();
-    TestConfigFaults();
     TestMissingFile();
     TestBuilds();
     TestSignatures();
     TestCatalogue();
-    TestOptionGates();
     TestBodyCanonicalisation();
     TestEvents();
 

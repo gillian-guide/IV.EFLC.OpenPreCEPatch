@@ -7,7 +7,6 @@
 #include <new>
 
 import loading;
-import improvements;
 
 // The save converter's behavioural test: what `sub_10051B30` (0x10051B30, 337
 // instructions, rebuilt as `NewSavesConvert`) decides about a save file, on the real
@@ -455,71 +454,30 @@ namespace
     }
 
     // ---------------------------------------------------------------------------
-    // The fault cases.
+    // The rejection cases.
     // ---------------------------------------------------------------------------
     void CheckFaults(const std::filesystem::path& inputs)
     {
-        // (1) A chunk size below nine. The original's `add eax,0FFFFFFF7h`
-        // (0x10051C14) feeds `operator new` (0x100603F1) unchecked, so the payload
-        // underflows and the allocation throws. Deterministic, so it is asserted
-        // in this process, with the original's own exception type.
+        // A chunk size below nine underflows the original's payload arithmetic;
+        // the validated walk rejects it before any allocation.
         const auto sizeZero = inputs / "size_zero.bin";
         const auto sizeEight = inputs / "size_eight.bin";
-        const std::string zeroOutcome = OutcomeOf(sizeZero);
-        Check(zeroOutcome == "bad_alloc",
-            std::format("{}: chunk 0's size field 0 (< 9) answered {} - the original's unchecked"
-                        " add eax,0FFFFFFF7h (0x10051C14) -> operator new throws std::bad_alloc",
-                sizeZero.filename().string(), zeroOutcome));
-        const std::string eightOutcome = OutcomeOf(sizeEight);
-        Check(eightOutcome == "bad_alloc",
-            std::format("{}: chunk 9's size field 8 (< 9) answered {} after nine good chunks - same"
-                        " fault, at chunk 9's own allocation",
-                sizeEight.filename().string(), eightOutcome));
-
-        // (2) A truncated header. The 0x110-byte read at 0x10051BB3 is unchecked, so
-        // the bytes past the file are whatever the stack held. Two cases are decided
-        // by the file itself, because the magic offset lies inside it.
-        const auto truncNoMagic = inputs / "trunc_without_magic.bin";
-        const std::string noMagicOutcome = OutcomeOf(truncNoMagic);
-        Check(noMagicOutcome == "notASave",
-            std::format("{}: 0x20-byte file without \"SAVE\" at +0xC answered {} - rejected on the"
-                        " magic at 0x10051BD1 (the bytes it tests are in the file)",
-                truncNoMagic.filename().string(), noMagicOutcome));
-
-        const auto truncMagic = inputs / "trunc_with_magic.bin";
-        const std::string magicOutcome = OutcomeOf(truncMagic);
-        Check(magicOutcome == "walked" || magicOutcome == "bad_alloc",
-            std::format("{}: 0x20-byte file with \"SAVE\" at +0xC answered {} - the header read is"
-                        " unchecked, so a short file is not rejected on its header; it either"
-                        " walks on stale bytes or throws from their underflow",
-                truncMagic.filename().string(), magicOutcome));
-
-        const auto notASave = inputs / "not_a_save.bin";
-        const std::string plainOutcome = OutcomeOf(notASave);
-        Check(plainOutcome == "notASave",
-            std::format("{}: 0x110 zero bytes answered {} - the magic test is the only gate",
-                notASave.filename().string(), plainOutcome));
-        const std::string missingOutcome = OutcomeOf(inputs / "does_not_exist.bin");
-        Check(missingOutcome == "noFile", "does_not_exist.bin answered " + missingOutcome);
-
-        // (5) The hardening group: the same inputs are rejected before any
-        // underflow or unchecked header read. The caller then leaves the save
-        // alone, which is the un-patched game's behaviour.
-        SetImprovementsForTest(Improve(Improvement::hardening));
         Check(OutcomeOf(sizeZero) == "rejected",
-            "hardening: chunk size 0 is rejected, not bad_alloc");
+            "size_zero.bin: a chunk size below nine is rejected");
         Check(OutcomeOf(sizeEight) == "rejected",
-            "hardening: chunk size 8 is rejected, not bad_alloc");
+            "size_eight.bin: chunk 9's size below nine is rejected");
+
+        // A truncated header is not a save this build can read.
+        const auto truncMagic = inputs / "trunc_with_magic.bin";
         Check(OutcomeOf(truncMagic) == "rejected",
-            "hardening: a short header is rejected before the magic test");
+            "trunc_with_magic.bin: a short header is rejected before the magic test");
+
+        // A full-size header with the wrong magic is still a clean not-a-save.
+        const auto notASave = inputs / "not_a_save.bin";
         Check(OutcomeOf(notASave) == "notASave",
-            "hardening: a non-save still answers notASave");
+            "not_a_save.bin: a full header with the wrong magic answers notASave");
         Check(OutcomeOf(inputs / "does_not_exist.bin") == "noFile",
-            "hardening: a missing file still answers noFile");
-        SetImprovementsForTest(0);
-        Check(missingOutcome == "noFile",
-            std::format("does_not_exist.bin: a missing path answered {} - fopen_s's own answer",
-                missingOutcome));
+            "does_not_exist.bin: a missing file answers noFile");
 
         // (3) A file shorter than the magic offset: the magic itself is uninitialised,
         // so which of the original's three paths runs is a property of the process,
@@ -547,13 +505,10 @@ namespace
                 childDetail.empty() ? "" : "; " + childDetail));
         Check(!outcomeA.empty() && outcomeA == outcomeB,
             std::format("short_a.bin and short_b.bin (4-byte files, the same length, no magic in"
-                        " either) answered {} and {} in separate processes - equal, because the"
-                        " magic comes from the child's stack",
+                        " either) answered {} and {} in separate processes",
                 ranA ? outcomeA : whyA, ranB ? outcomeB : whyB));
-        Check(outcomeA == "walked" || outcomeA == "notASave" || outcomeA == "bad_alloc",
-            std::format("short_a.bin: {} is one of the original's three paths (magic rejected,"
-                        " walked on stale bytes, or std::bad_alloc from the underflow)",
-                ranA ? outcomeA : whyA));
+        Check(outcomeA == "rejected",
+            std::format("short_a.bin: {} is rejected on the short header", ranA ? outcomeA : whyA));
     }
 
     int Run(const std::filesystem::path& savesRoot)

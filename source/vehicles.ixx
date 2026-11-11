@@ -15,7 +15,6 @@ import bodies;
 import bytes;
 import common;
 import config;
-import improvements;
 import loader;
 import native;
 import options;
@@ -1594,27 +1593,18 @@ namespace
             Failsafe::Missing("GarageModelFix model lookup",
                 zpatch_model_lookup == 0) ||
             Failsafe::Missing("GarageModelFix resume",
-                zpatch_garage_resume_a == 0 || zpatch_garage_resume_b == 0))
+                zpatch_garage_entry_resume_a == 0 || zpatch_garage_resume_b == 0))
             return;
 
         auto pattern = find_pattern("8B 57 20 D9 42 34 D9 5E 04 8B 47 20");
         if (!pattern.empty())
         {
             auto* match = pattern.get_first<std::byte>(0);
-            if (ImprovementEnabled(Improvement::garage_entry) &&
-                zpatch_garage_entry_resume_a != 0)
-            {
-                // The prologue hook: the body replays the store helper with the
-                // prologue's own ECX/[esp+4], reloads the skipped xmm0 and
-                // resumes after the 8-byte movss. A shape miss falls back to the
-                // recovered mid-body site.
-                injector::MakeJMP(match - 0x20,
-                    reinterpret_cast<void*>(&GarageEntryBodyA), true);
-            }
-            else
-            {
-                injector::MakeJMP(match, reinterpret_cast<void*>(&GarageBodyA), true);
-            }
+            // The prologue hook: the body replays the store helper with the
+            // prologue's own ECX/[esp+4], reloads the skipped xmm0 and resumes
+            // after the 8-byte movss.
+            injector::MakeJMP(match - 0x20,
+                reinterpret_cast<void*>(&GarageEntryBodyA), true);
         }
 
         pattern = find_pattern("0F B7 0E 50 51 E8");

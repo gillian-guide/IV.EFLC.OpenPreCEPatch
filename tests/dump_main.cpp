@@ -8,20 +8,17 @@ import bodies;
 import common;
 import config;
 import game;
-import improvements;
 import loader;
 import options;
+import patch;
 import shared;
 import native;
 import stability;
 import vehicles;
-import useless_checks;
 import graphics;
-import launcher;
 import loading;
 import audio;
 import misc;
-import menu;
 import ooc;
 
 // The write-set dump: load a copy of a game image into this process, apply the
@@ -605,13 +602,10 @@ int main(int argc, char** argv)
     Native::Register();
     RegisterStability();
     RegisterVehicles();
-    RegisterUselessChecks();
     RegisterGraphics();
-    RegisterLauncher();
     RegisterLoading();
     RegisterAudio();
     RegisterMisc();
-    RegisterMenu();
     RegisterOoc();
 
     if (perOption)
