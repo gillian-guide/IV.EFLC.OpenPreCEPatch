@@ -113,6 +113,22 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
 - `task_dialogs`: `TaskDialogIndirect` with the ASI's common-controls 6.0
   manifest + `CreateActCtx`; `zp_pe_check` finds the manifest. UI unproven.
 
+## 2026-11-11 — final audit round
+
+- Removed-feature code is gone from graphics/loading too (BorderlessWindowed,
+  HighQualityReflections, ForceDynamicShadowsEverywhere,
+  RemoveBoundingBoxCulling, LocalSettingsPath, SkipIntro, SkipMenu): 146 bodies,
+  0 failures.
+- `CachedMatchFor` is the sound part of audit #8: the IDE slot and the three
+  steer signatures scan once per run, probe the cached address before reuse, and
+  the dump resets between per-option cells. A generic cache over all
+  `find_pattern` remains rejected.
+- Audit #1/#2: the simple stability jump arms and the EpisodicVehicleSupport NOP
+  windows are tables. FCHS is the checked C++ walk (`zp_fchs`).
+- Root INI is the shipped oPCEP file; `tests/parity/ZolikaPatch.ini` is internal;
+  `cmake --build --preset release --target package` writes dist/.
+- Release and Trace 35/35; parity 80 closed / 5 deltas / 0 open.
+
 ## 2026-11-11 — release packaging and the remaining refactors
 
 - Root `IV.EFLC.OpenPreCEPatch.ini` is the shipped file; the flat parity INI
