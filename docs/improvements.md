@@ -1,4 +1,4 @@
-﻿# OpenPreCEPatch improvements in this tree
+# OpenPreCEPatch improvements in this tree
 
 This tree ships as OpenPreCEPatch: the OpenPreCEPatch changes are **compiled in**
 on top of the readable-fusion code, and the keys OpenPreCEPatch removed or moved
@@ -113,7 +113,7 @@ both installations.
 ## 5. Measurement
 
 ```
-ctest --preset release                       # 34 targets, all green
+ctest --preset release                       # 35 targets, all green
 python tools/parity_report.py 9              # 80 closed, 5 expected deltas, 0 open
 python tools/dump_matrix.py                  # 9 builds x (full, per-option)
 python tools/gen_applicability.py --check

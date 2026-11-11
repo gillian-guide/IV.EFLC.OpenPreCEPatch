@@ -25,8 +25,8 @@ ForceDynamicShadowsEverywhere, HighQualityReflections, NoPhysicsSleep,
 RemoveBoundingBoxCulling, RemoveUselessChecks, BorderlessWindowed,
 DoNotPauseOnMinimize, LocalSettingsPath, SkipIntro, SkipLauncher, SkipMenu,
 VRAMFix). There is no runtime improvement switch; `git revert` of the integration
-commit is the rollback. The remaining 162-body proof passes for the retained
-bodies, `tools/parity_report.py 9` scores the retained keys, and the 34
+commit is the rollback. The remaining 149-body proof passes for the retained
+bodies, `tools/parity_report.py 9` scores the retained keys, and the 35
 native/ctest targets pass. On top of that:
 
 - The install-time failsafes and the P13 count checks are unconditional
@@ -115,7 +115,7 @@ version/mutex/notice probes, `zp_applicability` the build-refusal rule,
 creation/preference, `zp_dlc_path`/`zp_dlc_full` the DLC bound and checked
 discovery, `zp_module_guard` the GFWL module-offset guard, `zp_loader_info` the
 UAL 6.9.0 threshold, `zp_model_index`/`zp_popup_cache` the two caches,
-`zp_shipped_ini` the shipped grouped INI, and
+`zp_shipped_ini` the shipped grouped INI, `zp_fchs` the checked FCHS walk, and
 `zp_ooc_init`/`zp_nms_arena`/`zp_save_walk` the cache, allocator and save
 groups.
 

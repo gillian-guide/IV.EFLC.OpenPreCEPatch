@@ -13,9 +13,9 @@ The retained arms are measured against the recovered binary; the successor chang
 |measurement|result|produced by|
 |-|-|-|
 |retained keys on 1.0.8.0|80 closed, 5 documented improved deltas, 0 open (85-key surface)|`python tools/parity\_report.py 9`|
-|hook bodies proven whole|162 transcribed bodies, 0 failures|`python tools/verify\_bodies.py --original ../game\_refs/ZolikaPatch\_original.asi.off --candidate build/win-x86/Release/IV.EFLC.OpenPreCEPatch.asi --bodies tests/bodies.tsv --map build/win-x86/Release/IV.EFLC.OpenPreCEPatch.map`|
+|hook bodies proven whole|149 transcribed bodies, 0 failures|`python tools/verify\_bodies.py --original ../game\_refs/ZolikaPatch\_original.asi.off --candidate build/win-x86/Release/IV.EFLC.OpenPreCEPatch.asi --bodies tests/bodies.tsv --map build/win-x86/Release/IV.EFLC.OpenPreCEPatch.map`|
 |write set|retained-arm dump matrix; the full-cell diff also contains the bytes the 14 removed keys used to write (expected missing)|`python tools/dump_matrix.py --markdown <out>`|
-|tests|34 registered ctest targets|`ctest --preset release`|
+|tests|35 registered ctest targets|`ctest --preset release`|
 
 The five improved deltas are deliberate: GarageModelFix's prologue, BuildingAlphaFix's `jnz`-only removal, CutsceneFixes' callee, ImprovedShaderStreaming's two calls, and RemoveGFWLUpdatePopup's shipped default. They are reported apart from `open`. The 14 keys OpenPreCEPatch removed or moved to XLivelessAddon are out of the catalogue (SkipLauncher, SkipIntro, SkipMenu, BorderlessWindowed, DoNotPauseOnMinimize, LocalSettingsPath, VRAMFix and the seven dropped fixes).
 
