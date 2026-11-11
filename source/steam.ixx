@@ -4,6 +4,7 @@ module;
 
 #include <cstdio>
 #include <cstring>
+#include <atomic>
 #include <mutex>
 
 export module steam;
@@ -98,9 +99,10 @@ namespace
     void* g_user_stats = nullptr;
 
     std::mutex g_mutex;
+    std::mutex g_init_mutex;
     bool g_hook_installed = false;
-    bool g_disabled = false;
-    bool g_ready = false;
+    std::atomic<bool> g_disabled{ false };
+    std::atomic<bool> g_ready{ false };
     bool g_pending[kMaxAchievementId + 1] = {};
     bool g_sent[kMaxAchievementId + 1] = {};
 
@@ -217,9 +219,10 @@ namespace
 
     bool TryInitialise() noexcept
     {
-        if (g_ready)
+        std::lock_guard initLock(g_init_mutex);
+        if (g_ready.load(std::memory_order_acquire))
             return true;
-        if (g_disabled)
+        if (g_disabled.load(std::memory_order_relaxed))
             return false;
 
         PrepareAppId();
@@ -280,7 +283,7 @@ namespace
             g_run_callbacks();
             Sleep(50);
         }
-        g_ready = true;
+        g_ready.store(true, std::memory_order_release);
         return true;
     }
 
@@ -306,35 +309,55 @@ namespace
             return;
         }
 
-        std::lock_guard lock(g_mutex);
-        if (g_sent[id])
-            return;
-        if (!g_ready && !g_pending[id])
+        bool need_init = false;
         {
-            // First observation initialises Steam on this (game) thread. A
-            // failure keeps the id pending for the next write to retry.
-            (void)TryInitialise();
-        }
-        if (!g_ready)
-        {
+            std::lock_guard lock(g_mutex);
+            if (g_sent[id])
+                return;
             g_pending[id] = true;
-            Log::Print("steam: achievement {} ({}) queued until Steam is ready", id,
-                achievement->name);
-            return;
+            need_init = !g_ready.load(std::memory_order_acquire);
         }
 
-        // Replay anything queued by earlier writes, then this one.
-        for (uint32_t queued = 1; queued <= kMaxAchievementId; ++queued)
+        if (need_init)
         {
-            if (g_pending[queued] && !g_sent[queued])
+            // Initialisation is deliberately outside the state mutex: it loads
+            // steam_api.dll and pumps callbacks, and a callback can reach this
+            // hook on the same thread.
+            (void)TryInitialise();
+            std::lock_guard lock(g_mutex);
+            if (!g_ready.load(std::memory_order_acquire))
             {
-                g_sent[queued] = true;
-                Apply(queued, AchievementFor(queued)->name);
+                Log::Print("steam: achievement {} ({}) queued until Steam is ready", id,
+                    achievement->name);
+                return;
             }
         }
-        g_pending[id] = false;
-        g_sent[id] = true;
-        Apply(id, achievement->name);
+
+        uint32_t send[kMaxAchievementId + 1] = {};
+        size_t send_count = 0;
+        {
+            std::lock_guard lock(g_mutex);
+            if (!g_ready.load(std::memory_order_acquire))
+                return;
+            for (uint32_t queued = 1; queued <= kMaxAchievementId; ++queued)
+            {
+                if (g_pending[queued] && !g_sent[queued])
+                {
+                    g_sent[queued] = true;
+                    g_pending[queued] = false;
+                    send[send_count++] = queued;
+                }
+            }
+        }
+
+        // The Steam calls run without the state mutex; the function pointers are
+        // fixed once g_ready was published.
+        for (size_t index = 0; index < send_count; ++index)
+        {
+            const Achievement* queued = AchievementFor(send[index]);
+            if (queued != nullptr)
+                Apply(send[index], queued->name);
+        }
     }
 
     extern "C" uint32_t __stdcall WriteAchievementsHook(

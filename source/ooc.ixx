@@ -11,6 +11,7 @@ module;
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 
 export module ooc;
 
@@ -273,7 +274,11 @@ static uint32_t OocInitialise()
 {
     // The original's one-shot guard has no writer, so every call re-decodes,
     // re-registers and leaks the previous archive. Decode and mount once, then
-    // answer the same archive for the process lifetime.
+    // answer the same archive for the process lifetime. The game can enter this
+    // from more than one thread; the whole first build is serialised, and the
+    // hit path is a single cached read.
+    static std::mutex build_mutex;
+    std::lock_guard lock(build_mutex);
     {
         static uint32_t cached_archive = 0;
         static uint32_t cached_state = 0;

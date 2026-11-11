@@ -17,6 +17,7 @@
 #include <Windows.h>
 #include <Psapi.h>
 #include <subauth.h>
+#include <winver.h>
 
 #include "injector/injector.hpp"
 #include "injector/calling.hpp"

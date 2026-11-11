@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.28)
 project(IV.EFLC.OpenPreCEPatch LANGUAGES CXX)
 
 # A Win32 ASI: 32-bit, MSVC, static CRT, fixed image base, windowed subsystem.
@@ -59,6 +59,7 @@ set(ZP_VERSION_DEFINITIONS
 add_library(zp_modules STATIC
   external/hooking/Hooking.Patterns.cpp)
 set_target_properties(zp_modules PROPERTIES CXX_SCAN_FOR_MODULES ON CXX_EXTENSIONS OFF)
+target_link_libraries(zp_modules PUBLIC version)
 target_sources(zp_modules PUBLIC
   FILE_SET CXX_MODULES FILES
     source/common.ixx
@@ -224,6 +225,20 @@ set_target_properties(zp_popup_cache PROPERTIES CXX_SCAN_FOR_MODULES ON)
 target_link_libraries(zp_popup_cache PRIVATE zp_modules)
 add_test(NAME zp_popup_cache COMMAND zp_popup_cache)
 set_tests_properties(zp_popup_cache PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+# The GFWL module-offset guard: inside the mapped image and accessible.
+add_executable(zp_module_guard tests/module_guard.cpp)
+set_target_properties(zp_module_guard PROPERTIES CXX_SCAN_FOR_MODULES ON)
+target_link_libraries(zp_module_guard PRIVATE zp_modules)
+add_test(NAME zp_module_guard COMMAND zp_module_guard)
+set_tests_properties(zp_module_guard PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+# The Ultimate ASI Loader version-resource threshold.
+add_executable(zp_loader_info tests/loader_info.cpp)
+set_target_properties(zp_loader_info PROPERTIES CXX_SCAN_FOR_MODULES ON)
+target_link_libraries(zp_loader_info PRIVATE zp_modules)
+add_test(NAME zp_loader_info COMMAND zp_loader_info)
+set_tests_properties(zp_loader_info PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
 # The two per-model light tables the loader preamble reads from
 # [PopupLightAngles] / [HeadlightConeOffsets]: the recovered grammar, defaults and

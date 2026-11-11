@@ -846,6 +846,30 @@ namespace
     // its `jz`/`jmp` to a `jmp`. No xlive image is available to scan, so the RVA
     // is the only anchor and the pre-image byte is the guard: a different xlive
     // build is left untouched.
+    // An offset in a module is only readable when it is inside the mapped image
+    // and the containing page is committed and accessible. The OpenPreCEPatch
+    // xlive arm has no signature to check, so this is its guard.
+    bool ModuleImageContains(HMODULE module, size_t offset, size_t bytes) noexcept
+    {
+        if (module == nullptr || bytes == 0)
+            return false;
+
+        MODULEINFO info{};
+        if (!GetModuleInformation(GetCurrentProcess(), module, &info, sizeof(info)))
+            return false;
+        if (offset > info.SizeOfImage || bytes > info.SizeOfImage - offset)
+            return false;
+
+        const auto* address = reinterpret_cast<const uint8_t*>(module) + offset;
+        MEMORY_BASIC_INFORMATION region{};
+        if (VirtualQuery(address, &region, sizeof(region)) != sizeof(region))
+            return false;
+        if (region.State != MEM_COMMIT ||
+            (region.Protect & (PAGE_NOACCESS | PAGE_GUARD)) != 0)
+            return false;
+        return bytes <= region.RegionSize;
+    }
+
     void InstallGFWLProtectionDisabler()
     {
         if (!OpenOptionEnabled("GFWLProtectionDisabler", "1"))
@@ -855,7 +879,14 @@ namespace
         if (xlive == nullptr)
             return;
 
-        auto* const site = reinterpret_cast<std::byte*>(xlive) + 988677;
+        constexpr size_t kSiteOffset = 988677;  // 0xF1605
+        if (!ModuleImageContains(xlive, kSiteOffset, 1))
+        {
+            Log::Print("gfwl: xlive.dll+0x{:X} is not readable; skipped", kSiteOffset);
+            return;
+        }
+
+        auto* const site = reinterpret_cast<std::byte*>(xlive) + kSiteOffset;
         const std::byte opcode = *site;
         if (opcode == std::byte{ 0x74 } || opcode == std::byte{ 0xEB })
             injector::WriteMemory<std::byte>(site, std::byte{ 0xEB }, true);
@@ -1207,6 +1238,11 @@ export uint32_t PopupIndexForTest() noexcept
 export float PopupAngleForTest() noexcept
 {
     return zpatch_popup_angle;
+}
+
+export bool ModuleImageContainsForTest(uintptr_t module, size_t offset, size_t bytes) noexcept
+{
+    return ModuleImageContains(reinterpret_cast<HMODULE>(module), offset, bytes);
 }
 
 // Registered like every other arm: the publish tier reads the site's original

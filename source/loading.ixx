@@ -5,6 +5,7 @@ module;
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <mutex>
 #include <shlwapi.h>
 #include <unordered_set>
 
@@ -715,11 +716,8 @@ namespace
     // neither path can initialise the section twice.
     void PrepareArenaRegistry()
     {
-        static bool prepared = false;
-        if (prepared)
-            return;
-        prepared = true;
-        InitializeCriticalSection(&nms_registry_lock);
+        static std::once_flag prepared;
+        std::call_once(prepared, [] { InitializeCriticalSection(&nms_registry_lock); });
     }
 
     // sub_10038360, recovered VA 0x10038360: the vtable's allocate slot
@@ -731,24 +729,34 @@ namespace
     void* __stdcall NmsAllocateBody(uint32_t size, uint32_t align, uint32_t flags)
     {
         (void)flags;
-        const uint32_t unit = align < 0x10u ? 0x10u : align;
-        const uint32_t want = size < unit ? unit : size;
-        // A 32-bit sum that wraps would HeapAlloc a tiny block and then fill
-        // `want` bytes past it; the request is refused instead.
-        if (want > UINT32_MAX - unit * 2u)
+        // The arena's own alignment is 16 bytes; a caller-supplied alignment
+        // above 1 MiB is not a request this allocator is meant to serve, and
+        // any arithmetic on it must not wrap before the bound check.
+        if (align > 0x100000u)
             return nullptr;
-        void* base = HeapAlloc(NmsHeap(), 0, want + unit * 2u);
+        const uint64_t unit = align < 0x10u ? 0x10u : align;
+        const uint64_t want = size < unit ? unit : size;
+        const uint64_t total = want + unit * 2u;
+        if (total > UINT32_MAX)
+            return nullptr;
+        void* base = HeapAlloc(NmsHeap(), 0, static_cast<SIZE_T>(total));
         if (base == nullptr)
             return nullptr;
 
         const auto raw = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(base));
-        const auto aligned = ((raw - 1u) / unit + 2u) * unit;
+        const uint64_t aligned64 = ((static_cast<uint64_t>(raw) - 1u) / unit + 2u) * unit;
+        if (aligned64 > UINT32_MAX || aligned64 + want > UINT32_MAX + 1ull)
+        {
+            HeapFree(NmsHeap(), 0, base);
+            return nullptr;
+        }
+        const auto aligned = static_cast<uint32_t>(aligned64);
         *reinterpret_cast<uint32_t*>(aligned - 4u) = aligned - raw;
-        std::memset(reinterpret_cast<void*>(aligned), kNmsHeapPoison, want);
+        std::memset(reinterpret_cast<void*>(aligned), kNmsHeapPoison, static_cast<size_t>(want));
 
         EnterCriticalSection(&nms_registry_lock);
         (void)nms_allocations.Insert(aligned);
-        MarkNmsPages(raw, static_cast<size_t>(want) + unit * 2u);
+        MarkNmsPages(raw, static_cast<size_t>(total));
         LeaveCriticalSection(&nms_registry_lock);
         return reinterpret_cast<void*>(aligned);
     }
@@ -762,44 +770,42 @@ namespace
 
         const auto raw = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(pointer));
 
-        // The group hands a pointer it did not allocate back to the allocator
-        // that produced it. Reading NMS's distance word from a foreign block
-        // would HeapFree an address that allocator never made; without a captured
-        // original vtable the block is left alone instead of corrupted.
-        {
-            EnterCriticalSection(&nms_registry_lock);
-            const bool mine = nms_allocations.Contains(raw);
-            if (mine)
-                (void)nms_allocations.Erase(raw);
-            LeaveCriticalSection(&nms_registry_lock);
+        // The page bitmap is read under the same lock that marks it.
+        bool mine = false;
+        bool pageOwned = false;
+        EnterCriticalSection(&nms_registry_lock);
+        mine = nms_allocations.Contains(raw);
+        if (mine)
+            (void)nms_allocations.Erase(raw);
+        pageOwned = NmsPageIsMine(raw);
+        LeaveCriticalSection(&nms_registry_lock);
 
-            if (!mine)
+        if (!mine)
+        {
+            // A pointer that was already freed, or an interior pointer into
+            // a live NMS block: the original's range answer was "mine", so
+            // `sysMemMultiAllocator::free` routed it here. Answering the
+            // range truth and then not calling HeapFree keeps the game
+            // alive; the block is freed by its real owner (or leaked if it
+            // was a double free), never freed twice.
+            if (pageOwned)
             {
-                // A pointer that was already freed, or an interior pointer into
-                // a live NMS block: the original's range answer was "mine", so
-                // `sysMemMultiAllocator::free` routed it here. Answering the
-                // range truth and then not calling HeapFree keeps the game
-                // alive; the block is freed by its real owner (or leaked if it
-                // was a double free), never freed twice.
-                if (NmsPageIsMine(raw))
-                {
-                    Log::Print("nms: free of a non-exact pointer {:#010x} inside an "
-                               "NMS block; ignored (MMA10 avoided)", raw);
-                    return;
-                }
-                if (nms_original_object != nullptr && nms_original_vtable[3] != 0)
-                {
-                    using OriginalFree = void(__thiscall*)(void*, void*);
-                    reinterpret_cast<OriginalFree>(nms_original_vtable[3])(
-                        nms_original_object, pointer);
-                }
+                Log::Print("nms: free of a non-exact pointer {:#010x} inside an "
+                           "NMS block; ignored (MMA10 avoided)", raw);
                 return;
             }
-
-            const auto base = raw - *reinterpret_cast<const uint32_t*>(raw - 4u);
-            HeapFree(NmsHeap(), 0, reinterpret_cast<void*>(base));
+            if (nms_original_object != nullptr && nms_original_vtable[3] != 0)
+            {
+                using OriginalFree = void(__thiscall*)(void*, void*);
+                reinterpret_cast<OriginalFree>(nms_original_vtable[3])(
+                    nms_original_object, pointer);
+            }
             return;
         }
+
+        const auto base = raw - *reinterpret_cast<const uint32_t*>(raw - 4u);
+        HeapFree(NmsHeap(), 0, reinterpret_cast<void*>(base));
+        return;
     }
 
     // sub_100385A0, recovered VA 0x100385A0: the "is this pointer mine" query

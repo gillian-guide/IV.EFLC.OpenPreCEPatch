@@ -509,3 +509,88 @@ export bool IsUALPresent()
     }
     return false;
 }
+
+// Ultimate ASI Loader >= 6.9.0 added the marker and the version resource that
+// distinguishes it. The marker is definitive; when the resource is readable the
+// version is checked as well.
+export bool LoaderVersionAccepted(uint32_t versionMs, uint32_t versionLs) noexcept
+{
+    constexpr uint32_t kMinimumVersionMs = 0x00060009;  // 6.9
+    return versionMs > kMinimumVersionMs ||
+           (versionMs == kMinimumVersionMs && versionLs >= 0u);
+}
+
+export struct LoaderVersion
+{
+    bool present = false;
+    bool versionKnown = false;
+    uint32_t versionMs = 0;
+    uint32_t versionLs = 0;
+    std::wstring name;
+};
+
+namespace
+{
+    bool ReadFixedFileInfo(HMODULE module, VS_FIXEDFILEINFO& info) noexcept
+    {
+        wchar_t path[MAX_PATH]{};
+        if (module == nullptr || K32GetModuleFileNameExW(GetCurrentProcess(), module, path,
+                MAX_PATH) == 0)
+            return false;
+
+        DWORD ignored = 0;
+        const DWORD size = GetFileVersionInfoSizeW(path, &ignored);
+        if (size == 0)
+            return false;
+        std::vector<uint8_t> data(size);
+        if (!GetFileVersionInfoW(path, 0, size, data.data()))
+            return false;
+
+        VS_FIXEDFILEINFO* fixed = nullptr;
+        UINT length = 0;
+        if (!VerQueryValueW(data.data(), L"\\", reinterpret_cast<void**>(&fixed), &length) ||
+            fixed == nullptr || length < sizeof(VS_FIXEDFILEINFO))
+            return false;
+        info = *fixed;
+        return true;
+    }
+}
+
+export LoaderVersion QueryLoaderVersion()
+{
+    LoaderVersion result;
+    HMODULE modules[512]{};
+    DWORD needed{};
+    if (!K32EnumProcessModules(GetCurrentProcess(), modules, sizeof(modules), &needed))
+        return result;
+
+    const auto count = std::min<size_t>(needed / sizeof(HMODULE), std::size(modules));
+    for (size_t index = 0; index < count; ++index)
+    {
+        if (!IsModuleUAL(modules[index]))
+            continue;
+
+        result.present = true;
+        wchar_t path[MAX_PATH]{};
+        if (K32GetModuleFileNameExW(GetCurrentProcess(), modules[index], path, MAX_PATH) != 0)
+        {
+            const wchar_t* base = path;
+            for (const wchar_t* p = path; *p != L'\0'; ++p)
+            {
+                if (*p == L'\\' || *p == L'/')
+                    base = p + 1;
+            }
+            result.name = base;
+        }
+
+        VS_FIXEDFILEINFO info{};
+        if (ReadFixedFileInfo(modules[index], info))
+        {
+            result.versionKnown = true;
+            result.versionMs = info.dwFileVersionMS;
+            result.versionLs = info.dwFileVersionLS;
+        }
+        break;
+    }
+    return result;
+}

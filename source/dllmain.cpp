@@ -1,5 +1,6 @@
 #include <common.hxx>
 #include <cstdio>
+#include <cwchar>
 
 import common;
 import config;
@@ -50,11 +51,23 @@ namespace
                     0x8000FFFFu);
                 return;
             }
-            if (!IsUALPresent())
+            const auto loader = QueryLoaderVersion();
+            if (!loader.present)
             {
                 Warnings::Show(L"IV.EFLC.OpenPreCEPatch",
                     L"Old ASI Loader detected! Install Ultimate ASI Loader 6.9.0 or newer, or "
                     L"the module may not load next to other ASIs.");
+            }
+            else if (loader.versionKnown &&
+                     !LoaderVersionAccepted(loader.versionMs, loader.versionLs))
+            {
+                wchar_t message[256]{};
+                std::swprintf(message, std::size(message),
+                    L"Ultimate ASI Loader %u.%u.%u.%u is older than 6.9.0. Update it, or "
+                    L"the module may not load next to other ASIs.",
+                    HIWORD(loader.versionMs), LOWORD(loader.versionMs),
+                    HIWORD(loader.versionLs), LOWORD(loader.versionLs));
+                Warnings::Show(L"IV.EFLC.OpenPreCEPatch", message);
             }
         }
 

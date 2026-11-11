@@ -5,6 +5,7 @@ module;
 // Declares the /GS cookie the helper's prologue reads and the check its epilogue
 // calls (`__security_cookie`, `__security_check_cookie` in vcruntime.h).
 #include <intrin.h>
+#include <atomic>
 
 export module shared;
 
@@ -127,26 +128,24 @@ namespace Shared
 
 namespace
 {
-    // A direct-mapped memo of successful model lookups. The table is static
-    // after startup, so a hit cannot go stale; a collision just re-resolves.
-    struct LookupCacheEntry
-    {
-        uint32_t hash;
-        int32_t index;
-        uint32_t valid;
-    };
+    // A direct-mapped memo of successful model lookups. One 64-bit atomic per
+    // slot: the valid bit, the hash and the index are published together, so a
+    // reader on another game thread can never pair a new hash with an old
+    // index. The table is static after startup; a collision just re-resolves.
     constexpr size_t kLookupCacheSlots = 1024;
-    LookupCacheEntry g_lookup_cache[kLookupCacheSlots] = {};
+    constexpr uint64_t kLookupValid = 1ull << 63;
+    std::atomic<uint64_t> g_lookup_cache[kLookupCacheSlots] = {};
 
     int __cdecl CachedModelLookup(uint32_t hash, int32_t* out) noexcept
     {
         const size_t slot = (static_cast<size_t>(hash) * 2654435761u) >>
                             (32 - 10);  // 1024 slots
-        auto& entry = g_lookup_cache[slot];
-        if (entry.valid != 0 && entry.hash == hash)
+        const uint64_t packed = g_lookup_cache[slot].load(std::memory_order_acquire);
+        if ((packed & kLookupValid) != 0 &&
+            static_cast<uint32_t>(packed >> 31) == hash)
         {
             if (out != nullptr)
-                *out = entry.index;
+                *out = static_cast<int32_t>(packed & 0x7FFFFFFFu);
             return 1;
         }
 
@@ -163,9 +162,10 @@ namespace
         const int answer = original(hash, &index);
         if (answer != 0 && index > 0)
         {
-            entry.hash = hash;
-            entry.index = index;
-            entry.valid = 1;
+            g_lookup_cache[slot].store(kLookupValid |
+                    (static_cast<uint64_t>(hash) << 31) |
+                    static_cast<uint64_t>(index) & 0x7FFFFFFFu,
+                std::memory_order_release);
         }
         if (out != nullptr)
             *out = index;
@@ -191,7 +191,7 @@ namespace Shared
     void ResetLookupCacheForTest()
     {
         for (auto& entry : g_lookup_cache)
-            entry = {};
+            entry.store(0, std::memory_order_release);
     }
 }
 
