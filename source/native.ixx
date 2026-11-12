@@ -31,8 +31,8 @@ import patch;
 // hand-written instruction stream: their frames carry a cookie-xored scope table
 // whose handler fields name addresses inside the original image, which cannot be
 // transcribed as instructions. They are rebuilt with the same ABI and the same
-// observable behaviour; docs/parity.md records the split and why the instruction
-// counts of those two do not appear in the manifest.
+// observable behaviour; that is why the instruction counts of those two do not
+// appear in the manifest.
 //
 // The ABI the recovered bodies agree on. The game's resolver (dword_1015BDE0)
 // takes the native hash in ESI, the 0xA0-byte call block in EDX, and answers the
@@ -154,7 +154,7 @@ static void* ResolveInEsi(unsigned int);
 // instead: the inline assembler rejects a direct call to the memset intrinsic
 // (C2420), so the call names a local function that performs the same zeroing with
 // the same argument order. The call itself is still one `E8`, and the body is
-// otherwise instruction-for-instruction (docs/parity.md).
+// otherwise instruction-for-instruction.
 static void __cdecl NativeZeroBlock(void* destination, int value, unsigned int count)
 {
     std::memset(destination, value, count);

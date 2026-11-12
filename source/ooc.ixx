@@ -329,7 +329,7 @@ static uint32_t OocInitialise()
 // The shipped ASI never calls this. The payload path only runs when the game
 // calls the wrapper at 0xB70733, which no offline tool can reach, so the decoder
 // and the builder would otherwise be unexecuted code; `zp_dump --ooc-selftest`
-// runs them against the pinned data instead (docs/parity.md). The two fnv1a
+// runs them against the pinned data instead. The two fnv1a
 // values are recomputed from `game_refs/ZolikaPatch_original.asi.off` by the
 // recipe in source/ooc_finale2.inc's header.
 export const char* OocSelfCheck()
@@ -1912,7 +1912,7 @@ static __declspec(naked) void* OocBuildArchiveBody()
 
 // sub_10001280, recovered VA 0x10001280: the bounded formatter, transcribed once
 // in source/stability.ixx and proved there instruction for instruction
-// (docs/rebuilt.md). A module interface cannot export a naked function, so this
+// A module interface cannot export a naked function, so this
 // six-byte forwarder is what the wrapper's `call` names: the original's call is
 // an immediate too, and the forwarder enters the body with the stack and the
 // registers untouched.

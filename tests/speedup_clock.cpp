@@ -7,7 +7,8 @@
 import misc;
 
 // SpeedupBugFix's body (`sub_10050540`, 0x10050540, 93 instructions to its `ret`)
-// rebuilt in C++ (`docs/rebuilt.md` §3 class B): the game's timer-init function.
+// rebuilt in C++ (its SEH frame, `/GS` cookie and thread-safe static guard block
+// transcription): the game's timer-init function.
 // The key's payload is pure arithmetic and two unguarded lookups, so it is the
 // class of rebuild that fails silently: a wrong scale or a swapped slot makes the
 // whole frame-time fix subtly wrong instead of crashing. This test runs the

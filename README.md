@@ -1,92 +1,93 @@
 # IV.EFLC.OpenPreCEPatch
 
-This repository ships as **IV.EFLC.OpenPreCEPatch**: an improvement/successor fork of ZolikaPatch 7.65 with the OpenPreCEPatch changes compiled in. The ASI is `IV.EFLC.OpenPreCEPatch.asi`; its shipped configuration is OpenPreCEPatch's grouped `IV.EFLC.OpenPreCEPatch.ini`, read from next to the ASI. There is no runtime improvement switch and no separate parity build. `tests/parity/ZolikaPatch.ini` is an internal regression fixture, not a shipped file.
+[![Build](https://github.com/gillian-guide/IV.EFLC.OpenPreCEPatch/actions/workflows/build.yml/badge.svg)](https://github.com/gillian-guide/IV.EFLC.OpenPreCEPatch/actions/workflows/build.yml)
 
-The implementation is written with C++23 module interface units, one plain translation unit for the startup driver, `Event<Args...>` tiers and a `Game` install context, with the vendored libraries pinned under `external/`. It is not Zolika1351's source. The shipped 32-bit ASI was the specification, and its loader, per-key install arms and hook bodies are written back as ordinary C++ with the recovered addresses, signatures, defaults and behaviour.
+IV.EFLC.OpenPreCEPatch is an open-source successor to ZolikaPatch, the GTA IV / Episodes from Liberty City quality-of-life and crash-fix plugin, reimplemented in FusionFix's shape. It keeps the original mod's options, rewrites them as ordinary C++ around the same recovered signature data, and modernises the loader, hooking and configuration layers, while adding improvements to some unreliable code. The 84-key catalogue is OpenPreCEPatch's surface: the keys it removed or moved to the XLivelessAddon companion are out, and the ones it adds are compiled in.
 
-The compiled ASI supports every game version from 1.0.0.0 to 1.1.3.0, including EFLC, and the 1.2.0.43 product version the catalogue also masks. It is Win32 only. Each catalogue key carries its shipped default, its absent-key default and the builds it applies to; `IV.EFLC.OpenPreCEPatch.ini` supplies the shipped values.
-
-## Status
-
-The retained arms are measured against the recovered binary; the successor changes are the product.
-
-|measurement|result|produced by|
-|-|-|-|
-|retained keys on 1.0.8.0|80 closed, 5 documented improved deltas, 0 open (85-key surface)|`python tools/parity\_report.py 9`|
-|hook bodies proven whole|146 transcribed bodies, 0 failures|`python tools/verify\_bodies.py --original ../game\_refs/ZolikaPatch\_original.asi.off --candidate build/win-x86/Release/IV.EFLC.OpenPreCEPatch.asi --bodies tests/bodies.tsv --map build/win-x86/Release/IV.EFLC.OpenPreCEPatch.map`|
-|write set|retained-arm dump matrix; the full-cell diff also contains the bytes the 14 removed keys used to write (expected missing)|`python tools/dump_matrix.py --markdown <out>`|
-|tests|35 registered ctest targets|`ctest --preset release`|
-
-The five improved deltas are deliberate: GarageModelFix's prologue, BuildingAlphaFix's `jnz`-only removal, CutsceneFixes' callee, ImprovedShaderStreaming's two calls, and RemoveGFWLUpdatePopup's shipped default. They are reported apart from `open`. The 14 keys OpenPreCEPatch removed or moved to XLivelessAddon are out of the catalogue (SkipLauncher, SkipIntro, SkipMenu, BorderlessWindowed, DoNotPauseOnMinimize, LocalSettingsPath, VRAMFix and the seven dropped fixes).
+It targets improvements to the pre-CE experience to bring it closer to the Complete Edition, and to
+general stability and the multiplayer experience. Options FusionFix already owns are gated off
+automatically when a FusionFix ASI is next to the game. It is meant to be used with
+[this fork of XLivelessAddon](https://github.com/gillian-guide/XLivelessAddon) as a companion,
+because some features belong there.
 
 ## Features
 
-* Fix the benchmark, Concrete Jungle, episode-switch, ROCKET, wanted-level, SuperLOD and SMPA60 crashes.
-* Fix the multiplayer crash methods, and block weapon-stripping and teleport trainers.
-* Fix the high-FPS problems: cutscenes, bike physics, the 300 FPS speedup, VSync, drive-by aim and the mouse deadzone.
-* Raise the PtrNode and vehicle limits, remove the livery limit, and reimplement memory allocation.
-* Fix the emissive, reversing-light and LOD fade-in bugs, and add car, object and building shadows.
-* Load TBoGT and TLAD content from the EFLC folder layout, and add the APC/Buzzard, explosive and police weapons and the TBoGT aircraft height limit.
-* Add the popup-headlights, siren, plane-part, engine-block and steering-wheel support, and .ide hash support.
-* Restore the death music, and add the OpenPreCEPatch failsafes, caches, Steam achievement mirror and GFWL protection disabler.
+- Skip the launcher/DRM checks (XLivelessAddon).
+- Set custom savegame and settings folders, or move both into a saves folder inside the game folder (XLivelessAddon).
+- Remove the Rockstar Games registry path dependency and skip the GFWL web-connect and health checks (XLivelessAddon).
+- Shorten the intro screens and skip the main menu (XLivelessAddon).
+- Add borderless windowed mode, keep rendering while unfocused, and fix the VRAM detection (XLivelessAddon).
+- Use a (non-SecuROM) launcher renamed to `PlayGTAIV.exe`.
+- Fix the 15+ second startup times before the game window even pops up, cut loading times in half or more, and get to the main menu faster.
+- Fix benchmark, Concrete Jungle, episode-switch, ROCKET, wanted-level, SuperLOD and SMPA60 crashes.
+- Fix the multiplayer crashes and freezes, including the modmenu crash methods.
+- Fix some high-FPS problems: cutscenes, bike physics, the 300 FPS speedup, VSync, driveby aim and the mouse deadzone.
+- Raise the PtrNode and vehicle limits, remove the livery limit and reimplement memory allocation.
+- Fix the emissive-light, reversing-light and LOD fade-in bugs, and add car, object and building shadows.
+- Add experimental night shadow features.
+- Add compatibility for Complete Edition's folder structure, files and savefiles to minimize downgrade requirements.
+- Remove GFWL checks.
+- Add the APC/Buzzard, explosive weapons, police weapons and TBoGT aircraft height limit.
+- Add the popup headlights, sirens, plane parts, engine block, steering wheel and garage fixes.
+- Death music restoration
+- .ide hash support
+- Mirror GFWL achievements to Steam and disable the GFWL `xlive.dll` protection check, and add the pipe-bomb icon, `gta.dat` override and Niko ped clothes.
 
-Launcher/menu/intro/borderless/VRAM/settings-path features moved to the
-XLivelessAddon companion and are not part of this ASI.
+## Installation
+
+1. Install [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/latest)
+   (it can be installed as `xlive.dll` for xliveless).
+2. Extract the archive anywhere the ASI loader loads from: the game folder, `plugins\`,
+   `scripts\` or `update\`.
+3. Start the game and edit `IV.EFLC.OpenPreCEPatch.ini`; the shipped ASI writes no log, so a
+   `Trace` build is what records what was applied.
+
+The ASI resolves its own directory, so its INI, FusionFix notice and trace log are
+resolved next to it. A FusionFix ASI is detected by its loaded module name, or next to this ASI.
+
+If an old `ZolikaPatch.ini` is present (next to the ASI, or in the working directory) and
+`IV.EFLC.OpenPreCEPatch.ini` is not, the ASI imports the old values on first run and writes the
+grouped file next to the ASI. The old file is left untouched.
+
+`BorderlessWindowed`, `DoNotPauseOnMinimize`, `LocalSettingsPath`, `SkipIntro`, `SkipLauncher`,
+`SkipMenu` and `VRAMFix` belong to the
+[XLivelessAddon](https://github.com/gillian-guide/XLivelessAddon) companion, which reads the same
+legacy keys from its own INI. Its `[USERPROFILE] CustomUserProfilePath` replaced the three old
+path keys, `LocalSettingsPath`, `CustomSavePath` and `CustomSettingsPath`.
 
 ## Building
 
-Requirements: Windows, Visual Studio with the x86 C++ toolchain (the preset names the `Visual Studio 18 2026` generator), CMake 3.28 or newer, and the two submodules checked out. The shipped ASI is 32-bit.
+Requirements: Windows 10/11, Visual Studio with the **x86** C++ toolchain (the `win-x86` preset
+names the Visual Studio 18 2026 generator) and CMake 3.28 or newer. The vendor libraries are
+committed under `external/`; there are no submodules to initialise.
 
-```
+```bat
 cmake --preset win-x86
 cmake --build --preset release
 ctest --preset release
 ```
 
-The artifact is `build/win-x86/Release/IV.EFLC.OpenPreCEPatch.asi`; copy it next to `GTAIV.exe` or `EFLC.exe` with `IV.EFLC.OpenPreCEPatch.ini`. The release folder and zip are produced by:
+The output is `build/win-x86/Release/IV.EFLC.OpenPreCEPatch.asi` and its INI. The release folder
+and zip are a separate target:
 
-```
+```bat
 cmake --build --preset release --target package
 ```
 
-They land in `dist/IV.EFLC.OpenPreCEPatch/` and `dist/IV.EFLC.OpenPreCEPatch.zip`. The `Trace` configuration builds the same ASI with diagnostics enabled.
+They land in `dist/IV.EFLC.OpenPreCEPatch/` and `dist/IV.EFLC.OpenPreCEPatch.zip`. The `Trace`
+configuration builds the same ASI with diagnostics enabled (`cmake --build --preset trace`,
+`ctest --preset trace`).
 
-## Documentation
-
-|document|what it answers|
-|-|-|
-|[architecture.md](docs/architecture.md)|the module layout, the three event tiers, the shape of an arm, and why startup is synchronous|
-|[building.md](docs/building.md)|the presets, the toolchain and link settings, Release versus Trace, and where the artifact lands|
-|[features.md](docs/features.md)|every catalogue key, grouped by module, with its shipped and absent-key default and its build scope|
-|[hooking.md](docs/hooking.md)|how a body is transcribed, registered and proved, the C++ rebuilds and why, and the preserved-fault policy|
-|[testing.md](docs/testing.md)|every test and measurement tool, what each proves, and how to run them|
-|[behavior.md](docs/behavior.md)|the retained arms' original behavior and the remaining fault evidence|
+`CMakePresets.json` has the presets (`win-x86`, `debug`, `release`, `trace`). The MSVC settings
+that matter (C++23 modules, static CRT, `/BASE:0x10000000`, the committed `external/` trees) are in
+`CMakeLists.txt`, and `.github/workflows/build.yml` is the CI invocation.
 
 ## Credits
 
-* **Zolika1351** - author of ZolikaPatch, the mod this code reimplements.
-* **ThirteenAG and the FusionFix contributors** - the project layout, the `Event<Args...>` tiers and the hook conventions this tree follows.
-* **LINK/2012, ThirteenAG** - the `injector` memory-write library under `external/injector/`.
-* **CitizenFX, ThirteenAG** - the Hooking.Patterns scanner under `external/hooking/`.
-* **Turbine1991** - feather-ini-parser 1.41, whose grammar `source/config.ixx` reproduces.
-* **Rockstar Games / Take-Two** - GTA IV and EFLC. This project is not affiliated with or endorsed by them.
+- **Zolika1351** — author of ZolikaPatch, the original mod whose options, defaults, signatures and behaviour this project preserves.
+- **ThirteenAG and the FusionFix contributors** — the project layout, build and hook conventions this repository follows.
+- **LINK/2012** — the `injector` memory-write library.
+- **CitizenFX and ThirteenAG** — `Hooking.Patterns`.
+- **Turbine1991** — feather-ini-parser 1.41, whose grammar `source/config.ixx` reproduces.
 
-Licensed under the GPL-3.0; see `LICENSE` and `NOTICE`. The vendored libraries keep their own licences.
-
-## Licence and attribution
-
-This tree is licensed under the **GNU General Public License v3.0** (see LICENSE), because
-its architecture is GTAIV.EFLC.FusionFix's and that project is GPL-3.0:
-
-- GTAIV.EFLC.FusionFix (https://github.com/ThirteenAG/GTAIV.EFLC.FusionFix) — the module
-  layout, the Event<Args...> tiers, the Game install context, the plain-translation-unit
-  startup driver and the ind_pattern house idiom are its design, adapted here. Where a file
-  is a direct adaptation rather than an independent implementation it says so in its header.
-- injector (https://github.com/thelink2012/injector), Hooking.Patterns
-  (https://github.com/Hooking-Patterns/Hooking.Patterns) and IniReader
-  (https://github.com/Rookfighter/inifile-cpp) are vendored under external/ at the pinned
-  commits recorded there, each under its own licence.
-- ZolikaPatch itself (Zolika1351) is the specification this reimplements; no source was
-  copied from it, and the recovered addresses, signatures, defaults and behaviour are
-  documented with provenance throughout docs/.
-
+Licensed under the GNU General Public License, version 3; see `LICENSE` and `NOTICE`.

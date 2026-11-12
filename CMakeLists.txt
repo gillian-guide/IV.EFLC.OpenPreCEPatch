@@ -309,7 +309,7 @@ target_link_libraries(zp_nms_arena PRIVATE zp_modules)
 add_test(NAME zp_nms_arena COMMAND zp_nms_arena)
 set_tests_properties(zp_nms_arena PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
-# The DFA close-handle body (0x10004790, class B in docs/rebuilt.md) and its four
+# The DFA close-handle body (0x10004790, rebuilt for its exception frame) and its four
 # transcribed siblings, asserted by behaviour instead of by their disassembly: a real
 # 32-byte file opened through the create wrapper, sized, seeked and read through the
 # other three, then closed through the rebuilt one; the closed handle's answer (FALSE
@@ -324,7 +324,7 @@ set_tests_properties(zp_nms_arena PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_B
 # probe byte to be there and no answer to have been written, then terminates and reaps
 # it. Offline: no game image, no ASI load; a fixture file, a report and a probe file in
 # the binary directory, all removed.
-# The SpeedupBugFix body (0x10050540, class B in docs/rebuilt.md), asserted by
+# The SpeedupBugFix body (0x10050540, rebuilt for its exception frame), asserted by
 # behaviour instead of by its disassembly: the four derived floats against the
 # formula recomputed in the test at five frequencies (bit patterns, not
 # approximations), the eight published slots by the ASI dword each one is, the
@@ -338,7 +338,7 @@ target_link_libraries(zp_speedup_clock PRIVATE zp_modules)
 add_test(NAME zp_speedup_clock COMMAND zp_speedup_clock)
 set_tests_properties(zp_speedup_clock PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
-# The OutOfCommissionFix init (sub_1004B750, class B in docs/rebuilt.md), asserted
+# The OutOfCommissionFix init (sub_1004B750, rebuilt for its container plumbing), asserted
 # by behaviour instead of by its disassembly: the one-shot guard that has no writer
 # (three calls build three archives, none ever freed), the cursor slot left equal to
 # the archive's 182,272 bytes with the pinned fnv1a and header words, the
@@ -471,7 +471,7 @@ if(Python3_Interpreter_FOUND)
   # measured at six relocation deltas, and its hit set must be identical at each.
   # A literal whose hit set changes is classified against the key's recovered
   # original string: `MiscFixes`' first row is the original's own string and is a
-  # preserved fault (docs/parity.md), anything else is a failure to fix.
+  # preserved fault, anything else is a failure to fix.
   if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs/GTAIV.exe)
     add_test(NAME zp_relocated_literals
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_relocated_literals.py
@@ -480,7 +480,7 @@ if(Python3_Interpreter_FOUND)
   # The other half of "does the scan mean what the original's does": a shortened
   # copy of a handler's signature picks the original's first match on 1.0.8.0 and a
   # different function elsewhere. This compares our per-image hit sets with the
-  # original handler's own signature (docs/parity.md, signature parity).
+  # original handler's own signature (signature parity).
   if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs/ZolikaPatch_original.asi.off)
     add_test(NAME zp_signature_parity
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_signature_parity.py

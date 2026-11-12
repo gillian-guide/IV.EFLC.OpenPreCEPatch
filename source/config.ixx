@@ -20,14 +20,13 @@ import game;
 //     stream's `failbit`, which nothing clears, so the original's loop -- whose only
 //     exit is `eofbit` -- re-parses the same 255 bytes for ever. This reader models
 //     the stream's two flags for that reason, and spins where the original spins
-//     (docs/parity.md, Preserved faults);
+//     (the original's fault, preserved here);
 //   * no BOM branch: the 1.41 source has `if (line[0] == 0xEF)`, but the oracle's
 //     build compiles it out (`char` is signed, so a byte 0xEF promotes to -17 and
 //     never equals the literal 239). A first line starting with the UTF-8 BOM is an
 //     ordinary malformed line: it has no '=', so it is dropped -- and if it carried
 //     `[Options]`, that header is lost and the first key line faults on the null
-//     current section. The oracle faults here, and so does this tree (docs/parity.md,
-//     Preserved faults);
+//     current section. The oracle faults here, and so does this tree;
 //   * only `#` and `//` start a comment, and only at the start of a line;
 //   * a section line is `[...]`, and re-opening a section starts it empty;
 //   * a key line is split on '=' with strtok semantics, the key keeps any
@@ -77,7 +76,7 @@ export namespace Feather
         // `failbit` and stops there, and because the loop's only exit is `eofbit` and
         // nothing in the body clears the stream, every later `getline` is a sentry
         // no-op that leaves the buffer alone. That is the original's hang, not a
-        // simplification -- `docs/parity.md` records it as a preserved fault.
+        // simplification -- the original's fault, preserved here.
         std::string line;      // the original's `char line[256]`
         size_t position = 0;   // the stream's read position
         bool fail = false;     // failbit: sticky, set by a line that does not fit
@@ -626,7 +625,7 @@ export namespace Config
     // and never a member at an offset inside one. That is what lets the popup checker
     // and the cone check be proven at all -- they read the arrays as
     // `[eax+0x1015C628]`-shaped operands, and `tests/bodies.tsv` pairs each array with
-    // the original's VA and length (docs/rebuilt.md §2f, §2g).
+    // the original's VA and length.
     struct ModelTable
     {
         std::span<uint32_t> hashes;
@@ -684,7 +683,7 @@ extern "C"
     //
     // Laying the four out in the original's order is what makes the walk's first read
     // past slot 511 land on the same word as the original's; the hash table is
-    // registered with the original's extended 2,052-byte range (docs/rebuilt.md §2g).
+    // registered with the original's extended 2,052-byte range.
     uint32_t zpatch_headlight_cone_hashes[Config::ModelTableSlots] = {};
     uint32_t zpatch_carparts_shadow_fn = 0;   // dword_1015B5B8
     uint32_t zpatch_fchs_resume = 0;          // dword_1015B5BC

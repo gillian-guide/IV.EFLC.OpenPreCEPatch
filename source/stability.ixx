@@ -842,7 +842,7 @@ namespace
         // original's VA and its length in that image) and the offline proof
         // compares the table's contents through the registration instead of the
         // displacement. Nothing at run time reads this entry; it is what makes the
-        // operand provable (docs/rebuilt.md).
+        // operand provable.
         Bodies::RegisterTable(reinterpret_cast<uintptr_t>(kBadPlayerModelNames),
             0x100DE770u, sizeof(kBadPlayerModelNames));
 
@@ -1306,13 +1306,13 @@ static __declspec(naked) void FreezeGunShim()
 // It is transcribed rather than rebuilt because the tree's body registry now names
 // such tables (Bodies::RegisterTable): the operand keeps the original's
 // `[table + esi*4]` shape and the proof compares the table's *contents* through
-// the registration instead of its displacement. docs/rebuilt.md §2b records it.
+// the registration instead of its displacement.
 // ---------------------------------------------------------------------------
 
 // sub_10001230, recovered VA 0x10001230 (2 instructions): the UCRT printf options
 // block the engine reads. The original answers the address of its own zeroed .data
 // word at 0x101A84B0; this module answers its copy, and the instruction is the
-// original's. Transcribed, with a proof row (docs/rebuilt.md).
+// original's. Transcribed, with a proof row.
 //
 // Naked and internal: an external-linkage naked function is written to the module
 // and every importer fails (C2488).

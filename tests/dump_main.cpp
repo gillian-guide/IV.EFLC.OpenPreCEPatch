@@ -44,9 +44,8 @@ import ooc;
 // `hostBase - OptionalHeader.ImageBase`; at a *run-dependent* delta a signature
 // whose fixed bytes span the high half of a HIGHLOW fixup matches on some runs and
 // not others, and the row convention's high-half suppression can hide an arm's
-// write on some runs and report it on others. Both were measured before the pin
-// (docs/parity.md, "The per-option dump pins its image base"). A
-// captured pattern operand read out of the buffer is a live address in *this*
+// write on some runs and report it on others. Both were measured before the pin.
+// A captured pattern operand read out of the buffer is a live address in *this*
 // process at either pinned base -- exactly what it is in the game -- so an arm's
 // identity cast is right in both places, and the dump cannot reward a per-arm
 // rebase that would be wrong at run time.
@@ -327,8 +326,8 @@ namespace
         // The image's own preferred base first: that is its own coordinate system,
         // and the delta is then zero. A Win32 process cannot have it -- the loader
         // maps the NLS section C_1252.NLS at 0x00400000 before any user code runs
-        // and the heap follows, so the 26 MB range is never free (docs/parity.md,
-        // "The per-option dump pins its image base"). The copy then goes
+        // and the heap follows, so the 26 MB range is never free (measured, and
+        // the reference tree records the same). The copy then goes
         // to a fixed 64 KiB-aligned base, never to the allocator's choice: a
         // run-dependent delta is the defect this tool exists to avoid, and an
         // unstable oracle is worse than a missing one. The tool is linked at
@@ -572,7 +571,7 @@ int main(int argc, char** argv)
     // The payload path only runs when the game calls the wrapper the arm installs,
     // so this is the one way the rebuilt decoder and archive builder execute
     // offline: decode the pinned resource and check both results against the
-    // fingerprints the recovered bytes carry (source/ooc.ixx, docs/parity.md).
+    // fingerprints the recovered bytes carry (source/ooc.ixx).
     if (oocSelfTest)
     {
         const char* failure = OocSelfCheck();

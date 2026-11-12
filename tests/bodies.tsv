@@ -7,7 +7,7 @@
 # table an arm registers with Bodies::RegisterTable, so an indexed absolute operand
 # whose displacement is that table is compared as `table:<content hash>` on both
 # sides instead of as a displacement. A displacement no row names keeps the literal
-# comparison (docs/rebuilt.md Â§1).
+# comparison (docs/improvements.md).
 value_resolver 10003E50 ?ValueResolverBody@@YAXXZ 67
 aim_projectile_crash_fix 10005590 ?AimProjectileShim@@YAXXZ 11
 building_dynamic_shadows 10005AF0 ?BuildingsDynamicShadowsShim@@YAXXZ 11
@@ -41,7 +41,7 @@ car_dynamic_shadow_b 100068D0 ?CarDynamicShadowShimB@@YAXXZ 27
 # published shadow-function slot). The table registration is the extended 2,052-byte
 # range so that read is compared too, and this tree reproduces the word as the same
 # slot rather than a placeholder: it is defined immediately after the array, with the
-# check's own resume word after it, in source/config.ixx. docs/rebuilt.md Â§2g.
+# check's own resume word after it, in source/config.ixx. docs/improvements.md.
 table 1015ADB8 _zpatch_headlight_cone_hashes 2052
 table 1015B5C0 _zpatch_headlight_cone_values 2048
 force_headlight_shadows_shim 1001ADB0 ?FchsShimBody@@YAXXZ 9
@@ -103,7 +103,7 @@ bad_player_model_print 1005B530 ?BpmPrintBody@@YAXXZ 45
 # the comparator resolves both operands through the registry and compares the
 # table's contents instead of its displacement. The table row below is the offline
 # projection of that registration: recovered VA, the candidate symbol the linker map
-# resolves, and the registered length. docs/rebuilt.md Â§2b.
+# resolves, and the registered length. docs/improvements.md.
 table 100DE770 ?kBadPlayerModelNames@@3QBQBDB 153820
 bpm_model_name 10003F00 ?BpmModelNameBody@@YAXXZ 21
 # Patch4RemoveModChecks (source/misc.ixx): the shared GFWL/Patch4 stub. Its
@@ -128,7 +128,7 @@ copsirens_ide 100040E0 ?IdeHookBody@@YAXXZ 9
 # writes it through `[ecx*4+table]` (an indexed absolute, the Â§2b shape); the slot-0
 # entry check is a plain absolute and compares as an `abs` slot. The table row is the
 # offline projection of the arm's RegisterTable call; the table is all-zero at load in
-# both images. docs/rebuilt.md Â§2e.
+# both images. docs/improvements.md.
 table 1015CE28 _zpatch_popuplights_models 2048
 copsirens_ide_parse 10003FA0 ?IdeParseBody@@YAXXZ 92
 # PopupHeadlightsFlag (source/misc.ixx): the EAX site's shim, its EDX twin and the
@@ -144,7 +144,7 @@ popup_headlights_edx 10044560 ?PopupHeadlightsBodyB@@YAXXZ 10
 # difference). The two table rows are the offline projection of the arm's
 # RegisterTable calls -- Config's own arrays, which the loader preamble's reader
 # fills, not copies. The +popuplights list it walks is the table row above.
-# docs/rebuilt.md Â§2f.
+# docs/improvements.md.
 table 1015C628 _zpatch_popup_angle_hashes 2048
 table 1015BE28 _zpatch_popup_angle_values 2048
 popup_headlights_check 10044310 ?PopupHeadlightsCheckBody@@YAXXZ 125
@@ -152,7 +152,7 @@ popup_headlights_check 10044310 ?PopupHeadlightsCheckBody@@YAXXZ 125
 # (original 0x100B5038) that are written as instruction streams. Its three arena
 # methods (0x10038360 allocate, 0x10038430 free, 0x100385A0 membership) carry the
 # compiler's frames, cmov sequences and hash-map code and are rebuilt in C++, so
-# they have no rows (docs/behavior.md). nms_sync is the table's 0x100057F0 slot: the
+# they have no rows (docs/improvements.md). nms_sync is the table's 0x100057F0 slot: the
 # same two instructions as audio.ixx's better_mp_sync row, duplicated because a
 # table in this unit cannot name a body internal to another unit.
 nms_ctor 10038640 ?NmsCtorBody@@YAPAXXZ 17
@@ -167,21 +167,21 @@ nms_thunk18 10038620 ?NmsThunk18Body@@YAXXZ 5
 nms_noop_arg 10038630 ?NmsNoopArgBody@@YAXXZ 1
 # NewFilesCompatibility (source/loading.ixx): the registrar's replacement tail.
 # Its two update bodies (0x10051890, 0x100518D0) are compiled in the original and
-# are rebuilt in C++, so they have no rows (docs/behavior.md).
+# are rebuilt in C++, so they have no rows (docs/improvements.md).
 newfiles_register 10051600 ?NewfilesRegisterBody@@YAXXZ 4
 # NewSavesCompatibility (source/loading.ixx): the savegame-load trampoline, eight
 # instructions to its tail jump. The prepare step (0x10051FD0), the converter
 # (0x10051B30) and the two read hooks it installs (0x10051A90, 0x10051AD0) are
 # compiled C in the original -- file IO, a std::string path build with the TLS
 # static-init guards and /GS frames -- and are rebuilt in C++, so they have no rows
-# (docs/behavior.md).
+# (docs/improvements.md).
 new_saves_tramp 100521E0 ?NewSavesTrampoline@@YAXXZ 8
 # RestoreDeathMusic (source/audio.ixx): the gate body and the three native-script
 # wrappers it answers through, transcribed because the layer's own four pieces
 # (sub_100038C0/38E0, sub_1005DE40/DE80, sub_1005B150) are reached through
 # forwarders. The install body (sub_10050AD0, 75 instructions to its `ret`) is
 # rebuilt: it is compiler output with an EH4 frame whose clock/seed block calls the
-# CRT's image-internal helpers, so it has no row (docs/behavior.md).
+# CRT's image-internal helpers, so it has no row (docs/improvements.md).
 death_music_gate 10050A50 ?DeathMusicGateBody@@YA_NXZ 41
 audio_call_two 1005B1E0 ?AudioCallTwoBody@@YIIII@Z 48
 audio_call_zero_bool 1005B360 ?AudioCallZeroBoolBody@@YIII@Z 44
@@ -202,7 +202,7 @@ mf_advance_windows 100241E0 ?MfAdvanceWindowsBody@@YAXXZ 138
 # LoadDLCs (source/loading.ixx): the loader callback's replacement and the DLC
 # manager's initialisation tail. The discovery pass the tail calls (0x10023150) is
 # a rebuild - compiled code with a /GS frame, TLS static-init guards and CRT calls -
-# so it has no row (docs/behavior.md).
+# so it has no row (docs/improvements.md).
 load_dlcs_dummy 10023480 ?DlcDummyBody@@YAXXZ 2
 load_dlcs_struct_fixup 10023490 ?DlcStructFixupBody@@YAXXZ 19
 
@@ -214,7 +214,7 @@ load_dlcs_struct_fixup 10023490 ?DlcStructFixupBody@@YAXXZ 19
 # them) and the length there (512 dwords). Both tables are all-zero at load in the
 # original and here, so the content check pins "reads a zero-filled table registered
 # for this row"; which table each operand reads is pinned by the manifest pairing and
-# the instruction's own semantics (docs/rebuilt.md Â§2c).
+# the instruction's own semantics (docs/improvements.md).
 table 1015A538 _zpatch_wheelangle_models 2048
 table 10159D38 _zpatch_wheelangle_angles 2048
 steer_consumer 10004C70 ?SteerConsumerBody@@YAXXZ 320
@@ -255,9 +255,9 @@ cutscene_chain_b 100388C0 ?CutsceneChainBody@@YAXXZ 146
 # retargeted to (41 to its `ret`, 0x1004C350..0x1004C3BF). The key's remaining
 # rebuilt pieces are compiler output -- the init (sub_1004B750, EH + C++
 # containers) and the key's own handler (sub_1004C3F0, 4199 instructions with an
-# EH4 frame) -- and have no rows (docs/behavior.md); the decoder pair is transcribed
+# EH4 frame) -- and have no rows (docs/improvements.md); the decoder pair is transcribed
 # below and the archive builder with its twelve helpers in the block at the end of
-# this file (docs/rebuilt.md 2h).
+# this file (docs/improvements.md).
 ooc_branch 1004C3C0 ?OocBranchBody@@YAXXZ 7
 ooc_wrap 1004C350 ?OocWrapBody@@YAXXZ 41
 # The decoder pair (source/ooc.ixx): an interpreter with sixteen exits and no
@@ -265,7 +265,7 @@ ooc_wrap 1004C350 ?OocWrapBody@@YAXXZ 41
 # guard and no indexed absolute operand, so it is transcribed whole. The opcode
 # step's four CRT `memcpy` calls go through a forwarder (the inline assembler
 # refuses `call memcpy`); the driver's Adler-32 loop is inline in the original, not
-# a call, so its 5552-byte block structure is transcribed too. docs/rebuilt.md.
+# a call, so its 5552-byte block structure is transcribed too. docs/improvements.md.
 ooc_step 1004B150 ?OocStepBody@@YAXXZ 406
 ooc_decode 1004B570 ?OocDecodeBody@@YIHPAE@Z 159
 # HighQualityReflections (source/graphics.ixx): the detour body the E9 at game
@@ -279,21 +279,21 @@ ooc_decode 1004B570 ?OocDecodeBody@@YIHPAE@Z 159
 # a six-byte forwarder on zpatch_format_entry), sub_10001240 the printf-engine call
 # -- its `call ds:[__stdio_common_vsprintf]` is a slot here, because the static CRT
 # has no IAT for the engine -- and sub_10001230 the two-dword options block it reads.
-# The three C++ `_vsnprintf_s` rebuilds this replaces are gone; docs/rebuilt.md.
+# The three C++ `_vsnprintf_s` rebuilds this replaces are gone; docs/improvements.md.
 bpm_format 10001280 ?BpmFormat@@YAXXZ 13
 bpm_format_engine 10001240 ?BpmFormatEngine@@YAXXZ 21
 bpm_format_options 10001230 ?BpmFormatOptions@@YAXXZ 2
 # NewSavesCompatibility's two installed hooks (source/loading.ixx): the read at game
 # 0x7D8C50 and the second LoadData at 0x8DA090. Both were C++ rebuilds; the /GS
 # frames, the EAX the hooks answer with and the unconditional second call are now
-# the original's own instructions. docs/rebuilt.md.
+# the original's own instructions. docs/improvements.md.
 new_saves_read_hook 10051A90 ?NewSavesReadHook@@YAXXZ 20
 new_saves_second_hook 10051AD0 ?NewSavesSecondLoadHook@@YAXXZ 33
 # LoadDLCs' discovery pass (source/loading.ixx): 223 instructions to its `ret`, with
 # no EH frame, no TLS static-init guard and no indexed absolute operand -- the one
 # rebuilt piece that was transcribable, so it is transcribed. Its IAT operands are
 # the five slots the arm fills; its two `call` targets are the allocation/memset
-# forwarders and the shared formatter. docs/rebuilt.md.
+# forwarders and the shared formatter. docs/improvements.md.
 
 # The OOC archive builder (source/ooc.ixx) and its twelve internal helpers: what was
 # the last class-D piece. Its stream has no exception frame and no TLS static-init
@@ -301,7 +301,7 @@ new_saves_second_hook 10051AD0 ?NewSavesSecondLoadHook@@YAXXZ 33
 # cmov, direct `E8`s, EBP/ECX-relative -- so the whole graph is transcribed here and
 # the class-D objection ("every call lands in another rebuild") no longer holds. The
 # CRT boundaries (operator new, memset, memcpy, free) are cdecl forwarders, and the
-# vector's element-destroy loop (0x1005CD50) stays rebuilt; docs/rebuilt.md 2h.
+# vector's element-destroy loop (0x1005CD50) stays rebuilt; docs/improvements.md.
 ooc_archive_build 1004ACE0 ?OocBuildArchiveBody@@YAPAXXZ 314
 ooc_pak_zero_header 1004AB70 ?OocZeroHeaderBody@@YAXXZ 5
 ooc_pak_zero_record 1004AB80 ?OocZeroRecordBody@@YAXXZ 4
@@ -321,7 +321,7 @@ ooc_entry_name 10057710 ?OocEntryNameBody@@YAXXZ 6
 # 0x10037C70 installs through sixteen `E8` detours (seventeen rows: the primary and
 # its short prefix name the same site). The probe's name/who/print helpers are
 # compiler output and rebuilt in C++; its formatter is the body source/stability.ixx
-# already proves. docs/behavior.md.
+# already proves. docs/improvements.md.
 spawns_guard 100372F0 ?SpawnsGuardBody@@YAXXZ 16
 spawns_case_0x24 10037330 ?SpawnsCase0x24Body@@YAXXZ 9
 spawns_case_0xCA 10037360 ?SpawnsCase0xCABody@@YAXXZ 9
@@ -337,7 +337,7 @@ spawns_probe 10037510 ?SpawnsProbeBody@@YAXXZ 394
 
 # VRAMFix (source/misc.ixx): the argument/verdict shim the original's handler
 # 0x1004AAE0 jumps to from its single matched site. Its verdict helper is compiler
-# output and rebuilt in C++. docs/behavior.md.
+# output and rebuilt in C++. docs/improvements.md.
 
 
 # AddOptionsInMenu / IVMenuAPI (source/menu.ixx): the writer 0x1001EDE0 and the

@@ -34,7 +34,7 @@ extern "C"
     // dword_1015B5B8, defined in source/config.ixx: the original keeps it in `.data`
     // immediately after the [HeadlightConeOffsets] hash array, and the cone check's
     // walk reads it as the 513th hash, so this tree defines it as the next object after
-    // that array (docs/rebuilt.md Ã‚Â§2g). This arm publishes the same value into it.
+    // that array. This arm publishes the same value into it.
     extern uint32_t zpatch_carparts_shadow_fn;
 
     // The collision body's node-walk test and the deadlock counter it compares.
@@ -49,7 +49,7 @@ extern "C"
     // resume, published from the site's own prologue before the E9 replaces it, and
     // defined in source/config.ixx as the second word of the [HeadlightConeOffsets]
     // block (the original keeps it between the cone's hashes and its offsets, and the
-    // cone walk can read it -- docs/rebuilt.md Ã‚Â§2g).
+    // cone walk can read it).
     uint32_t zpatch_fchs_param = 0;
     float zpatch_fchs_offset = 2.0f;
     extern uint32_t zpatch_fchs_resume;
@@ -927,7 +927,7 @@ namespace
     // The gate is the catalogue's INI read alone. This key's catalogue mask (0x20) is
     // the feature document's build list, not the original's: the original's own two
     // arm masks cover every supported build, so `Loader::Enabled` would never install
-    // this arm anywhere but 1.0.4.0. See docs/parity.md.
+    // this arm anywhere but 1.0.4.0.
     void InstallDualVehicleHeadlights()
     {
         if (Catalogue::Read("DualVehicleHeadlights") != 1)
@@ -1682,7 +1682,7 @@ export void RegisterVehicles()
     // which cannot name the original's VA, so each registration pairs this module's
     // copy with the address the original keeps it at and the length there: 512
     // dwords. The registration is mirrored by a `table` row in tests/bodies.tsv, the
-    // offline projection the proof resolves (docs/rebuilt.md). The arrays belong to
+    // offline projection the proof resolves. The arrays belong to
     // source/misc.ixx because the transcribed IDE parser hook is what fills them;
     // both are all-zero at load, as the original's are.
     Bodies::RegisterTable(reinterpret_cast<uintptr_t>(zpatch_wheelangle_models),
@@ -1696,7 +1696,7 @@ export void RegisterVehicles()
     // slot 511 (dword_1015B5B8) -- so the proof compares that read too. The word is not
     // a copy: it is CarDynamicShadowFix's published shadow-function slot, defined
     // immediately after the array in source/config.ixx so the layout matches the
-    // original's .data (docs/rebuilt.md Ã‚Â§2g). The offsets array is registered at its
+    // original's .data. The offsets array is registered at its
     // own base, which the original places 2,056 bytes into the block.
     Bodies::RegisterTable(reinterpret_cast<uintptr_t>(zpatch_headlight_cone_hashes),
         0x1015ADB8u, sizeof(zpatch_headlight_cone_hashes) + sizeof(uint32_t));  // 2052
@@ -2526,7 +2526,7 @@ export float FchsOffsetForTest() noexcept
 // in source/config.ixx). Our layout reproduces it as the same slot, with the check's
 // own resume word (0x1015B5BC) after it, so the walk reads the value the original's
 // does rather than a placeholder -- which is what makes this transcription possible
-// instead of a bounded walk (docs/rebuilt.md Ã‚Â§2g). The two arrays are registered with
+// instead of a bounded walk. The two arrays are registered with
 // their original VAs; the hash table's registration is the extended 2,052 bytes
 // (512 words + the neighbour).
 //
@@ -2891,7 +2891,7 @@ static __declspec(naked) void SteerResolveEntry()
 // `cmova` -- and none of that blocks a transcription: the cookie is an absolute
 // slot, the check is a call slot, the .rdata constants are absolute slots, and the
 // two 512-slot wheelangle tables are indexed absolutes the table registry covers
-// (tests/bodies.tsv table rows `1015A538` / `10159D38`, docs/rebuilt.md Ã‚Â§2c).
+// (tests/bodies.tsv table rows `1015A538` / `10159D38`).
 //
 // What the operands are:
 //   * `[0x1015A538 + esi*4]` / `[0x10159D38 + esi*4]` are the wheelangle model and
@@ -3270,7 +3270,7 @@ static __declspec(naked) void SteerConsumerBody()
 
 // sub_10001280, recovered VA 0x10001280: the bounded formatter, transcribed once
 // in source/stability.ixx and proved there instruction for instruction
-// (docs/rebuilt.md). A module interface cannot export a naked function, so this
+// A module interface cannot export a naked function, so this
 // six-byte forwarder is what the livery helpers' `call` names: the original's
 // call is an immediate too, and the forwarder enters the body with the stack and
 // the registers untouched.

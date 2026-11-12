@@ -499,7 +499,7 @@ def main() -> int:
     if preserved:
         print(f"\n{len(preserved)} preserved original fault(s): the literal is the "
               f"original handler's own string, so the base-dependence is the original's "
-              f"(1:1 policy: keep it, record it in docs/behavior.md):")
+              f"(1:1 policy: keep it, record it in the docs):")
         for name, line, arm, key, literal, entry in preserved:
             print_entry(name, line, arm, key, literal, entry,
                         "preserved original fault")

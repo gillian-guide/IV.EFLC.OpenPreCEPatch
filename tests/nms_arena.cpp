@@ -9,9 +9,9 @@ import loading;
 
 // The NewMemorySystem arena, asserted by behaviour rather than by its disassembly.
 //
-// The three methods are the vtable slots the rebuild carries (docs/rebuilt.md Â§3
-// class D): allocate 0x10038360, free 0x10038430 and membership 0x100385A0 of the
-// CRageAllocator table at 0x100B5038. They cannot be transcribed because their
+// The three methods are the vtable slots the rebuild carries: allocate
+// 0x10038360, free 0x10038430 and membership 0x100385A0 of the CRageAllocator
+// table at 0x100B5038. They cannot be transcribed because their
 // callees are the original's inlined `std::_Hash` (the emplace carries an exception
 // frame; the free inlines the erase unlink over the map's own globals), so the
 // evidence for the rebuild is behaviour. This test drives the module's own three

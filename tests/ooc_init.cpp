@@ -10,7 +10,8 @@
 import ooc;
 
 // The OutOfCommissionFix init (`sub_1004B750`, 0x1004B750, 991 instructions,
-// `docs/rebuilt.md` Â§3 class B), asserted by behaviour with no game image.
+// rebuilt in C++ because of its container plumbing), asserted by behaviour with
+// no game image.
 //
 // What is already pinned is the transform: `zp_dump --ooc-selftest` runs the
 // decode, the registration and the archive build against the recovered resource

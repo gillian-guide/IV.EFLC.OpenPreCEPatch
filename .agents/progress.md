@@ -254,10 +254,21 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
   `PlayGTAIV.exe`: expected (a) pass, (b) pass, (c) pass, (d) pass with this fix;
   the launch, the SRC10 dialog detection and the process kill are the user's to
   run.
-- `docs/features.md` still describes the 99-key parent catalogue (it lists the 14
-  keys this distribution removed or moved); it is inherited and predates
-  `d6a83f3`, and no tool regenerates it.
 - Live xlive/Steam validation for `opcep`; a live game run for `nms`.
-- Candidates not ported, with reasons in `docs/improvements.md` Â§4: NewSaves
-  hardening, garage/cutscene/NMS-thunk entry rewrites, asm-body caches,
-  grouped-INI creation/import, SCOSignatureFix anchor, DLC path buffer.
+
+## 2026-11-12 - docs consolidated to the reference shape
+
+- Rewrote `README.md`, `docs/improvements.md`, `docs/performance.md` and
+  `docs/readability.md` to mirror the OpenPreCEPatch reference docs, with this
+  tree's facts: the 84-key catalogue, the grouped shipped INI, the
+  `win-x86`/`release` presets, the FusionFix overlap gate, the ZMenuIV guard and
+  the XLivelessAddon companion split.
+- Deleted the inherited docs (`architecture`, `behavior`, `building`, `features`,
+  `hooking`, `matrix`, `mma10`, `testing`, `version-matrix`).
+- `tools/gen_applicability.py` now writes only `tests/parity/applicability.tsv`
+  (the `--check` drift rule is unchanged); `tools/dump_matrix.py` lost its
+  `--markdown` renderer. Every `docs/*.md` pointer in `tools/`, `tests/`,
+  `source/` and `CMakeLists.txt` was re-pointed to the surviving doc or stated
+  inline, and `AGENTS.md` now describes the three-doc set.
+- 37/37 Release, `verify_bodies.py` 146 bodies / 0 failures,
+  `parity_report.py 9` = 79 closed / 5 expected deltas / 0 open.

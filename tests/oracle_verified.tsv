@@ -1,7 +1,7 @@
 # Keys whose measured difference is the *baseline's* incompleteness, not ours.
 #
 # One row per key:
-#   key <TAB> builds <TAB> why <TAB> the anchor in docs/behavior.md <TAB> how it was measured
+#   key <TAB> builds <TAB> why <TAB> the anchor in docs/improvements.md <TAB> how it was measured
 #
 # `builds` is the comma-separated list of build ids the excuse covers, or `*` for
 # every build the key's catalogue mask allows. The scoreboard reports the key as
@@ -16,5 +16,5 @@
 # the original ASI exists. `tools/check_oracle_verified.py` pins the omissions that
 # have been measured so far and the builds each one covers, so a new row (or a wider
 # build list) needs that evidence in the guard too, not just here.
-CarDynamicShadowFix	1,5	the stored baseline lacks the six-byte NOP fill the original writes at the C anchor's +0x3E on the two builds where pattern E is absent; its producer never ran the reference tree's defined-but-unwired `ApplyCarDynamicShadowFixNoE` pass	docs/behavior.md#the-noe-fill-cardynamicshadowfix-on-1000-and-1040	ours writes `90 90 90 90 90 90` at C+0x3E on both builds (1.0.0.0: C 0x44DF1B -> 0x44DF59; 1.0.4.0: C 0x46DFEA -> 0x46E028) and the baseline has no row there; the oracle's own fill (`0x10019039`..`0x10019052`, then `memset(..., 0x90, 6)`) writes exactly those six bytes
-Patch7RemoveModChecks	7,8	the original has no Patch7 handler of its own: 0x100523C0 ORs "Patch7RemoveModChecks" into Patch6and7's handler 0x10044710, so a Patch7-only INI runs the full 16/21-byte write set; the stored cell records the reference tree's own separate 5-byte (1.0.6.0) / two-jump, 10-byte (1.0.7.0) arm instead	docs/behavior.md#patch7removemodchecks-the-or-an-alternate-handler	handler 0x10044710's own VirtualProtect+store rows at RVAs 0x38AC/0x392E/0x397E/0x3982/0x3A14/0x42E7..0x42ED (1.0.6.0) and 0x388C/0x389C/0x390E/0x395E/0x3962/0x39F4/0x42C7..0x42CD (1.0.7.0) are exactly our 16/21 rows; a Patch7-only cell now writes 16/21 and the baseline 5/10 is a strict subset
+CarDynamicShadowFix	1,5	the stored baseline lacks the six-byte NOP fill the original writes at the C anchor's +0x3E on the two builds where pattern E is absent; its producer never ran the reference tree's defined-but-unwired `ApplyCarDynamicShadowFixNoE` pass	docs/improvements.md#the-noe-fill-cardynamicshadowfix-on-1000-and-1040	ours writes `90 90 90 90 90 90` at C+0x3E on both builds (1.0.0.0: C 0x44DF1B -> 0x44DF59; 1.0.4.0: C 0x46DFEA -> 0x46E028) and the baseline has no row there; the oracle's own fill (`0x10019039`..`0x10019052`, then `memset(..., 0x90, 6)`) writes exactly those six bytes
+Patch7RemoveModChecks	7,8	the original has no Patch7 handler of its own: 0x100523C0 ORs "Patch7RemoveModChecks" into Patch6and7's handler 0x10044710, so a Patch7-only INI runs the full 16/21-byte write set; the stored cell records the reference tree's own separate 5-byte (1.0.6.0) / two-jump, 10-byte (1.0.7.0) arm instead	docs/improvements.md#patch7removemodchecks-the-or-an-alternate-handler	handler 0x10044710's own VirtualProtect+store rows at RVAs 0x38AC/0x392E/0x397E/0x3982/0x3A14/0x42E7..0x42ED (1.0.6.0) and 0x388C/0x389C/0x390E/0x395E/0x3962/0x39F4/0x42C7..0x42CD (1.0.7.0) are exactly our 16/21 rows; a Patch7-only cell now writes 16/21 and the baseline 5/10 is a strict subset

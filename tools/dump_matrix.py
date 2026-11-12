@@ -9,8 +9,8 @@ scoreboard stands, and which keys are behind the residual.
 Every cell is its own subprocess, and a cell that dies with a Windows exception is
 a recorded outcome, not an abort. That matters because one cell faults *by
 design*: `NoImpostorHeightCutoff` reproduces the original's 1.0.0.0 access
-violation (`docs/behavior.md`), so build 1's per-option cell dies at that arm. A
-fault records:
+violation (an uninitialised vector entry, the preserved original fault), so
+build 1's per-option cell dies at that arm. A fault records:
 
   * the cell's exit code, printed as the exception code (`0xC0000005`);
   * whatever the cell wrote before it died, kept next to the build as
@@ -23,7 +23,6 @@ fault records:
     makes a faulted cell measurable and what proves no *other* key faults there.
 
     python tools/dump_matrix.py [--only 9] [--baseline DIR]
-    python tools/dump_matrix.py --markdown docs/matrix.md
     python tools/dump_matrix.py --only 9 --check        # the cheap ctest form
 """
 
@@ -342,122 +341,6 @@ def print_table(results, table) -> None:
             print(f"       {line}")
 
 
-def markdown(results, table) -> str:
-    measured = len(results) * 2
-    lines = [
-        "# The 18-cell dump matrix",
-        "",
-        "Nine supported images x two cells -- the **full** cell (the shipped INI) and the",
-        "**per-option** cell (every key off, one on) -- measured against the reference",
-        "tree's stored dumps in `readable/build/p3-final-dumps3`. Generated, not",
-        "hand-written:",
-        "",
-        "```",
-        "python tools/dump_matrix.py --markdown docs/matrix.md",
-        "```",
-        "",
-        "Each cell is its own subprocess. Every number is the scoreboard's comparison",
-        "(`tools/parity_report.py`): a branch displacement -- the four bytes after an",
-        "`E8`/`E9`, found in either cell or in the pristine image -- is excluded, because",
-        "the baseline recorded one stand-in address for every body target and those bytes",
-        "cannot be compared. `differing`, `missing` and `extra` count real bytes only.",
-        "",
-        "## Full cell",
-        "",
-        "`bytes` is what our cell writes; the rest is against the baseline. The residual",
-        "column names the keys whose per-key cell writes those bytes (a byte can be named",
-        "by more than one key, so the counts need not add up to the byte count), each with",
-        "its scoreboard state: `closed`, `open`, or `oracle-verified baseline omission`.",
-        "",
-        "| build | version | image | bytes | differing | missing | extra | residual |",
-        "|---:|---|---|---:|---:|---:|---:|---|",
-    ]
-    for build, full, cell, residual in results:
-        scored = full.fault == ""
-        residual_text = (
-            "faulted: partial not scored" if not scored
-            else ('; '.join(residual) if residual else "none")
-        )
-        lines.append(f"| {build} | {VERSIONS[build]} | `{BUILDS[build]}.exe` | {full.wrote} | "
-                     f"{len(full.differing) if scored else '-'} | "
-                     f"{len(full.missing) if scored else '-'} | "
-                     f"{len(full.extra) if scored else '-'} | "
-                     f"{residual_text} |")
-    lines += [
-        "",
-        "A **faulted** full cell's partial rows are not a write-set scoreboard (the",
-        "preserved 1.0.0.0 fault stops the install pass); its diff/missing/extra cells",
-        "are `-`, the fault is reported below, and the per-option/isolated cells are the",
-        "scoreboard for that build.",
-        "",
-        "## Per-option cell",
-        "",
-        "`closed / 99` is the key scoreboard: a key is closed when its cell has the same",
-        "rows as the baseline's, branch displacements aside. `open` names the keys that",
-        "are not; `oracle` names the keys whose difference is a measured omission in the",
-        "stored baseline (`tests/oracle_verified.tsv`, per key and build) and is therefore",
-        "reported apart and never counted as closed; `fault` names the cell that died.",
-        "",
-        "| build | version | closed / 99 | open | oracle | fault |",
-        "|---:|---|---:|---|---|---|",
-    ]
-    for build, full, cell, _ in results:
-        fault = "-"
-        if cell.faulted:
-            fault = "; ".join(f"FAULTED at `{key}` ({text})" for key, text in cell.faulted)
-        elif cell.fault:
-            fault = f"FAULTED ({cell.fault})"
-        opened = ", ".join(f"`{key}`" for key, *_ in cell.opened) or "-"
-        oracle = ", ".join(f"`{key}`" for key, *_ in cell.oracle) or "-"
-        closed = str(cell.closed) + (" (isolated)" if cell.isolated else "")
-        lines.append(f"| {build} | {VERSIONS[build]} | {closed} | {opened} | {oracle} | {fault} |")
-
-    faulted = [(build, cell) for build, _, cell, _ in results if cell.faulted or cell.fault]
-    full_faults = [(build, full) for build, full, _cell, _ in results if full.fault]
-    lines += ["", "## The fault", ""]
-    if not faulted and not full_faults:
-        lines += ["No cell faulted.", ""]
-    for build, full in full_faults:
-        lines += [
-            f"`{BUILDS[build]}.exe` ({VERSIONS[build]}) dies in the **full** cell with",
-            f"`{full.fault}` after {full.partial} byte(s): the shipped INI reaches",
-            "`NoImpostorHeightCutoff`, whose 1.0.0.0 pattern matches once and whose",
-            "original writes `hits[1]` through an uninitialised vector entry. The",
-            "per-option cell isolates that key (its row is `open` above); in the 1:1",
-            "configuration this is the original's fault, and",
-            "`tools/check_failsafe_parity.py` shows the same cell completing with",
-            "`OPCEP_IMPROVEMENTS=all` and the guarded write absent.",
-            "",
-        ]
-    for build, cell in faulted:
-        key, text = cell.faulted[0] if cell.faulted else ("?", cell.fault)
-        lines += [
-            f"`{BUILDS[build]}.exe` ({VERSIONS[build]}) dies in the per-option cell at",
-            f"`{key}`, {text}: the original's own fault -- an uninitialised vector entry,",
-            "write `66 89 06` at the original's `0x100536F1` -- which `docs/behavior.md`",
-            "records as deliberate and unguarded. The cell wrote "
-            f"{cell.wrote} byte(s) before it died, so its rows are not a scoreboard: the",
-            f"first {cell.reached} keys ran, and the {len(table) - cell.reached} after it",
-            "were never reached. It is scored one key per subprocess instead, and",
-            f"`{key}` is the only key whose cell faults alone -- so no other cell faults on",
-            "that build. The isolated cells are not a different measurement: on builds 5",
-            "and 9 they are byte-identical to the per-option rows for all 99 keys",
-            "(`python tools/dump_matrix.py --selfcheck-isolated --only 5`).",
-            "",
-        ]
-    lines += [
-        "## What the matrix proves",
-        "",
-        f"{measured} cell(s) ran for {len(results)} build(s). A per-option cell that",
-        "completes does so over all 99 keys, so any fault inside it would have shown up",
-        "as an abort; the one fault recorded is the reproduced original fault, not a",
-        "harness failure. Every residual full-cell byte has a key named behind it, and",
-        "the per-option column is the scoreboard that says whether that key is done.",
-        "",
-    ]
-    return "\n".join(lines)
-
-
 def check(dump: Path, baseline: Path, ini: Path, work: Path, table) -> int:
     """The cheap pin: build 9, both cells, three assertions."""
     build = 9
@@ -529,7 +412,6 @@ def main() -> int:
     parser.add_argument("--only", type=int)
     parser.add_argument("--check", action="store_true",
                         help="the cheap ctest form: build 9, both cells, pinned")
-    parser.add_argument("--markdown", help="write the documented table to this path")
     parser.add_argument("--selfcheck-isolated", action="store_true",
                         help="prove an isolated single-key cell equals the per-option rows")
     args = parser.parse_args()
@@ -557,9 +439,6 @@ def main() -> int:
     builds = [args.only] if args.only else sorted(BUILDS)
     results = run_matrix(builds, baseline, dump, ini, work, table)
     print_table(results, table)
-    if args.markdown:
-        Path(args.markdown).write_text(markdown(results, table), encoding="utf-8")
-        print(f"wrote {args.markdown}")
     return 0
 
 

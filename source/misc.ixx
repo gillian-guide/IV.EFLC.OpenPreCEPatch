@@ -254,7 +254,7 @@ namespace
 // original's sub_10050540. That body is compiled C -- an SEH frame, a /GS
 // cookie, the MSVC thread-safe static guard for its one-time signature scan and
 // SSE double arithmetic -- so this is a C++ reimplementation of the same
-// behaviour, not a transcription (docs/parity.md records the split).
+// behaviour, not a transcription.
 //
 // The original's handler has no build gate and reads its eight float pointers
 // from fixed site-relative operands, so the row is the same on every build that
@@ -1118,7 +1118,7 @@ export void RegisterMisc()
     // transcription reads as `[esi + zpatch_copsirens_models]` and as a plain absolute
     // at slot 0. The registration pairs this module's array with the original's VA and
     // the length there (512 words); its tests/bodies.tsv `table` row is the offline
-    // projection of this call (docs/rebuilt.md §3). Unlike the wheelangle tables this
+    // projection of this call. Unlike the wheelangle tables this
     // one is *filled* at run time by the transcribed IDE hook, so a content hash of it
     // compares the shipped all-zero state, not the populated one.
     Bodies::RegisterTable(reinterpret_cast<uintptr_t>(zpatch_copsirens_models),
@@ -1137,7 +1137,7 @@ export void RegisterMisc()
     // copies: the loader preamble's reader fills them, and the checker reads them
     // through eight interleaved columns, which is why the registration names the
     // array's base and the comparator resolves the seven column displacements inside
-    // it (docs/rebuilt.md §2f). Both are all-zero at load.
+    // it. Both are all-zero at load.
     Bodies::RegisterTable(reinterpret_cast<uintptr_t>(zpatch_popup_angle_hashes),
         0x1015C628u, sizeof(zpatch_popup_angle_hashes));  // 512 * 4 = 2048
     Bodies::RegisterTable(reinterpret_cast<uintptr_t>(zpatch_popup_angle_values),
@@ -1264,7 +1264,7 @@ static __declspec(naked) void Patch4StubBody()
 // through the CRT's _strnicmp followed by strtof of the text eleven bytes in. The
 // first two fall through to the next arm; the third ends the function.
 //
-// Every one of the four tables is a registered table (docs/rebuilt.md §2b-§2e): the
+// Every one of the four tables is a registered table: the
 // popuplights list at 0x1015CE28, the siren list at 0x10159380, and the wheelangle
 // model/angle pair at 0x1015A538 / 0x10159D38. Three of them are read through an
 // absolute *with* a base and no index (`cmp [eax+table],esi`, the §2d shape) and the
@@ -1626,7 +1626,7 @@ static __declspec(naked) void CopSirensCheckABody()
 // walks the IDE parser's +siren list: `push dword ptr [esi + 0x10159380]` reads slot
 // N of the 512-word table, an absolute *with* a base register and no index -- the
 // shape the table registry canonicalises as `[esi+table:<hash>]`, with the base
-// register still compared (docs/rebuilt.md §2d). The walk stops at the first
+// register still compared. The walk stops at the first
 // zero word (`cmp dword ptr [esi+0x10159380], 0`), and the check before the loop
 // reads the same table's first word as a plain absolute.
 //
@@ -1778,7 +1778,7 @@ static __declspec(naked) void IdeHookBody()
 // 0x1015BE28, with EAX stepping 0x20 (`add eax,20h` / `cmp eax,800h` / `jl`). Seven
 // of each eight displacements are therefore four bytes into the table rather than at
 // its base; the registry resolves a displacement inside a registered table to that
-// table plus the offset, and the offset is compared (docs/rebuilt.md §2f). Each column
+// table plus the offset, and the offset is compared. Each column
 // keeps the last matching row's angle, which is what the original's in-place
 // overwrite does.
 //

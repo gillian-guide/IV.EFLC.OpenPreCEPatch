@@ -120,8 +120,8 @@ extern "C"
 // update calls become this module's bodies and the registrar's own `ret` becomes a
 // jump to the registration body. Both arms are gated on the two modules the original
 // refuses to run beside. What the three radio-HUD pieces resolve to - the current
-// texture dictionary, pgDictionary::Lookup and CSprite2d::SetTexture - is recorded in
-// docs/rebuilt.md 2m, since none of them can be driven offline.
+// texture dictionary, pgDictionary::Lookup and CSprite2d::SetTexture - cannot be
+// driven offline.
 
 extern "C"
 {
@@ -821,8 +821,7 @@ namespace
     // once and dereferenced on every call because the game swaps the dictionary as
     // it streams. A miss reads through the null the scan left behind, as the
     // original's `mov eax,[esi]` with ESI = 0 does. The game-facing behaviour of
-    // this half is documented in docs/rebuilt.md 2m, which also records that it
-    // cannot be driven from a synthetic image.
+    // this half cannot be driven from a synthetic image either.
     void* NewfilesObject()
     {
         static const uintptr_t match = FirstMatch(
@@ -2250,7 +2249,7 @@ static __declspec(naked) void NewfilesRegisterBody()
 // `[ebp+8]`, is deliberately left untouched - and answers the read's value; an
 // unpublished read entry skips the call and leaves EAX at the zero the test just
 // saw, which is the value this returns. The /GS frame and the returned register are
-// the original's, so this replaces the C++ rebuild the tree carried (docs/rebuilt.md).
+// the original's, so this replaces the C++ rebuild the tree carried.
 //
 // Naked and internal: an external-linkage naked function is written to the module
 // and every importer fails (C2488).
@@ -2288,7 +2287,7 @@ static __declspec(naked) void NewSavesReadHook()
 // and the second one's value is what the body leaves in EAX - and otherwise the
 // original call's value passes through. The original call itself is unconditional
 // (a call through an unpublished slot faults), and it is the site's own target the
-// installer republished. Transcribed, so the C++ rebuild is gone (docs/rebuilt.md).
+// installer republished. Transcribed, so the C++ rebuild is gone.
 //
 // Naked and internal: an external-linkage naked function is written to the module
 // and every importer fails (C2488).
@@ -2357,7 +2356,7 @@ static __declspec(naked) void NewSavesTrampoline()
 
 namespace
 {
-    // sub_10001280, transcribed in source/stability.ixx (docs/rebuilt.md). The
+    // sub_10001280, transcribed in source/stability.ixx. The
     // original's `call 0x10001280` is an immediate, so this six-byte forwarder keeps
     // that shape while a module interface cannot export the naked body itself.
     static __declspec(naked) void DlcFormat()
@@ -2380,7 +2379,7 @@ namespace
 // no EH frame, no TLS static-init guard and no indexed absolute operand -- the
 // /GS cookie is ordinary instructions, every call is a direct `E8` or an absolute
 // IAT slot, and every buffer is ESP/EBP-relative. The proof row is why the C++ rebuild
-// is gone; docs/rebuilt.md records the evidence and what is left unproven.
+// is gone; the proof row is the evidence.
 //
 // Two details are the original's and not the rebuild's invention:
 // - The register call is `call esi` with ESI = image base + the stored register RVA

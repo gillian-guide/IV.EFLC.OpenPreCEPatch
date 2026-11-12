@@ -46,7 +46,7 @@ extern "C"
     // function external linkage in a module interface unit, so no importer can use
     // it as a link-time call target. The body calls this module's one-instruction
     // thunk instead, which jumps through this slot -- the single deviation from the
-    // original's instruction stream in this body (docs/parity.md).
+    // original's instruction stream in this body.
     uintptr_t zpatch_audio_value_resolver = 0;
 
     // The "player" model name the PedModels body pushes (original 0x1013A038). A
@@ -61,7 +61,7 @@ extern "C"
 // one of the native layer's ten resolved words, taken with `Native::Salt(ref)` at
 // registration time and never written as a literal: on 1.0.8.0 the probe hits and
 // the shipped `.data` values stand, while 1.0.0.0 and 1.0.4.0 miss and the
-// preamble's fallback set applies (source/native.ixx, docs/parity.md).
+// preamble's fallback set applies (source/native.ixx).
 extern "C"
 {
     // byte_10159B86: the option word the gate body tests. The original's loader
@@ -70,7 +70,7 @@ extern "C"
 
     // dword_101A84B8: the `6A 06 68 ? ? ? ? 8D 8C` site the install body resolves
     // once. The original's other word, dword_101A84C0, is the guard for its CRT
-    // clock/seed block; the rebuild does not carry that block (docs/parity.md), so
+    // clock/seed block; the rebuild does not carry that block, so
     // the slot is not published.
     uint32_t zpatch_audio_death_music_site = 0;
 
@@ -190,7 +190,7 @@ static void __cdecl AudioZeroBlock(void* destination, int value, unsigned int co
 // 0x10050BAE .. 0x10050BC8), and its clock/seed block calls the static CRT's own
 // helpers (0x1005FFC3 and 0x1005FF77), which reach the CRT's per-thread state
 // through `fs:[2Ch]` and the TLS index dword_10159328 -- image-internal addresses
-// a rebuilt module cannot name (docs/parity.md). The state word it keeps is
+// a rebuilt module cannot name. The state word it keeps is
 // published above, the gate call is the transcribed body, and the write it makes
 // is the original's: `rand() % 5 + 1` at site+1.
 static char DeathMusicInstallBody()
@@ -579,8 +579,7 @@ namespace
 //     sub_1004B750 / sub_1004C3F0 (16,311 bytes of C++ with EH4 frames). Its
 //     7-instruction branch body and its 29-instruction wrapper are implementable,
 //     but the branch only accepts the archive magic the missing table produces, so
-//     installing it would widen a check nothing fills. docs/parity.md records what
-//     is missing.
+//     installing it would widen a check nothing fills.
 //
 // It stays open rather than being stubbed.
 

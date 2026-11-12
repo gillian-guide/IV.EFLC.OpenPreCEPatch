@@ -12,7 +12,7 @@ import options;
 // The build-applicability boundary: every catalogue key refuses `unknown` and
 // every build its mask does not carry, and `Loader::Enabled` agrees with its
 // mask when the key is present. This is the "refuse to install outside the
-// matrix" rule in code; docs/version-matrix.md is the generated table.
+// table" rule in code; tests/parity/applicability.tsv is the generated table.
 
 namespace
 {

@@ -9,11 +9,11 @@
 
 import native;
 
-// The native layer's two guarded entries, asserted by behaviour. Until now their
-// fault parity was argued from the disassembly in `docs/rebuilt.md`; this test runs
-// them. `0x100038E0` (59 instructions) and `0x10003980` (52) are compiler output for
-// a C function with `__try`/`__except (EXCEPTION_EXECUTE_HANDLER)`, so the frame *is*
-// the feature:
+// The native layer's two guarded entries, asserted by behaviour. Their fault
+// parity used to be argued from the disassembly; this test runs them. `0x100038E0`
+// (59 instructions) and `0x10003980` (52) are compiler output for a C function
+// with `__try`/`__except (EXCEPTION_EXECUTE_HANDLER)`, so the frame *is* the
+// feature:
 //
 //   0x100038E0  invoke:     resolve, then `test eax,eax / je 0x1000393F` skips the
 //                           handler call when the answer is null, `mov [ebp-4],-2;

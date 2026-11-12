@@ -8,8 +8,8 @@ is merely absent takes its default (most are `1`), so a one-line INI measures th
 whole default set, not one key. The matrix is what attributes a fault to a key.
 
 The one expected fault is `NoImpostorHeightCutoff` on 1.0.0.0: it reproduces the
-original's access violation (`docs/behavior.md`, "A preserved fault that the tools
-cannot measure"), so that cell is recorded as evidence and does not fail the run.
+original's access violation (an uninitialised vector entry, preserved rather than
+guarded), so that cell is recorded as evidence and does not fail the run.
 Any other non-zero exit does.
 
     python tools/single_key_matrix.py                  # nine builds, all keys
@@ -18,7 +18,7 @@ Any other non-zero exit does.
     python tools/single_key_matrix.py --tsv build/single-key.tsv
 
 Exit status: 0 when every cell exits 0 except the documented one, 1 otherwise.
-This is a measurement tool, not a ctest: 9 x 99 process launches.
+This is a measurement tool, not a ctest: 9 x 84 process launches.
 """
 
 import argparse
