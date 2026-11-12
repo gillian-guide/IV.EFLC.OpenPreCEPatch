@@ -91,7 +91,7 @@ The habit is that a guard is shown to fail on a case it should reject before it 
 
 - `verify_bodies.py --selftest` requires the original to pass against itself and a one-byte corruption to fail, and it runs the registered-table path both ways (a content change fails as `table contents differ`, an unregistered displacement still compares literally).
 - `check_oracle_verified.py` pins each omission's build scope. Widening `CarDynamicShadowFix` to `*` makes it fail with `excuses build(s) [6, 7, 8, 9, 11, 12, 13]; the measured omission covers only [1, 5]`; the row is then reverted. The build-9 scoreboard alone cannot catch that, because the key is closed there.
-- `check_relocated_literals.py` was falsified with a synthetic base-dependent literal: it is classified "ours to fix", while the real `MiscFixes` literal is classified as the original's preserved fault.
+- `check_relocated_literals.py` was falsified with a synthetic base-dependent literal and is classified "ours to fix"; the recovered `MiscFixes` row that used to be the original's preserved fault went away with its key, so the sweep now finds no changed literal.
 - the option-gate check was falsified by running the old `== 1` rule through the same requirement: it reports one failure (`TestOptionGates`), and the working rule reports none.
 - `zp_fault_parity` pins both sides of the line-buffer boundary, so a re-introduced line split fails the child check instead of hanging the suite.
 - `check_fault_dialogs.py` exists because the mistake it catches happened twice: a deliberately faulting test without `SetErrorMode` put an Application Error dialog in front of the person waiting for the result.

@@ -23,7 +23,7 @@ This tree is one 32-bit ASI built from C++23 module units, in the shape GTAIV.EF
 | `source/launcher.ixx` | the 25-row launcher stage, and the DFA and ROM stages |
 | `source/loading.ixx` | 18 startup, loading, save and file-compatibility keys |
 | `source/audio.ixx` | 13 keys the original groups with the radio and the world: audio, input, pointer pools, MP sync and the episodic weapons |
-| `source/misc.ixx` | 13 misc keys: the bundled `MiscFixes` table, the mod-check stubs, the flags, the menu gate and the process gate |
+| `source/misc.ixx` | 12 misc keys: the mod-check stubs, the flags, the menu gate and the process gate (`MiscFixes` is the companion's) |
 | `source/menu.ixx` | the IVMenuAPI integration behind `AddOptionsInMenu` |
 | `source/ooc.ixx` | the `OutOfCommissionFix` payload: the decoder, the archive builder and the mount |
 | `source/dllmain.cpp` | the plain TU: `DllMain`, `InitializeASI` and the startup order |

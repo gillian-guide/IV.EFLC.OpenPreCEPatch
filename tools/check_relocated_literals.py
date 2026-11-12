@@ -13,9 +13,9 @@ just a harness one.
 This script measures it without loading any game:
 
   * every pattern-like string literal in `source/*.ixx` (direct `find_pattern`
-    arguments **and** the table rows -- `kMiscFixSites`, the `kModChecks*`
-    tables, the launcher/audio tables -- which the old `find_pattern("...")`-only
-    extraction could not see);
+    arguments **and** the table rows -- the `kModChecks*` tables, the
+    launcher/audio tables -- which the old `find_pattern("...")`-only extraction
+    could not see);
   * the hit set (count and every hit RVA) in each image's unrelocated bytes, and
     again in the image relocated by each delta in `DELTAS`;
   * a literal is relocation-safe when its hit set is identical at every delta. A

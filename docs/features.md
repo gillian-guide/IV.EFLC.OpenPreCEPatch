@@ -127,15 +127,16 @@ The keys the original groups with the radio and the world: audio, input, pointer
 | `AllowHashesForIDE` | 1 | 1 | all 12 |
 | `BetterMPSync` | 0 | 0 | all 12 |
 
-## misc (13)
+## misc (12)
 
-The bundled `MiscFixes` table, the mod-check stubs, the flag keys, the menu integration and the process gate.
+The mod-check stubs, the flag keys, the menu integration and the process gate. The
+recovered `MiscFixes` bundle is not part of this surface: OpenPreCEPatch removed it
+and the XLivelessAddon companion carries its fixes under their own keys.
 
 | key | shipped | absent | builds |
 | --- | ---: | ---: | --- |
 | `CopSirensFlag` | 1 | 1 | all 12 |
 | `DrivebyFOVFix` | 1 | 1 | all 12 |
-| `MiscFixes` | 1 | 1 | all 12 |
 | `Patch4RemoveModChecks` | 0 | 0 | all 12 |
 | `Patch6and7RemoveModChecks` | 1 | 0 | 1.0.6.0, 1.0.7.0 |
 | `Patch7RemoveModChecks` | - | 0 | 1.0.6.0, 1.0.7.0 |

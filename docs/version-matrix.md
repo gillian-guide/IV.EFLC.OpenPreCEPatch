@@ -12,7 +12,7 @@ outside its row installs nothing, and `unknown` (id 0) is in no row.
 | `G` | A port narrowing: the original is build-blind, the port gates the build. None today. |
 | `.` | Refused: the arm does not run on this build. |
 
-85 keys, 12 builds. Nine of the builds have an on-disk
+84 keys, 12 builds. Nine of the builds have an on-disk
 image here, so only 1.0.8.0 is exercised by the dump matrix; every other cell
 is recovered evidence, not a live result.
 
@@ -95,7 +95,6 @@ is recovered evidence, not a live result.
 | `VSyncFix` | loading | recovered | . | R | . | R | R | R | . | R | R | R | . | R | `0x00049DC0` |
 | `CopSirensFlag` | misc | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `DrivebyFOVFix` | misc | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
-| `MiscFixes` | misc | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `Patch4RemoveModChecks` | misc | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `Patch6and7RemoveModChecks` | misc | recovered | . | . | . | R | . | R | . | . | . | . | . | . | `0x00000180` |
 | `Patch7RemoveModChecks` | misc | recovered | . | . | . | R | . | R | . | . | . | . | . | . | `0x00000180` |

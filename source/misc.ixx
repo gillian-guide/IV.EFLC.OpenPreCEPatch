@@ -21,9 +21,12 @@ import patch;
 import shared;
 import steam;
 
-// The remaining fixes: the bundled MiscFixes table, the mod-check stubs and the
-// drive-by FOV. One arm per key, each anchored to its own recovered signature (or,
-// for the stubs, to the recovered per-build site table).
+// The remaining fixes: the mod-check stubs and the drive-by FOV. One arm per key,
+// each anchored to its own recovered signature (or, for the stubs, to the
+// recovered per-build site table). The recovered `MiscFixes` bundle is **not**
+// here: OpenPreCEPatch removed that key and the XLivelessAddon companion carries
+// its fixes under their own keys (the reference's legacy import maps a legacy
+// `MiscFixes` onto them), so this ASI has no such arm.
 
 // The DrivebyFOVFix published state, in C linkage because the transcribed bodies
 // name the slots directly (the original keeps them in its own .bss beside its
@@ -170,66 +173,8 @@ static void PopupHeadlightsBodyA();
 static void PopupHeadlightsBodyACached();
 static void PopupHeadlightsBodyB();
 
-// `mov eax, imm32`: the MiscFixes token-activation row writes it. bytes.ixx does
-// not carry it, and that module is outside this task's edit scope, so the opcode
-// is named here.
-// The opcode comes from bytes.ixx; this table only records which row writes it.
-
 namespace
 {
-    // One site of MiscFixes: the recovered signature, the write shape, the offset
-    // from the anchor, and the byte the shape writes (the jump displacement for a
-    // short jump, the immediate for the `mov eax` row).
-    enum class MiscFixWrite : uint8_t
-    {
-        byte,
-        shortJump,
-        nop2,
-        movEax,
-    };
-
-    struct MiscFixSite final
-    {
-        std::string_view signature;
-        MiscFixWrite kind;
-        ptrdiff_t offset;
-        std::byte opcode{};  // the byte for `byte`, the jmp opcode for `shortJump`
-        uint32_t value{};    // the jump displacement, or the `mov eax` immediate
-    };
-
-    // The original handler's eleven literals in its write order (sub_10023DD0). The
-    // DFA stage it calls between them is a loader-level arm there, not part of this
-    // key's write set. Five rows are other builds' sites and match nothing on
-    // 1.0.8.0, which is why the key writes eight places on that image.
-    constexpr MiscFixSite kMiscFixSites[] = {
-        // data integrity checks VDS102 [v1002 - v1004]
-        { "C7 06 ? ? ? ? 74 19", MiscFixWrite::byte, 6, Bytes::ShortJmp },
-        // data integrity checks VDS102 [v1005 - v1008]
-        { "83 C4 ? 3B 46 20", MiscFixWrite::byte, 12, Bytes::ShortJmp },
-        // data integrity checks VDS100 [v1006 - v1008]
-        { "75 28 6A 00 6A 00 68 ? ? ? ? E8 ? ? ? ? 83 C4 0C", MiscFixWrite::byte, 0,
-          Bytes::ShortJmp },
-        // token activation [v1006 - v1007]: `jmp +0xC9`
-        { "8B 54 24 04 52 A3", MiscFixWrite::shortJump, 0, Bytes::ShortJmp, 0xC9 },
-        // token activation [v1006 - v1007]: mov eax,1
-        { "83 F8 01 75 30 A3", MiscFixWrite::movEax, 0, Bytes::MovEax, 1 },
-        // skip first-time play ask [v1006 - v1008]: `jmp +0x0D`
-        { "C7 05 ? ? ? ? 03 00 00 00 33 C0 5E 59 C3 C7", MiscFixWrite::shortJump, 0,
-          Bytes::ShortJmp, 0x0D },
-        // InternetGetConnectedState [v1000 - v1001]
-        { "FF 15 ? ? ? ? 85 C0 75 18", MiscFixWrite::nop2, 8 },
-        // InternetGetConnectedState [v1002 - v1005]
-        { "FF 15 ? ? ? ? 85 C0 75 04 32", MiscFixWrite::nop2, 8 },
-        // InternetGetConnectedState [v1006 - v1008]
-        { "FF 15 ? ? ? ? 85 C0 75 07 A0", MiscFixWrite::nop2, 8 },
-        // health check [v1003 - v1008]
-        { "81 EC ? ? ? ? A1 ? ? ? ? 33 C4 89 84 24 ? ? ? ? 53 ? 6A 3C 33 DB 8D 44 24 ? 53 50 E8",
-          MiscFixWrite::byte, 0, Bytes::Ret },
-        // the handler's last write, after its DFA call: force a short jump
-        { "74 05 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 83 C4 04 B9", MiscFixWrite::byte, 0,
-          Bytes::ShortJmp },
-    };
-
     // Patch6and7RemoveModChecks (original handler sub_10044710): the packed
     // entry-stub jump targets, per gated build. The handler writes
     // `lea edi,[eax+<site>]; lea ebx,[eax+<target>]; mov byte [edi],0E9h`; the
@@ -738,47 +683,6 @@ namespace
 
 namespace
 {
-    // MiscFixes: the eleven literals, in the handler's order. The original skips
-    // the whole key when the XLivelessAddon companion is loaded (it sets its
-    // byte_10159B84 from GetModuleHandleA("XLivelessAddon.asi")), so the arm asks
-    // the same question first.
-    void InstallMiscFixes()
-    {
-        if (GetModuleHandleA("XLivelessAddon.asi") != nullptr)
-            return;
-        if (!Loader::Enabled("MiscFixes"))
-            return;
-
-        for (const auto& site : kMiscFixSites)
-        {
-            auto pattern = find_pattern(site.signature);
-            if (pattern.empty())
-                continue;
-
-            auto* match = pattern.get_first<std::byte>(0);
-            switch (site.kind)
-            {
-            case MiscFixWrite::byte:
-                injector::WriteMemory<std::byte>(match + site.offset, site.opcode, true);
-                break;
-            case MiscFixWrite::shortJump:
-                // A `jmp rel8` written as its two bytes: the injector has no
-                // short-jump primitive.
-                injector::WriteMemory<std::byte>(match + site.offset, site.opcode, true);
-                injector::WriteMemory<std::byte>(match + site.offset + 1,
-                    static_cast<std::byte>(site.value), true);
-                break;
-            case MiscFixWrite::nop2:
-                injector::MakeNOP(match + site.offset, 2, true);
-                break;
-            case MiscFixWrite::movEax:
-                injector::WriteMemory<std::byte>(match + site.offset, site.opcode, true);
-                injector::WriteMemory<uint32_t>(match + site.offset + 1, site.value, true);
-                break;
-            }
-        }
-    }
-
     // OpenPreCEPatch-only keys have no recovered catalogue row (the 99-key table
     // is the original's INI), so they are read directly. The read keeps the
     // original's gate: the stored value must be exactly 1.
@@ -1183,7 +1087,6 @@ export void RegisterMisc()
 
     Loader::InstallEvent() += []
     {
-        InstallMiscFixes();
         InstallPatch6and7RemoveModChecks();
         InstallDrivebyFOVFix();
         InstallSpeedupBugFix();

@@ -18,10 +18,10 @@ internal regression fixture, not a shipped file.
 
 ## Current state
 
-The 85-key catalogue is the OpenPreCEPatch surface: the ZolikaPatch 7.65 behavior
+The 84-key catalogue is the OpenPreCEPatch surface: the ZolikaPatch 7.65 behavior
 with the improvements compiled in, minus the keys OpenPreCEPatch removed or moved
-to XLivelessAddon (14 keys: AddOptionsInMenu, FixPCIDKickbug,
-ForceDynamicShadowsEverywhere, HighQualityReflections, NoPhysicsSleep,
+to XLivelessAddon (15 keys: AddOptionsInMenu, FixPCIDKickbug,
+ForceDynamicShadowsEverywhere, HighQualityReflections, MiscFixes, NoPhysicsSleep,
 RemoveBoundingBoxCulling, RemoveUselessChecks, BorderlessWindowed,
 DoNotPauseOnMinimize, LocalSettingsPath, SkipIntro, SkipLauncher, SkipMenu,
 VRAMFix). There is no runtime improvement switch; `git revert` of the integration
@@ -63,7 +63,7 @@ native/ctest targets pass. On top of that:
 ## Non-negotiables
 
 - **The OpenPreCEPatch surface is the product.** The improvements are compiled in,
-  the 14 removed/moved keys stay out, and a behavior change is a normal commit
+  the 15 removed/moved keys stay out, and a behavior change is a normal commit
   with a `Revert:` line; there is no runtime switch to fall back to. A retained
   arm's write set is still proved by the dump against the recovered baseline;
   a deliberate improved delta (shader, alpha, DLC paths, entry points) is

@@ -62,6 +62,7 @@ REMOVED_KEYS = {
     "FixPCIDKickbug",
     "ForceDynamicShadowsEverywhere",
     "HighQualityReflections",
+    "MiscFixes",
     "NoPhysicsSleep",
     "RemoveBoundingBoxCulling",
     "RemoveUselessChecks",

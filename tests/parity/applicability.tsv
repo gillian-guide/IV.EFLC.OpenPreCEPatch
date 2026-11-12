@@ -76,7 +76,6 @@ StartupTimeFix	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 VSyncFix	loading	recovered	0x00049DC0	.	R	.	R	R	R	.	R	R	R	.	R
 CopSirensFlag	misc	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 DrivebyFOVFix	misc	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
-MiscFixes	misc	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 Patch4RemoveModChecks	misc	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 Patch6and7RemoveModChecks	misc	recovered	0x00000180	.	.	.	R	.	R	.	.	.	.	.	.
 Patch7RemoveModChecks	misc	recovered	0x00000180	.	.	.	R	.	R	.	.	.	.	.	.

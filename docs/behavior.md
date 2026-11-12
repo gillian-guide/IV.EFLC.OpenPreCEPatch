@@ -56,7 +56,6 @@ a non-fault is a fidelity bug, not a fix.
 | a double free is unguarded | the same pointer handed to the arena's free twice | `sub_10038430` has no membership check in front of the free: `0x10038449` tests the incoming pointer for null and nothing else, `0x10038457` recovers the base from `[pointer-4]`, and `0x10038474` calls `HeapFree` on it unconditionally. The rebuild keeps the same order (free, then erase) and the same missing guard. The second free therefore reads `[pointer-4]` from a block the heap owns again and hands `HeapFree` a base derived from the heap's own links rather than from the original's arithmetic; whether that is a no-op, a `STATUS_HEAP_CORRUPTION` termination or silent corruption is the heap's decision, so `zp_nms_arena` asserts only the knowable part (the pointer stops being a member after the first free) and does not run a double free |
 | the arena's request size is a 32-bit sum | a request of `2^32 - 2*unit` bytes or more (`0xFFFFFFE0` at the `0x10` floor) | `0x1003838B`'s `lea eax,[edi+esi*2]` adds `want + 2*unit` in 32 bits, so the request wraps to a tiny block while the `memset` at `0x100383C9` still fills `want` bytes - the allocate returns a block it cannot fill and the fill runs off the heap. The rebuild computes `want + unit * 2u` in `uint32_t` too, so the same input wraps the same way; the failure path the test asserts uses `0x7FFFFFF0`, whose sum `0x80000010` does not wrap, and the wrapping case is recorded here rather than run |
 | the DFA close-handle frame retries a faulting call for ever | a fault inside the guarded `CloseHandle` call -- an import slot whose target faults; no handle value reaches it | `0x10004790`'s scope table (`0x10153FC0`) names the filter `0x100047EC` (`or eax,-1; ret`, i.e. `EXCEPTION_CONTINUE_EXECUTION`) and the handler `0x100047F0` (the `return TRUE` arm). The filter's answer *resumes* the faulting instruction, so the fault is retried and the handler is never entered; the wrapper has no answer for a faulting call at all. The rebuild compiles the same frame -- byte-identical except the four relocated operands (`rebuilt.md` §2l) -- and `zp_dfa_close` replaces the test exe's `CloseHandle` import slot with a callee that writes one probe byte on entry and then faults; the child must be *still running* at the 1 s watchdog with the probe byte present and no answer written, and the test then terminates and reaps it. Unreachable through the wrapper's own argument: `CloseHandle` validates every handle value and returns `FALSE` |
-| the `MiscFixes` first literal is base-dependent, so the original's first write fires on some launches only | any launch whose relocation delta makes the fixup at `0x739731` read `C7 06`; every other launch misses the scan | the original handler `0x10023DD0` scans its own string `C7 06 ? ? ? ? 74 19` (`ZolikaPatch_reconstruction/evidence/handler_table.json`, whose own `game_hits` row records **0 hits** on the unrelocated 1.0.8.0 image). The fixup at `0x739731` (`0x016703C4`) covers the literal's first two bytes, so only a delta whose high word is `0x0560` makes them read `C7 06` -- measured witness `0x05600000`, one hit at RVA `0x739733` -- and the arm then writes `EB` at `0x739739`; at delta `0` or the dump's pinned `0x2FC00000` it has no hit. The transcription keeps the original's string verbatim (`source/misc.ixx:225`), so its *effect* depends on the game's live base exactly as the original's does: on most launches the original writes nothing there. Our dump pins one delta, at which the arm is inert, and that matches the stored baseline (also taken at a zero delta), so the scoreboard is measuring the original's common case. Widening the literal over the fixup bytes would make us write where the original does not -- a divergence dressed as a robustness fix |
 | the ZMenuIV version compare can read an uninitialised stack word | a `ZMenuIV.asi` whose `GetZMenuVersion` returns without writing its first out-parameter | `sub_10052300` reserves the slot with `sub esp, 0Ch` (`0x10052303`) and never initialises it; the slot is written only by the library's own `call eax` (`0x10052337`), and `cmp [ebp+var_8], 35DD1h` (`0x1005233C`) then decides between nothing and `MessageBoxA` + `TerminateProcess` (`0x10052345..0x10052362`). With a library that writes neither out-parameter the compare reads whatever the caller's stack held, so the outcome is undefined -- the original's, kept: the transcription is the same instruction stream over the same two unzeroed locals. Unreachable with a library that writes the version it is asked for, and inert in the harness (no library at all: the first `jz` at `0x1005231D`) |
 
 Two of the rows above used to be assumptions, and so did the CRLF note below them.
@@ -1943,14 +1942,13 @@ ASLR-dependent again.
 Why the pin matters: at a run-dependent delta, a signature whose fixed bytes cover
 the **high half of a HIGHLOW fixup** matches on some runs and not others, and the
 dump's own high-half suppression can hide an arm's write on some runs and report it
-on others. The recorded row is `MiscFixes`' first literal (`C7 06 ? ? ? ? 74 19`):
-it matches at RVA `0x739733` when the fixup at `0x739731` (`0x016703C4`) is
-relocated by a delta whose high word is `0x0560` (witness `0x05600000`, measured),
-because that makes the fixup's bytes read `C4 03 C7 06` and the `74 19` two bytes
-later still follow; the arm then writes `EB` at `0x739739`, one row no clean delta
-has. With delta `0x055F` the same bytes read `C4 03 C6 06` and the signature does not
-match. That literal is the original handler's own string, so the base-dependence is
-the original's, not a transcription bug; it is recorded under Preserved faults.
+on others. The one literal that behaved that way was `MiscFixes`' first row
+(`C7 06 ? ? ? ? 74 19`, the original handler's own string): it matched at RVA
+`0x739733` only at a delta whose high word is `0x0560` (the fixup at `0x739731`,
+`0x016703C4`, makes its bytes read `C4 03 C7 06`), and then wrote `EB` at
+`0x739739` -- one row no clean delta has. That key is no longer part of this
+surface (`improvements.md` §2), so the current tree has no base-dependent literal
+left; the pin and the lint stay because the class is the harness's, not that key's.
 
 The defect was measured on the pre-pin binary, whose `VirtualAlloc` delta was the
 allocator's: six runs of the **same** `zp_dump.exe` gave
@@ -1964,18 +1962,16 @@ delta `0x05D9`.) With the pin, six runs are byte-identical and equal the clean h
 
 The guard for the class is `tools/check_relocated_literals.py` (ctest
 `zp_relocated_literals`): every pattern-like literal in `source/*.ixx`, **including
-the table rows** (`kMiscFixSites`, the `kModChecks*` tables, the launcher and audio
-tables -- the old `find_pattern("...")`-only extraction could not see them), is
-measured in each of the nine images at six deltas (`0x00010000`, `0x01000000`,
-`0x05600000`, `0x05D90000`, `0x2FC00000`, `0xFFFF0000`), and its hit set (count and
-every RVA) must be identical at every delta to the unrelocated hit set. A literal
-whose hit set changes is classified against the key's recovered original strings: the
-`MiscFixes` literal is the original's own string and is a preserved fault; a literal
-that differs from a safe original string is a failure to fix. The full sweep --
-319 literals (254 distinct patterns) x 9 images x 6 deltas -- currently finds
-exactly one changed literal, `misc.ixx:225`, the `MiscFixes` row above, and no
-literal of the second
-kind.
+the table rows** (`kModChecks*` tables, the launcher and audio tables -- the old
+`find_pattern("...")`-only extraction could not see them), is measured in each of
+the nine images at six deltas (`0x00010000`, `0x01000000`, `0x05600000`,
+`0x05D90000`, `0x2FC00000`, `0xFFFF0000`), and its hit set (count and every RVA)
+must be identical at every delta to the unrelocated hit set. A literal whose hit set
+changes is classified against the key's recovered original strings: the original's
+own string is a preserved fault, a literal that differs from a safe original string
+is a failure to fix. The full sweep -- every pattern-like literal in `source/*.ixx`
+x 9 images x 6 deltas -- currently finds no changed literal: the only one that used
+to change was the removed `MiscFixes` row above.
 
 ## Signature parity: the original's own pattern strings
 
@@ -2262,11 +2258,11 @@ the 43 displacement bytes the scoreboard excludes by design.
 - The DFA stage is suppressed when `XLivelessAddon.asi` is loaded, when `GTAC.dll` is
   loaded, and on the four EFLC builds, and it is one-shot; the ROM stage is one-shot
   and runs regardless. Those are the original's own guards (`0x1000487B` onward).
-- **Not wired:** the original's *other* DFA call, from the MiscFixes handler
-  (`0x10024018`). It is a no-op whenever `SkipLauncher=1` because the DFA one-shot is
-  already set, so it cannot change this key's cell or any other cell measured above;
-  it would only matter for `SkipLauncher=0, MiscFixes=1` in the game, and that arm
-  lives in `misc.ixx` rather than the launcher module.
+  The companion's own loader stage is the one that runs there, not this module's.
+- **Gone with its key:** the original's *other* DFA call, from the `MiscFixes`
+  handler (`0x10024018`). `MiscFixes` is not part of this surface (`improvements.md`
+  §2), so this tree has no such call to wire; the note is kept only so the recovered
+  handler's shape stays accounted for.
 
 ## NoImpostorHeightCutoff on 1.0.0.0
 
@@ -2513,7 +2509,7 @@ comparison (`!= 0` against `== 1`). Every other arm still calls `Loader::Enabled
 Proven by the contract suite, `TestOptionGates` in `tests/test_main.cpp` (9 checks):
 `AddOptionsInMenu` is enabled by `"2"`, by `"1"` and by `"-1"`, disabled by `"0"`,
 enabled by an absent key (the catalogue's absent default `"1"`), refused on a build
-its mask excludes, and an ordinary key (`MiscFixes`) still requires exactly `1`.
+its mask excludes, and an ordinary key (`RestoreDeathMusic`) still requires exactly `1`.
 The falsification is in the same test: `Loader::Enabled` -- the old gate -- is
 asserted **not** to enable the key for `"2"`, and running the new check against the
 old predicate fails it:

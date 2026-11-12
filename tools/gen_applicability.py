@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Generate the build-applicability matrix from the catalogue.
 
 `source/options.inc` carries each key's recovered build mask. This script joins
@@ -118,8 +118,13 @@ def render_doc(builds, rows):
 
 def main():
     builds, rows = load()
-    if len(rows) < 85:
-        raise SystemExit(f"only {len(rows)} option rows parsed")
+    # The table covers exactly the catalogue: a floor would let a removed key
+    # (or a parser regression) slip through as long as the count stayed high.
+    catalogue = [line for line in OPTIONS.read_text(encoding="utf-8").splitlines()
+                 if line.startswith("ZP_OPTION(")]
+    if len(rows) != len(catalogue):
+        raise SystemExit(f"{len(rows)} option rows parsed, "
+                         f"{len(catalogue)} in the catalogue")
     tsv = render_tsv(builds, rows)
     doc = render_doc(builds, rows)
 

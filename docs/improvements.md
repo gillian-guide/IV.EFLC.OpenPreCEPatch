@@ -25,9 +25,9 @@ their keys.
 
 ## 2. Options OpenPreCEPatch removes or moves (removed here)
 
-The 14 keys were dropped from the catalogue with the integration commit, so
-`Loader::Enabled` refuses them and their arms are unregistered or deleted. Their
-INI rows in an old flat file are ignored.
+The 15 keys were dropped from the catalogue so `Loader::Enabled` refuses them and
+their arms are unregistered or deleted. Their INI rows in an old flat file are
+ignored.
 
 | option | oPCEP disposition | here |
 | --- | --- | --- |
@@ -35,6 +35,7 @@ INI rows in an old flat file are ignored.
 | `FixPCIDKickbug` | removed | removed |
 | `ForceDynamicShadowsEverywhere` | removed | removed |
 | `HighQualityReflections` | removed | removed |
+| `MiscFixes` | removed; the bundle's fixes are the companion's | removed; the six literals are gone |
 | `NoPhysicsSleep` | removed | removed |
 | `RemoveBoundingBoxCulling` | removed | removed |
 | `RemoveUselessChecks` | removed | removed; `useless_checks.ixx` deleted |
@@ -46,9 +47,15 @@ INI rows in an old flat file are ignored.
 | `SkipMenu` | moved to XLivelessAddon | removed |
 | `VRAMFix` | moved to XLivelessAddon | removed |
 
-`MiscFixes` is not in OpenPreCEPatch's INI because oPCEP folded its fixes into
-other keys; here it stays as the original bundle, documented in the catalogue,
-because this tree has no per-fix replacement for every piece.
+`MiscFixes` is not in OpenPreCEPatch's INI: OpenPreCEPatch removed the bundle and
+its own legacy import maps an old `MiscFixes` value onto the companion's per-fix
+keys (`RemoveDataIntegrityChecks`, `SkipTokenActivation`, `SkipFirstTimePlayAsk`,
+`SkipInternetConnectionCheck`, `SkipHealthCheck`). The bundle is gone from this
+catalogue too; XLivelessAddon carries those fixes. Keeping it here was a surface
+error with a concrete cost: its last literal (`74 05 E8 ? ? ? ? 6A 05 E8 ? ? ? ?
+83 C4 04 B9`, written `EB` at 1.0.8.0 RVA `0x090628`) sits inside the 33-byte
+window LibertyCityPlates.asi scans for its first address lookup and made that
+plugin report "Addresses could not be determined".
 
 ## 3. Shipped defaults
 
@@ -102,10 +109,10 @@ both installations.
 | **DLC discovery checked paths.** | `loading.ixx` | **compiled in.** C++ `DlcDiscoveryCpp` uses `std::filesystem` for the TLAD/TBoGT/Episode probes, keeps the register call's `stdcall` shape and the apply call's `__thiscall` shape (manager in `ECX`, request on the stack, as `0x10023278`-`0x1002328C` calls `sub_88FE00`), and the EDX result. `zp_dlc_full` proves the registration set, the post bytes, and the apply contract (its fake apply fails on a cdecl capture). |
 | **Steam achievement mirror.** | `steam.ixx` | **compiled in.** Lazy init outside the state mutex; queue/replay; packed-xlive refusal; ids 1..65. `zp_steam` covers the table and refusal. Live Steam is unproven. |
 | **GFWL protection disabler.** | `misc.ixx` | **compiled in.** Module-image/page-access guard plus the pre-image opcode check (`zp_module_guard`). |
-| **Option removals/moves.** | oPCEP INI | **applied.** The 14 keys are out of the catalogue and their arms/modules are gone; `RemoveModChecks` is the unified alias. |
+| **Option removals/moves.** | oPCEP INI | **applied.** The 15 keys are out of the catalogue and their arms/modules are gone; `RemoveModChecks` is the unified alias. |
 | **Default changes.** | oPCEP INI | **applied through the shipped INI.** The flat `ZolikaPatch.ini` remains the parity configuration. |
 | **NewFilesCompatibility scan guards.** | `loading.ixx` update bodies | **not ported.** The four update/registrar bodies are transcribed; their null-scan faults are preserved. |
-| **MiscFixes per-fix split.** | oPCEP INI | **not ported.** The bundle stays as the original's own option. |
+| **MiscFixes per-fix split.** | oPCEP INI | **applied.** The bundle key is out of the catalogue; the companion carries its fixes under the per-fix keys the reference's legacy import names. |
 | **Multi-pattern scan pass/cache.** | `entry-points-audit.md` | **partly applied.** The IDE slot and the three steer signatures go through `CachedMatchFor`, an opt-in single-match cache that probes the cached address before reuse; the dump resets it between per-option cells (`ResetCachedMatchesForTest`). A generic cache over every `find_pattern` is still rejected: an earlier install can invalidate a later arm's site. |
 | **FCHS body null guards.** | `graphics.ixx` | **not ported.** The 46-instruction checker is transcribed asm; its lookup is covered by the shared memo, its own guards are not added. |
 

@@ -150,12 +150,6 @@ EpisodicWeaponSupport.g	0x4A9D3A	83 3D ? ? ? ? 02 7C 32 8B 41	11
 EpisodicWeaponSupport.h	0x997768	83 3D ? ? ? ? 02 7C 7D 8B 4C 24 0C	13
 PoliceEpisodicWeaponSupport	0x49F18C	39 2D ? ? ? ? 75 3E	8
 TBoGTHeliHeightLimit	0x8F0071	83 3D ? ? ? ? 02 7C 0A F3 0F	11
-MiscFixes.a	0x490141	83 C4 ? 3B 46 20	6
-MiscFixes.b	0x48FE63	75 28 6A 00 6A 00 68 ? ? ? ? E8 ? ? ? ? 83 C4 0C	19
-MiscFixes.c	0x85C509	C7 05 ? ? ? ? 03 00 00 00 33 C0 5E 59 C3 C7	16
-MiscFixes.d	0x89842F	FF 15 ? ? ? ? 85 C0 75 07 A0	11
-MiscFixes.e	0x8972B0	81 EC ? ? ? ? A1 ? ? ? ? 33 C4 89 84 24 ? ? ? ? 53 ? 6A 3C 33 DB 8D 44 24 ? 53 50 E8	33
-MiscFixes.f	0x490628	74 05 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 83 C4 04 B9	18
 # Patch6and7RemoveModChecks: the only two gated builds are 1.0.6.0 and 1.0.7.0, so these
 # rows are the site VAs in THOSE images (base 0x400000); the only IDB available is 1.0.8.0.
 # Each signature was confirmed to have exactly one hit on its build.

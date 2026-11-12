@@ -16,9 +16,10 @@ import options;
 //   * every publish runs before any install -- a site write destroys the
 //     signature a later publish scans for, and the original reads a site's
 //     original bytes for the resume before it overwrites them;
-//   * RemoveUselessChecks runs before MiscFixes and RestoreDeathMusic, because
-//     its tables destroy both signatures (the original applies it once, at the
-//     same point, and the two installs are suppressed there).
+//   * the removed RemoveUselessChecks sweep ran before RestoreDeathMusic,
+//     because its tables destroyed that signature (the original applies it once,
+//     at the same point). The key is gone from this surface; the ordering note
+//     stays because a future re-add would hit the same destruction.
 export namespace Loader
 {
     // The build the loader classified at startup. An unsupported executable is
