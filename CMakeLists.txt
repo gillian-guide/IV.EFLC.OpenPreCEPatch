@@ -212,15 +212,6 @@ target_link_libraries(zp_dlc_path PRIVATE zp_modules)
 add_test(NAME zp_dlc_path COMMAND zp_dlc_path)
 set_tests_properties(zp_dlc_path PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
-# DeterministicRadioStart: the recovered track hash and scan anchor, the resume
-# offset the naked body's replayed prologue pins, and the fill/no-fill rule.
-add_executable(zp_deterministic_radio tests/deterministic_radio.cpp)
-set_target_properties(zp_deterministic_radio PROPERTIES CXX_SCAN_FOR_MODULES ON)
-target_link_libraries(zp_deterministic_radio PRIVATE zp_modules)
-target_compile_definitions(zp_deterministic_radio PRIVATE ZP_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-add_test(NAME zp_deterministic_radio COMMAND zp_deterministic_radio)
-set_tests_properties(zp_deterministic_radio PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-
 # The shipped OpenPreCEPatch INI: grouped sections, trailing comments and
 # over-256-byte lines are normalised by Feather::LoadGrouped; the flat parity
 # file keeps the original grammar (and its preserved 256-byte fault).

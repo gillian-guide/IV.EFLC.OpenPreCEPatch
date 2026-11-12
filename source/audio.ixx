@@ -1,4 +1,4 @@
-module;
+﻿module;
 
 #include <common.hxx>
 
@@ -14,7 +14,6 @@ export module audio;
 import bodies;
 import bytes;
 import common;
-import config;
 import game;
 import loader;
 import native;
@@ -54,63 +53,6 @@ extern "C"
     // copy rather than shared.ixx's literal: a module-attached literal is not
     // visible to an importer, and the proof compares the push as a slot anyway.
     const char zpatch_audio_player_name[] = "player";
-}
-
-// DeterministicRadioStart's published state. The key is an OpenPreCEPatch
-// addition with no recovered catalogue row (source/options.inc is the original's
-// table), so the arm reads it directly and the words below are its own.
-extern "C"
-{
-    // sub_7D7810 (1.0.8.0): the set-entry resolver the advance's request branch
-    // calls. `__thiscall`, three stack arguments, `retn 0Ch`; a pure set walk.
-    uintptr_t zpatch_radio_resolve = 0;
-
-    // sub_7D78B0 + 5: the `mov ebp, ecx` the body resumes at after replaying the
-    // five-byte prologue.
-    uintptr_t zpatch_radio_advance_resume = 0;
-
-    // One shot per process: the engine clears the request pair when it consumes
-    // it, and this keeps a later music advance from asking for the same track.
-    uint32_t zpatch_radio_first_track_done = 0;
-}
-
-export namespace Audio
-{
-    // RADIO_VLADIVOSTOK_SHVAYNE, the restored track this arm forces first. The
-    // value is the game's `hashStringLowercaseFromSeed` over the sound name, which
-    // is what the playlist record's child dword holds -- recovered by
-    // `.agents/radio-downgrade/map_playlist.py` against the modded SOUNDS.DAT15.
-    inline constexpr uint32_t kShvayneTrackHash = 0x1975E2EFu;
-
-    // The station advance's prologue as bytes: `sub esp,10h; push ebx; push ebp`.
-    // The body replays exactly these and resumes at the end of them.
-    inline constexpr std::array<uint8_t, 5> kRadioAdvancePrologue = { 0x83, 0xEC, 0x10, 0x53, 0x55 };
-
-    // The scan anchor: that prologue, the `mov ebp, ecx` after it and the
-    // request-branch load `mov eax, [ebp+1900h]` that pins the field offsets.
-    // Unique in GTAIV.exe 1.0.8.0: one hit, at 0x7D78B0.
-    inline constexpr std::string_view kDeterministicRadioStartSignature =
-        "83 EC 10 53 55 8B E9 8B 85 00 19 00 00 85 C0";
-
-    // Where the body resumes: the first byte after the prologue it replays, or 0
-    // when the bytes at `at` are not that prologue (the arm then refuses).
-    inline size_t DeterministicRadioStartResumeOffset(std::span<const uint8_t> image, size_t at)
-    {
-        if (at > image.size() || image.size() - at < kRadioAdvancePrologue.size())
-            return 0;
-        if (std::memcmp(image.data() + at, kRadioAdvancePrologue.data(),
-                kRadioAdvancePrologue.size()) != 0)
-            return 0;
-        return kRadioAdvancePrologue.size();
-    }
-
-    // The body's decision: fill the request only when nothing is pending and the
-    // category's set resolved the hash. A pending request is the game's own and is
-    // never overridden.
-    inline bool DeterministicRadioStartWantsRequest(bool requestPending, bool resolved)
-    {
-        return !requestPending && resolved;
-    }
 }
 
 // RestoreDeathMusic's published state. The gate body reads the original's option
@@ -227,7 +169,6 @@ static void MfAngleStepBody();
 static void MfAngleBody();
 static void MfAdvanceWindowsBody();
 static void MfAdvanceBody();
-static void DeterministicRadioStartBody();
 
 // The CRT `memset` the three wrappers open with. The original calls the CRT's own
 // thunk (0x10060D6E) with the same argument order; the inline assembler rejects a
@@ -628,88 +569,6 @@ namespace
                 reinterpret_cast<void*>(&MfAdvanceBody), true);
         }
     }
-
-    // DeterministicRadioStart -- an OpenPreCEPatch addition, not a recovered key.
-    //
-    // The station advance (1.0.8.0 sub_7D78B0) opens with a pending-request
-    // branch: when `[station+0x1900]` holds a track hash and `[station+0x1914]` is
-    // not 0xFFFF, it resolves that hash through sub_7D7810 and clears both words.
-    // No code in the 1.0.8.0 image writes the pair -- the constructor zeroes it
-    // and the advance is the only other reference -- so the branch is dead and the
-    // first Vladivostok track is whatever the audio RNG picks. That RNG is seeded
-    // from `_getTime` (timeGetTime) once, in the audio engine's init
-    // (sub_799AA0 -> sub_789D50), so the pick changes with the system uptime.
-    //
-    // This arm fills the pair once per process with the restored playlist's
-    // SHVAYNE hash, but only when the category's own set resolves that hash
-    // through the engine's resolver. That is true for the Vladivostok music set
-    // and for nothing else, so the arm is inert on every other station, on every
-    // non-music segment, and on any playlist that does not define the restored
-    // track (a vanilla install).
-    bool DeterministicRadioStartEnabled()
-    {
-        // Read directly like misc.ixx's OpenPreCEPatch-only keys. The fallback is
-        // 0: the shipped INI sets it to 1, and the per-option parity dumps run
-        // with a missing INI, so they see 0 and the write set they prove is
-        // unchanged.
-        return Config::Integer(Config::Ini(), "DeterministicRadioStart", "0") == 1;
-    }
-
-    void PublishDeterministicRadioStart()
-    {
-        if (!DeterministicRadioStartEnabled())
-            return;
-
-        auto pattern = find_pattern(Audio::kDeterministicRadioStartSignature);
-        if (!pattern.empty())
-        {
-            zpatch_radio_advance_resume =
-                reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(0)) +
-                Audio::kRadioAdvancePrologue.size();
-        }
-
-        // sub_7D7810's own prologue; the anchor is the function entry. Unique in
-        // GTAIV.exe 1.0.8.0: one hit, at 0x7D7810.
-        pattern = find_pattern("8B 44 24 04 53 50 33 DB E8");
-        if (!pattern.empty())
-            zpatch_radio_resolve =
-                reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(0));
-    }
-
-    void InstallDeterministicRadioStart()
-    {
-        if (!DeterministicRadioStartEnabled())
-            return;
-
-        // Only 1.0.8.0 has the station layout and the resolver this body is
-        // written against; every other build is a clean skip.
-        if (Loader::Current() != Build::v1080)
-        {
-            Log::Print("DeterministicRadioStart: build {} has no evidence; skipped",
-                static_cast<int>(Loader::Current()));
-            return;
-        }
-
-        if (Failsafe::Missing("DeterministicRadioStart resolver",
-                zpatch_radio_resolve == 0) ||
-            Failsafe::Missing("DeterministicRadioStart resume",
-                zpatch_radio_advance_resume == 0))
-            return;
-
-        auto pattern = find_pattern(Audio::kDeterministicRadioStartSignature);
-        if (pattern.empty())
-        {
-            Log::Print("DeterministicRadioStart: station advance signature not found; skipped");
-            return;
-        }
-
-        // The body is not a transcribed one: it has no recovered VA in the
-        // original ASI, so it is deliberately not registered with Bodies (a
-        // registration would rewrite the dump's branch displacement against a
-        // reference that does not exist) and it has no body-proof row.
-        injector::MakeJMP(pattern.get_first(0),
-            reinterpret_cast<void*>(&DeterministicRadioStartBody), true);
-    }
 }
 
 // One of this module's keys is deliberately not installed:
@@ -754,7 +613,6 @@ export void RegisterAudio()
     {
         PublishRestoreDeathMusic();
         PublishMouseFix();
-        PublishDeterministicRadioStart();
     };
 
     Loader::InstallEvent() += []
@@ -769,7 +627,6 @@ export void RegisterAudio()
         InstallPedModelsInCutscenesFix();
         InstallRestoreDeathMusic();
         InstallMouseFix();
-        InstallDeterministicRadioStart();
     };
 }
 
@@ -1612,67 +1469,5 @@ static __declspec(naked) void MfAdvanceBody()
         addss xmm0, xmm3
         movss xmm3, DWORD PTR [esi + 150h]
         jmp DWORD PTR [zpatch_mf_resume_b]
-    }
-}
-
-// ---------------------------------------------------------------------------
-// DeterministicRadioStart
-// ---------------------------------------------------------------------------
-//
-// The station advance's five-byte prologue (`sub esp,10h; push ebx; push ebp`)
-// is replayed, then the body fills the pending-request pair the engine's own
-// dead branch consumes:
-//
-//   [station+0x1900] = RADIO_VLADIVOSTOK_SHVAYNE   (the track hash)
-//   [station+0x1914] = 0                           (occurrence: the first)
-//
-// `sub_7D7810(station, category, hash, occurrence)` is the engine's own resolver
-// (`__thiscall`, three stack arguments, `retn 0Ch`); it walks the category's set
-// chain and returns the matching (hash, flags) entry, or 0. It has no side
-// effects. A non-zero answer means this category's set contains the track, which
-// is true for the Vladivostok music set and nothing else, so the arm cannot touch
-// another station, an ident/advert/news segment, or a vanilla playlist.
-//
-// One shot per process: the engine clears the pair when it consumes it, and the
-// flag keeps a later music advance from asking for the same track again, so the
-// rotation after the first track is the engine's own.
-//
-// Resume: a `jmp` to the published `mov ebp, ecx` (never a call). ECX is reloaded
-// from ESI because the resolver clobbers it; ESI/EDI are saved here because the
-// original saves EDI only after this prologue, so a clobbered EDI would reach the
-// caller. EBX/EBP are the original's own saves, replayed by the prologue.
-static __declspec(naked) void DeterministicRadioStartBody()
-{
-    __asm
-    {
-        sub  esp, 10h
-        push ebx
-        push ebp
-        push esi
-        push edi
-        mov  esi, ecx
-        cmp  dword ptr [esi + 1900h], 0
-        jne  drs_done
-        cmp  word ptr [esi + 1914h], 0FFFFh
-        jne  drs_done
-        cmp  dword ptr [zpatch_radio_first_track_done], 0
-        jne  drs_done
-        mov  eax, dword ptr [esp + 24h]
-        movzx edx, byte ptr [eax]
-        push 0
-        push 1975E2EFh
-        push edx
-        mov  ecx, esi
-        call dword ptr [zpatch_radio_resolve]
-        test eax, eax
-        jz   drs_done
-        mov  dword ptr [zpatch_radio_first_track_done], 1
-        mov  dword ptr [esi + 1900h], 1975E2EFh
-        mov  word ptr [esi + 1914h], 0
-    drs_done:
-        pop  edi
-        pop  esi
-        mov  ecx, esi
-        jmp  dword ptr [zpatch_radio_advance_resume]
     }
 }
