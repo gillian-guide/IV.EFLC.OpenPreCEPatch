@@ -1,4 +1,4 @@
-﻿module;
+module;
 
 #include <common.hxx>
 #include <cstdio>
@@ -1475,8 +1475,12 @@ namespace
             return;
 
         // dword_10159C10: the xlive.dll module the original's loader captures.
-        zpatch_xlive_base =
-            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(GetModuleHandleA("xlive.dll")));
+        // xlive.dll can also be Ultimate ASI Loader's proxy; its image is not a
+        // GFWL module and the four flag offsets would corrupt the loader.
+        const HMODULE xlive = GetModuleHandleA("xlive.dll");
+        if (xlive == nullptr || GetProcAddress(xlive, "XLiveInitialize") == nullptr)
+            return;
+        zpatch_xlive_base = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(xlive));
 
         // The stub replays into xlive.dll through the captured base. Without the
         // module the original writes through zero; keep the game's popup instead.
@@ -2408,12 +2412,20 @@ struct DlcRegisterRequest
 };
 static_assert(sizeof(DlcRegisterRequest) == kDlcRequestSize);
 
-using DlcRegisterFn = void(__cdecl*)(int, const char*, int);
-using DlcApplyFn = void(__cdecl*)(void*, const char*);
+// The apply function's calling convention is the game's: `sub_88FE00` is
+// `__thiscall` (`push ecx; push ebx; mov ebx, ecx; movzx ecx, [ebx+150h]`), so
+// the DLC manager arrives in ECX and the 0x168-byte request pointer on the stack.
+// The oracle's discovery calls it that way (`0x10023278`: `mov ecx, [manager]`,
+// `push request`, `call [apply]`). A cdecl call leaves ECX with the caller's
+// garbage, which is what faulted at `0x88FE04` on 2026-11-12.
+using DlcRegisterFn = char(__stdcall*)(int, const char*, int);
+using DlcApplyFn = void(__thiscall*)(void*, const void*);
 
 // The apply function returns its second value in EDX. Capture it for the one
-// caller that observes it (an existing \Episode254\).
-static __declspec(naked) void DlcApplyCapture(void* object, const char* path,
+// caller that observes it (an existing \Episode254\). The manager goes to ECX and
+// the request pointer on the stack; the callee pops it (`ret 4`), and the
+// `mov esp, ebp` below discards any imbalance regardless.
+static __declspec(naked) void DlcApplyCapture(void* object, const void* request,
     DlcApplyFn apply, uint32_t* out)
 {
     __asm
@@ -2421,6 +2433,7 @@ static __declspec(naked) void DlcApplyCapture(void* object, const char* path,
         push ebp
         mov ebp, esp
         push DWORD PTR [ebp + 0Ch]
+        mov ecx, DWORD PTR [ebp + 8]
         call DWORD PTR [ebp + 10h]
         mov eax, DWORD PTR [ebp + 14h]
         mov DWORD PTR [eax], edx
@@ -2476,7 +2489,7 @@ void* __cdecl DlcDiscoveryCpp(void* object)
         request.mode = 1;
         request.flag = 1;
         registerFn(id, request.path, 1);
-        DlcApplyCapture(object, request.path, applyFn, &lastApplyEdx);
+        DlcApplyCapture(object, &request, applyFn, &lastApplyEdx);
         if (id == 2 * 254)
             episode254 = true;
     };

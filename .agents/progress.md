@@ -1,13 +1,13 @@
-# Progress — readable-fusion-opcep
+﻿# Progress â€” readable-fusion-opcep
 
-## 2026-11-10 — fork and baseline
+## 2026-11-10 â€” fork and baseline
 
 - Copied `readable-fusion` to `readable-fusion-opcep` (excluding `build/`, `.git/`,
   `.scratch/`), initialized a new repository. Tag `opcep-base`.
 - Verified the fork builds and the inherited suite passes: 22/22 ctest,
   `parity_report.py 9` = 98 closed / 0 open / 1 oracle-verified.
 
-## 2026-11-10 — improvement switch and failsafe primitives
+## 2026-11-10 â€” improvement switch and failsafe primitives
 
 - `source/improvements.ixx`: `OPCEP_IMPROVEMENTS` parser (`none`/`all`/`only:`/
   `except:`/bare list), one-time resolver, test seams, and the failsafe
@@ -20,7 +20,7 @@
   inversion of oPCEP's default, required by the "1:1 is the default" rule.
 - Tag `opcep-failsafe-switch`.
 
-## 2026-11-10 — failsafe guards and fault parity
+## 2026-11-10 â€” failsafe guards and fault parity
 
 - Install-time guards for the oPCEP list: SuperLODFix, PlayerAsPedComponentsFix,
   BadPlayerModelCrashFix, GarageModelFix, PedModelsInCutscenesFix, the
@@ -32,7 +32,7 @@
   0xC0000005 with `except:failsafe` and 0 with `all`. 27 checks.
 - `docs/parity.md`: failsafe table. Tag `opcep-deltas` follows the next batch.
 
-## 2026-11-10 — source audit of OpenPreCEPatch
+## 2026-11-10 â€” source audit of OpenPreCEPatch
 
 Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
 
@@ -43,11 +43,11 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
   `RemoveUselessChecks`, `MiscFixes`) or moved to XLivelessAddon
   (`BorderlessWindowed`, `DoNotPauseOnMinimize`, `LocalSettingsPath`,
   `SkipIntro`, `SkipLauncher`, `SkipMenu`, `VRAMFix`).
-- 15 shipped defaults differ; documented in `docs/improvements.md` §3.
-- Implementation deltas catalogued in §4; the not-ported ones have reasons
+- 15 shipped defaults differ; documented in `docs/improvements.md` Â§3.
+- Implementation deltas catalogued in Â§4; the not-ported ones have reasons
   (NewSaves rewrite, entry-point rewrites, asm-body caches, grouped INI import).
 
-## 2026-11-10 — changed implementations as groups
+## 2026-11-10 â€” changed implementations as groups
 
 - `shader`: two LookupShader calls only (LCP signature intact).
 - `alpha_nop`: BuildingAlphaFix `jnz` only.
@@ -61,7 +61,7 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
   extended `zp_ooc_init`/`zp_nms_arena`, `tools/check_opcep_deltas.py`.
 - 30/30 ctest. Tag `opcep-deltas`.
 
-## 2026-11-10 — build matrix and docs
+## 2026-11-10 â€” build matrix and docs
 
 - `data/applicability_evidence.json`, `tools/gen_applicability.py` generate
   `docs/version-matrix.md` and `tests/parity/applicability.tsv`; the drift guard
@@ -74,7 +74,7 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
   1.0.0.0/1.0.4.0). `docs/matrix.md` regenerated.
 - Release and Trace suites: 30/30 each.
 
-## 2026-11-11 — MMA10 investigation and the NewSaves walk
+## 2026-11-11 â€” MMA10 investigation and the NewSaves walk
 
 - Read the four crash reports and the 2026-11-04 minidump. Three are unrelated
   plugins (SISCO/overlay stack overflow, CloudFixIV access violations). The
@@ -96,9 +96,9 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
   the save unpatched. `zp_save_walk` proves the same corrupt files throw under
   1:1 and are `rejected` under the group (264 checks).
 
-## 2026-11-11 — remaining changed implementations
+## 2026-11-11 â€” remaining changed implementations
 
-- `sco_anchor`: branch-anchored SCOSignatureFix scan (`89 3D … 85 ED 74 1E`, +8),
+- `sco_anchor`: branch-anchored SCOSignatureFix scan (`89 3D â€¦ 85 ED 74 1E`, +8),
   fallback to the recovered `-32` arm; same byte on 1.0.8.0.
 - `garage_entry`: prologue hook at 0xC68B90 (match - 0x20), xmm0 reloaded, resume
   at +8; 5-byte E9 moves exactly -0x20.
@@ -113,7 +113,7 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
 - `task_dialogs`: `TaskDialogIndirect` with the ASI's common-controls 6.0
   manifest + `CreateActCtx`; `zp_pe_check` finds the manifest. UI unproven.
 
-## 2026-11-11 — final audit round
+## 2026-11-11 â€” final audit round
 
 - Removed-feature code is gone from graphics/loading too (BorderlessWindowed,
   HighQualityReflections, ForceDynamicShadowsEverywhere,
@@ -129,7 +129,7 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
   `cmake --build --preset release --target package` writes dist/.
 - Release and Trace 35/35; parity 80 closed / 5 deltas / 0 open.
 
-## 2026-11-11 — release packaging and the remaining refactors
+## 2026-11-11 â€” release packaging and the remaining refactors
 
 - Root `IV.EFLC.OpenPreCEPatch.ini` is the shipped file; the flat parity INI
   moved to `tests/parity/ZolikaPatch.ini` and the tools default there.
@@ -143,7 +143,7 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
   open. The remaining unreferenced graphics/loading arms and the duplicate
   publish/install scan cost (#8) are still open.
 
-## 2026-11-11 — OpenPreCEPatch surface, integrated improvements, audits
+## 2026-11-11 â€” OpenPreCEPatch surface, integrated improvements, audits
 
 - The runtime `OPCEP_IMPROVEMENTS` switch is gone. Failsafes/P13 live in
   `patch.ixx` and are unconditional; config parsing never throws; the improved
@@ -164,7 +164,7 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
 - Docs: AGENTS identity/surface, README status, improvements sections 1-6 and
   the parity distribution banner are current again.
 
-## 2026-11-11 — distribution identity
+## 2026-11-11 â€” distribution identity
 
 - Artifact/project: `IV.EFLC.OpenPreCEPatch.asi`; version resource follows the
   target name. The shipped INI is OpenPreCEPatch's grouped
@@ -179,7 +179,7 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
 - `zp_shipped_ini` proves the grouped file parses (8 checks); `zp_tests` loads
   the renamed ASI with the shipped INI; 34/34 Release.
 
-## 2026-11-11 — matrix fault capture
+## 2026-11-11 â€” matrix fault capture
 
 - The 1.0.0.0 full cell's preserved NoImpostor fault is an out-of-range
   `pattern.get(1)` (Debug: vector subscript out of range). In Release it is
@@ -219,6 +219,34 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
 - Not verified: the live 2x2 launch matrix (the game was not started on the
   user's behalf).
 
+
+## 2026-11-12 (LoadDLCs apply call: the __thiscall fault at 0x88FE04)
+
+- Live run with the fixed launcher arm (no more SRLC10) reached the DLC manager and
+  faulted at `GTAIV.exe+0x48FE04` (`sub_88FE00`), caller chain
+  `DlcStructFixupBody` -> `DlcDiscoveryCpp` -> the `tryPaths` lambda. The
+  apply function is `__thiscall`: its prologue is `push ecx; push ebx; mov ebx,
+  ecx; movzx ecx,[ebx+150h]` at `0x88FE00`, and the oracle calls it with the
+  manager in ECX (`0x10023278`: `mov ecx,[var_2C0]; lea eax,[var_2B8]; push
+  eax; call eax`). The rebuild's `DlcApplyCapture` was a cdecl forwarder that
+  pushed only the path, so ECX held the caller's garbage and `[ebx+0x150]` read
+  the bad pointer.
+- `loading.ixx`: `DlcRegisterFn` is `__stdcall` (`sub_88F440`'s real shape),
+  `DlcApplyFn` is `__thiscall` with the request as `const void*`, and
+  `DlcApplyCapture` now pushes the request and loads `ECX` from the manager
+  before the call. The caller passes `&request`.
+- `tests/dlc_full.cpp`: the fake register is `__stdcall` and the fake apply is
+  a `__thiscall`-shaped naked forwarder (`this` in ECX, request on the stack,
+  `ret 4`) that records ECX; two new checks pin the contract. Verified the test
+  fails on the pre-fix capture ("the apply call passes the DLC manager as 	his
+  (ECX)") and passes after it.
+- 37/37 Release; `parity_report.py 9` unchanged (80 closed, 5 expected deltas, 0
+  open), so the install write set did not move -- the fix is inside the rebuilt
+  body only.
+- Measured for the "Addresses could not be determined" dialog (LibertyCityPlates):
+  none of the 27 pattern strings extractable from its image is changed by our
+  write set on 1.0.8.0, and XLA loads after LCP, so the dialog is not attributable
+  to this tree; it needs a control (cell a) comparison.
 ## Open items
 
 - 18-cell `dump_matrix.py` full run; record `differing`.
@@ -230,6 +258,6 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
   keys this distribution removed or moved); it is inherited and predates
   `d6a83f3`, and no tool regenerates it.
 - Live xlive/Steam validation for `opcep`; a live game run for `nms`.
-- Candidates not ported, with reasons in `docs/improvements.md` §4: NewSaves
+- Candidates not ported, with reasons in `docs/improvements.md` Â§4: NewSaves
   hardening, garage/cutscene/NMS-thunk entry rewrites, asm-body caches,
   grouped-INI creation/import, SCOSignatureFix anchor, DLC path buffer.
