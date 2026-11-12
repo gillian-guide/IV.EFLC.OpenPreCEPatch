@@ -543,10 +543,13 @@ export namespace Config
         { "NoLiveryLimit", "FusionFix limits.ixx (LiveriesLimit)" },
         { "NoLoadingSleep", "FusionFix loadingdelays.ixx (same push 5000)" },
         { "OutOfCommissionFix", "FusionFix frameratevigilante.ixx / fixes.ixx" },
-        { "PedModelsInCutscenesFix", "FusionFix cutscene fixes" },
-        { "PlayerAsPedComponentsFix", "FusionFix player component fixes" },
+        { "PipeBombDropIconSupport", "FusionFix episodiccontent.ixx" },
+        { "PoliceEpisodicWeaponSupport", "FusionFix episodiccontent.ixx (TBoGTPoliceWeapons)" },
         { "ReversingLightFix", "FusionFix vehicles.ixx" },
+        { "RestoreDeathMusic", "FusionFix deathmusic.ixx (DeathMusic)" },
         { "SCOSignatureFix", "FusionFix episodiccontent.ixx" },
+        { "SpeedupBugFix", "FusionFix frameratevigilante.ixx (time scale)" },
+        { "TBoGTHeliHeightLimit", "FusionFix episodiccontent.ixx NOPs the same height check" },
         { "VSyncFix", "FusionFix vsync.ixx" },
     };
 

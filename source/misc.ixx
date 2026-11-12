@@ -836,6 +836,15 @@ namespace
         if (xlive == nullptr)
             return;
 
+        // xlive.dll is also the common filename for Ultimate ASI Loader's proxy.
+        // Only a real Games for Windows LIVE image has this export; patching the
+        // UAL proxy's image at the GFWL RVA would corrupt the loader itself.
+        if (GetProcAddress(xlive, "XLiveInitialize") == nullptr)
+        {
+            Log::Print("gfwl: xlive.dll is not Games for Windows LIVE; skipped");
+            return;
+        }
+
         constexpr size_t kSiteOffset = 988677;  // 0xF1605
         if (!ModuleImageContains(xlive, kSiteOffset, 1))
         {
