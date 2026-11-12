@@ -247,6 +247,46 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
   none of the 27 pattern strings extractable from its image is changed by our
   write set on 1.0.8.0, and XLA loads after LCP, so the dialog is not attributable
   to this tree; it needs a control (cell a) comparison.
+## 2026-11-12 - DeterministicRadioStart (radio first-track selection)
+
+- Added `DeterministicRadioStart`, an OpenPreCEPatch-only key (read through
+  `Config::Integer(Config::Ini(), ...)`, outside the recovered catalogue). On
+  1.0.8.0 the station advance `sub_7D78B0` has a pending-request branch keyed on
+  `[station+0x1900]` (hash) and `[station+0x1914]` (occurrence, 0xFFFF = none),
+  and nothing in the image ever writes the pair, so the first Vladivostok track
+  is whatever the audio RNG picks -- and that RNG is seeded from
+  `_getTime`/`timeGetTime` once, at audio init (`sub_799AA0` -> `sub_789D50`).
+- The arm is one 5-byte `jmp` at RVA `0x3D78B0` (`sub_7D78B0`, signature
+  `83 EC 10 53 55 8B E9 8B 85 00 19 00 00 85 C0`, one hit) into a naked body that
+  replays the prologue (`sub esp,10h; push ebx; push ebp`), asks the engine's own
+  resolver `sub_7D7810` (second scan, one hit at 0x7D7810) whether the current
+  category's set holds `RADIO_VLADIVOSTOK_SHVAYNE` (`0x1975E2EF`), and if it does
+  -- and no request is pending and this is the first time -- writes the pair.
+  One shot per process; the engine clears the pair when it consumes it, so the
+  rotation after the first track is unchanged. Inert on a vanilla playlist and on
+  every other station, because the resolver returns 0 there.
+- Resume is a tail `jmp` to `sub_7D78B0+5` (`mov ebp, ecx`), ECX reloaded from
+  ESI (the resolver clobbers it), ESI/EDI saved by the body (the original saves
+  EDI only after this prologue). No `Bodies::Register`: the body has no recovered
+  VA in the oracle, and registering one would rewrite the dump's displacement
+  against a reference that does not exist. No body-proof row, deliberately.
+- Code default 0, shipped grouped INI 1 (same shape as `RemoveGFWLUpdatePopup`).
+  With the default the per-option parity dumps install nothing, so
+  `parity_report.py 9` stays 79 closed / 5 expected deltas / 0 open. The isolated
+  cell (`zp_dump --only DeterministicRadioStart`) is exactly 5 changed bytes,
+  `E9 4B 81 C5 EF` at RVA `0x3D78B0`; with the shipped INI the build-9 full cell
+  gains that one branch (recorded in docs/improvements.md).
+- `zp_deterministic_radio` (14 checks): the SHVAYNE hash, the prologue bytes and
+  the normalised signature, the resume offset (real prologue = 5, one byte off =
+  refused, past the end = refused, empty image = refused), the fill/no-fill rule,
+  and the shipped-INI/default pair.
+- Gates: `cmake --build --preset release` clean; `ctest --preset release` 38/38;
+  `python tools/parity_report.py 9` -> 0 open.
+- Unverified without a live run: that the first Vladivostok music segment really
+  lands on SHVAYNE, and that the CE's own first-track behaviour is deterministic
+  at all (its selection code is byte-for-byte equivalent, so the CE's seed path
+  is the open question -- see `.agents/radio-downgrade/ce-selection.md`).
+
 ## Open items
 
 - 18-cell `dump_matrix.py` full run; record `differing`.

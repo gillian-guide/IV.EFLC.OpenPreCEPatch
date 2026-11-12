@@ -19,9 +19,31 @@ stays only as the parity/legacy configuration the oracle tools use.
 | `GFWLProtectionDisabler` | 1 | `source/misc.ixx` (`InstallGFWLProtectionDisabler`) | writes xlive.dll+0xF1605 from `jz`/`jmp` to `jmp`, after a module-image/page-access check and a pre-image opcode check. No xlive image is available, so the live effect is **unproven**; the guard is `zp_module_guard`. |
 | `SteamAchievements` | 1 | `source/steam.ixx` | hooks xlive.dll ordinal 5278, calls the original first, mirrors ids 1..65 to `ISteamUserStats` v012; `zp_steam` pins the table and the refusal path, the state mutex is never held across a Steam call. Live Steam unlock is **unproven** (no Steam client). |
 | `RemoveModChecks` | 1 | `source/misc.ixx` (`ModChecksEnabled`, `OpenOptionEnabled`) | a unified alias over the three recovered keys: patch-4 on 1.0.4.0, patch-6/7 on 1.0.6.0/1.0.7.0. No new writes; the existing write-set oracles cover the arms. |
+| `DeterministicRadioStart` | 1 | `source/audio.ixx` (`PublishDeterministicRadioStart` / `InstallDeterministicRadioStart`) | 1.0.8.0 only. One 5-byte `jmp` at RVA `0x3D78B0` (the station advance `sub_7D78B0`), and the body fills the engine's own dead pending-request pair (`[station+0x1900]`, `[station+0x1914]`) with `RADIO_VLADIVOSTOK_SHVAYNE` (`0x1975E2EF`) the first time the category's set resolves that hash. `zp_deterministic_radio` pins the hash, the scan anchor, the resume offset and the fill/no-fill rule; the isolated dump cell is exactly the 5 bytes `E9 .. .. .. ..` at `0x3D78B0`. |
 
 These are read outside the recovered 99-key catalogue; the shipped INI carries
 their keys.
+
+`DeterministicRadioStart` is the one added key that writes the game image. It is
+a deliberate divergence, not a parity arm: no build has a recovered body for it,
+so it is not registered with `Bodies` (a registration would rewrite the dump's
+branch displacement against a reference that does not exist) and it has no
+body-proof row. The code default is **0**, so the per-option parity dumps (which
+run with a missing INI) install nothing and the 79 closed keys stay closed; the
+shipped grouped INI sets it to 1, which is the intent. Enabling it in the shipped
+configuration adds those 5 bytes to the 1.0.8.0 full-cell write set, so
+`tools/dump_matrix.py`'s full cell for build 9 now differs from the recovered
+baseline by exactly that one branch (the `IMPROVED_DELTAS` scoreboard is keyed on
+catalogue keys, so the arm is invisible to it by construction).
+
+Why it exists: on 1.0.8.0 the first Vladivostok track after a new game is
+whatever the audio RNG picks, because the engine seeds that RNG from
+`_getTime`/`timeGetTime` once at audio init (`sub_799AA0` -> `sub_789D50`) and the
+advance's pending-request branch is dead code -- nothing in the image writes the
+pair. The arm revives the branch for one track, so the first song is fixed and
+the rotation after it is the engine's own. The arm is inert on a vanilla install
+(no playlist entry for the restored track, so the resolver returns 0) and on every
+station but Vladivostok. Evidence: `.agents/radio-downgrade/ce-selection.md`.
 
 ## 2. Options OpenPreCEPatch removes or moves (removed here)
 
