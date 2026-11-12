@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cstdio>
 
-import vehicles;
+import graphics;
 
 // The checked ForceCarHeadlightShadows walk: a real object, a fake model lookup,
 // and the table slot; a null object or a missing lookup keeps the 2.0f seed.

@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <string>
 
-import loading;
+import episodic;
 
 // The `dlc_path` group's bound: the discovery body's path buffer is 0x104 bytes
 // including the NUL, so 259 bytes fit and 260 do not.
@@ -28,12 +28,12 @@ namespace
 
 int main()
 {
-    Check(Loading::DlcPathFits(std::string(259, 'a')),
+    Check(Episodic::DlcPathFits(std::string(259, 'a')),
         "dlc_path: a 259-byte path fits the 0x104 buffer");
-    Check(!Loading::DlcPathFits(std::string(260, 'a')),
+    Check(!Episodic::DlcPathFits(std::string(260, 'a')),
         "dlc_path: a 260-byte path does not fit");
-    Check(!Loading::DlcPathFits(""), "dlc_path: an empty path is refused");
-    Check(Loading::DlcPathFits("C:\\GTAIV\\GTAIV.exe"),
+    Check(!Episodic::DlcPathFits(""), "dlc_path: an empty path is refused");
+    Check(Episodic::DlcPathFits("C:\\GTAIV\\GTAIV.exe"),
         "dlc_path: a normal install path fits");
 
     std::printf("%d check(s), %d failure(s)\n", checks, failures);

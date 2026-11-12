@@ -3,9 +3,11 @@ module;
 #include <common.hxx>
 
 // Declares the /GS cookie the helper's prologue reads and the check its epilogue
-// calls (`__security_cookie`, `__security_check_cookie` in vcruntime.h).
+// calls (`__security_cookie`, `__security_check_cookie` in vcruntime.h), and the
+// printf engine the bounded formatter calls.
 #include <intrin.h>
 #include <atomic>
+#include <cstdio>
 
 export module shared;
 
@@ -14,17 +16,24 @@ import common;
 import patch;
 
 // The helper library the original ASI keeps beside its bodies: the name hasher /
-// "hash:NNNN" resolver (sub_10003E50) and the game lookup it and several features
-// go through (dword_10159C0C). Both are transcribed as instruction streams, not
-// reimplemented, so the recovered VA is in the comment above each piece and in
-// tests/bodies.tsv.
+// "hash:NNNN" resolver (sub_10003E50), the game lookup it and several features go
+// through (dword_10159C0C), the bounded formatter (sub_10001280 over
+// 0x10001240/0x10001230) and the PlayerAsPedComponentsFix bodies. All are
+// transcribed as instruction streams, not reimplemented, so the recovered VA is
+// in the comment above each piece and in tests/bodies.tsv.
 //
-// The two PlayerAsPedComponentsFix bodies are here rather than in stability.ixx
+// The formatter is here because four section modules reach it: the livery and
+// spawn diagnostics in `vehicles`/`multiplayer`, the OOC mount name in `fixes` and
+// the DLC path in `episodic` call it through a six-byte forwarder on
+// `zpatch_format_entry`. The BPM diagnostic in `multiplayer` does the same now;
+// the body is one shared transcription, not a copy per module.
+//
+// The two PlayerAsPedComponentsFix bodies are here rather than in the MISC module
 // because the helper reaches the resolver with a direct `call` (E8, the shape the
 // original has) and MSVC rejects an external-linkage naked function in a module
 // interface unit: a body that names the resolver has to live in the resolver's
 // unit. They are exported by address; the arm that installs them lives in
-// stability.ixx, where the key does.
+// `misc`, where the key does.
 
 // The exported surface. The functions are declared here and defined below out of
 // line: an exported *inline* body would be written to the module's interface and
@@ -51,9 +60,13 @@ export namespace Shared
     int CachedLookupForTest(uint32_t hash, int32_t* out);
     void ResetLookupCacheForTest();
 
-    // Runs once, before any arm: it resolves the shared game lookup and publishes
-    // the bodies' recovered addresses. Called from the startup drivers next to the
-    // other Register functions.
+    // The bounded formatter's entry (sub_10001280), for the modules whose inline
+    // asm reaches it through a six-byte forwarder on `zpatch_format_entry`.
+    uintptr_t FormatEntry();
+
+    // Runs once, before any arm: it resolves the shared game lookup, fills the
+    // formatter's data and publishes the bodies' recovered addresses. Called from
+    // the startup drivers next to the other Register functions.
     void Register();
 }
 
@@ -86,6 +99,23 @@ extern "C"
     uint32_t zpatch_player_ped_computed = 0;
     uint32_t zpatch_player_ped_object = 0;
     uint32_t zpatch_player_ped_resume = 0;
+
+    // The bounded formatter's data (original sub_10001280). `sub_10001230` answers
+    // the UCRT printf options block the original keeps at 0x101A84B0, which is zero
+    // in its .data; `sub_10001240` reaches the UCRT's own printf engine through the
+    // IAT slot 0x1006336C, and this module links the static CRT, so the engine is
+    // reached through this slot and the call keeps the original's `call ds:[...]`
+    // shape. Both are filled unconditionally in Register(): the formatter is reached
+    // from every module that formats a bounded string, so it cannot sit behind a
+    // key's gate.
+    uint32_t zpatch_bpm_format_options[2] = { 0, 0 };  // 0x101A84B0
+    uint32_t zpatch_bpm_stdio_common_vsprintf = 0;     // 0x1006336C
+
+    // sub_10001280's address, for the modules whose inline asm names a local
+    // formatter. They enter this body through a six-byte `jmp` forwarder, because a
+    // module interface cannot export a naked function; the slot is a plain dword so
+    // the forwarder's `jmp DWORD PTR [...]` keeps the original's shape.
+    uint32_t zpatch_format_entry = 0;       // sub_10001280 (this module)
 }
 
 // The two literals the transcribed code pushes: the "hash:" prefix (original
@@ -104,6 +134,9 @@ extern "C"
 static void ValueResolverBody();
 static void PlayerPedHelperBody();
 static void PlayerPedComponentsShimBody();
+static void BpmFormatOptions();
+static void BpmFormatEngine();
+static void BpmFormat();
 
 namespace Shared
 {
@@ -115,6 +148,11 @@ namespace Shared
     uintptr_t PlayerPedComponentsShim()
     {
         return reinterpret_cast<uintptr_t>(&PlayerPedComponentsShimBody);
+    }
+
+    uintptr_t FormatEntry()
+    {
+        return reinterpret_cast<uintptr_t>(&BpmFormat);
     }
 }
 
@@ -203,6 +241,13 @@ namespace Shared
         // these slots, which is what keeps the instruction shape.
         zpatch_resolver_strnicmp = reinterpret_cast<uintptr_t>(&_strnicmp);
         zpatch_resolver_strtoul = reinterpret_cast<uintptr_t>(&strtoul);
+
+        // The bounded formatter's data, filled before any tier runs. The body is
+        // reached from five modules, so neither slot may sit behind a key's gate.
+        zpatch_format_entry = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(&BpmFormat));
+        zpatch_bpm_stdio_common_vsprintf = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(&__stdio_common_vsprintf));
 
         // dword_10159C0C, from the byte pattern the original scans for in the game
         // image (game 0x8DD2D0 on 1.0.8.0). A miss keeps the slot as it was.
@@ -389,5 +434,91 @@ static __declspec(naked) void PlayerPedComponentsShimBody()
         push DWORD PTR [zpatch_player_ped_computed]
         push ecx
         jmp DWORD PTR [zpatch_player_ped_resume]
+    }
+}
+
+// sub_10001230, recovered VA 0x10001230 (2 instructions): the UCRT printf options
+// block the engine reads. The original answers the address of its own zeroed .data
+// word at 0x101A84B0; this module answers its copy, and the instruction is the
+// original's. Transcribed, with a proof row.
+//
+// Naked and internal: an external-linkage naked function is written to the module
+// and every importer fails (C2488).
+static __declspec(naked) void BpmFormatOptions()
+{
+    __asm
+    {
+        mov eax, OFFSET zpatch_bpm_format_options
+        ret
+    }
+}
+
+// sub_10001240, recovered VA 0x10001240 (21 instructions): the printf engine call
+// itself, with the original's standard-snprintf option bit (`or ecx, 2`) and its
+// "every negative answer becomes -1" tail. The original's `call ds:0x1006336C` is
+// its IAT slot for `__stdio_common_vsprintf`; the static CRT has no IAT, so the
+// engine is reached through the slot above and the instruction keeps that shape.
+// Both the option block and the engine are what the original calls, so the rebuild
+// this replaces (`_vsnprintf_s` with `_TRUNCATE`) is gone: the semantics are now the
+// original's own CRT entry point rather than an equivalent one.
+//
+// Naked and internal: an external-linkage naked function is written to the module
+// and every importer fails (C2488).
+static __declspec(naked) void BpmFormatEngine()
+{
+    __asm
+    {
+        push ebp
+        mov ebp, esp
+        and esp, 0FFFFFFF8h
+        push DWORD PTR [ebp + 0Ch]
+        push 0
+        push DWORD PTR [ebp + 8]
+        push edx
+        push ecx
+        call BpmFormatOptions
+        mov ecx, DWORD PTR [eax]
+        push DWORD PTR [eax + 4]
+        or ecx, 2
+        push ecx
+        call DWORD PTR [zpatch_bpm_stdio_common_vsprintf]
+        or ecx, 0FFFFFFFFh
+        add esp, 1Ch
+        test eax, eax
+        cmovs eax, ecx
+        mov esp, ebp
+        pop ebp
+        ret
+    }
+}
+
+// sub_10001280, recovered VA 0x10001280 (13 instructions): the original's bounded
+// `vsnprintf` wrapper, `(char* buffer, unsigned size, const char* format, ...)`,
+// with the arg list's address taken from the frame (`[ebp+14h]`) exactly as the
+// compiled original does. Transcribed and proven, so the C++ `_vsnprintf_s` rebuild
+// the tree carried is gone. The other modules whose inline asm names a local
+// formatter (vehicles' livery helpers, the OOC wrapper, the DLC discovery) enter
+// this body through a six-byte `jmp` forwarder on `zpatch_format_entry`, so the
+// original's single formatter is single here too.
+//
+// Naked and internal: an external-linkage naked function is written to the module
+// and every importer fails (C2488).
+static __declspec(naked) void BpmFormat()
+{
+    __asm
+    {
+        push ebp
+        mov ebp, esp
+        push ecx
+        mov ecx, DWORD PTR [ebp + 8]
+        lea eax, [ebp + 14h]
+        mov edx, DWORD PTR [ebp + 0Ch]
+        push eax
+        push DWORD PTR [ebp + 10h]
+        call BpmFormatEngine
+        add esp, 8
+        pop ecx
+        pop ebp
+        ret
     }
 }

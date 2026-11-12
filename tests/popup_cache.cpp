@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cstdio>
 
-import misc;
+import vehicles;
 
 // The `popup_cache` group: one model-lookup resolution and one angle scan per
 // unique model hash, with the exact table semantics the transcribed check uses.

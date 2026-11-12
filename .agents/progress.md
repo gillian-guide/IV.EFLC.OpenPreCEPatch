@@ -272,3 +272,24 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
   inline, and `AGENTS.md` now describes the three-doc set.
 - 37/37 Release, `verify_bodies.py` 146 bodies / 0 failures,
   `parity_report.py 9` = 79 closed / 5 expected deltas / 0 open.
+
+## 2026-11-13 - modules recategorised by INI section
+
+- The feature modules are one per INI section: `stability`, `fixes`,
+  `performance`, `graphics`, `episodic`, `compatibility`, `multiplayer`,
+  `vehicles` and `misc`. `audio`, `loading`, `ooc` and `steam` are gone;
+  their keys (and the whole OutOfCommissionFix payload) moved to their section's
+  module. `launcher` stays the LaunchWithPlayGTAIV subsystem, and the `Steam`
+  namespace is part of `compatibility`.
+- `source/registration.ixx` is the ordered registration entry point: the section
+  modules own the arms, this module owns the historical publish/install order (39
+  publishes, 83 install calls) so moving an arm between modules cannot reorder it.
+  `dllmain.cpp` and `tests/dump_main.cpp` call `Registration::RegisterAll()`.
+- `shared` now owns the bounded formatter (one transcription for the five
+  sections that format a bounded string) beside the resolver and the
+  PlayerAsPedComponents bodies.
+- Proof: the per-option dump before/after is byte-identical
+  (`tools/compare_dumps.py`: missing 0 / extra 0 / differing 0); 37/37 ctest;
+  `parity_report.py 9` = 79 closed / 5 expected deltas / 0 open;
+  `gen_applicability.py --check` up to date; `tools/dump_matrix.py` full cells
+  diff 0 on all nine builds.

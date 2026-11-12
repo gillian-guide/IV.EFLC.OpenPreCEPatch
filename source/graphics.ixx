@@ -2,14 +2,58 @@ module;
 
 #include <common.hxx>
 
+// The /GS cookie the ForceCarHeadlightShadows check's prologue reads and its
+// epilogue calls (`__security_cookie`, `__security_check_cookie` in vcruntime.h).
+#include <intrin.h>
+#include <bit>
+#include <cstring>
+
 export module graphics;
 
 import bodies;
 import bytes;
 import common;
+import config;
 import game;
 import loader;
+import native;
+import options;
 import patch;
+import shared;
+
+// GRAPHICS: the shipped INI's [GRAPHICS] section. The handler carve-outs that
+// were not graphics keys have moved to their own sections: CutsceneFixes to
+// `fixes`, ImprovedShaderStreaming to `performance`, SuperLODFix to
+// `multiplayer`. The vehicle light and shadow features the old `vehicles` module
+// carried (ReversingLightFix, CarDynamicShadowFix, CarPartsShadowFix,
+// DualVehicleHeadlights, ForceCarHeadlightShadows, InfiniteCarBottomDistance) are
+// graphics keys and live here now.
+export namespace Graphics
+{
+    void Prepare();
+
+    void PublishBuildingDynamicShadows();
+    void PublishEmissiveLerpFix();
+    void PublishCarPartsShadowFix();
+    void PublishCarDynamicShadowFix();
+    void PublishForceCarHeadlightShadows();
+    void PublishDualVehicleHeadlights();
+
+    void InstallBuildingAlphaFix();
+    void InstallBuildingDynamicShadows();
+    void InstallEmissiveLerpFix();
+    void InstallForceShadowsOnObjects();
+    void InstallNoImpostorHeightCutoff();
+    void InstallNoLODLightHeightCutoff();
+    void InstallRemoveStaticCarShadows();
+    void InstallRemoveStaticCutsceneCarShadows();
+    void InstallCarPartsShadowFix();
+    void InstallCarDynamicShadowFix();
+    void InstallForceCarHeadlightShadows();
+    void InstallInfiniteCarBottomDistance();
+    void InstallReversingLightFix();
+    void InstallDualVehicleHeadlights();
+}
 
 // The two published model hashes and the two resumes the shim reads. C linkage:
 // the transcribed asm names them directly.
@@ -19,136 +63,159 @@ extern "C"
     uint32_t zpatch_bds_hash_b = 0;              // dword_10159C24
     void* zpatch_bds_resume_a = nullptr;         // dword_10159C20
     void* zpatch_bds_resume_b = nullptr;         // dword_10159C28
-}
 
-// The EmissiveLerpFix pair's published state. The original keeps it in four .bss
-// words beside its own code (dword_10159CC0/CCC/CC4/CC8); the transcribed asm
-// names the slots directly, so they carry C linkage.
-extern "C"
-{
+    // The EmissiveLerpFix pair's published state. The original keeps it in four
+    // .bss words beside its own code (dword_10159CC0/CCC/CC4/CC8).
     uint32_t zpatch_emissive_saved_ecx = 0;  // dword_10159CC0
     uint32_t zpatch_emissive_saved_edx = 0;  // dword_10159CCC
     uint32_t zpatch_emissive_scale = 0;      // dword_10159CC4 (match - 16)
     uint32_t zpatch_emissive_resume = 0;     // dword_10159CC8 (match - 12)
 }
 
-
-// The SuperLODFix pair's published state: the two resumes the shim tails into
-// (dword_101580AC and dword_101580B0) and the lookup the model helper calls
-// (dword_101580B4). The original keeps them in .bss beside its code; the
-// transcribed asm names the slots directly, so they carry C linkage.
+// CarPartsShadowFix and CarDynamicShadowFix's published operands. Each slot is the
+// original's own .bss word; the two resume_if/else words hold the site's resume
+// addresses (match+2 and match+0x45 of the "85 DB 7E 41 55 EB 0A" anchor).
 extern "C"
 {
-    uint32_t zpatch_super_lod_fail = 0;    // dword_101580AC
-    uint32_t zpatch_super_lod_ok = 0;      // dword_101580B0
-    uint32_t zpatch_super_lod_lookup = 0;  // dword_101580B4
+    uint32_t zpatch_carparts_resume_if = 0;    // dword_1015BDC8
+    uint32_t zpatch_carparts_resume_else = 0;  // dword_1015BDC0
+    uint32_t zpatch_carparts_resume_2 = 0;     // dword_1015BDCC
+
+    // dword_1015B5B8, defined in source/config.ixx: the original keeps it in `.data`
+    // immediately after the [HeadlightConeOffsets] hash array, and the cone check's
+    // walk reads it as the 513th hash, so this tree defines it as the next object
+    // after that array. This arm publishes the same value into it.
+    extern uint32_t zpatch_carparts_shadow_fn;
+
+    // dword_1015BDD0: the object the hooked function receives in ECX (the shim
+    // stores it, the checker reads +0x2E of it). dword_101580C0: the offset float
+    // the site's `movss xmm2, [0xD95B68]` is retargeted at; the original seeds its
+    // copy with 2.0f on disk, so this one starts there too. dword_1015B5BC: the
+    // resume, published from the site's own prologue before the E9 replaces it, and
+    // defined in source/config.ixx as the second word of the [HeadlightConeOffsets]
+    // block.
+    uint32_t zpatch_fchs_param = 0;
+    float zpatch_fchs_offset = 2.0f;
+    extern uint32_t zpatch_fchs_resume;
+
+    // DualVehicleHeadlights' published state, one word per operand its two bodies
+    // read: the light-state global the site pushes (the `push 0x1252D90` at
+    // match+207), the three call targets both bodies share, the resume, the two
+    // light indices the init helper sets, and the eight register slots a body saves
+    // before its first draw and restores before its second.
+    uint32_t zpatch_dual_bcc = 0;      // dword_10159BCC
+    uint32_t zpatch_dual_bd0 = 0;      // dword_10159BD0
+    uint32_t zpatch_dual_bd4 = 0;      // dword_10159BD4
+    uint32_t zpatch_dual_be0 = 0;      // dword_10159BE0
+    uint32_t zpatch_dual_be4 = 0;      // dword_10159BE4
+    uint32_t zpatch_dual_light_a = 1;  // dword_1015802C (the original's on-disk 1)
+    uint32_t zpatch_dual_light_b = 2;  // dword_10158030 (the original's on-disk 2)
+    uint32_t zpatch_dual_r_eax = 0;    // dword_10159BC4
+    uint32_t zpatch_dual_r_ebx = 0;    // dword_10159BEC
+    uint32_t zpatch_dual_r_ecx = 0;    // dword_10159BD8
+    uint32_t zpatch_dual_r_edx = 0;    // dword_10159BF0
+    uint32_t zpatch_dual_r_esi = 0;    // dword_10159BC8
+    uint32_t zpatch_dual_r_edi = 0;    // dword_10159BE8
+    uint32_t zpatch_dual_r_ebp = 0;    // dword_10159BDC
+    uint32_t zpatch_dual_r_esp = 0;    // dword_10159BF4
+
+    // The two [HeadlightConeOffsets] arrays are Config's own storage, filled by the
+    // loader preamble's reader and registered by this module.
+    extern uint32_t zpatch_headlight_cone_hashes[512];
+    extern float zpatch_headlight_cone_values[512];
 }
 
-
-// ---------------------------------------------------------------------------
-// CutsceneFixes
-//
-// One option, two halves of one chain. Chain B is the original's sub_100388C0: a
-// thiscall `char(float)` that the worker sub_10038B40 installs as a `call` at the
-// two places the game's camera function (1.0.8.0 `0xC9A640`) is entered, so both
-// callers run it. Chain A is the single `je` -> `jmp` inside that same function
-// that makes its "target found" test unconditional. The original runs them from
-// two loader arms under one option, so one arm installs both here.
-//
-// The body's mutable state sits in the original's .bss beside it
-// (dword_1015BDE4 / dword_1015BDF0 / dword_1015BDE8) and its constants in its
-// .rdata (0x101522F0, 0x101522F8, 0x101522FC, 0x10152340, 0x101523D0); the
-// transcribed asm names module slots instead, and the arm fills the two game
-// pointers from the site's own call operand before it overwrites the call.
-// ---------------------------------------------------------------------------
-extern "C"
-{
-    // dword_1015BDE4: the camera function the site calls. The worker publishes
-    // `match + [match - 4]` -- the destination of the `E8` it is about to
-    // overwrite -- and this is that address.
-    uint32_t zpatch_cutscene_target = 0;
-
-    // dword_1015BDF0: the same address + 0x4F. The camera function's
-    // `mov byte [esp + 1Ch], 1` sits at target + 0x4A and its immediate byte is the
-    // last one (target + 0x4E); the body's `dec esi` lands the store there.
-    uint32_t zpatch_cutscene_poke = 0;
-
-    // dword_1015BDE8: the accumulated scene-frame time, a double that starts at
-    // zero (the original's .bss).
-    uint64_t zpatch_cutscene_accum = 0;
-
-    // 0x10063010: the original's VirtualProtect import slot. The arm fills this
-    // with the module's own import; the body still calls it indirectly (`call edi`
-    // after `mov edi, [slot]`), exactly as the original does.
-    uint32_t zpatch_cutscene_virtual_protect = 0;
-
-    // The body's literal pool, from the original ASI's .rdata. Each is declared
-    // with the type its instruction reads and initialised with the number it is;
-    // every literal round-trips to the original's bytes at the VA in its comment.
-    // The one mask stays a hex word because it is not a number. No explicit
-    // alignment: a scalar load does not need one on x86.
-    double zpatch_cutscene_zero = 0.0;        // 0x101522F0
-    // 0x10152340: the double nearest 0.3333, not 1/3.
-    double zpatch_cutscene_limit = 0.3333;
-    // 0x101523D0: an `andps` sign mask, not a number (the body clears the sign bit
-    // of a difference before comparing it), so this one stays a hex word.
-    uint32_t zpatch_cutscene_abs_mask = 0x7FFFFFFFu;
-    float zpatch_cutscene_eps_a = 0.05f;      // 0x101522F8
-    float zpatch_cutscene_eps_b = 0.5f;       // 0x101522FC
-}
-
-// The loader preamble's salt this body resolves its native with (dword_1015803C)
-// and the native layer's guarded resolve entry, which is the original's
-// sub_10003980 rebuilt as C (source/native.ixx). Both live in another module
-// unit, so they are declared here with the C linkage they are defined with.
-extern "C"
-{
-    extern uint32_t zpatch_native_salt_1015803C;
-    extern uintptr_t zpatch_native_resolve_entry;
-}
-
-// Forward declarations for the transcribed bodies at the bottom of this
-// file: the readable code above installs them (and a body may branch to
-// another), so every one is named here. MSVC rejects `__declspec(naked)`
-// on a declaration (C2488), so these carry the signature only; each
-// definition in the tail is naked.
+// The transcribed bodies are defined in the tail of this file. MSVC rejects a
+// __declspec(naked) declaration (C2488), so the readable code above them names
+// each body through a plain prototype; only the definition in the tail keeps the
+// attribute.
 static void BuildingsDynamicShadowsShim();
 static void EmissiveLerpHelper();
 static void EmissiveLerpShim();
-static void SuperLodModel();
-static void SuperLodShim();
-static void ShaderStreamingFilterHpe();
-static void ShaderStreamingFilterV();
-static void ShaderStreamingFindHpe();
-static void ShaderStreamingFindV();
-static void CutsceneResolveEntry();
-static void CutsceneChainBody();
-
-// The emissive shim's address, registered at its recovered VA on first use.
-export void* EmissiveLerpShimAddress()
-{
-    Bodies::Register(reinterpret_cast<uintptr_t>(&EmissiveLerpShim), 0x1001AF60u);
-    return reinterpret_cast<void*>(&EmissiveLerpShim);
-}
+static void CarPartsShadowShim();
+static void CarDynamicShadowShim();
+static void CarDynamicShadowShimB();
+static void FchsShimBody();
+void FchsCheckCpp() noexcept;
+static void DualHeadlightsNewBody();
+static void DualHeadlightsOldBody();
 
 namespace
 {
-
-
-    // The per-build set InstallSuperLODFix publishes: the site's two continuations
-    // and the hash lookup the model helper calls, each a game RVA from the
-    // recovered handler's own base + RVA pairs (the suffix is the build).
-    struct SuperLodTargets
+    // The emissive shim's address, registered at its recovered VA on first use.
+    void* EmissiveLerpShimAddress()
     {
-        Build build;
-        uint32_t fail;
-        uint32_t ok;
-        uint32_t lookup;
-    };
-    constexpr SuperLodTargets kSuperLodTargets[] = {
-        { Build::v1070, 0x4A3D37u, 0x4A3CEFu, 0x58AAE0u },
-        { Build::v1080, 0x540E67u, 0x540E1Fu, 0x4DD2D0u },
-    };
+        Bodies::Register(reinterpret_cast<uintptr_t>(&EmissiveLerpShim), 0x1001AF60u);
+        return reinterpret_cast<void*>(&EmissiveLerpShim);
+    }
+
+    // CarDynamicShadowFix@noE's own gate: the recovered table gives the row the
+    // mask 0x22 (build ids 1000 and 1040), the builds where the installer's pattern
+    // E is absent. 1.0.0.4 has pattern E, so it keeps the E path and is not in the
+    // mask even though pattern C matches there too.
+    constexpr uint32_t kCarDynamicShadowNoEBuilds = 0x22u;
+
+    // DualVehicleHeadlights' two recovered arm gates: the original's own table gives
+    // the old body 0x62 (build ids 1, 5 and 6 -- 1.0.0.0, 1.0.4.0, 1.0.0.4) and the
+    // new body 0x4BF80 (id 7 and every later build).
+    constexpr uint32_t kDualHeadlightsOldBuilds = 0x62u;
+    constexpr uint32_t kDualHeadlightsNewBuilds = 0x4BF80u;
+
+    // One recovered sub-gate: is the current build's id a bit of `mask`? The
+    // catalogue's own mask is the arm's gate; a few recovered rows carry a narrower
+    // one of their own, which is what this reads.
+    bool CurrentBuildInMask(uint32_t mask)
+    {
+        return (mask & (1u << static_cast<uint32_t>(Loader::Current()))) != 0;
+    }
+
+    // A rel32 target inside the match: the displacement dword at `displacement`,
+    // measured from the instruction's last byte at `next`.
+    uint32_t Rel32Target(std::byte* match, std::ptrdiff_t displacement, std::ptrdiff_t next)
+    {
+        const auto displacementValue = *reinterpret_cast<const int32_t*>(match + displacement);
+        return static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(match + next) + static_cast<uint32_t>(displacementValue));
+    }
+
+    // sub_100064D0, recovered VA 0x100064D0: the two light indices the
+    // dual-headlight bodies push. The original's bodies call it inside
+    // pushad/popad, so the clobbering is harmless there; the words hold the same
+    // values from load time on.
+    void DualHeadlightConstants() noexcept
+    {
+        zpatch_dual_light_a = 1;
+        zpatch_dual_light_b = 2;
+    }
+}
+
+namespace Graphics
+{
+    void Prepare()
+    {
+        // ForceCarHeadlightShadows' two [HeadlightConeOffsets] arrays: dword_1015ADB8
+        // (the hashes) and dword_1015B5C0 (the offsets). The hash registration is the
+        // original's extended 2,052-byte range -- 512 words plus the one word the walk
+        // reads past slot 511 (dword_1015B5B8) -- so the proof compares that read too.
+        // The word is not a copy: it is CarDynamicShadowFix's published shadow-function
+        // slot, defined immediately after the array in source/config.ixx so the layout
+        // matches the original's .data. The offsets array is registered at its own
+        // base, which the original places 2,056 bytes into the block.
+        Bodies::RegisterTable(reinterpret_cast<uintptr_t>(zpatch_headlight_cone_hashes),
+            0x1015ADB8u, sizeof(zpatch_headlight_cone_hashes) + sizeof(uint32_t));  // 2052
+        Bodies::RegisterTable(reinterpret_cast<uintptr_t>(zpatch_headlight_cone_values),
+            0x1015B5C0u, sizeof(zpatch_headlight_cone_values));  // 512 * 4 = 2048
+
+        // The ForceCarHeadlightShadows pair's bodies, so the dump expresses both
+        // branches (the site's E9 and the checker call inside the shim) in the
+        // original's coordinates.
+        Bodies::Register(reinterpret_cast<uintptr_t>(&FchsShimBody), 0x1001ADB0u);
+        Bodies::Register(reinterpret_cast<uintptr_t>(&FchsCheckCpp), 0x1001AD20u);
+    }
+}
+
+namespace Graphics
+{
 
     // BuildingDynamicShadows' published state: both resumes come from the site's
     // original bytes (match+15 and match+112) and the two hash slots take the same
@@ -177,7 +244,6 @@ namespace
         }
     }
 
-
     // EmissiveLerpFix's published state: match - 12 as the resume and match - 16 as
     // the float slot. Both published values are addresses, not values read out of
     // the game (see EmissiveLerpShim).
@@ -195,59 +261,6 @@ namespace
         zpatch_emissive_resume = static_cast<uint32_t>(match - 12);
     }
 
-    // SuperLODFix's published state: the site's two continuations and the hash lookup
-    // the model helper calls, each a game RVA from the recovered handler's own base +
-    // RVA pairs (the suffix is the build).
-    void PublishSuperLODFix()
-    {
-        if (!Loader::Enabled("SuperLODFix"))
-            return;
-
-        auto pattern = find_pattern("F6 40 ? ? 74 ? 85 ED 0F 85 ? ? ? ? 55 6A ? E8 ? ? ? ? 8B F8");
-        if (pattern.empty())
-            return;
-
-        const auto base = Game::Get().ImageBase();
-        for (const SuperLodTargets& targets : kSuperLodTargets)
-        {
-            if (targets.build != Loader::Current())
-                continue;
-            zpatch_super_lod_fail = static_cast<uint32_t>(base + targets.fail);
-            zpatch_super_lod_ok = static_cast<uint32_t>(base + targets.ok);
-            zpatch_super_lod_lookup = static_cast<uint32_t>(base + targets.lookup);
-        }
-    }
-
-    // CutsceneFixes' published state. The worker publishes two game pointers from
-    // the primary site's own `E8` operand: the call's destination (the camera
-    // function) and that destination + 0x4F, one past the immediate the body
-    // pokes. Both are read here, before the install tier overwrites the call; the
-    // secondary site calls the same function and publishes nothing, as the
-    // original's second scan does.
-    void PublishCutsceneFixes()
-    {
-        if (!Loader::Enabled("CutsceneFixes"))
-            return;
-
-        auto pattern = find_pattern("8B 4C 24 2C 5F 5E 5B 33 CC B0 01 E8");
-        if (!pattern.empty())
-        {
-            auto* match = pattern.get_first<std::byte>(0);
-            const auto displacement = *pattern.get_first<int32_t>(-4);
-            zpatch_cutscene_target =
-                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + displacement));
-            zpatch_cutscene_poke =
-                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + displacement + 0x4F));
-            Log::Print("cutscene: match {:08X} disp {:08X} target {:08X} poke {:08X}",
-                       reinterpret_cast<uintptr_t>(match), displacement,
-                       zpatch_cutscene_target, zpatch_cutscene_poke);
-        }
-
-        // The body's VirtualProtect call goes through a slot because the original
-        // loads its IAT entry by absolute address; fill it from the module's own
-        // import, as audio.ixx does for its advance helper.
-        zpatch_cutscene_virtual_protect = reinterpret_cast<uintptr_t>(&VirtualProtect);
-    }
     // BuildingAlphaFix: two copies of the `test [esi+24h], 40000000h` alpha gate.
     // The first one's `jz` (0F 84 rel32, six bytes) becomes a five-byte `jmp` to
     // the same target, so the alpha path is entered unconditionally; the second
@@ -275,8 +288,6 @@ namespace
             injector::MakeNOP(pattern.get_first<std::byte>(7), 6, true);
         }
     }
-
-
 
     // NoImpostorHeightCutoff: both copies of the two-byte `76 0B` branch that skips
     // the impostor's height cutoff become 0x9090. The original's block (0x10053689
@@ -366,7 +377,6 @@ namespace
             injector::WriteMemory<std::byte>(pattern.get_first(7), Bytes::ShortJmp, true);
     }
 
-
     // BuildingDynamicShadows: the shadow-size operand at the call site becomes zero
     // (0x104 -> 0x100) and the second site jumps into the shim.
     void InstallBuildingDynamicShadows()
@@ -394,7 +404,6 @@ namespace
             reinterpret_cast<void*>(&BuildingsDynamicShadowsShim), true);
     }
 
-
     // EmissiveLerpFix: the original handler sub_1001AFA0 scans the signature and
     // writes the E9 at match - 24.
     void InstallEmissiveLerpFix()
@@ -409,252 +418,330 @@ namespace
         injector::MakeJMP(pattern.get_first(-24), EmissiveLerpShimAddress(), true);
     }
 
-    // SuperLODFix: the two-byte pair `test byte [eax+72h], 10h` / `jz` that decides
-    // whether the detailed LOD is used is replaced by the model-hash test. The fail
-    // path is the `jz` target, the ok path the instruction after the six-byte pair,
-    // and the lookup is the game's hash function.
-    void InstallSuperLODFix()
+    // CarPartsShadowFix's published resumes: the site's own bytes -- the `jle` it
+    // would have run (match+2) and the loop exit that `jle` jumps to (match+0x45).
+    // The shared detour is installed under either key, so the publish uses the same
+    // combined gate.
+    void PublishCarPartsShadowFix()
     {
-        if (!Loader::Enabled("SuperLODFix"))
+        if (!Loader::Enabled("CarPartsShadowFix") && !Loader::Enabled("CarDynamicShadowFix"))
             return;
 
-        // The body's three published pointers come from the per-build table. A
-        // build outside it leaves them zero and the original shim faults on the
-        // lookup; the failsafe keeps the game's own LOD test instead.
-        if (Failsafe::Missing("SuperLODFix lookup", zpatch_super_lod_lookup == 0) ||
-            Failsafe::Missing("SuperLODFix resume",
-                zpatch_super_lod_fail == 0 || zpatch_super_lod_ok == 0))
-            return;
-
-        auto pattern = find_pattern("F6 40 ? ? 74 ? 85 ED 0F 85 ? ? ? ? 55 6A ? E8 ? ? ? ? 8B F8");
-        if (pattern.empty())
-            return;
-        if (!Failsafe::Site("SuperLODFix site",
-                reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(0)), 6) ||
-            !Failsafe::Body("SuperLODFix body", reinterpret_cast<uintptr_t>(&SuperLodShim)))
-            return;
-
-        Bodies::Register(reinterpret_cast<uintptr_t>(&SuperLodModel), 0x100469A0u);
-        Bodies::Register(reinterpret_cast<uintptr_t>(&SuperLodShim), 0x100469E0u);
-        injector::MakeJMP(pattern.get_first(0), reinterpret_cast<void*>(&SuperLodShim), true);
-    }
-
-    // ImprovedShaderStreaming: the name-by-name LookupShader walks become one call
-    // each into a shader-array walk with a kind filter, and the rest of the old
-    // chain is jumped over. The original's handler sub_10045AD0 writes the four
-    // sites at match + 0x55 (E8 body A), + 0x62 (E9, displacement 0x8E), + 0xFD
-    // (E8 body B) and + 0x10A (E9, displacement 0x377); the displacement it writes
-    // is the constant but it encodes exactly the two targets below, so the jumps
-    // are computed rather than hardcoded. The finders are the bodies the calls
-    // name; the filters are only called by the finders, so they appear in the body
-    // manifest rather than as branch targets.
-    void InstallImprovedShaderStreaming()
-    {
-        if (!Loader::Enabled("ImprovedShaderStreaming"))
-            return;
-
-        auto pattern = find_pattern(
-            "33 F6 8B 4C 24 08 8B 06 8B 50 04 51 8B CE FF D2 F6 D8 1B C0 23 C6 5E C3 8B 44 24 0C 8B 74 24");
+        auto pattern = find_pattern("85 DB 7E 41 55 EB 0A");
         if (pattern.empty())
             return;
 
         auto* match = pattern.get_first<std::byte>(0);
-        Bodies::Register(reinterpret_cast<uintptr_t>(&ShaderStreamingFindHpe), 0x10045A30u);
-        Bodies::Register(reinterpret_cast<uintptr_t>(&ShaderStreamingFindV), 0x10045A80u);
-
-        // Only the two LookupShader calls are replaced. The two jumps over the
-        // remaining name chain are a pure speed-up, and the bytes they overwrite
-        // are inside the window LibertyCityPlates scans for
-        // addCustomShaderEffect; dropping them keeps that mod's address scan
-        // intact.
-        //
-        // A build can match the surrounding bytes without the two call opcodes;
-        // writing a branch over an arbitrary instruction is worse than not
-        // applying the speed-up.
-        if (match[85] != std::byte{ 0xE8 } || match[253] != std::byte{ 0xE8 })
-            return;
-
-        injector::MakeCALL(match + 85, reinterpret_cast<void*>(&ShaderStreamingFindHpe), true);
-        injector::MakeCALL(match + 253, reinterpret_cast<void*>(&ShaderStreamingFindV), true);
+        zpatch_carparts_resume_if = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + 2));
+        zpatch_carparts_resume_else =
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + 0x45));
     }
 
-    // The cutscene_entry group: one hook at the shared camera callee instead of
-    // the three sites. The callee is relocated into private memory, its 13
-    // direct calls are re-pointed, and the branch fix is baked into the copy.
-    // Any shape mismatch falls back to the three original sites, so the fix is
-    // never lost.
-    namespace
+    // CarDynamicShadowFix's published call target and resume, from whichever body
+    // variant the build carries: pattern A's `call` sits at match+6, so its resume is
+    // match+0xB and the displacement is at match+7; pattern B's `call` sits at
+    // match+8, so its resume is match+0xD and the displacement is at match+9.
+    void PublishCarDynamicShadowFix()
     {
-        constexpr size_t kCutsceneCalleeSize = 0x2D2u;
-        constexpr uint32_t kCutscenePokeOffset = 0x4Fu;
-        constexpr uint32_t kCutsceneBranchOffset = 0x200u;
-        constexpr uint32_t kCutsceneCalls[] = {
-            0x00Eu, 0x01Du, 0x092u, 0x0E9u, 0x0F1u, 0x101u, 0x118u,
-            0x127u, 0x13Cu, 0x233u, 0x24Cu, 0x286u, 0x29Au,
-        };
-
-        bool RelocateCalls(uint8_t* destination, const uint8_t* source,
-            std::span<const uint32_t> offsets) noexcept
-        {
-            for (const uint32_t offset : offsets)
-            {
-                int32_t displacement{};
-                std::memcpy(&displacement, source + offset + 1, sizeof(displacement));
-                const auto target = reinterpret_cast<uintptr_t>(source + offset + 5) +
-                                    static_cast<intptr_t>(displacement);
-                const auto next = reinterpret_cast<uintptr_t>(destination + offset + 5);
-                const auto relative = static_cast<intptr_t>(target) -
-                                      static_cast<intptr_t>(next);
-                if (relative < INT32_MIN || relative > INT32_MAX)
-                    return false;
-                const auto narrowed = static_cast<int32_t>(relative);
-                std::memcpy(destination + offset + 1, &narrowed, sizeof(narrowed));
-            }
-            return true;
-        }
-
-        void* AllocateNearImage(size_t size) noexcept
-        {
-            const auto base = Game::Get().ImageBase();
-            const auto imageSize = Game::Get().ImageSize();
-            constexpr uintptr_t kStep = 0x1000000u;
-            constexpr uintptr_t kReach = 0x40000000u;
-            constexpr uintptr_t kPageMask = 0xFFFFu;
-            const uintptr_t first = (base + imageSize + kPageMask) & ~kPageMask;
-            for (uintptr_t candidate = first; candidate < first + kReach; candidate += kStep)
-            {
-                if (void* const block = VirtualAlloc(reinterpret_cast<void*>(candidate), size,
-                        MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))
-                    return block;
-            }
-            const uintptr_t lower = base > kReach ? base - kReach : kStep;
-            for (uintptr_t candidate = first - kStep;
-                 candidate > lower && candidate > kStep; candidate -= kStep)
-            {
-                if (void* const block = VirtualAlloc(reinterpret_cast<void*>(candidate), size,
-                        MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))
-                    return block;
-            }
-            return nullptr;
-        }
-
-        uint8_t* CutsceneCalleeCopy(uintptr_t callee) noexcept
-        {
-            static constexpr uint8_t kPrologue[5] = { 0x55u, 0x8Bu, 0xECu, 0x83u, 0xE4u };
-            static constexpr uint8_t kPokeSite[5] = { 0xC6u, 0x44u, 0x24u, 0x1Cu, 0x01u };
-            static constexpr uint8_t kBranchSite[8] = {
-                0x74u, 0x24u, 0x8Bu, 0x44u, 0x24u, 0x2Cu, 0x83u, 0xF8u,
-            };
-            const auto& game = Game::Get();
-            if (callee == 0 || !game.Contains(callee) ||
-                !game.Contains(callee + kCutsceneCalleeSize - 1))
-                return nullptr;
-
-            const auto* source = reinterpret_cast<const uint8_t*>(callee);
-            if (std::memcmp(source, kPrologue, sizeof(kPrologue)) != 0 ||
-                std::memcmp(source + 0x4Au, kPokeSite, sizeof(kPokeSite)) != 0 ||
-                std::memcmp(source + kCutsceneBranchOffset, kBranchSite,
-                    sizeof(kBranchSite)) != 0)
-                return nullptr;
-
-            auto* copy = static_cast<uint8_t*>(AllocateNearImage(kCutsceneCalleeSize));
-            if (copy == nullptr)
-                return nullptr;
-            if (!RelocateCalls(copy, source, kCutsceneCalls))
-            {
-                VirtualFree(copy, 0, MEM_RELEASE);
-                return nullptr;
-            }
-            // The copy's `jz` at +0x200 becomes the unconditional `jmp`, with
-            // the original displacement kept.
-            copy[kCutsceneBranchOffset] = static_cast<uint8_t>(Bytes::ShortJmp);
-            return copy;
-        }
-    } // namespace
-
-    // CutsceneFixes: chain B's two camera call sites become calls into
-    // sub_100388C0, and chain A's `je` in the camera function becomes the
-    // unconditional `jmp` that skips its "target found" test. Each caller's
-    // pattern starts at the epilogue/a byte the call precedes, so the site is the
-    // five bytes before the match. Chain A's two texts are the original worker's
-    // first and fallback patterns: the first is the one the supported 1.0.8.0-class
-    // images carry, the second covers the older ones.
-    void InstallCutsceneFixes()
-    {
-        if (!Loader::Enabled("CutsceneFixes"))
+        if (!Loader::Enabled("CarDynamicShadowFix"))
             return;
 
-        Bodies::Register(reinterpret_cast<uintptr_t>(&CutsceneChainBody), 0x100388C0u);
-        // The body's call names the resolve forwarder, which stands in for the
-        // original's sub_10003980; recording that VA keeps the registered branch in
-        // the original's coordinates.
-        Bodies::Register(reinterpret_cast<uintptr_t>(&CutsceneResolveEntry), 0x10003980u);
-
-        if (zpatch_cutscene_target != 0)
-        {
-            const auto callee = static_cast<uintptr_t>(zpatch_cutscene_target);
-            if (uint8_t* copy = CutsceneCalleeCopy(callee))
-            {
-                zpatch_cutscene_target = static_cast<uint32_t>(
-                    reinterpret_cast<uintptr_t>(copy));
-                zpatch_cutscene_poke = static_cast<uint32_t>(
-                    reinterpret_cast<uintptr_t>(copy) + kCutscenePokeOffset);
-                injector::MakeJMP(reinterpret_cast<void*>(callee),
-                    reinterpret_cast<void*>(&CutsceneChainBody), true);
-                Log::Print("cutscene: hooked callee {:08X}, copy {:08X}", callee,
-                    reinterpret_cast<uintptr_t>(copy));
-                return;
-            }
-        }
-
-        auto pattern = find_pattern("8B 4C 24 2C 5F 5E 5B 33 CC B0 01 E8");
+        auto pattern = find_pattern("56 6A 02 53 53 57 E8 ? ? ? ? 56 6A 02 6A 04 6A 05 57 E8");
         if (!pattern.empty())
         {
-            injector::MakeCALL(pattern.get_first(-5),
-                reinterpret_cast<void*>(&CutsceneChainBody), true);
+            auto* match = pattern.get_first<std::byte>(0);
+            const auto resume = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + 11));
+            zpatch_carparts_shadow_fn = resume + *reinterpret_cast<const int32_t*>(match + 7);
+            zpatch_carparts_resume_2 = resume;
+            return;
         }
 
-        pattern = find_pattern("8B CF 88 44 24 0F E8 ? ? ? ? A1");
+        pattern = find_pattern("56 6A 02 6A 00 6A 00 57 E8 ? ? ? ? 56 6A 02 6A 04 6A 05 57 E8");
         if (!pattern.empty())
         {
-            injector::MakeCALL(pattern.get_first(-5),
-                reinterpret_cast<void*>(&CutsceneChainBody), true);
+            auto* match = pattern.get_first<std::byte>(0);
+            const auto resume = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + 13));
+            zpatch_carparts_shadow_fn = resume + *reinterpret_cast<const int32_t*>(match + 9);
+            zpatch_carparts_resume_2 = resume;
         }
+    }
 
-        pattern = find_pattern("74 24 8B 44 24 2C 83 F8 03");
+    // ForceCarHeadlightShadows' resume: the E9 replaces the shadow function's entry
+    // (game 0x8F7590), and the shim replays those twelve prologue bytes itself, so
+    // the continuation is the instruction after them (match+12, the `mov eax,
+    // [ebp+20h]`). Read before the site is written, as the original's handler does.
+    void PublishForceCarHeadlightShadows()
+    {
+        if (!Loader::Enabled("ForceCarHeadlightShadows"))
+            return;
+
+        auto pattern = find_pattern("55 8B EC 83 E4 F0 81 EC D4 00 00 00 8B 45 20 8B");
+        if (!pattern.empty())
+            zpatch_fchs_resume = static_cast<uint32_t>(
+                reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(12)));
+    }
+
+    // DualVehicleHeadlights' published operands, all read from the one match: the
+    // light-state global the site pushes at match+207, the ped getter's call target
+    // (the disp32 at match+140, next byte +144), the driver test's (+151/+155), the
+    // draw call's (+331/+335) and the resume (`pop edi`, match+338). The site's own
+    // instructions carry those operands, so the publish is a read, not a decode.
+    void PublishDualVehicleHeadlights()
+    {
+        // The catalogue's key mask cannot be the gate here: see the install arm.
+        if (Catalogue::Read("DualVehicleHeadlights") != 1)
+            return;
+
+        auto pattern = find_pattern("8B 17 8B 42 64 8B CF FF D0 8B 54");
         if (pattern.empty())
-            pattern = find_pattern("74 0B 83 7C 24 2C 03");
-        if (!pattern.empty())
-            injector::WriteMemory<std::byte>(pattern.get_first(0), Bytes::ShortJmp, true);
+            return;
 
-        Log::Print("cutscene: resolved={} target={:08X} poke={:08X} resolveEntry={:08X}",
-                   zpatch_cutscene_target != 0 ? 1 : 0, zpatch_cutscene_target,
-                   zpatch_cutscene_poke, zpatch_native_resolve_entry);
+        auto* match = pattern.get_first<std::byte>(0);
+        zpatch_dual_bcc = *pattern.get_first<uint32_t>(207);
+        zpatch_dual_bd0 = Rel32Target(match, 140, 144);
+        zpatch_dual_be4 = Rel32Target(match, 151, 155);
+        zpatch_dual_bd4 = Rel32Target(match, 331, 335);
+        zpatch_dual_be0 = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + 338));
     }
-}
 
-// Registered like every other arm: the publish tier reads every site the install
-// tier is about to overwrite, and the install tier owns the gate and the writes.
-export void RegisterGraphics()
-{
-    Loader::PublishEvent() += []
+    // CarPartsShadowFix shares the detour with CarDynamicShadowFix: the original
+    // gates the rewrite on either key and only the standalone forcing writes below
+    // are CarPartsShadowFix's own.
+    void InstallCarPartsShadowFix()
     {
-        PublishBuildingDynamicShadows();
-        PublishCutsceneFixes();
-        PublishEmissiveLerpFix();
-        PublishSuperLODFix();
-    };
-    Loader::InstallEvent() += [] { InstallBuildingAlphaFix(); };
-    Loader::InstallEvent() += [] { InstallBuildingDynamicShadows(); };
-    Loader::InstallEvent() += [] { InstallCutsceneFixes(); };
-    Loader::InstallEvent() += [] { InstallEmissiveLerpFix(); };
-    Loader::InstallEvent() += [] { InstallForceShadowsOnObjects(); };
-    Loader::InstallEvent() += [] { InstallImprovedShaderStreaming(); };
-    Loader::InstallEvent() += [] { InstallNoImpostorHeightCutoff(); };
-    Loader::InstallEvent() += [] { InstallNoLODLightHeightCutoff(); };
-    Loader::InstallEvent() += [] { InstallRemoveStaticCarShadows(); };
-    Loader::InstallEvent() += [] { InstallRemoveStaticCutsceneCarShadows(); };
-    Loader::InstallEvent() += [] { InstallSuperLODFix(); };
+        if (!Loader::Enabled("CarPartsShadowFix") && !Loader::Enabled("CarDynamicShadowFix"))
+            return;
+
+        auto pattern = find_pattern("85 DB 7E 41 55 EB 0A");
+        if (pattern.empty())
+            return;
+
+        auto* match = pattern.get_first<std::byte>(0);
+
+        Bodies::Register(reinterpret_cast<uintptr_t>(&CarPartsShadowShim), 0x10006880u);
+        injector::MakeJMP(match - 6, reinterpret_cast<void*>(&CarPartsShadowShim), true);
+
+        if (!Loader::Enabled("CarPartsShadowFix"))
+            return;
+
+        // The standalone arm forces the shadow path on its own: the `jnz` that would
+        // skip it becomes a short jump. The recovered standalone handler scans two
+        // variants: the `83 F8 04` site (1.0.6.0 and later) and the `83 FA 04 75 0C`
+        // site (the older builds). Each scan is a clean skip on the builds that do
+        // not carry it.
+        pattern = find_pattern("83 F8 04 C6 44 24 0E 00 75 0F");
+        if (!pattern.empty())
+            injector::WriteMemory<std::byte>(pattern.get_first(8), Bytes::ShortJmp, true);
+
+        pattern = find_pattern("83 FA 04 75 0C");
+        if (!pattern.empty())
+            injector::WriteMemory<std::byte>(pattern.get_first(3), Bytes::ShortJmp, true);
+    }
+
+    // CarDynamicShadowFix: the shadow call site is detached so the shadow is drawn
+    // twice with the remaining arguments. Two recovered body variants exist: pattern
+    // A (1.0.6.0 and later) and pattern B (the older builds); the key's own build
+    // mask covers both, and the signatures are the gate. The same installer's C and
+    // E branches are the old builds' two extra writes: a range check rewritten as an
+    // unconditional jump, and the six-byte NOP fill where pattern E is absent.
+    void InstallCarDynamicShadowFix()
+    {
+        if (!Loader::Enabled("CarDynamicShadowFix"))
+            return;
+
+        auto pattern = find_pattern("56 6A 02 53 53 57 E8 ? ? ? ? 56 6A 02 6A 04 6A 05 57 E8");
+        if (!pattern.empty())
+        {
+            auto* match = pattern.get_first<std::byte>(0);
+            Bodies::Register(reinterpret_cast<uintptr_t>(&CarDynamicShadowShim), 0x100068A0u);
+            injector::MakeJMP(match, reinterpret_cast<void*>(&CarDynamicShadowShim), true);
+        }
+
+        // Pattern B is the old-build variant of the same call site.
+        pattern = find_pattern("56 6A 02 6A 00 6A 00 57 E8 ? ? ? ? 56 6A 02 6A 04 6A 05 57 E8");
+        if (!pattern.empty())
+        {
+            auto* match = pattern.get_first<std::byte>(0);
+            Bodies::Register(reinterpret_cast<uintptr_t>(&CarDynamicShadowShimB), 0x100068D0u);
+            injector::MakeJMP(match, reinterpret_cast<void*>(&CarDynamicShadowShimB), true);
+        }
+
+        // Pattern C: the double range check (`>= 0x14` / `>= 6`) is skipped by
+        // turning the second test's `jnz` into a jump over it. The row exists only on
+        // the older builds, which is also where the @noE fill below belongs.
+        pattern = find_pattern("83 F8 14 7D 05 83 F8 06 7D 14");
+        if (!pattern.empty())
+        {
+            auto* match = pattern.get_first<std::byte>(0);
+            injector::MakeJMP(match + 3, match + 0x1E, true);
+
+            // CarDynamicShadowFix@noE: with pattern E absent (the recovered gate is
+            // build ids 1000 and 1040) the installer NOP-fills six bytes after the C
+            // anchor. 1.0.0.4 has pattern E, so it is not in the mask.
+            if (CurrentBuildInMask(kCarDynamicShadowNoEBuilds))
+                injector::MakeNOP(match + 62, 6, true);
+        }
+
+        // The shadow's record size is forced to 0x100 from 0x104, and the branch that
+        // would skip the shadow becomes unconditional.
+        pattern = find_pattern("50 68 04 01 00 00 6A 02 6A 00 E8");
+        if (!pattern.empty())
+            injector::WriteMemory<std::byte>(pattern.get_first(2), Bytes::Zero, true);
+
+        pattern = find_pattern("83 E0 0F 83 F8 03 75 17 F6 86 6C 02 00 00 04");
+        if (!pattern.empty())
+            injector::WriteMemory<std::byte>(pattern.get_first(6), Bytes::ShortJmp, true);
+
+        // With ForceCarHeadlightShadows off the original also re-encodes the `jz`
+        // that skips the shadow as a five-byte `jmp` to the same target, and forces
+        // the pushed shadow size from 0x504 to 0x100.
+        if (Loader::Enabled("ForceCarHeadlightShadows"))
+            return;
+
+        pattern = find_pattern("0F 84 9E 00 00 00 80 7D 28");
+        if (!pattern.empty())
+        {
+            auto* match = pattern.get_first<std::byte>(0);
+            const auto displacement = *reinterpret_cast<const int32_t*>(match + 2);
+            injector::MakeJMP(match, match + 6 + displacement, true);
+        }
+
+        pattern = find_pattern("51 68 04 05 00 00 6A 02 6A 00 E8");
+        if (!pattern.empty())
+            injector::WriteMemory<uint32_t>(pattern.get_first(2), 0x100u, true);
+    }
+
+    // ForceCarHeadlightShadows: the shadow function hooks to the shim, the three
+    // branches that decide whether the headlight cone draws its shadow are forced so
+    // the shadow always runs, and the offset float is retargeted at this module's
+    // word instead of the game's 0.0f at 0xD95B68. The writes, in the original
+    // handler's order:
+    //   * `EB` at the anchor's +6 (the `jne +79h` of `cmp al,1` / `test bl,bl`),
+    //     `E9` at +95 to match+476 (the second `jne +177h`, one byte shorter than the
+    //     six-byte `0F 85` it replaces, which is why the write starts on the opcode
+    //     and its sixth byte becomes the unreachable remainder), `EB` at +379 (the
+    //     `jne +5Fh` on the same target) and the `movss` operand at +211;
+    //   * the E9 at the shadow function's entry;
+    //   * the handler tail's restore of the two shadow-buffer pushes (0x504 / 0x104)
+    //     and of the `je +9Eh` at 0x8F719F. On a pristine image every one of those is
+    //     a no-op; they are the original's `sub_1000E870` writes, which undo exactly
+    //     the CarDynamicShadowFix rewrites that arm skips while this key is on, so
+    //     the two keys interact the way they do in the original.
+    void InstallForceCarHeadlightShadows()
+    {
+        if (!Loader::Enabled("ForceCarHeadlightShadows"))
+            return;
+
+        auto pattern = find_pattern("3C 01 75 50 84 DB 75 79");
+        if (!pattern.empty())
+        {
+            auto* match = pattern.get_first<std::byte>(0);
+            injector::WriteMemory<std::byte>(match + 6, Bytes::ShortJmp, true);
+            injector::MakeJMP(match + 95, match + 476, true);
+            injector::WriteMemory<std::byte>(match + 379, Bytes::ShortJmp, true);
+
+            // The `movss xmm2, [0xD95B68]` operand becomes this module's float. The
+            // original writes its own image's dword_101580C0 here (0x101580C0); the
+            // stored baseline records the reference dump's 0xD0000000 placeholder for
+            // the word, so the slot is registered for the dump's canonicalisation.
+            injector::WriteMemory<uint32_t>(match + 211,
+                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&zpatch_fchs_offset)), true);
+            Bodies::RegisterPublishedImage(reinterpret_cast<uintptr_t>(match + 211));
+        }
+
+        pattern = find_pattern("55 8B EC 83 E4 F0 81 EC D4 00 00 00 8B 45 20 8B");
+        if (!pattern.empty())
+            injector::MakeJMP(pattern.get_first<std::byte>(0),
+                reinterpret_cast<void*>(&FchsShimBody), true);
+
+        // `push 0x504` (the first shadow buffer) and `push 0x104` (the second) are
+        // written back as dwords; both immediates are unchanged on a pristine image.
+        pattern = find_pattern("8D 4C 24 50 51 68 04 05 00 00");
+        if (!pattern.empty())
+            injector::WriteMemory<uint32_t>(pattern.get_first<std::byte>(6), 0x00000504u, true);
+
+        pattern = find_pattern("8D 44 24 50 50 68 04 01 00 00");
+        if (!pattern.empty())
+            injector::WriteMemory<uint32_t>(pattern.get_first<std::byte>(6), 0x00000104u, true);
+
+        // `0F 84 9E 00 00 00` (the `je` that skips the shadow) is rewritten with its
+        // own six bytes, the last one left as it was.
+        pattern = find_pattern("F3 0F 11 44 24 1C 0F 84 9E 00 00 00");
+        if (!pattern.empty())
+        {
+            auto* site = pattern.get_first<std::byte>(6);
+            injector::WriteMemory<std::byte>(site, std::byte{ 0x0F }, true);
+            injector::WriteMemory<std::byte>(site + 1, std::byte{ 0x84 }, true);
+            injector::WriteMemory<uint16_t>(site + 2, 0x009Eu, true);
+            injector::WriteMemory<std::byte>(site + 4, Bytes::Zero, true);
+        }
+    }
+
+    // InfiniteCarBottomDistance: the `ja` of the bottom-distance clamp becomes an
+    // unconditional jump over it (`EB 2A`, written as its two bytes -- there is no
+    // short-jump API).
+    void InstallInfiniteCarBottomDistance()
+    {
+        if (!Loader::Enabled("InfiniteCarBottomDistance"))
+            return;
+
+        auto pattern = find_pattern("0F 2F D0 76 25 0F 28 C2");
+        if (pattern.empty())
+            return;
+
+        auto* site = pattern.get_first<std::byte>(3);
+        injector::WriteMemory<std::byte>(site, Bytes::ShortJmp, true);
+        injector::WriteMemory<std::byte>(site + 1, Bytes::JumpOverClamp, true);
+    }
+
+    // ReversingLightFix: the slot displacement of `mov eax,[edx+64h]` becomes 0x60,
+    // so the reversing-light path reads the neighbouring member.
+    void InstallReversingLightFix()
+    {
+        if (!Loader::Enabled("ReversingLightFix"))
+            return;
+
+        auto pattern = find_pattern("11 01 00 00 8B 16 8B 42 64 8B CE FF D0 F3 0F 10");
+        if (!pattern.empty())
+            injector::WriteMemory<std::byte>(pattern.get_first(8), Bytes::Slot60, true);
+    }
+
+    // DualVehicleHeadlights: both recovered arms jump to their own body at the same
+    // site, and the original's handler picks the body from the build id it classified
+    // (`cmp [build], 1` .. `cmp [build], 6` at 0x100067F3): ids 1..6 get the old body,
+    // every later build the new one. That is the pair of recovered masks, so each
+    // build runs exactly one arm; the reference tree ran both unconditionally and the
+    // later write won, which lands on the same bytes everywhere the masks are
+    // disjoint (they are).
+    //
+    // The gate is the catalogue's INI read alone. This key's catalogue mask (0x20) is
+    // the feature document's build list, not the original's: the original's own two
+    // arm masks cover every supported build, so `Loader::Enabled` would never install
+    // this arm anywhere but 1.0.4.0.
+    void InstallDualVehicleHeadlights()
+    {
+        if (Catalogue::Read("DualVehicleHeadlights") != 1)
+            return;
+
+        auto pattern = find_pattern("8B 17 8B 42 64 8B CF FF D0 8B 54");
+        if (pattern.empty())
+            return;
+
+        if (CurrentBuildInMask(kDualHeadlightsOldBuilds))
+        {
+            Bodies::Register(reinterpret_cast<uintptr_t>(&DualHeadlightsOldBody), 0x10006630u);
+            injector::MakeJMP(pattern.get_first<std::byte>(0),
+                reinterpret_cast<void*>(&DualHeadlightsOldBody), true);
+        }
+
+        if (CurrentBuildInMask(kDualHeadlightsNewBuilds))
+        {
+            Bodies::Register(reinterpret_cast<uintptr_t>(&DualHeadlightsNewBody), 0x100064F0u);
+            injector::MakeJMP(pattern.get_first<std::byte>(0),
+                reinterpret_cast<void*>(&DualHeadlightsNewBody), true);
+        }
+    }
+
 }
 
 // ---------------------------------------------------------------------------
@@ -755,430 +842,399 @@ static __declspec(naked) void EmissiveLerpShim()
     }
 }
 
-
-// sub_100469A0, recovered VA 0x100469A0: the model test the shim calls with the
-// ESI argument still on the stack. It resolves the constant 0xAE4B15D6 through
-// the published lookup and compares the object's signed word at +0x2E with the
-// answer. The frame is the body's own /GS frame: the cookie word and the cookie
-// check are the module's, exactly as a compiled function of this module has
-// them, and both are absolute/slot operands in the proof.
-static __declspec(naked) void SuperLodModel()
+// abi_carparts_shadow, recovered VA 0x10006880: the shared car-parts shadow body.
+// The site's `movzx ebx,[edi+1Ch]` / `xor esi,esi` are re-run here (the jump
+// overwrites them), with a null guard on the parts pointer in front, and the
+// re-run `test ebx,ebx` is what the resumed `jle` reads. The nops are the
+// original's own padding between those instructions, not filler added here.
+static __declspec(naked) void CarPartsShadowShim()
 {
     __asm
     {
-        push ebp
-        mov ebp, esp
-        sub esp, 8
-        mov eax, DWORD PTR [__security_cookie]
-        xor eax, ebp
-        mov DWORD PTR [ebp - 4], eax
-        lea eax, [ebp - 8]
-        push eax
-        push 0AE4B15D6h
-        call DWORD PTR [zpatch_super_lod_lookup]
-        mov eax, DWORD PTR [ebp + 8]
-        add esp, 8
-        mov ecx, DWORD PTR [ebp - 4]
-        movsx eax, WORD PTR [eax + 2Eh]
-        cmp eax, DWORD PTR [ebp - 8]
-        setz al
-        xor ecx, ebp
-        call __security_check_cookie
-        mov esp, ebp
-        pop ebp
-        ret
-    }
-}
-
-// sub_100469E0, recovered VA 0x100469E0: the body the SuperLODFix arm installs at
-// the `test byte [eax+72h], 10h` / `jz` pair. EAX is the object and ESI the model
-// the test reads. A model that resolves to the published hash continues at the
-// site's continuation (ok); otherwise the object's 0x10 flag decides, and the
-// `jz` it would have taken is the site's branch target (fail).
-static __declspec(naked) void SuperLodShim()
-{
-    __asm
-    {
-        jmp slod_main
-    slod_fail:
-        jmp DWORD PTR [zpatch_super_lod_fail]
-    slod_main:
-        push eax
-        push ecx
-        push esi
-        call SuperLodModel
-        add esp, 4
-        pop ecx
-        test al, al
-        pop eax
-        jnz slod_ok
-        test byte ptr [eax + 72h], 10h
-        jz slod_fail
-    slod_ok:
-        jmp DWORD PTR [zpatch_super_lod_ok]
-    }
-}
-
-// sub_100459E0, recovered VA 0x100459E0: the HPE filter the shader finder calls
-// with the shader-name object. The finder takes the entry whose filter result is 0,
-// so 0 means "this is the name kind we want": the kind byte 'h', or 'p' followed by
-// 'e'. Every other name returns 2, which the finder reads as "keep looking".
-static __declspec(naked) void ShaderStreamingFilterHpe()
-{
-    __asm
-    {
-        push ebp
-        mov ebp, esp
-        mov eax, DWORD PTR [ebp + 0Ch]
-        mov cl, BYTE PTR [eax + 4]
-        cmp cl, 68h
-        jz hpe_match
-        cmp cl, 70h
-        jnz hpe_skip
-        cmp BYTE PTR [eax + 5], 65h
-        jz hpe_match
-    hpe_skip:
-        mov eax, 2
-        pop ebp
-        ret
-    hpe_match:
-        xor eax, eax
-        pop ebp
-        ret
-    }
-}
-
-// sub_10045A10, recovered VA 0x10045A10: the V filter, the same 0-for-match /
-// 2-for-skip contract for the single kind byte 'v'.
-static __declspec(naked) void ShaderStreamingFilterV()
-{
-    __asm
-    {
-        push ebp
-        mov ebp, esp
-        mov ecx, DWORD PTR [ebp + 0Ch]
-        xor edx, edx
-        mov eax, 2
-        cmp BYTE PTR [ecx + 4], 76h
-        cmovz eax, edx
-        pop ebp
-        ret
-    }
-}
-
-// sub_10045A30, recovered VA 0x10045A30: the replacement for the
-// `LookupShader("gta_ped")` call (the arm's second write then jumps over the
-// following ped-name lookups). It walks the shader group's array (count at +0Ch,
-// array at +8), asks each shader's virtual +0x10 for its name object and takes
-// the first one the HPE filter reports as the wanted kind (a 0 result; 2 means
-// keep looking), or returns null. `ret 4` because the caller pushed two arguments.
-static __declspec(naked) void ShaderStreamingFindHpe()
-{
-    __asm
-    {
-        push ebx
-        push esi
-        push edi
-        mov edi, ecx
+        cmp edi, 0
+        nop
+        jz carparts_shadow_skip
+        nop
+        movzx ebx, WORD PTR [edi + 0x1C]
+        nop
         xor esi, esi
-        cmp WORD PTR [edi + 0Ch], si
-        jbe hpe_none
-        mov ebx, DWORD PTR [esp + 10h]
-    hpe_loop:
-        mov eax, DWORD PTR [edi + 8]
-        mov ecx, DWORD PTR [eax + esi * 4]
-        test ecx, ecx
-        jz hpe_advance
-        mov edx, DWORD PTR [ecx]
-        mov eax, DWORD PTR [edx + 10h]
-        call eax
-        push eax
-        push ebx
-        call ShaderStreamingFilterHpe
-        add esp, 8
-        test eax, eax
-        jz hpe_found
-    hpe_advance:
-        movzx ecx, WORD PTR [edi + 0Ch]
-        add esi, 1
-        cmp esi, ecx
-        jl hpe_loop
-    hpe_none:
-        pop edi
-        pop esi
-        xor eax, eax
-        pop ebx
-        ret 4
-    hpe_found:
-        mov edx, DWORD PTR [edi + 8]
-        mov eax, DWORD PTR [edx + esi * 4]
-        pop edi
-        pop esi
-        pop ebx
-        ret 4
+        nop
+        test ebx, ebx
+        nop
+        jmp DWORD PTR [zpatch_carparts_resume_if]
+    carparts_shadow_skip:
+        nop
+        jmp DWORD PTR [zpatch_carparts_resume_else]
     }
 }
 
-// sub_10045A80, recovered VA 0x10045A80: the same walk for the V filter, the
-// replacement for the `LookupShader("gta_vehicle_default")` call (the arm's fourth
-// write then jumps to the end of the shader chain).
-static __declspec(naked) void ShaderStreamingFindV()
+// abi_carparts_shadow_2, recovered VA 0x100068A0: CarDynamicShadowFix's detour. It
+// re-runs the shadow call the site overwrote and then repeats it with the
+// remaining arguments, calling through the published target rather than a direct
+// call, which is what the original's body does.
+static __declspec(naked) void CarDynamicShadowShim()
 {
     __asm
     {
-        push ebx
         push esi
-        push edi
-        mov edi, ecx
-        xor esi, esi
-        cmp WORD PTR [edi + 0Ch], si
-        jbe v_none
-        mov ebx, DWORD PTR [esp + 10h]
-    v_loop:
-        mov eax, DWORD PTR [edi + 8]
-        mov ecx, DWORD PTR [eax + esi * 4]
-        test ecx, ecx
-        jz v_advance
-        mov edx, DWORD PTR [ecx]
-        mov eax, DWORD PTR [edx + 10h]
-        call eax
-        push eax
+        nop
+        push 2
+        nop
         push ebx
-        call ShaderStreamingFilterV
-        add esp, 8
-        test eax, eax
-        jz v_found
-    v_advance:
-        movzx ecx, WORD PTR [edi + 0Ch]
-        add esi, 1
-        cmp esi, ecx
-        jl v_loop
-    v_none:
-        pop edi
-        pop esi
-        xor eax, eax
-        pop ebx
-        ret 4
-    v_found:
-        mov edx, DWORD PTR [edi + 8]
-        mov eax, DWORD PTR [edx + esi * 4]
-        pop edi
-        pop esi
-        pop ebx
-        ret 4
+        nop
+        push ebx
+        nop
+        push edi
+        nop
+        call DWORD PTR [zpatch_carparts_shadow_fn]
+        push esi
+        nop
+        push 0
+        nop
+        push ebx
+        nop
+        push ebx
+        nop
+        push edi
+        nop
+        call DWORD PTR [zpatch_carparts_shadow_fn]
+        nop
+        add esp, 0x14
+        nop
+        jmp DWORD PTR [zpatch_carparts_resume_2]
     }
 }
 
-
-
-// The body's `call 0x10003980` must stay a direct `call`: the original's is an
-// `E8`, and an indirect `call [slot]` is a different instruction shape. A module
-// interface cannot export a naked function either (C2488), so the call names this
-// six-byte forwarder, which enters the layer's C entry with ECX (the salt) and
-// the stack untouched -- the same shape as misc.ixx's drive-by forwarder.
-static __declspec(naked) void CutsceneResolveEntry()
+// abi_carparts_shadow_2b, recovered VA 0x100068D0: CarDynamicShadowFix's second
+// shadow-submission body, the old builds' variant of CarDynamicShadowShim. It makes
+// the same double call through the published target and pops the same 20 argument
+// bytes, but the first submission pushes 2/0/0 instead of 2/ebx/ebx.
+static __declspec(naked) void CarDynamicShadowShimB()
 {
     __asm
     {
-        jmp DWORD PTR [zpatch_native_resolve_entry]
+        push esi
+        nop
+        push 2
+        nop
+        push 0
+        nop
+        push 0
+        nop
+        push edi
+        nop
+        call DWORD PTR [zpatch_carparts_shadow_fn]
+        nop
+        push esi
+        nop
+        push 0
+        nop
+        push 0
+        nop
+        push 0
+        nop
+        push edi
+        nop
+        call DWORD PTR [zpatch_carparts_shadow_fn]
+        nop
+        add esp, 0x14
+        nop
+        jmp DWORD PTR [zpatch_carparts_resume_2]
     }
 }
 
-// sub_100388C0, recovered VA 0x100388C0: chain B's body, 146 instructions and 592
-// bytes to its `ret 4`, plus the restore block at 0x10038B10..0x10038B3F that the
-// six `ja` exits reach (the proof sweeps the 146; the restore block follows the
-// `ret` and is not decoded by it). Its frame is the original's 0xA18: two
-// 0x140-dword object copies (ebp-504h and ebp-0A04h), the 8-byte block
-// VirtualProtect writes its old protection to, and the three scratch words the
-// camera call uses.
+// A checked rebuild of abi_fchs_check: the same table walk, with the model
+// lookup and the object pointer guarded. A missing preamble or a null object
+// leaves the 2.0f seed instead of faulting.
+void FchsCheckCpp() noexcept
+{
+    zpatch_fchs_offset = 2.0f;
+    const auto object = static_cast<uintptr_t>(zpatch_fchs_param);
+    if (object == 0)
+        return;
+    const auto lookup = reinterpret_cast<int(__cdecl*)(uint32_t, int32_t*)>(
+        zpatch_model_lookup);
+    if (lookup == nullptr)
+        return;
+
+    const int16_t model = *reinterpret_cast<const int16_t*>(object + 0x2E);
+    for (size_t index = 0; index < 512; ++index)
+    {
+        const uint32_t hash = zpatch_headlight_cone_hashes[index];
+        if (hash == 0)
+            return;
+        int32_t resolved = -1;
+        lookup(hash, &resolved);
+        if (resolved == model)
+        {
+            zpatch_fchs_offset = zpatch_headlight_cone_values[index];
+            return;
+        }
+    }
+}
+
+// abi_fchs_check, recovered VA 0x1001AD20 (46 instructions, 139 bytes,
+// 0x1001AD20..0x1001ADAA): ForceCarHeadlightShadows' per-model offset check,
+// transcribed instruction for instruction.
 //
-// It resolves a game native through the loader salt dword_1015803C, copies the
-// scene object it answers with into the first block and accumulates that object's
-// frame delta (a float at +8) into the double accumulator. It then makes the
-// camera function's `mov byte [esp + 1Ch], 1` immediate readable, writes 1 over
-// it, calls the function with the body's own float argument and keeps the call's
-// double result as a flag. Once the recovered limit (0.3333) has accumulated it
-// calls again with that immediate forced to 0, and if the two runs' position
-// floats differ by more than (0.05, 0.05, 0.05, 0.5, 0.5, 0.5) it restores the
-// object as it was before the second call and resets the accumulator; otherwise
-// it answers the second call's flag.
+// It seeds the offset float (dword_101580C0) with 2.0f, then walks the
+// [HeadlightConeOffsets] hash table from slot 0: `mov eax,ds:[0x1015ADB8]` loads
+// slot 0, and each iteration asks the game's model store for that hash's model index
+// and compares it with the object's signed word at +0x2E (the object is read
+// unguarded, as the original's `movsx eax,word [edi+2Eh]` is). On a match it
+// publishes that slot's float; otherwise it loads the next slot with
+// `mov eax,ds:[esi*4+0x1015ADBC]` -- the table's base **plus four**, because ESI
+// counts the slot it just consumed -- and stops at the first zero word.
 //
-// The `ucomisd`/`lahf`/`test ah,44h`/`jnp` sequences are the original's own
-// codegen for its `!= 0` tests: `mov al,1` when the comparison is non-zero or
-// unordered. `rep movsd` is one instruction (F3 A5) on both sides.
+// The one-word-past read. With ESI at 511 that load is `ds:[0x1015B5B8]`, the word
+// immediately after the 512-slot table in the original's `.data`. It is *not* dead
+// space: it is CarDynamicShadowFix's published shadow-function pointer, written
+// before this check can run by the ASI's own car-shadow code (see the block comment
+// in source/config.ixx). Our layout reproduces it as the same slot, with the check's
+// own resume word (0x1015B5BC) after it, so the walk reads the value the original's
+// does rather than a placeholder -- which is what makes this transcription possible
+// instead of a bounded walk. The two arrays are registered with
+// their original VAs; the hash table's registration is the extended 2,052 bytes
+// (512 words + the neighbour).
+//
+// The /GS frame is the original's (cookie slot, check call slot) and the
+// `nop dword ptr [eax]` at 0x1001AD4D is emitted as bytes. No exception frame, no TLS
+// static-init guard.
 //
 // Naked and internal: an external-linkage naked function is written to the module
 // and every importer fails (C2488).
-static __declspec(naked) void CutsceneChainBody()
+// abi_fchs_shim, recovered VA 0x1001ADB0 (9 instructions, 0x1001ADB0..0x1001ADCE):
+// the hook body the arm installs at the shadow function's entry (game 0x8F7590).
+// It stores the object the function was called with, runs the check between
+// pushad/popad, then replays the prologue the E9 replaced -- the resume must run
+// with the frame those twelve bytes establish -- and tail-jumps to the published
+// resume, never calls it.
+static __declspec(naked) void FchsShimBody()
 {
     __asm
     {
+        mov DWORD PTR [zpatch_fchs_param], ecx
+        __emit 0x60  // pushad
+        call FchsCheckCpp
+        __emit 0x61  // popad
         push ebp
         mov ebp, esp
-        sub esp, 0A18h
-        mov eax, DWORD PTR [__security_cookie]
-        xor eax, ebp
-        mov DWORD PTR [ebp - 4], eax
-        push esi
-        mov esi, ecx
-        mov ecx, DWORD PTR [zpatch_native_salt_1015803C]
-        push edi
-        mov DWORD PTR [ebp - 0A10h], esi
-        call CutsceneResolveEntry
-        lea edi, [ebp - 504h]
-        mov ecx, DWORD PTR [eax + 0Eh]
-        mov eax, DWORD PTR [ecx + eax + 18h]
-        mov ecx, 140h
-        rep movsd
-        movss xmm0, DWORD PTR [eax + 8]
-        lea eax, [ebp - 0A08h]
-        mov esi, DWORD PTR [zpatch_cutscene_poke]
-        mov edi, DWORD PTR [zpatch_cutscene_virtual_protect]
-        dec esi
-        cvtps2pd xmm0, xmm0
+        and esp, 0FFFFFFF0h
+        sub esp, 0D4h
+        jmp DWORD PTR [zpatch_fchs_resume]
+    }
+}
+
+export void SetFchsStateForTest(uintptr_t object, uintptr_t lookup) noexcept
+{
+    zpatch_fchs_param = static_cast<uint32_t>(object);
+    zpatch_model_lookup = lookup;
+}
+
+export void ClearFchsTableForTest() noexcept
+{
+    for (size_t index = 0; index < 512; ++index)
+    {
+        zpatch_headlight_cone_hashes[index] = 0;
+        zpatch_headlight_cone_values[index] = 0.0f;
+    }
+}
+
+export void SetFchsSlotForTest(size_t index, uint32_t hash, float offset) noexcept
+{
+    if (index >= 512)
+        return;
+    zpatch_headlight_cone_hashes[index] = hash;
+    zpatch_headlight_cone_values[index] = offset;
+}
+
+export void RunFchsCheckForTest() noexcept
+{
+    FchsCheckCpp();
+}
+
+export float FchsOffsetForTest() noexcept
+{
+    return zpatch_fchs_offset;
+}
+
+// sub_100064F0, recovered VA 0x100064F0: DualVehicleHeadlights' new-build body. It
+// saves every GPR (and ESP) into the module words, draws the two headlights through
+// the site's own calls -- the game's light-state global, the ped getter, the driver
+// test and the light-draw call the site's instructions name -- restoring the caller's
+// registers between the draws, then tail-jumps to the site's `pop edi` (match+338).
+// The stack offsets are the recovered ones: this variant is the 1.0.6.0-and-later
+// light call's frame, and the old-build body below differs only in them.
+static __declspec(naked) void DualHeadlightsNewBody()
+{
+    __asm
+    {
+        __emit 0x60                          // pushad
+        call DualHeadlightConstants
+        __emit 0x61                          // popad
+        mov DWORD PTR [zpatch_dual_r_eax], eax
+        mov DWORD PTR [zpatch_dual_r_ebx], ebx
+        mov DWORD PTR [zpatch_dual_r_ecx], ecx
+        mov DWORD PTR [zpatch_dual_r_edx], edx
+        mov DWORD PTR [zpatch_dual_r_esi], esi
+        mov DWORD PTR [zpatch_dual_r_edi], edi
+        mov DWORD PTR [zpatch_dual_r_ebp], ebp
+        mov DWORD PTR [zpatch_dual_r_esp], esp
+        push 0
+        call DWORD PTR [zpatch_dual_bd0]
+        add esp, 4
         push eax
-        push 40h
-        push 1
-        push esi
-        addsd xmm0, QWORD PTR [zpatch_cutscene_accum]
-        movsd QWORD PTR [zpatch_cutscene_accum], xmm0
-        call edi
-        lea eax, [ebp - 0A08h]
-        mov BYTE PTR [esi], 1
+        mov ecx, edi
+        call DWORD PTR [zpatch_dual_be4]
         push eax
-        push DWORD PTR [ebp - 0A08h]
+        mov eax, DWORD PTR [esp + 30h]
+        fld DWORD PTR [esp + 1Ch]
         push 1
-        push esi
-        call edi
-        mov eax, DWORD PTR [zpatch_cutscene_target]
-        movss xmm0, DWORD PTR [ebp + 8]
+        push DWORD PTR [zpatch_dual_light_a]
+        mov ecx, DWORD PTR [ebp + 24h]
+        sub esp, 10h
+        fstp DWORD PTR [esp + 0Ch]
+        add eax, 30h
+        fld DWORD PTR [esp + 38h]
+        fstp DWORD PTR [esp + 8]
+        fld DWORD PTR [esp + 30h]
+        fstp DWORD PTR [esp + 4]
+        fld DWORD PTR [esp + 2Ch]
+        fstp DWORD PTR [esp]
+        push eax
         push ecx
-        mov ecx, DWORD PTR [ebp - 0A10h]
-        mov DWORD PTR [ebp - 0A14h], eax
-        movss DWORD PTR [esp], xmm0
-        call DWORD PTR [ebp - 0A14h]
-        fstp QWORD PTR [ebp - 0A18h]
-        movsd xmm0, QWORD PTR [ebp - 0A18h]
-        ucomisd xmm0, QWORD PTR [zpatch_cutscene_zero]
-        lahf
-        test ah, 44h
-        jnp ccb_al_zero
-        mov al, 1
-        jmp ccb_al_done
-    ccb_al_zero:
-        xor al, al
-    ccb_al_done:
-        mov edx, DWORD PTR [ebp - 0A10h]
-        lea edi, [ebp - 0A04h]
-        movsd xmm0, QWORD PTR [zpatch_cutscene_limit]
-        mov ecx, 140h
-        comisd xmm0, QWORD PTR [zpatch_cutscene_accum]
-        mov esi, edx
-        mov BYTE PTR [ebp - 0A09h], al
-        rep movsd
-        ja ccb_return_al
-        mov edi, edx
-        lea eax, [ebp - 0A08h]
+        movsx edx, BYTE PTR [edi + 40h]
+        mov esi, DWORD PTR [edi + 48h]
+        mov edi, DWORD PTR [zpatch_dual_bcc]
+        lea ecx, [esp + 54h]
+        call DWORD PTR [zpatch_dual_bd4]
+        add esp, 24h
+        mov eax, DWORD PTR [zpatch_dual_r_eax]
+        mov ebx, DWORD PTR [zpatch_dual_r_ebx]
+        mov ecx, DWORD PTR [zpatch_dual_r_ecx]
+        mov edx, DWORD PTR [zpatch_dual_r_edx]
+        mov esi, DWORD PTR [zpatch_dual_r_esi]
+        mov edi, DWORD PTR [zpatch_dual_r_edi]
+        mov ebp, DWORD PTR [zpatch_dual_r_ebp]
+        mov esp, DWORD PTR [zpatch_dual_r_esp]
+        push 0
+        call DWORD PTR [zpatch_dual_bd0]
+        add esp, 4
         push eax
-        mov ecx, 140h
-        lea esi, [ebp - 504h]
-        rep movsd
-        mov esi, DWORD PTR [zpatch_cutscene_poke]
-        mov edi, DWORD PTR [zpatch_cutscene_virtual_protect]
-        dec esi
-        push 40h
-        push 1
-        push esi
-        call edi
-        lea eax, [ebp - 0A08h]
-        mov BYTE PTR [esi], 0
+        mov ecx, edi
+        call DWORD PTR [zpatch_dual_be4]
+        fld DWORD PTR [esp + 18h]
+        mov ecx, DWORD PTR [esp + 28h]
         push eax
-        push DWORD PTR [ebp - 0A08h]
         push 1
-        push esi
-        call edi
-        mov eax, DWORD PTR [zpatch_cutscene_target]
-        movss xmm0, DWORD PTR [ebp + 8]
+        push DWORD PTR [zpatch_dual_light_b]
+        mov eax, DWORD PTR [ebp + 24h]
+        sub esp, 10h
+        fstp DWORD PTR [esp + 0Ch]
+        add ecx, 30h
+        fld DWORD PTR [esp + 38h]
+        fstp DWORD PTR [esp + 8]
+        fld DWORD PTR [esp + 30h]
+        fstp DWORD PTR [esp + 4]
+        fld DWORD PTR [esp + 2Ch]
+        fstp DWORD PTR [esp]
         push ecx
-        mov ecx, DWORD PTR [ebp - 0A10h]
-        mov DWORD PTR [ebp - 0A14h], eax
-        movss DWORD PTR [esp], xmm0
-        call DWORD PTR [ebp - 0A14h]
-        fstp QWORD PTR [ebp - 0A18h]
-        movsd xmm0, QWORD PTR [ebp - 0A18h]
-        xorps xmm3, xmm3
-        ucomisd xmm0, xmm3
-        lahf
-        test ah, 44h
-        jnp ccb_dl_zero
-        mov dl, 1
-        jmp ccb_dl_done
-    ccb_dl_zero:
-        xor dl, dl
-    ccb_dl_done:
-        mov eax, DWORD PTR [ebp - 0A10h]
-        lea edi, [ebp - 504h]
-        movss xmm1, DWORD PTR [zpatch_cutscene_abs_mask]
-        mov ecx, 140h
-        movss xmm2, DWORD PTR [zpatch_cutscene_eps_a]
-        mov esi, eax
-        rep movsd
-        movss xmm0, DWORD PTR [ebp - 4E4h]
-        subss xmm0, DWORD PTR [ebp - 9E4h]
-        andps xmm0, xmm1
-        comiss xmm0, xmm2
-        ja ccb_restore
-        movss xmm0, DWORD PTR [ebp - 4E0h]
-        subss xmm0, DWORD PTR [ebp - 9E0h]
-        andps xmm0, xmm1
-        comiss xmm0, xmm2
-        ja ccb_restore
-        movss xmm0, DWORD PTR [ebp - 4DCh]
-        subss xmm0, DWORD PTR [ebp - 9DCh]
-        andps xmm0, xmm1
-        comiss xmm0, xmm2
-        ja ccb_restore
-        movss xmm0, DWORD PTR [ebp - 4C4h]
-        subss xmm0, DWORD PTR [ebp - 9C4h]
-        movss xmm2, DWORD PTR [zpatch_cutscene_eps_b]
-        andps xmm0, xmm1
-        comiss xmm0, xmm2
-        ja ccb_restore
-        movss xmm0, DWORD PTR [ebp - 4C0h]
-        subss xmm0, DWORD PTR [ebp - 9C0h]
-        andps xmm0, xmm1
-        comiss xmm0, xmm2
-        ja ccb_restore
-        movss xmm0, DWORD PTR [ebp - 4BCh]
-        subss xmm0, DWORD PTR [ebp - 9BCh]
-        andps xmm0, xmm1
-        comiss xmm0, xmm2
-        ja ccb_restore
-        pop edi
-        mov al, dl
-        pop esi
-        mov ecx, DWORD PTR [ebp - 4]
-        xor ecx, ebp
-        call __security_check_cookie
-        mov esp, ebp
-        pop ebp
-        ret 4
-    ccb_restore:
-        mov edi, eax
-        movsd QWORD PTR [zpatch_cutscene_accum], xmm3
-        mov al, BYTE PTR [ebp - 0A09h]
-        lea esi, [ebp - 0A04h]
-        mov ecx, 140h
-        rep movsd
-    ccb_return_al:
-        mov ecx, DWORD PTR [ebp - 4]
-        pop edi
-        xor ecx, ebp
-        pop esi
-        call __security_check_cookie
-        mov esp, ebp
-        pop ebp
-        ret 4
-        __emit 0CCh
+        push eax
+        movsx edx, BYTE PTR [edi + 40h]
+        mov esi, DWORD PTR [edi + 48h]
+        mov edi, DWORD PTR [zpatch_dual_bcc]
+        lea ecx, [esp + 54h]
+        call DWORD PTR [zpatch_dual_bd4]
+        add esp, 24h
+        jmp DWORD PTR [zpatch_dual_be0]
+    }
+}
+
+// sub_10006630, recovered VA 0x10006630: DualVehicleHeadlights' old-build body, the
+// 1.0.0.0/1.0.4.0/1.0.0.4 variant. Instruction for instruction the same as the new
+// body except for the four float offsets each draw reads: this build's light call
+// pushes its arguments one dword (then two) further up the frame.
+static __declspec(naked) void DualHeadlightsOldBody()
+{
+    __asm
+    {
+        __emit 0x60                          // pushad
+        call DualHeadlightConstants
+        __emit 0x61                          // popad
+        mov DWORD PTR [zpatch_dual_r_eax], eax
+        mov DWORD PTR [zpatch_dual_r_ebx], ebx
+        mov DWORD PTR [zpatch_dual_r_ecx], ecx
+        mov DWORD PTR [zpatch_dual_r_edx], edx
+        mov DWORD PTR [zpatch_dual_r_esi], esi
+        mov DWORD PTR [zpatch_dual_r_edi], edi
+        mov DWORD PTR [zpatch_dual_r_ebp], ebp
+        mov DWORD PTR [zpatch_dual_r_esp], esp
+        push 0
+        call DWORD PTR [zpatch_dual_bd0]
+        add esp, 4
+        push eax
+        mov ecx, edi
+        call DWORD PTR [zpatch_dual_be4]
+        push eax
+        mov eax, DWORD PTR [esp + 30h]
+        fld DWORD PTR [esp + 20h]
+        push 1
+        push DWORD PTR [zpatch_dual_light_a]
+        mov ecx, DWORD PTR [ebp + 24h]
+        sub esp, 10h
+        fstp DWORD PTR [esp + 0Ch]
+        add eax, 30h
+        fld DWORD PTR [esp + 30h]
+        fstp DWORD PTR [esp + 8]
+        fld DWORD PTR [esp + 2Ch]
+        fstp DWORD PTR [esp + 4]
+        fld DWORD PTR [esp + 34h]
+        fstp DWORD PTR [esp]
+        push eax
+        push ecx
+        movsx edx, BYTE PTR [edi + 40h]
+        mov esi, DWORD PTR [edi + 48h]
+        mov edi, DWORD PTR [zpatch_dual_bcc]
+        lea ecx, [esp + 54h]
+        call DWORD PTR [zpatch_dual_bd4]
+        add esp, 24h
+        mov eax, DWORD PTR [zpatch_dual_r_eax]
+        mov ebx, DWORD PTR [zpatch_dual_r_ebx]
+        mov ecx, DWORD PTR [zpatch_dual_r_ecx]
+        mov edx, DWORD PTR [zpatch_dual_r_edx]
+        mov esi, DWORD PTR [zpatch_dual_r_esi]
+        mov edi, DWORD PTR [zpatch_dual_r_edi]
+        mov ebp, DWORD PTR [zpatch_dual_r_ebp]
+        mov esp, DWORD PTR [zpatch_dual_r_esp]
+        push 0
+        call DWORD PTR [zpatch_dual_bd0]
+        add esp, 4
+        push eax
+        mov ecx, edi
+        call DWORD PTR [zpatch_dual_be4]
+        fld DWORD PTR [esp + 1Ch]
+        mov ecx, DWORD PTR [esp + 28h]
+        push eax
+        push 1
+        push DWORD PTR [zpatch_dual_light_b]
+        mov eax, DWORD PTR [ebp + 24h]
+        sub esp, 10h
+        fstp DWORD PTR [esp + 0Ch]
+        add ecx, 30h
+        fld DWORD PTR [esp + 30h]
+        fstp DWORD PTR [esp + 8]
+        fld DWORD PTR [esp + 2Ch]
+        fstp DWORD PTR [esp + 4]
+        fld DWORD PTR [esp + 34h]
+        fstp DWORD PTR [esp]
+        push ecx
+        push eax
+        movsx edx, BYTE PTR [edi + 40h]
+        mov esi, DWORD PTR [edi + 48h]
+        mov edi, DWORD PTR [zpatch_dual_bcc]
+        lea ecx, [esp + 54h]
+        call DWORD PTR [zpatch_dual_bd4]
+        add esp, 24h
+        jmp DWORD PTR [zpatch_dual_be0]
     }
 }

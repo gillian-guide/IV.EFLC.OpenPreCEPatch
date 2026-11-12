@@ -70,18 +70,20 @@ target_sources(zp_modules PUBLIC
     source/game.ixx
     source/options.ixx
     source/loader.ixx
-    source/steam.ixx
     source/warnings.ixx
     source/shared.ixx
     source/native.ixx
     source/stability.ixx
-    source/vehicles.ixx
+    source/fixes.ixx
+    source/performance.ixx
     source/graphics.ixx
-    source/launcher.ixx
-    source/loading.ixx
-    source/audio.ixx
+    source/episodic.ixx
+    source/compatibility.ixx
+    source/multiplayer.ixx
+    source/vehicles.ixx
     source/misc.ixx
-    source/ooc.ixx)
+    source/launcher.ixx
+    source/registration.ixx)
 target_include_directories(zp_modules PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/source
   ${CMAKE_CURRENT_SOURCE_DIR}/external/injector/include
@@ -299,7 +301,7 @@ set_tests_properties(zp_native_guard PROPERTIES WORKING_DIRECTORY ${CMAKE_CURREN
 
 # The NewMemorySystem arena, asserted by behaviour instead of by its disassembly: the
 # three rebuilt vtable methods (allocate 0x10038360, free 0x10038430, membership
-# 0x100385A0) driven directly through loading.ixx's test-only seam. The scheme (unit,
+# 0x100385A0) driven directly through performance.ixx's test-only seam. The scheme (unit,
 # want, the 2*unit slack, the distance range), the distance word, the 0xCD fill,
 # membership, free and the null-returning failed request, all on the process heap.
 # Offline: no game image, no ASI load, and it writes no files.

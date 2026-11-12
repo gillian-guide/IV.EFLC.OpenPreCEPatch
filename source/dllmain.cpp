@@ -10,14 +10,7 @@ import options;
 import shared;
 import native;
 import warnings;
-import stability;
-import vehicles;
-import graphics;
-import launcher;
-import loading;
-import audio;
-import misc;
-import ooc;
+import registration;
 
 extern "C" __declspec(dllexport) void InitializeASI();
 
@@ -165,14 +158,9 @@ namespace
         // The native-call layer resolves the game's native-handle pointer and
         // publishes its entries before any arm can install a body that uses them.
         Native::Register();
-        RegisterStability();
-        RegisterVehicles();
-        RegisterGraphics();
-        RegisterLauncher();
-        RegisterLoading();
-        RegisterAudio();
-        RegisterMisc();
-        RegisterOoc();
+        // The feature modules own the arms; the registration driver owns the
+        // order they subscribe in.
+        Registration::RegisterAll();
         Loader::Run();
 
 #ifdef ZP_TRACE

@@ -2,7 +2,7 @@
 
 #include <cstdio>
 
-import misc;
+import compatibility;
 
 // The GFWL xlive arm's module-image guard: an offset is readable only when it
 // lies inside the mapped image and its page is committed and accessible.

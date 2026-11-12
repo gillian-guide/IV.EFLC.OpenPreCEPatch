@@ -33,7 +33,7 @@ car_decals_selector 1001B2E0 ?CarDecalsSelectorShim@@YAXXZ 13
 car_parts_shadow 10006880 ?CarPartsShadowShim@@YAXXZ 13
 car_dynamic_shadow 100068A0 ?CarDynamicShadowShim@@YAXXZ 26
 car_dynamic_shadow_b 100068D0 ?CarDynamicShadowShimB@@YAXXZ 27
-# ForceCarHeadlightShadows (source/vehicles.ixx): the shadow function's hook body and
+# ForceCarHeadlightShadows (source/graphics.ixx): the shadow function's hook body and
 # the per-model offset check it calls. The check (sub_1001AD20, 46 instructions, 139
 # bytes) is transcribed; it walks the [HeadlightConeOffsets] hash table with
 # `mov eax,[esi*4+0x1015ADBC]`, so ESI=511 reads the word immediately after the
@@ -82,12 +82,12 @@ native_call_bool 1005B3F0 ?NativeCallBoolBody@@YIIII@Z 46
 native_call_hash 1005B150 ?NativeCallHashBody@@YIII@Z 44
 native_cleanup_dword 1005DE40 ?NativeCleanupDwordBody@@YAIXZ 21
 native_cleanup_bool 1005DE80 ?NativeCleanupBoolBody@@YAIXZ 21
-# DrivebyFOVFix (source/misc.ixx): the shim and the FOV helper it calls. The helper
+# DrivebyFOVFix (source/fixes.ixx): the shim and the FOV helper it calls. The helper
 # calls the native layer's resolve entry instead of the original's sub_10003980;
 # the proof compares a call as an immediate, so the body is whole.
 driveby_fov_helper 10006450 ?DrivebyFovHelperBody@@YAXXZ 20
 driveby_fov_shim 100064B0 ?DrivebyFovShimBody@@YAXXZ 5
-# BadPlayerModelCrashFix (source/stability.ixx): the site's trampoline, the payload
+# BadPlayerModelCrashFix (source/multiplayer.ixx): the site's trampoline, the payload
 # it calls and the two native wrappers of its GTAC.dll diagnostic. The wrappers'
 # shared pieces (sub_100038C0/DE40, sub_1005B150, sub_1005B3F0, sub_10003E50,
 # sub_100038E0) are transcribed in source/native.ixx and source/shared.ixx and
@@ -106,11 +106,11 @@ bad_player_model_print 1005B530 ?BpmPrintBody@@YAXXZ 45
 # resolves, and the registered length. AGENTS.md.
 table 100DE770 ?kBadPlayerModelNames@@3QBQBDB 153820
 bpm_model_name 10003F00 ?BpmModelNameBody@@YAXXZ 21
-# Patch4RemoveModChecks (source/misc.ixx): the shared GFWL/Patch4 stub. Its
+# Patch4RemoveModChecks (source/multiplayer.ixx): the shared GFWL/Patch4 stub. Its
 # helper (sub_10005340, 145 instructions) is compiler output and is rebuilt; the
-# same recovered VA is already proven for loading.ixx's RemoveGFWLUpdatePopup arm.
+# same recovered VA is already proven for multiplayer.ixx's RemoveGFWLUpdatePopup arm.
 patch4_stub 100054E0 ?Patch4StubBody@@YAXXZ 8
-# CopSirensFlag (source/misc.ixx): the two model-check shims, the shared IDE
+# CopSirensFlag (source/vehicles.ixx): the two model-check shims, the shared IDE
 # parser hook and both model checks. The checks read the +siren table as a plain
 # absolute (slot 0) and as `[esi/edi + 0x10159380]`, a base-plus-displacement
 # absolute the registry canonicalises with the base register still compared. The
@@ -131,7 +131,7 @@ copsirens_ide 100040E0 ?IdeHookBody@@YAXXZ 9
 # both images. AGENTS.md.
 table 1015CE28 _zpatch_popuplights_models 2048
 copsirens_ide_parse 10003FA0 ?IdeParseBody@@YAXXZ 92
-# PopupHeadlightsFlag (source/misc.ixx): the EAX site's shim, its EDX twin and the
+# PopupHeadlightsFlag (source/vehicles.ixx): the EAX site's shim, its EDX twin and the
 # checker itself. The twin's pattern is absent on 1.0.8.0 (the original's own second
 # site is a build-specific row) but the body is still proven.
 popup_headlights 10044530 ?PopupHeadlightsBodyA@@YAXXZ 10
@@ -148,12 +148,12 @@ popup_headlights_edx 10044560 ?PopupHeadlightsBodyB@@YAXXZ 10
 table 1015C628 _zpatch_popup_angle_hashes 2048
 table 1015BE28 _zpatch_popup_angle_values 2048
 popup_headlights_check 10044310 ?PopupHeadlightsCheckBody@@YAXXZ 125
-# NewMemorySystem (source/loading.ixx): the ten methods of the allocator vtable
+# NewMemorySystem (source/performance.ixx): the ten methods of the allocator vtable
 # (original 0x100B5038) that are written as instruction streams. Its three arena
 # methods (0x10038360 allocate, 0x10038430 free, 0x100385A0 membership) carry the
 # compiler's frames, cmov sequences and hash-map code and are rebuilt in C++, so
 # they have no rows (AGENTS.md). nms_sync is the table's 0x100057F0 slot: the
-# same two instructions as audio.ixx's better_mp_sync row, duplicated because a
+# same two instructions as multiplayer.ixx's better_mp_sync row, duplicated because a
 # table in this unit cannot name a body internal to another unit.
 nms_ctor 10038640 ?NmsCtorBody@@YAPAXXZ 17
 nms_reject_ptr 10038350 ?NmsRejectPtrBody@@YAXXZ 2
@@ -165,18 +165,18 @@ nms_reject 10038590 ?NmsRejectBody@@YAXXZ 2
 nms_sync 100057F0 ?NmsSyncBody@@YAXXZ 2
 nms_thunk18 10038620 ?NmsThunk18Body@@YAXXZ 5
 nms_noop_arg 10038630 ?NmsNoopArgBody@@YAXXZ 1
-# NewFilesCompatibility (source/loading.ixx): the registrar's replacement tail.
+# NewFilesCompatibility (source/compatibility.ixx): the registrar's replacement tail.
 # Its two update bodies (0x10051890, 0x100518D0) are compiled in the original and
 # are rebuilt in C++, so they have no rows (AGENTS.md).
 newfiles_register 10051600 ?NewfilesRegisterBody@@YAXXZ 4
-# NewSavesCompatibility (source/loading.ixx): the savegame-load trampoline, eight
+# NewSavesCompatibility (source/compatibility.ixx): the savegame-load trampoline, eight
 # instructions to its tail jump. The prepare step (0x10051FD0), the converter
 # (0x10051B30) and the two read hooks it installs (0x10051A90, 0x10051AD0) are
 # compiled C in the original -- file IO, a std::string path build with the TLS
 # static-init guards and /GS frames -- and are rebuilt in C++, so they have no rows
 # (AGENTS.md).
 new_saves_tramp 100521E0 ?NewSavesTrampoline@@YAXXZ 8
-# RestoreDeathMusic (source/audio.ixx): the gate body and the three native-script
+# RestoreDeathMusic (source/misc.ixx): the gate body and the three native-script
 # wrappers it answers through, transcribed because the layer's own four pieces
 # (sub_100038C0/38E0, sub_1005DE40/DE80, sub_1005B150) are reached through
 # forwarders. The install body (sub_10050AD0, 75 instructions to its `ret`) is
@@ -186,7 +186,7 @@ death_music_gate 10050A50 ?DeathMusicGateBody@@YA_NXZ 41
 audio_call_two 1005B1E0 ?AudioCallTwoBody@@YIIII@Z 48
 audio_call_zero_bool 1005B360 ?AudioCallZeroBoolBody@@YIII@Z 44
 audio_call_byte 1005B490 ?AudioCallByteBody@@YIIII@Z 46
-# MouseFix (source/audio.ixx): all eight pieces are transcribed. The two site
+# MouseFix (source/fixes.ixx): all eight pieces are transcribed. The two site
 # bodies call their helpers directly (the call target is an immediate on both
 # sides, which is what the proof compares), and the advance helper's only indirect
 # call is the game's VirtualProtect through the published slot -- the original's
@@ -199,7 +199,7 @@ mf_angle_step 10024440 ?MfAngleStepBody@@YAXXZ 62
 mf_angle 10024560 ?MfAngleBody@@YAXXZ 25
 mf_advance 100243A0 ?MfAdvanceBody@@YAXXZ 23
 mf_advance_windows 100241E0 ?MfAdvanceWindowsBody@@YAXXZ 138
-# LoadDLCs (source/loading.ixx): the loader callback's replacement and the DLC
+# LoadDLCs (source/episodic.ixx): the loader callback's replacement and the DLC
 # manager's initialisation tail. The discovery pass the tail calls (0x10023150) is
 # a rebuild - compiled code with a /GS frame, TLS static-init guards and CRT calls -
 # so it has no row (AGENTS.md).
@@ -210,7 +210,7 @@ load_dlcs_struct_fixup 10023490 ?DlcStructFixupBody@@YAXXZ 19
 # it walks. Every operand is an absolute slot except the two indexed absolutes into
 # the wheelangle model/angle tables, which are registered: `table` rows below pair
 # the recovered VA with the candidate symbol the linker map resolves (a C name,
-# because the arrays are `extern "C"` in misc.ixx where the IDE parser hook fills
+# because the arrays are `extern "C"` in vehicles.ixx where the IDE parser hook fills
 # them) and the length there (512 dwords). Both tables are all-zero at load in the
 # original and here, so the content check pins "reads a zero-filled table registered
 # for this row"; which table each operand reads is pinned by the manifest pairing and
@@ -243,14 +243,14 @@ nolivery_body_b 1003D340 ?NoliveryBodyB@@YAXXZ 11
 nolivery_body_c 1003D370 ?NoliveryBodyC@@YAXXZ 12
 nolivery_body_d 1003D3A0 ?NoliveryBodyD@@YAXXZ 14
 nolivery_body_e 1003D3E0 ?NoliveryBodyE@@YAXXZ 14
-# CutsceneFixes (source/graphics.ixx): chain B's body, the original's sub_100388C0.
+# CutsceneFixes (source/fixes.ixx): chain B's body, the original's sub_100388C0.
 # 146 is the count to its `ret 4` at 0x10038B0D, which is 592 bytes; the restore
 # block at 0x10038B10..0x10038B3F follows that `ret` and is reached only by the six
 # `ja` exits, so the linear sweep does not decode it. The body's `call` names the
 # local resolve forwarder that stands in for sub_10003980, which is rebuilt as C in
 # source/native.ixx; the proof compares a call as an immediate.
 cutscene_chain_b 100388C0 ?CutsceneChainBody@@YAXXZ 146
-# OutOfCommissionFix (source/ooc.ixx): the branch body the E9 at game 0xA22E97
+# OutOfCommissionFix (source/fixes.ixx): the branch body the E9 at game 0xA22E97
 # jumps to (7 instructions) and the mounting wrapper the E8 at 0xB70733 is
 # retargeted to (41 to its `ret`, 0x1004C350..0x1004C3BF). The key's remaining
 # rebuilt pieces are compiler output -- the init (sub_1004B750, EH + C++
@@ -260,7 +260,7 @@ cutscene_chain_b 100388C0 ?CutsceneChainBody@@YAXXZ 146
 # this file (AGENTS.md).
 ooc_branch 1004C3C0 ?OocBranchBody@@YAXXZ 7
 ooc_wrap 1004C350 ?OocWrapBody@@YAXXZ 41
-# The decoder pair (source/ooc.ixx): an interpreter with sixteen exits and no
+# The decoder pair (source/fixes.ixx): an interpreter with sixteen exits and no
 # register contract beyond "ECX in, EAX out", no exception frame, no TLS static-init
 # guard and no indexed absolute operand, so it is transcribed whole. The opcode
 # step's four CRT `memcpy` calls go through a forwarder (the inline assembler
@@ -274,7 +274,7 @@ ooc_decode 1004B570 ?OocDecodeBody@@YIHPAE@Z 159
 # the first eleven, and the tail jump. The site's own call is at match+0x0E, so
 # the resume it publishes is match+0x13 (the `push 0` after that call).
 
-# The bounded formatter (source/stability.ixx): the original's single formatter,
+# The bounded formatter (source/shared.ixx): the original's single formatter,
 # transcribed whole. sub_10001280 is the wrapper (the other modules reach it through
 # a six-byte forwarder on zpatch_format_entry), sub_10001240 the printf-engine call
 # -- its `call ds:[__stdio_common_vsprintf]` is a slot here, because the static CRT
@@ -283,19 +283,19 @@ ooc_decode 1004B570 ?OocDecodeBody@@YIHPAE@Z 159
 bpm_format 10001280 ?BpmFormat@@YAXXZ 13
 bpm_format_engine 10001240 ?BpmFormatEngine@@YAXXZ 21
 bpm_format_options 10001230 ?BpmFormatOptions@@YAXXZ 2
-# NewSavesCompatibility's two installed hooks (source/loading.ixx): the read at game
+# NewSavesCompatibility's two installed hooks (source/compatibility.ixx): the read at game
 # 0x7D8C50 and the second LoadData at 0x8DA090. Both were C++ rebuilds; the /GS
 # frames, the EAX the hooks answer with and the unconditional second call are now
 # the original's own instructions. AGENTS.md.
 new_saves_read_hook 10051A90 ?NewSavesReadHook@@YAXXZ 20
 new_saves_second_hook 10051AD0 ?NewSavesSecondLoadHook@@YAXXZ 33
-# LoadDLCs' discovery pass (source/loading.ixx): 223 instructions to its `ret`, with
+# LoadDLCs' discovery pass (source/episodic.ixx): 223 instructions to its `ret`, with
 # no EH frame, no TLS static-init guard and no indexed absolute operand -- the one
 # rebuilt piece that was transcribable, so it is transcribed. Its IAT operands are
 # the five slots the arm fills; its two `call` targets are the allocation/memset
 # forwarders and the shared formatter. AGENTS.md.
 
-# The OOC archive builder (source/ooc.ixx) and its twelve internal helpers: what was
+# The OOC archive builder (source/fixes.ixx) and its twelve internal helpers: what was
 # the last class-D piece. Its stream has no exception frame and no TLS static-init
 # guard, and every one of the twelve helpers is itself a plain stream -- SSE stores,
 # cmov, direct `E8`s, EBP/ECX-relative -- so the whole graph is transcribed here and
@@ -316,11 +316,11 @@ ooc_vector_size 100564C0 ?OocVectorSizeBody@@YAXXZ 9
 ooc_vector_clear 10056500 ?OocVectorClearBody@@YAXXZ 11
 ooc_entry_name 10057710 ?OocEntryNameBody@@YAXXZ 6
 
-# FreezeCarFix / DebugPrintSpawns (source/vehicles.ixx): the spawn guard, the ten
+# FreezeCarFix / DebugPrintSpawns (source/multiplayer.ixx): the spawn guard, the ten
 # factory-dispatch thunks and the 394-instruction spawn probe the original's handler
 # 0x10037C70 installs through sixteen `E8` detours (seventeen rows: the primary and
 # its short prefix name the same site). The probe's name/who/print helpers are
-# compiler output and rebuilt in C++; its formatter is the body source/stability.ixx
+# compiler output and rebuilt in C++; its formatter is the body source/shared.ixx
 # already proves. AGENTS.md.
 spawns_guard 100372F0 ?SpawnsGuardBody@@YAXXZ 16
 spawns_case_0x24 10037330 ?SpawnsCase0x24Body@@YAXXZ 9
@@ -344,7 +344,7 @@ spawns_probe 10037510 ?SpawnsProbeBody@@YAXXZ 394
 # death-music installer 0x10050BD0 are the two handlers the original's config
 # walker calls once the companion library is loaded; both are transcribed. The
 # death-music gate and its three native-script wrappers are the same recovered
-# pieces source/audio.ixx carries for RestoreDeathMusic (its copies have internal
+# pieces source/misc.ixx carries for RestoreDeathMusic (its copies have internal
 # linkage, so this module carries its own; only one copy is live per
 # configuration). The four callbacks are the function pointers the two
 # AddIVMenuOption registrations pass. sub_1001ECB0 and sub_10050AD0 are compiler

@@ -4,7 +4,7 @@
 #include <string>
 
 import common;
-import steam;
+import compatibility;
 
 // The Steam achievement bridge's recovered id -> Steam name table, and the
 // no-op path when the process is not the game (the native test process has no

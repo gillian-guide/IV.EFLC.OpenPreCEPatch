@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <cstring>
 
-import stability;
+import multiplayer;
 
 // The `model_index` group: the 38,455-name table is indexed once by the same
 // hash resolver the transcribed body calls, then binary-searched. A fake

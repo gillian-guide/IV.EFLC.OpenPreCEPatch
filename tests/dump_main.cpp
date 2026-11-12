@@ -13,14 +13,9 @@ import options;
 import patch;
 import shared;
 import native;
-import stability;
-import vehicles;
-import graphics;
+import fixes;
 import launcher;
-import loading;
-import audio;
-import misc;
-import ooc;
+import registration;
 
 // The write-set dump: load a copy of a game image into this process, apply the
 // image's own relocations to it (which is what the game's loader does), run the
@@ -571,7 +566,7 @@ int main(int argc, char** argv)
     // The payload path only runs when the game calls the wrapper the arm installs,
     // so this is the one way the rebuilt decoder and archive builder execute
     // offline: decode the pinned resource and check both results against the
-    // fingerprints the recovered bytes carry (source/ooc.ixx).
+    // fingerprints the recovered bytes carry (source/fixes.ixx).
     if (oocSelfTest)
     {
         const char* failure = OocSelfCheck();
@@ -613,14 +608,7 @@ int main(int argc, char** argv)
     // The same layer registration the ASI performs: it only resolves a pointer
     // and publishes body addresses, so it changes no byte of the image.
     Native::Register();
-    RegisterStability();
-    RegisterVehicles();
-    RegisterGraphics();
-    RegisterLauncher();
-    RegisterLoading();
-    RegisterAudio();
-    RegisterMisc();
-    RegisterOoc();
+    Registration::RegisterAll();
 
     // One key's cell: every other key off, this one on -- the same document
     // `--per-option` builds, for a check that reads a single arm's write set

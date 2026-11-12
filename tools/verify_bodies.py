@@ -624,7 +624,7 @@ def main() -> int:
                                Tables(original, {}, "candidate")))
 
         # The map reader resolves both decorations. A table can be a C array in
-        # another unit (the wheelangle tables are `extern "C"` in misc.ixx and the
+        # another unit (the wheelangle tables are `extern "C"` in vehicles.ixx and the
         # map gives them no C++ name), so a `table` row has to be able to name it.
         map_text = (" 0001:00000000       ?SelftestBody@@YAXXZ             10001000"
                     "     zp_modules:vehicles.obj\n"

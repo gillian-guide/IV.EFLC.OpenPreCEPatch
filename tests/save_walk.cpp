@@ -6,18 +6,18 @@
 #include <fstream>
 #include <new>
 
-import loading;
+import compatibility;
 
 // The save converter's behavioural test: what `sub_10051B30` (0x10051B30, 337
 // instructions, rebuilt as `NewSavesConvert`) decides about a save file, on the real
 // saves in `game_refs/saves/` and on synthetic layouts.
 //
 // The converter is the only piece in the tree that can destroy user data, so its walk
-// is pinned here by behaviour, not by shape. `Loading::WalkSaveFile` runs the same walk
+// is pinned here by behaviour, not by shape. `Compatibility::WalkSaveFile` runs the same walk
 // the production path runs (`NewSavesWalkFile`) and the same patch choice
 // (`NewSavesChoosePatch`), and patches nothing; the values this program asserts are
 // recomputed from the file by this file's own parser (an `std::ifstream` walk written
-// from the recovered format, not from `source/loading.ixx`), so the test cannot agree
+// from the recovered format, not from `source/compatibility.ixx`), so the test cannot agree
 // with a bug by construction.
 //
 //     zp_save_walk <saves directory>          discover, then convert every save under it
@@ -33,7 +33,7 @@ namespace
 {
     // ---------------------------------------------------------------------------
     // The recovered format and the recovered decision values, read off the original's
-    // own instructions rather than out of `source/loading.ixx`.
+    // own instructions rather than out of `source/compatibility.ixx`.
     // ---------------------------------------------------------------------------
     constexpr std::size_t kHeaderSize = 0x110;       // fread(header, 0x110, 1) at 0x10051BAD
     constexpr std::size_t kMagicOffset = 0x0C;       // cmp dword [eax],45564153h at 0x10051BD1
@@ -242,9 +242,9 @@ namespace
             std::format("{}: {} chunk header(s) at +0x{:X} (test parser)", label, parsed.chunks.size(),
                 kHeaderSize));
 
-        const Loading::SaveWalkDecision decision =
-            Loading::WalkSaveFile(path.string().c_str());
-        Check(decision.end == Loading::SaveWalkEnd::walked,
+        const Compatibility::SaveWalkDecision decision =
+            Compatibility::WalkSaveFile(path.string().c_str());
+        Check(decision.end == Compatibility::SaveWalkEnd::walked,
             std::format("{}: walk answered \"walked\" (converter, {} byte(s))", label,
                 std::filesystem::file_size(path)));
         Check(decision.chunkCount == parsed.chunks.size(),
@@ -319,17 +319,17 @@ namespace
     // ---------------------------------------------------------------------------
     // The faults: what a call did, so the original's throw can be asserted by type.
     // ---------------------------------------------------------------------------
-    std::string EndName(Loading::SaveWalkEnd end)
+    std::string EndName(Compatibility::SaveWalkEnd end)
     {
         switch (end)
         {
-        case Loading::SaveWalkEnd::walked:
+        case Compatibility::SaveWalkEnd::walked:
             return "walked";
-        case Loading::SaveWalkEnd::notASave:
+        case Compatibility::SaveWalkEnd::notASave:
             return "notASave";
-        case Loading::SaveWalkEnd::noFile:
+        case Compatibility::SaveWalkEnd::noFile:
             return "noFile";
-        case Loading::SaveWalkEnd::rejected:
+        case Compatibility::SaveWalkEnd::rejected:
             return "rejected";
         }
         return "unknown";
@@ -339,7 +339,7 @@ namespace
     {
         try
         {
-            return EndName(Loading::WalkSaveFile(path.string().c_str()).end);
+            return EndName(Compatibility::WalkSaveFile(path.string().c_str()).end);
         }
         catch (const std::bad_alloc&)
         {
@@ -377,7 +377,7 @@ namespace
         std::string end;
         try
         {
-            end = EndName(Loading::WalkSaveFile(path.string().c_str()).end);
+            end = EndName(Compatibility::WalkSaveFile(path.string().c_str()).end);
         }
         catch (const std::bad_alloc&)
         {

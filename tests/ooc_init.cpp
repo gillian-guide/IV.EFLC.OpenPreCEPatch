@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-import ooc;
+import fixes;
 
 // The OutOfCommissionFix init (`sub_1004B750`, 0x1004B750, 991 instructions,
 // rebuilt in C++ because of its container plumbing), asserted by behaviour with
@@ -19,7 +19,7 @@ import ooc;
 // that does *not* pin is the init's own semantics -- when it runs, what it leaves
 // in the module's slots, and what it does when its decode fails. This test pins
 // exactly those three things by driving the module's own `OocInitialise`
-// (`OocInit::Initialise`, `source/ooc.ixx`) and reading the slots it left.
+// (`OocInit::Initialise`, `source/fixes.ixx`) and reading the slots it left.
 //
 // What the original's instructions say (image base 0x10000000, read off
 // ../game_refs/ZolikaPatch_original.asi.off with a linear capstone sweep of the
@@ -72,7 +72,7 @@ import ooc;
 // wrapper's `push dword ptr [0x10159BFC]` at 0x1004C373 (the wrapper calls the
 // init at 0x1004C364 and only formats the mount string when it answers non-null).
 //
-// The seam these checks drive is `OocInit` (`source/ooc.ixx`): `Initialise` is the
+// The seam these checks drive is `OocInit` (`source/fixes.ixx`): `Initialise` is the
 // function the wrapper calls, `Current` reads the three module slots, `Decode` is
 // the transcribed driver, `Register`/`FrontEntry`/`ClearEntries` are the
 // registration and the vector's own clear, and `ResourceBytes` is the recovered

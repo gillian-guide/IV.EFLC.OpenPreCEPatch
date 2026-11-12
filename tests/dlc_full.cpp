@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-import loading;
+import episodic;
 
 // The full DLC discovery rewrite: it walks the checked path API, registers the
 // one existing layout per DLC, applies it, and sets the post-discovery bytes.

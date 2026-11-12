@@ -58,6 +58,50 @@ native/ctest targets pass. On top of that:
   `GFWLProtectionDisabler` (module-image guarded), `SteamAchievements` (the
   xlive ordinal-5278 boundary) and the unified `RemoveModChecks` alias.
 
+## Source layout
+
+One module per INI section, each owning its keys' whole footprint (published
+`extern "C"` state, hook-body prototypes and definitions, publish/install
+functions, `Bodies::Register` rows, per-key constants and tables):
+
+| module | keys |
+| --- | --- |
+| `source/stability.ixx` | the 7 [STABILITY] keys |
+| `source/fixes.ixx` | the 10 [FIXES] keys, including the OutOfCommissionFix payload |
+| `source/performance.ixx` | the 5 [PERFORMANCE] keys |
+| `source/graphics.ixx` | the 14 [GRAPHICS] keys |
+| `source/episodic.ixx` | the 7 [EPISODIC] keys |
+| `source/compatibility.ixx` | NewFiles/NewSaves/SavegameFix, GFWLProtectionDisabler, SteamAchievements (with the `Steam` bridge) |
+| `source/multiplayer.ixx` | the 18 [MULTIPLAYER] keys, the three recovered mod-check keys and the unified RemoveModChecks |
+| `source/vehicles.ixx` | the 11 [VEHICLES] keys, the shared IDE parser hook and the per-model light tables |
+| `source/misc.ixx` | the 6 [MISC] keys |
+
+`source/registration.ixx` is the ordered registration entry point: the section
+modules own the arms, but the historical publish/install sequence interleaves
+keys from different sections and is behavioural, so `Registration::RegisterAll()`
+owns the order (the two tiers, plus each section's unconditional `Prepare()`).
+The `dllmain.cpp` driver and `tests/dump_main.cpp` call it after
+`Shared::Register()` / `Native::Register()`.
+
+Fixed homes:
+
+- `launcher` stays its own module: it is the `LaunchWithPlayGTAIV` string-slot
+  subsystem (COMPATIBILITY), with its own probe, payload and dump mode.
+- `shared` owns the runtime helpers more than one section reaches: the value
+  resolver, the bounded formatter (the BPM diagnostic, the livery/spawn
+  diagnostics, the OOC mount name and the DLC path call it through a forwarder
+  on `zpatch_format_entry`) and the PlayerAsPedComponentsFix bodies (they call
+  the resolver directly, so they must live in its unit; the MISC module owns the
+  arm that installs them).
+- `audio`, `loading`, `ooc` and `steam` are gone. `source/options.inc`'s `module`
+  column is the recovered inventory's provenance (the old tree's grouping), not
+  the current module ownership; `dllmain.cpp`'s legacy-INI import still uses it
+  for the first-run section assignment, unchanged.
+
+The key-to-module table is also written to
+`../.agents/refactor/readable-fusion-opcep.md` so the sibling
+`readable-fusion` tree can reconcile its own recategorisation.
+
 ## Non-negotiables
 
 - **The OpenPreCEPatch surface is the product.** The improvements are compiled in,
