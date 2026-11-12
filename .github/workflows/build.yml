@@ -1,46 +1,102 @@
 name: build
 
-# Builds and tests the rewritten ASI: Win32, MSVC, C++23 module interface units.
-# The presets target Visual Studio 18 2026; the runners carry 17 2022, so the
-# workflow configures the same tree with an explicit 17 2022 Win32 generator.
-
 on:
   push:
-    branches: [master]
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.txt"
   pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.txt"
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    runs-on: windows-2022
+    name: build
+    runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          python-version: "3.12"
+          fetch-depth: 1
 
+      # No -G: use whichever Visual Studio generator the image provides (the
+      # windows-latest image moves between VS 2022 and VS 2026). -A Win32 is the
+      # part that matters, because the game and the ASI are 32-bit.
       - name: Configure
-        run: >
-          cmake -S . -B build/ci
-          -G "Visual Studio 17 2022" -A Win32
-          -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
-          -DCMAKE_CXX_SCAN_FOR_MODULES=ON
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake -S . -B build/win-x86 -A Win32 -DCMAKE_CONFIGURATION_TYPES="Debug;Release;Trace"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build
-        run: cmake --build build/ci --config Release --parallel
+        run: cmake --build build/win-x86 --config Release -- /m
 
-      - name: Test
-        run: ctest --test-dir build/ci -C Release --output-on-failure
+      # The CI artifact is deliberately just the two files a user installs.
+      - name: Package (ASI + INI)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = 'dist'
+          New-Item -ItemType Directory -Force $dist | Out-Null
+          Copy-Item 'build/win-x86/Release/IV.EFLC.OpenPreCEPatch.asi' $dist
+          Copy-Item 'build/win-x86/Release/IV.EFLC.OpenPreCEPatch.ini' $dist
 
-      - name: Prove the artifact is the expected shape
-        run: python tools/pe_check.py build/ci/Release/ZolikaPatch.asi
-        continue-on-error: true
+          $expected = @('IV.EFLC.OpenPreCEPatch.asi', 'IV.EFLC.OpenPreCEPatch.ini')
+          $actual = @(Get-ChildItem $dist -File | Select-Object -ExpandProperty Name | Sort-Object)
+          if (Compare-Object -ReferenceObject ($expected | Sort-Object) -DifferenceObject $actual) {
+            throw "release folder contains unexpected files: $($actual -join ', ')"
+          }
 
-      - uses: actions/upload-artifact@v4
+          Compress-Archive -Force -Path "$dist/IV.EFLC.OpenPreCEPatch.asi", "$dist/IV.EFLC.OpenPreCEPatch.ini" `
+            -DestinationPath "$dist/IV.EFLC.OpenPreCEPatch.zip"
+          $hash = (Get-FileHash "$dist/IV.EFLC.OpenPreCEPatch.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  IV.EFLC.OpenPreCEPatch.zip" | Set-Content "$dist/IV.EFLC.OpenPreCEPatch.zip.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: ZolikaPatch
+          name: IV.EFLC.OpenPreCEPatch
           path: |
-            build/ci/Release/ZolikaPatch.asi
-            ZolikaPatch.ini
+            dist/IV.EFLC.OpenPreCEPatch.zip
+            dist/IV.EFLC.OpenPreCEPatch.zip.sha256
           if-no-files-found: error
+
+  tests:
+    name: tests
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake -S . -B build/win-x86 -A Win32 -DCMAKE_CONFIGURATION_TYPES="Debug;Release;Trace"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build
+        run: cmake --build build/win-x86 --config Release -- /m
+
+      # Image-dependent checks (the dump matrix, the body proof, the relocated
+      # literals) are registered by CMake only when ../game_refs is present, so a
+      # checkout without the game images runs the native and generated-file suite.
+      - name: Test
+        run: ctest --test-dir build/win-x86 -C Release --output-on-failure --timeout 600
