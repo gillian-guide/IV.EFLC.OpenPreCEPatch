@@ -2,7 +2,7 @@
 
 [![Build](https://github.com/gillian-guide/IV.EFLC.OpenPreCEPatch/actions/workflows/build.yml/badge.svg)](https://github.com/gillian-guide/IV.EFLC.OpenPreCEPatch/actions/workflows/build.yml)
 
-IV.EFLC.OpenPreCEPatch is an open-source successor to ZolikaPatch, the GTA IV / Episodes from Liberty City quality-of-life and crash-fix plugin, reimplemented in FusionFix's shape. It keeps the original mod's options, rewrites them as ordinary C++ around the same recovered signature data, and modernises the loader, hooking and configuration layers, while adding improvements to some unreliable code. The 84-key catalogue is OpenPreCEPatch's surface: the keys it removed or moved to the XLivelessAddon companion are out, and the ones it adds are compiled in.
+IV.EFLC.OpenPreCEPatch is an open-source successor to ZolikaPatch. It keeps most of the original mod's options, rewrites them as ordinary C++ around the same recovered signature data, and modernises the loader, hooking and configuration layers, while adding improvements to some unreliable code.
 
 It targets improvements to the pre-CE experience to bring it closer to the Complete Edition, and to
 general stability and the multiplayer experience. Options FusionFix already owns are gated off
@@ -12,11 +12,6 @@ because some features belong there.
 
 ## Features
 
-- Skip the launcher/DRM checks (XLivelessAddon).
-- Set custom savegame and settings folders, or move both into a saves folder inside the game folder (XLivelessAddon).
-- Remove the Rockstar Games registry path dependency and skip the GFWL web-connect and health checks (XLivelessAddon).
-- Shorten the intro screens and skip the main menu (XLivelessAddon).
-- Add borderless windowed mode, keep rendering while unfocused, and fix the VRAM detection (XLivelessAddon).
 - Use a (non-SecuROM) launcher renamed to `PlayGTAIV.exe`.
 - Fix the 15+ second startup times before the game window even pops up, cut loading times in half or more, and get to the main menu faster.
 - Fix benchmark, Concrete Jungle, episode-switch, ROCKET, wanted-level, SuperLOD and SMPA60 crashes.
@@ -26,12 +21,12 @@ because some features belong there.
 - Fix the emissive-light, reversing-light and LOD fade-in bugs, and add car, object and building shadows.
 - Add experimental night shadow features.
 - Add compatibility for Complete Edition's folder structure, files and savefiles to minimize downgrade requirements.
-- Remove GFWL checks.
 - Add the APC/Buzzard, explosive weapons, police weapons and TBoGT aircraft height limit.
 - Add the popup headlights, sirens, plane parts, engine block, steering wheel and garage fixes.
 - Death music restoration
 - .ide hash support
-- Mirror GFWL achievements to Steam and disable the GFWL `xlive.dll` protection check, and add the pipe-bomb icon, `gta.dat` override and Niko ped clothes.
+- Mirror GFWL achievements to Steam
+- Disable the GFWL `xlive.dll` protection and mod checks.
 
 ## Installation
 
@@ -48,12 +43,6 @@ resolved next to it. A FusionFix ASI is detected by its loaded module name, or n
 If an old `ZolikaPatch.ini` is present (next to the ASI, or in the working directory) and
 `IV.EFLC.OpenPreCEPatch.ini` is not, the ASI imports the old values on first run and writes the
 grouped file next to the ASI. The old file is left untouched.
-
-`BorderlessWindowed`, `DoNotPauseOnMinimize`, `LocalSettingsPath`, `SkipIntro`, `SkipLauncher`,
-`SkipMenu` and `VRAMFix` belong to the
-[XLivelessAddon](https://github.com/gillian-guide/XLivelessAddon) companion, which reads the same
-legacy keys from its own INI. Its `[USERPROFILE] CustomUserProfilePath` replaced the three old
-path keys, `LocalSettingsPath`, `CustomSavePath` and `CustomSettingsPath`.
 
 ## Building
 

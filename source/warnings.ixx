@@ -151,8 +151,7 @@ namespace Warnings
         // The original passes two uninitialised locals here and never checks the
         // library's return value. The rebuild zeroes them: a library that writes
         // nothing is then refused deterministically instead of comparing whatever
-        // the caller's stack held. That one input is the only delta, and it is
-        // recorded in docs/improvements.md.
+        // the caller's stack held. That one input is the only delta.
         std::uint32_t version = 0;
         std::uint32_t unused = 0;
         (void)getVersion(&version, &unused);

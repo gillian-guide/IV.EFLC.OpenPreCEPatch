@@ -28,7 +28,7 @@ GAME_BASE = 0x400000
 
 # Keys whose retained arm deliberately writes a different set in this
 # distribution. They are measured, reported apart and never counted as open; the
-# reason is the one docs/improvements.md gives.
+# reason is the one the commit messages give.
 IMPROVED_DELTAS = {
     "GarageModelFix": "the prologue hook replaces the mid-body site (same fix, -0x20)",
     "BuildingAlphaFix": "only the jnz is removed; the test stays",
