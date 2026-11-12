@@ -57,7 +57,7 @@ is recovered evidence, not a live result.
 | `PipeBombDropIconSupport` | vehicles | recovered | . | R | . | R | R | R | R | R | R | R | R | R | `0x0004BFC0` |
 | `ReversingLightFix` | vehicles | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `TeleportProtection` | vehicles | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
-| `BuildingAlphaFix` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
+| `BuildingAlphaFix` | graphics | pattern | . | . | . | A | A | A | A | A | A | A | A | A | `0x0004BF80` |
 | `BuildingDynamicShadows` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `CutsceneFixes` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `EmissiveLerpFix` | graphics | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
@@ -72,7 +72,7 @@ is recovered evidence, not a live result.
 | `RestoreDeathMusic` | audio | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `MouseFix` | audio | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `EpisodicWeaponSupport` | audio | recovered | . | R | . | R | R | R | R | R | R | R | R | R | `0x0004BFC0` |
-| `OutOfCommissionFix` | audio | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
+| `OutOfCommissionFix` | audio | pattern | . | . | . | A | A | A | A | A | A | A | A | . | `0x0000BF80` |
 | `PedModelsInCutscenesFix` | audio | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `PoliceEpisodicWeaponSupport` | audio | recovered | . | R | . | R | R | R | R | R | R | R | R | R | `0x0004BFC0` |
 | `TBoGTHeliHeightLimit` | audio | recovered | . | R | . | R | R | R | R | R | R | R | R | R | `0x0004BFC0` |
@@ -84,11 +84,11 @@ is recovered evidence, not a live result.
 | `LoadDLCs` | loading | recovered | . | . | . | R | . | R | R | . | . | . | . | . | `0x00000380` |
 | `NewFilesCompatibility` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `NewMemorySystem` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
-| `NewSavesCompatibility` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
+| `NewSavesCompatibility` | loading | pattern | . | . | . | A | A | A | A | . | . | . | . | . | `0x00008380` |
 | `NoLoadingSleep` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `OverrideGTADatPath` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `OverrideGTADatPathTo` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
-| `RemoveGFWLUpdatePopup` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
+| `RemoveGFWLUpdatePopup` | loading | pattern | A | A | A | . | . | . | . | . | . | . | . | . | `0x00000062` |
 | `RemoveRGSCLoginRequirement` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `SavegameFix` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |
 | `StartupTimeFix` | loading | pattern | A | A | A | A | A | A | A | A | A | A | A | A | `0x0004BFE2` |

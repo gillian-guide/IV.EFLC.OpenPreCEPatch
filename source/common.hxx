@@ -25,10 +25,12 @@
 #include "injector/utility.hpp"
 #include "Hooking.Patterns.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <bit>
 #include <cstdint>
+#include <cwctype>
 #include <deque>
 #include <filesystem>
 #include <format>

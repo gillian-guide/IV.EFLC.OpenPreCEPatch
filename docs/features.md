@@ -64,7 +64,7 @@ Rendering, light and shadow keys, including the 146-instruction cutscene chain a
 | key | shipped | absent | builds |
 | --- | ---: | ---: | --- |
 | `BorderlessWindowed` | 1 | 1 | all 12 |
-| `BuildingAlphaFix` | 1 | 1 | all 12 |
+| `BuildingAlphaFix` | 1 | 1 | 1.0.6.0, 1.0.6.1, 1.0.7.0, 1.0.8.0, 1.1.0.0, 1.1.1.0, 1.1.2.0, 1.1.3.0, 1.2.0.43 |
 | `BuildingDynamicShadows` | 0 | 1 | all 12 |
 | `CutsceneFixes` | 1 | 1 | all 12 |
 | `EmissiveLerpFix` | 1 | 1 | all 12 |
@@ -92,11 +92,11 @@ Startup, loading, save and file-compatibility keys, plus the launcher stage and 
 | `LocalSettingsPath` | 0 | 0 | all 12 |
 | `NewFilesCompatibility` | 1 | 1 | all 12 |
 | `NewMemorySystem` | 0 | 0 | all 12 |
-| `NewSavesCompatibility` | 1 | 1 | all 12 |
+| `NewSavesCompatibility` | 1 | 1 | 1.0.6.0, 1.0.6.1, 1.0.7.0, 1.0.8.0 |
 | `NoLoadingSleep` | 1 | 0 | all 12 |
 | `OverrideGTADatPath` | 0 | 0 | all 12 |
 | `OverrideGTADatPathTo` | - | - | all 12 |
-| `RemoveGFWLUpdatePopup` | 0 | 0 | all 12 |
+| `RemoveGFWLUpdatePopup` | 0 | 0 | 1.0.0.0, 1.0.0.4, 1.0.4.0 |
 | `RemoveRGSCLoginRequirement` | 1 | 0 | all 12 |
 | `SavegameFix` | 1 | 1 | all 12 |
 | `SkipIntro` | 1 | 1 | all 12 |
@@ -118,7 +118,7 @@ The keys the original groups with the radio and the world: audio, input, pointer
 | `DoNotPauseOnMinimize` | 0 | 0 | all 12 |
 | `MouseFix` | 1 | 1 | all 12 |
 | `EpisodicWeaponSupport` | 1 | 1 | all except 1.0.0.0, 1.0.4.0 |
-| `OutOfCommissionFix` | 1 | 1 | all 12 |
+| `OutOfCommissionFix` | 1 | 1 | 1.0.6.0, 1.0.6.1, 1.0.7.0, 1.0.8.0, 1.1.0.0, 1.1.1.0, 1.1.2.0, 1.1.3.0 |
 | `PedModelsInCutscenesFix` | 1 | 1 | all 12 |
 | `PoliceEpisodicWeaponSupport` | 0 | 0 | all except 1.0.0.0, 1.0.4.0 |
 | `TBoGTHeliHeightLimit` | 0 | 0 | all except 1.0.0.0, 1.0.4.0 |

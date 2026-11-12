@@ -111,6 +111,37 @@ namespace
             "sections: an absent key keeps the default");
     }
 
+    void TestFusionFixProbe()
+    {
+        // The release name changed between `GTAIV.FusionFix.asi` and
+        // `GTAIV.EFLC.FusionFix.asi`, and the loader matches file names without
+        // case, so the probe scans the directory for any `*fusionfix*.asi`.
+        const auto directory = std::filesystem::current_path() / "fusionfix_probe";
+        std::error_code ignored;
+        std::filesystem::remove_all(directory, ignored);
+        std::filesystem::create_directories(directory, ignored);
+
+        Check(Config::LooksLikeFusionFix(directory / "GTAIV.EFLC.FusionFix.asi"),
+            "probe: the current release name is detected");
+        Check(Config::LooksLikeFusionFix(directory / "GTAIV.FusionFix.asi"),
+            "probe: the older release name is detected");
+        Check(Config::LooksLikeFusionFix(directory / "gtaiv.eflc.fusionfix.ASI"),
+            "probe: a differently-cased name and extension is detected");
+        Check(!Config::LooksLikeFusionFix(directory / "GTAIV.EFLC.FusionFix.ini"),
+            "probe: a same-named INI is not an ASI");
+        Check(!Config::LooksLikeFusionFix(directory / "IV.EFLC.OpenPreCEPatch.asi"),
+            "probe: another ASI is not FusionFix");
+
+        Check(Config::DetectFusionFix(directory) == false,
+            "probe: an empty directory has no FusionFix");
+        std::ofstream(directory / "GTAIV.FusionFix.asi", std::ios::binary | std::ios::trunc)
+            << "stub";
+        Check(Config::DetectFusionFix(directory),
+            "probe: the directory half finds the old release name");
+
+        std::filesystem::remove_all(directory, ignored);
+    }
+
     void TestFusionFixGate()
     {
         Config::Ini() = Feather::Parse(
@@ -134,6 +165,7 @@ int main()
     TestFloat();
     TestModelTable();
     TestSections();
+    TestFusionFixProbe();
     TestFusionFixGate();
 
     std::printf("%d check(s), %d failure(s)\n", checks, failures);

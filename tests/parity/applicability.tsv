@@ -38,7 +38,7 @@ NoLiveryLimit	vehicles	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 PipeBombDropIconSupport	vehicles	recovered	0x0004BFC0	.	R	.	R	R	R	R	R	R	R	R	R
 ReversingLightFix	vehicles	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 TeleportProtection	vehicles	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
-BuildingAlphaFix	graphics	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
+BuildingAlphaFix	graphics	pattern	0x0004BF80	.	.	.	A	A	A	A	A	A	A	A	A
 BuildingDynamicShadows	graphics	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 CutsceneFixes	graphics	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 EmissiveLerpFix	graphics	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
@@ -53,7 +53,7 @@ CombinedRadioFreezeFix	audio	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 RestoreDeathMusic	audio	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 MouseFix	audio	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 EpisodicWeaponSupport	audio	recovered	0x0004BFC0	.	R	.	R	R	R	R	R	R	R	R	R
-OutOfCommissionFix	audio	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
+OutOfCommissionFix	audio	pattern	0x0000BF80	.	.	.	A	A	A	A	A	A	A	A	.
 PedModelsInCutscenesFix	audio	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 PoliceEpisodicWeaponSupport	audio	recovered	0x0004BFC0	.	R	.	R	R	R	R	R	R	R	R	R
 TBoGTHeliHeightLimit	audio	recovered	0x0004BFC0	.	R	.	R	R	R	R	R	R	R	R	R
@@ -65,11 +65,11 @@ FastLoading	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 LoadDLCs	loading	recovered	0x00000380	.	.	.	R	.	R	R	.	.	.	.	.
 NewFilesCompatibility	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 NewMemorySystem	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
-NewSavesCompatibility	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
+NewSavesCompatibility	loading	pattern	0x00008380	.	.	.	A	A	A	A	.	.	.	.	.
 NoLoadingSleep	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 OverrideGTADatPath	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 OverrideGTADatPathTo	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
-RemoveGFWLUpdatePopup	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
+RemoveGFWLUpdatePopup	loading	pattern	0x00000062	A	A	A	.	.	.	.	.	.	.	.	.
 RemoveRGSCLoginRequirement	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 SavegameFix	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 StartupTimeFix	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A

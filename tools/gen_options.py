@@ -77,6 +77,33 @@ REMOVED_KEYS = {
 }
 
 
+# OpenPreCEPatch narrows these four keys' build gates in code, with the reason
+# recorded next to each arm; the recovered handler gates them on `ALL`. The
+# catalogue is the OpenPreCEPatch surface, so the narrowed gates are the ones
+# this tree ships: a key that does not apply to a build must refuse it instead of
+# relying on the pattern happening to miss. Source: the reference's building-
+# alpha, finale, new-saves and GFWL-popup arms.
+#
+# `Patch4RemoveModChecks` and `Patch6and7RemoveModChecks` are deliberately not
+# here: OpenPreCEPatch merged them (with `Patch7RemoveModChecks`) into one
+# `RemoveModChecks` setting, and `misc.ixx`'s `ModChecksEnabled` gates each arm on
+# its own build in code (patch 4 on 1.0.4.0, patch 6/7 on 1.0.6.0/1.0.7.0). The
+# recovered keys keep their recovered masks so a legacy flat INI still behaves as
+# the original did.
+NARROWED = {
+    # graphics.ixx: "the LOD fade-in path it fixes does not exist before 1060"
+    "BuildingAlphaFix": ["1.0.6.0", "1.0.6.1", "1.0.7.0", "1.0.8.0", "1.1.0.0",
+                         "1.1.1.0", "1.1.2.0", "1.1.3.0", "1.2.0.43"],
+    # stability.ixx: "1.2.0.43 has no verified payload, so the arm stays gated"
+    "OutOfCommissionFix": ["1.0.6.0", "1.0.6.1", "1.0.7.0", "1.0.8.0", "1.1.0.0",
+                           "1.1.1.0", "1.1.2.0", "1.1.3.0"],
+    # loading.ixx: "the newer save format is 1060-1080 only"
+    "NewSavesCompatibility": ["1.0.6.0", "1.0.6.1", "1.0.7.0", "1.0.8.0"],
+    # compatibility.ixx: "the update/sign-out popup is patch 5 and below"
+    "RemoveGFWLUpdatePopup": ["1.0.0.0", "1.0.0.4", "1.0.4.0"],
+}
+
+
 def mask_for(text):
     text = text.strip()
     if text in SHORTHANDS:
@@ -131,6 +158,8 @@ def parse():
         if not shipped.isdigit() or not absent.isdigit():
             continue
         mask, names = mask_for(builds) if builds.strip() in SHORTHANDS else mask_for(builds.replace("**", " "))
+        if key in NARROWED:
+            mask, names = mask_for(",".join(NARROWED[key]))
         rows.append((key, int(shipped), int(absent), mask, module, names, "numeric"))
     return rows
 

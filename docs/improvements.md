@@ -113,6 +113,11 @@ both installations.
 | **Default changes.** | oPCEP INI | **applied through the shipped INI.** The flat `ZolikaPatch.ini` remains the parity configuration. |
 | **NewFilesCompatibility scan guards.** | `loading.ixx` update bodies | **not ported.** The four update/registrar bodies are transcribed; their null-scan faults are preserved. |
 | **MiscFixes per-fix split.** | oPCEP INI | **applied.** The bundle key is out of the catalogue; the companion carries its fixes under the per-fix keys the reference's legacy import names. |
+| **Narrowed build gates.** | oPCEP arms | **applied.** Four keys whose recovered handler gate is `ALL` are gated the way the reference's arms gate them: `BuildingAlphaFix` (patch 6+, the LOD path it fixes does not exist earlier), `OutOfCommissionFix` (no verified 1.2.0.43 payload), `NewSavesCompatibility` (the newer save format is 1.0.6.0-1.0.8.0) and `RemoveGFWLUpdatePopup` (patch 5 and below). `tools/gen_options.py` carries the overrides and the generated tables follow them. |
+"
+     "| **Merged mod-check key.** | oPCEP `RemoveModChecks` | **applied.** `misc.ixx`'s `ModChecksEnabled` is the single setting: patch 4 applies on 1.0.4.0 only and patch 6/7 on 1.0.6.0/1.0.7.0 only, measured with `zp_dump` on the three images (5, 16 and 21 bytes; nothing on 1.0.8.0). The three recovered keys stay readable for a legacy flat INI and keep their recovered masks -- the merged key is the surface, the recovered keys are the 1:1 path. |
+| **ZMenuIV guard out-parameters.** | original `0x10052300` | **applied as a fail-safe.** The guard is restored in `warnings.ixx`; the two out-parameters are zeroed before the library call, so a `GetZMenuVersion` that writes nothing is refused (message + exit) instead of comparing whatever the caller's stack held. The original's outcome there is undefined; everything else about the guard matches. |
+| **FusionFix probe names.** | oPCEP `config.ixx` | **applied.** The probe matches any `*fusionfix*.asi` in the module directory (case-insensitively) and both release names as loaded modules, instead of one literal file name. A wrong hit only switches the overlapping options off. |
 | **Multi-pattern scan pass/cache.** | `entry-points-audit.md` | **partly applied.** The IDE slot and the three steer signatures go through `CachedMatchFor`, an opt-in single-match cache that probes the cached address before reuse; the dump resets it between per-option cells (`ResetCachedMatchesForTest`). A generic cache over every `find_pattern` is still rejected: an earlier install can invalidate a later arm's site. |
 | **FCHS body null guards.** | `graphics.ixx` | **not ported.** The 46-instruction checker is transcribed asm; its lookup is covered by the shared memo, its own guards are not added. |
 
@@ -121,7 +126,7 @@ both installations.
 
 ```
 ctest --preset release                       # 35 targets, all green
-python tools/parity_report.py 9              # 80 closed, 5 expected deltas, 0 open
+python tools/parity_report.py 9              # 79 closed, 5 expected deltas, 0 open
 python tools/dump_matrix.py                  # 9 builds x (full, per-option)
 python tools/gen_applicability.py --check
 python tools/check_signature_parity.py --game ../game_refs

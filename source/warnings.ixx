@@ -36,6 +36,17 @@ export namespace Warnings
     // already claimed it; the caller shows the loaded-twice warning and returns.
     bool ClaimSingleInstance(const wchar_t* name) noexcept;
 
+    // The original's ZMenuIV version guard (0x10052300): the loaded
+    // `ZMenuIV.asi`, when it exports `GetZMenuVersion`, must report at least
+    // 220625 (0x35DD1); otherwise the original shows an error box and terminates
+    // the process. `ZMenuVersionAccepted` is the pure comparison the guard and the
+    // native suite share.
+    bool ZMenuVersionAccepted(std::uint32_t version) noexcept;
+
+    // Runs the guard. Returns false only when it terminated the process; an
+    // absent module or export is a continue, exactly as in the original.
+    bool CheckZMenuVersion() noexcept;
+
     // A synchronous warning. `exitCode` non-zero terminates the process after
     // the user closes the box (the caller decides; this never returns then).
     void Show(const wchar_t* title, const std::wstring& text,
@@ -49,6 +60,9 @@ export namespace Warnings
 
 namespace
 {
+    // The recovered threshold: `cmp [ebp+var_8], 35DD1h` at 0x1005233C.
+    inline constexpr std::uint32_t kZMenuMinimumVersion = 0x35DD1u;  // 220625
+
     HANDLE g_singleInstance = nullptr;
 
     using TaskDialogIndirectFn =
@@ -115,6 +129,43 @@ namespace Warnings
         if (compact == 12043)
             return false;
         return compact >= 1201 && compact <= 12999;
+    }
+
+    bool ZMenuVersionAccepted(std::uint32_t version) noexcept
+    {
+        return version >= kZMenuMinimumVersion;
+    }
+
+    bool CheckZMenuVersion() noexcept
+    {
+        const HMODULE module = GetModuleHandleA("ZMenuIV.asi");
+        if (module == nullptr)
+            return true;
+
+        using GetZMenuVersionFn = int(__cdecl*)(std::uint32_t*, std::uint32_t*);
+        const auto getVersion = reinterpret_cast<GetZMenuVersionFn>(
+            GetProcAddress(module, "GetZMenuVersion"));
+        if (getVersion == nullptr)
+            return true;
+
+        // The original passes two uninitialised locals here and never checks the
+        // library's return value. The rebuild zeroes them: a library that writes
+        // nothing is then refused deterministically instead of comparing whatever
+        // the caller's stack held. That one input is the only delta, and it is
+        // recorded in docs/improvements.md.
+        std::uint32_t version = 0;
+        std::uint32_t unused = 0;
+        (void)getVersion(&version, &unused);
+
+        if (ZMenuVersionAccepted(version))
+            return true;
+
+        // The original's own box: an empty caption and MB_ICONERROR.
+        MessageBoxA(nullptr,
+            "Incompatible/outdated version of ZMenu detected! The game will now exit.", "",
+            MB_ICONERROR);
+        TerminateProcess(GetCurrentProcess(), 0);
+        return false;
     }
 
     bool ClaimSingleInstance(const wchar_t* name) noexcept

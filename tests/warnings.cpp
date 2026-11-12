@@ -54,6 +54,19 @@ namespace
             CloseHandle(first);
     }
 
+    void TestZMenu()
+    {
+        // The recovered threshold: `cmp [ebp+var_8], 35DD1h`.
+        Check(Warnings::ZMenuVersionAccepted(0x35DD1u),
+            "zmenu: 220625 (the recovered threshold) is accepted");
+        Check(Warnings::ZMenuVersionAccepted(0x40000u), "zmenu: a newer library is accepted");
+        Check(!Warnings::ZMenuVersionAccepted(0x35DD0u),
+            "zmenu: one version below the threshold is refused");
+        Check(!Warnings::ZMenuVersionAccepted(0u), "zmenu: a zero version is refused");
+        // No ZMenuIV.asi is loaded into the test process, so the guard continues.
+        Check(Warnings::CheckZMenuVersion(), "zmenu: an absent module is a continue");
+    }
+
     void TestNotice()
     {
         const auto directory = std::filesystem::current_path() / "warnings_notice";
@@ -80,6 +93,7 @@ int main()
 {
     TestVersion();
     TestSingleInstance();
+    TestZMenu();
     TestNotice();
 
     std::printf("%d check(s), %d failure(s)\n", checks, failures);

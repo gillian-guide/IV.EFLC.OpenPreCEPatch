@@ -52,6 +52,9 @@ namespace
                     0x8000FFFFu);
                 return;
             }
+            // The original rejects an outdated ZMenuIV before the menu is built;
+            // the guard terminates the process itself when it fires.
+            (void)Warnings::CheckZMenuVersion();
             const auto loader = QueryLoaderVersion();
             if (!loader.present)
             {

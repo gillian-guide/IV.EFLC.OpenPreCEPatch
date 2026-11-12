@@ -652,32 +652,38 @@ namespace
     // PopupHeadlightsFlag's sites: the EAX anchor (jump, its +10 branch forced to
     // a short jump, and the `fld` operand at +82 retargeted to our pi/2 float),
     // the shared IDE hook, and the EDX twin when the image has it.
+    //
+    // The original handler (0x10044590) is `if (EAX anchor) { ... } else if (EDX
+    // anchor) { ... }`: exactly one of the two model checks is ever patched, and
+    // the two resume slots belong to that site. Two independent `if`s would let a
+    // second hit overwrite the shared slots, and the body installed on the first
+    // site would then tail-jump into the second site's resume. The IDE hook is
+    // independent of the pair and shared with the other arms that install it.
     void PublishPopupHeadlightsFlag()
     {
         if (!Loader::Enabled("PopupHeadlightsFlag"))
             return;
 
-        auto pattern = find_pattern("0F BF 46 2E 3B 05 ? ? ? ? 75 ? A1");
-        if (!pattern.empty())
+        if (auto pattern = find_pattern("0F BF 46 2E 3B 05 ? ? ? ? 75 ? A1");
+            !pattern.empty())
         {
             zpatch_popup_resume_b = static_cast<uint32_t>(
                 reinterpret_cast<uintptr_t>(pattern.get_first(10)));
             zpatch_popup_resume_a = static_cast<uint32_t>(
                 reinterpret_cast<uintptr_t>(pattern.get_first(12)));
+        }
+        else if (auto edx_pattern = find_pattern("0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1");
+                 !edx_pattern.empty())
+        {
+            zpatch_popup_resume_b = static_cast<uint32_t>(
+                reinterpret_cast<uintptr_t>(edx_pattern.get_first(10)));
+            zpatch_popup_resume_a = static_cast<uint32_t>(
+                reinterpret_cast<uintptr_t>(edx_pattern.get_first(12)));
         }
 
         if (auto* ide = CachedMatchFor("0C 83 88 94 00 00 00 04"))
             zpatch_ide_hook_slot = static_cast<uint32_t>(
                 reinterpret_cast<uintptr_t>(ide - 1));
-
-        pattern = find_pattern("0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1");
-        if (!pattern.empty())
-        {
-            zpatch_popup_resume_b = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first(10)));
-            zpatch_popup_resume_a = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first(12)));
-        }
     }
 }
 

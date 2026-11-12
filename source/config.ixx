@@ -577,13 +577,40 @@ export namespace Config
         return FusionFixPresent() && FusionFixConflictFor(key) != nullptr;
     }
 
-    // A FusionFix ASI next to ours (or loaded into this process).
+    // A FusionFix ASI next to ours (or loaded into this process). The release
+    // name changed (`GTAIV.FusionFix.asi`, then `GTAIV.EFLC.FusionFix.asi`), and
+    // the ASI loader matches file names case-insensitively, so the directory half
+    // of the probe looks for any `*fusionfix*.asi` instead of one literal file.
+    // A wrongly detected FusionFix only switches the overlapping options off, so
+    // the scan errs towards finding it.
+    inline bool LooksLikeFusionFix(const std::filesystem::path& file)
+    {
+        std::wstring name = file.filename().wstring();
+        std::wstring lower = name;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+            [](wchar_t c) { return static_cast<wchar_t>(std::towlower(c)); });
+        const std::wstring extension = file.extension().wstring();
+        std::wstring lowerExtension = extension;
+        std::transform(lowerExtension.begin(), lowerExtension.end(), lowerExtension.begin(),
+            [](wchar_t c) { return static_cast<wchar_t>(std::towlower(c)); });
+        return lowerExtension == L".asi" &&
+               lower.find(L"fusionfix") != std::wstring::npos;
+    }
+
     inline bool DetectFusionFix(const std::filesystem::path& moduleDirectory)
     {
-        if (GetModuleHandleW(L"GTAIV.EFLC.FusionFix.asi") != nullptr)
+        if (GetModuleHandleW(L"GTAIV.EFLC.FusionFix.asi") != nullptr ||
+            GetModuleHandleW(L"GTAIV.FusionFix.asi") != nullptr)
             return true;
+
         std::error_code ignored;
-        return std::filesystem::exists(moduleDirectory / L"GTAIV.EFLC.FusionFix.asi", ignored);
+        std::filesystem::directory_iterator entry(moduleDirectory, ignored);
+        for (const auto& candidate : entry)
+        {
+            if (LooksLikeFusionFix(candidate.path()))
+                return true;
+        }
+        return false;
     }
 
     // One recovered table: the 512 name hashes the checker walks and the 512 values
