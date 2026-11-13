@@ -33,10 +33,6 @@ extern "C"
 
 namespace
 {
-    // VSyncFix: both call shapes load the vsync flag from an operand the original
-    // retargets to its own dword. The key's build mask excludes 1.0.8.0, where
-    // neither anchor exists, so the arm is inert on that image.
-    uint32_t zpatch_vsync_flag = 0;
 
     // OverrideGTADatPath's sibling key: the path the game's gta.dat push is
     // retargeted to. The original's buffer is 64 bytes and its static initializer
@@ -111,27 +107,6 @@ namespace
 
 
 
-    void InstallVSyncFix()
-    {
-        if (!Loader::Enabled("VSyncFix"))
-            return;
-
-        auto pattern = find_pattern("8B 08 8B 51 0C 6A 01 6A 00 6A 00 6A 00 6A 00 50 FF D2 8B F0 81 FE ? ? ? ? 74");
-        if (!pattern.empty())
-        {
-            injector::WriteMemory<uint32_t>(pattern.get_first<std::byte>(30),
-                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&zpatch_vsync_flag)), true);
-            Bodies::RegisterPublished(reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(30)));
-        }
-
-        pattern = find_pattern("8B 10 50 8B 82 A8 00 00 00 FF D0 83");
-        if (!pattern.empty())
-        {
-            injector::WriteMemory<uint32_t>(pattern.get_first<std::byte>(13),
-                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&zpatch_vsync_flag)), true);
-            Bodies::RegisterPublished(reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(13)));
-        }
-    }
 
     // BenchmarkFix: two match sites eight bytes into the matched call sequence.
     // The resume is the anchor's +13, read before the sites are overwritten; the
@@ -249,7 +224,6 @@ export void RegisterLoading()
 {
     Loader::AddPublish(Loader::Entry::Loading, 1, CopyOverrideDatPath);
 
-    Loader::AddInstall(Loader::Entry::Loading, 6, InstallVSyncFix);
     Loader::AddInstall(Loader::Entry::Loading, 7, InstallBenchmarkFix);
     Loader::AddInstall(Loader::Entry::Loading, 8, InstallOverrideGTADatPath);
     Loader::AddInstall(Loader::Entry::Loading, 9, InstallSkipIntro);

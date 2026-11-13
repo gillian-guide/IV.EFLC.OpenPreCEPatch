@@ -21,7 +21,7 @@ import loading;
 import audio;
 import misc;
 import menu;
-import ooc;
+import fixes;
 import episodic;
 import performance;
 import compatibility;
@@ -547,7 +547,7 @@ int main(int argc, char** argv)
     // The payload path only runs when the game calls the wrapper the arm installs,
     // so this is the one way the rebuilt decoder and archive builder execute
     // offline: decode the pinned resource and check both results against the
-    // fingerprints the recovered bytes carry (source/ooc.ixx, docs/parity.md).
+    // fingerprints the recovered bytes carry (source/fixes.ixx, docs/parity.md).
     if (oocSelfTest)
     {
         const char* failure = OocSelfCheck();
@@ -590,7 +590,7 @@ int main(int argc, char** argv)
     RegisterAudio();
     RegisterMisc();
     RegisterMenu();
-    RegisterOoc();
+    RegisterFixes();
     RegisterEpisodic();
     RegisterPerformance();
     RegisterCompatibility();

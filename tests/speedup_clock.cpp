@@ -4,7 +4,7 @@
 #include <cstdio>
 #include <cstring>
 
-import misc;
+import fixes;
 
 // SpeedupBugFix's body (`sub_10050540`, 0x10050540, 93 instructions to its `ret`)
 // rebuilt in C++ (`docs/rebuilt.md` §3 class B): the game's timer-init function.
@@ -63,9 +63,9 @@ import misc;
 // dword_101A849C zero, so the call is to 0xFFFFFFCD and faults; that is the
 // original's preserved fault, and this test asserts it in-process.
 //
-// The seam these checks drive is `Misc::SpeedupBugFixPublishForTest` (the eight
+// The seam these checks drive is `Fixes::SpeedupBugFixPublishForTest` (the eight
 // published pointers, which the arm would take from the site operands) and
-// `Misc::SpeedupBugFixForTest` (the same `SpeedupBugFixRunPublished` the shipped
+// `Fixes::SpeedupBugFixForTest` (the same `SpeedupBugFixRunPublished` the shipped
 // body calls, with the scan result and the frequency read injected). No site is
 // written, no body is installed, and the test process has no game image.
 //
@@ -202,7 +202,7 @@ namespace
         return perSlot;
     }
 
-    Misc::SpeedupSlots SlotsByAddress(float* base)
+    Fixes::SpeedupSlots SlotsByAddress(float* base)
     {
         return {
             base + kT4c, base + kT50, base + kT54, base + kT58,
@@ -265,7 +265,7 @@ namespace
         float storage[kSlotCount + 2] = {};
         storage[kSlotCount] = 1234.5f;       // not in the published list
         storage[kSlotCount + 1] = -0.0f;     // neither is this
-        Misc::SpeedupBugFixPublishForTest(SlotsByAddress(storage));
+        Fixes::SpeedupBugFixPublishForTest(SlotsByAddress(storage));
 
         g_frequency = frequency;
         g_frequency_calls = 0;
@@ -274,7 +274,7 @@ namespace
         alignas(8) unsigned char self[16];
         std::memset(self, 0xA5, sizeof(self));
 
-        void* answer = Misc::SpeedupBugFixForTest(self, ClockMatch(), &ReadTestFrequency);
+        void* answer = Fixes::SpeedupBugFixForTest(self, ClockMatch(), &ReadTestFrequency);
 
         Check(g_frequency_calls == 1,
             std::format("frequency {}: QueryPerformanceFrequency was read once", frequency));
@@ -343,7 +343,7 @@ namespace
             reinterpret_cast<float*>(ladder + 0),  // t64: store 1
             reinterpret_cast<float*>(ladder + 4),  // t68: store 5
         };
-        Misc::SpeedupBugFixPublishForTest({ at[kT4c], at[kT50], at[kT54], at[kT58],
+        Fixes::SpeedupBugFixPublishForTest({ at[kT4c], at[kT50], at[kT54], at[kT58],
             at[kT5c], at[kT60], at[kT64], at[kT68] });
 
         g_frequency = frequency;
@@ -351,7 +351,7 @@ namespace
         g_clock_stamp = 0x0F1E2D3C4B5A6978ull;
         g_clock_calls = 0;
         alignas(8) unsigned char self[16] = {};
-        Misc::SpeedupBugFixForTest(self, ClockMatch(), &ReadTestFrequency);
+        Fixes::SpeedupBugFixForTest(self, ClockMatch(), &ReadTestFrequency);
 
         unsigned char expected[12] = {};
         for (size_t index = 0; index < 8; ++index)
@@ -397,7 +397,7 @@ namespace
         g_clock_calls = 0;
         __try
         {
-            Misc::SpeedupBugFixForTest(self, clock, &ReadTestFrequency);
+            Fixes::SpeedupBugFixForTest(self, clock, &ReadTestFrequency);
         }
         __except (CaptureFault(GetExceptionInformation(), &fault))
         {
@@ -414,7 +414,7 @@ namespace
 
         float storage[kSlotCount + 1] = {};
         storage[kSlotCount] = 42.0f;
-        Misc::SpeedupBugFixPublishForTest(SlotsByAddress(storage));
+        Fixes::SpeedupBugFixPublishForTest(SlotsByAddress(storage));
 
         alignas(8) unsigned char self[16];
         std::memset(self, 0x5A, sizeof(self));
@@ -450,11 +450,11 @@ namespace
 
         // The process survives: the next call with a resolved clock works.
         float after[kSlotCount] = {};
-        Misc::SpeedupBugFixPublishForTest(SlotsByAddress(after));
+        Fixes::SpeedupBugFixPublishForTest(SlotsByAddress(after));
         g_clock_stamp = 0x1020304050607080ull;
         g_clock_calls = 0;
         alignas(8) unsigned char selfAfter[16] = {};
-        void* answer = Misc::SpeedupBugFixForTest(selfAfter, ClockMatch(), &ReadTestFrequency);
+        void* answer = Fixes::SpeedupBugFixForTest(selfAfter, ClockMatch(), &ReadTestFrequency);
         Check(answer == selfAfter && StampOf(selfAfter) == g_clock_stamp &&
                   g_clock_calls == 1,
             "after the missing-scan fault the entry still runs and returns the clock's stamp");
@@ -468,7 +468,7 @@ namespace
     {
         float storage[kSlotCount + 1] = {};
         storage[kSlotCount] = 7.25f;
-        Misc::SpeedupBugFixPublishForTest(SlotsByAddress(storage));
+        Fixes::SpeedupBugFixPublishForTest(SlotsByAddress(storage));
 
         g_frequency = 1000;
         g_frequency_calls = 0;
@@ -476,7 +476,7 @@ namespace
         g_clock_calls = 0;
         alignas(8) unsigned char self[16] = {};
 
-        void* first = Misc::SpeedupBugFixForTest(self, ClockMatch(), &ReadTestFrequency);
+        void* first = Fixes::SpeedupBugFixForTest(self, ClockMatch(), &ReadTestFrequency);
         Check(first == self && g_frequency_calls == 1 && g_clock_calls == 1,
             "first call: read the frequency once, called the clock once");
 
@@ -488,7 +488,7 @@ namespace
         g_second_frequency_calls = 0;
         g_clock_stamp = 0x5555666677778888ull;
 
-        void* second = Misc::SpeedupBugFixForTest(self, ClockMatch(), &ReadSecondFrequency);
+        void* second = Fixes::SpeedupBugFixForTest(self, ClockMatch(), &ReadSecondFrequency);
         Check(second == self && g_second_frequency_calls == 0,
             "second call: did not read the frequency (dword_10159350 is no longer zero)");
         Check(g_clock_calls == 2,

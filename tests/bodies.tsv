@@ -265,7 +265,7 @@ nolivery_body_e 1003D3E0 ?NoliveryBodyE@@YAXXZ 14
 # local resolve forwarder that stands in for sub_10003980, which is rebuilt as C in
 # source/native.ixx; the proof compares a call as an immediate.
 cutscene_chain_b 100388C0 ?CutsceneChainBody@@YAXXZ 146
-# OutOfCommissionFix (source/ooc.ixx): the branch body the E9 at game 0xA22E97
+# OutOfCommissionFix (source/fixes.ixx): the branch body the E9 at game 0xA22E97
 # jumps to (7 instructions) and the mounting wrapper the E8 at 0xB70733 is
 # retargeted to (41 to its `ret`, 0x1004C350..0x1004C3BF). The key's remaining
 # rebuilt pieces are compiler output -- the init (sub_1004B750, EH + C++
@@ -275,7 +275,7 @@ cutscene_chain_b 100388C0 ?CutsceneChainBody@@YAXXZ 146
 # this file (docs/rebuilt.md 2h).
 ooc_branch 1004C3C0 ?OocBranchBody@@YAXXZ 7
 ooc_wrap 1004C350 ?OocWrapBody@@YAXXZ 41
-# The decoder pair (source/ooc.ixx): an interpreter with sixteen exits and no
+# The decoder pair (source/fixes.ixx): an interpreter with sixteen exits and no
 # register contract beyond "ECX in, EAX out", no exception frame, no TLS static-init
 # guard and no indexed absolute operand, so it is transcribed whole. The opcode
 # step's four CRT `memcpy` calls go through a forwarder (the inline assembler
@@ -312,7 +312,7 @@ new_saves_second_hook 10051AD0 ?NewSavesSecondLoadHook@@YAXXZ 33
 # forwarders and the shared formatter. docs/rebuilt.md.
 dlc_discovery 10023150 ?DlcDiscovery@@YAXXZ 223
 
-# The OOC archive builder (source/ooc.ixx) and its twelve internal helpers: what was
+# The OOC archive builder (source/fixes.ixx) and its twelve internal helpers: what was
 # the last class-D piece. Its stream has no exception frame and no TLS static-init
 # guard, and every one of the twelve helpers is itself a plain stream -- SSE stores,
 # cmov, direct `E8`s, EBP/ECX-relative -- so the whole graph is transcribed here and

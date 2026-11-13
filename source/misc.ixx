@@ -23,43 +23,6 @@ import shared;
 // drive-by FOV. One arm per key, each anchored to its own recovered signature (or,
 // for the stubs, to the recovered per-build site table).
 
-// The DrivebyFOVFix published state, in C linkage because the transcribed bodies
-// name the slots directly (the original keeps them in its own .bss beside its
-// bodies). dword_101580D4 is the native hash the helper resolves; it is not seeded
-// here, because the original's loader preamble resolves it with its ten-word salt
-// rule (source/native.ixx): on 1.0.8.0 the probe hits and the slot keeps the
-// shipped `.data` value 0x75E005F1, while a probe miss substitutes 0x09399528.
-// dword_101580C4 is the FOV it caches (45.0f, the .data value and the helper's own
-// first instruction), dword_1015BDF8 the cached entry pointer, byte_1015AD4A the
-// one-shot flag, and dword_1015BDF4 the resume the arm publishes.
-
-extern "C"
-{
-    // The layer's resolved salt (source/native.ixx), dword_101580D4.
-    extern uint32_t zpatch_native_salt_101580D4;
-
-    float zpatch_driveby_fov = 45.0f;
-    uint32_t zpatch_driveby_cached = 0;
-    uint8_t zpatch_driveby_done = 0;
-    uint32_t zpatch_driveby_resume = 0;
-
-    // The native layer's resolve entry (source/native.ixx), for the helper's call.
-    extern uintptr_t zpatch_native_resolve_entry;
-
-    // SpeedupBugFix: the eight game timing floats the handler publishes, in its
-    // own read order (the last four repeat the first four for the episode path).
-    // The pointers are game addresses read from the site's operands; the body
-    // writes through them.
-    float* zpatch_speedup_t4c = nullptr;  // dword_1015934C: copy of dword_18CAEB0
-    float* zpatch_speedup_t50 = nullptr;  // dword_10159350: dword_18CAE9C, seconds per tick
-    float* zpatch_speedup_t54 = nullptr;  // dword_10159354: copy of dword_18CAE9C
-    float* zpatch_speedup_t58 = nullptr;  // dword_10159358: copy of dword_1752074
-    float* zpatch_speedup_t5c = nullptr;  // dword_1015935C: dword_1752078, 1 / milliseconds
-    float* zpatch_speedup_t60 = nullptr;  // dword_10159360: dword_18CAEA4, milliseconds * dword_FF2014
-    float* zpatch_speedup_t64 = nullptr;  // dword_10159364: flt_18CAEA0, milliseconds per tick
-    float* zpatch_speedup_t68 = nullptr;  // dword_10159368: copy of flt_18CAEA0
-
-}
 
 // CopSirensFlag: the two model checks (sub_10005F70 and sub_10006260) and the
 // shared IDE hook (sub_100040E0), which fills the 512-slot model-hash tables the
@@ -169,9 +132,6 @@ extern "C"
 // __declspec(naked) declaration (C2488: "'naked' can only be applied to non-member
 // function definitions"), so the readable code above them names each body through a
 // plain prototype; only the definition in the tail keeps the attribute.
-static void DrivebyResolveEntry();
-static void DrivebyFovHelperBody();
-static void DrivebyFovShimBody();
 static void IdeParseBody();
 static void CopSirensCheckABody();
 static void CopSirensCheckBBody();
@@ -317,287 +277,8 @@ namespace
     };
 }
 
-// SpeedupBugFix: the game's timer-init function (1.0.8.0 game 0x4571B0, the
-// `50 64 89 25 00 00 00 00 83 EC 34` prologue's match - 21) is replaced by the
-// original's sub_10050540. That body is compiled C -- an SEH frame, a /GS
-// cookie, the MSVC thread-safe static guard for its one-time signature scan and
-// SSE double arithmetic -- so this is a C++ reimplementation of the same
-// behaviour, not a transcription (docs/parity.md records the split).
-//
-// The original's handler has no build gate and reads its eight float pointers
-// from fixed site-relative operands, so the row is the same on every build that
-// carries the signature (0x4544B0 on 1.0.4.0 through 0x5AD550 on 1.1.3.0) and
-// 1.0.0.0, which has no hit, is a clean skip. tests/signatures.tsv records the
-// per-build sites and the eight operand encodings.
-//
-// It fills the game's eight timing floats from QueryPerformanceFrequency, then
-// stores the game clock's 64-bit stamp in *self and answers self. The clock
-// function is found by the original's own one-time scan ("1B D9 89 5C 24 24 0F
-// 88", 1.0.8.0 site 0x456F93) and is called at match - 51 = 0x456F60.
-static std::atomic<uint32_t> zpatch_speedup_scan_done{ 0 };
-static uint32_t zpatch_speedup_clock = 0;
 
-namespace
-{
-    using SpeedupFrequencyReader = uint64_t(__cdecl*)();
 
-    // QueryPerformanceFrequency, the original's `call dword ptr [0x10063050]` at
-    // 0x100505EF. The original reaches it only when dword_10159350 is still zero.
-    uint64_t ReadQueryPerformanceFrequency()
-    {
-        LARGE_INTEGER frequency{};
-        QueryPerformanceFrequency(&frequency);
-        return static_cast<uint64_t>(frequency.QuadPart);
-    }
-
-    // The sequence sub_10050540 runs after its one-time scan: the
-    // dword_10159350 guard, the four derived floats written through eight
-    // pointers, then the clock call. It is split out so tests/speedup_clock.cpp
-    // (ctest `zp_speedup_clock`) can inject the frequency, the scan result and
-    // the eight destinations; the shipped body below passes the published globals,
-    // the scan slot and QueryPerformanceFrequency, so the parameters change no
-    // shipped behaviour.
-    //
-    // `targets` is in the original's *store* order (0x10050635..0x1005067F):
-    // dword_10159364, _1360, _1350, _135C, _1368, _134C, _1354, _1358. That is not
-    // the handler's read order (0x100506E8..0x10050738); the two must not be
-    // conflated. `clock` is dword_101A849C, the scan's match; the original calls
-    // `clock - 51`, so 0 is its missing-scan 0xFFFFFFCD.
-    void* SpeedupBugFixRun(void* self, float** targets, uint32_t clock,
-        SpeedupFrequencyReader read_frequency)
-    {
-        // The original tests the float at dword_10159350, not the pointer
-        // (0x100505D1..0x100505E5), so the dereference stays unguarded; the arm
-        // publishes all eight pointers before this body can run.
-        if (*targets[2] == 0.0f)
-        {
-            const uint64_t frequency = read_frequency();
-
-            // 0x10152380 is the double 1000.0 (0x408F400000000000) and 0x10152300
-            // the double 0.0010000000474974513 (0x3F50624DE0000000). The original
-            // divides, multiplies and truncates to float in this order
-            // (0x10050600..0x10050653): scale = 1000.0 / frequency, then
-            // (float)scale, (float)(scale * 1000.0),
-            // (float)(scale * 0.0010000000474974513) and
-            // (float)(0.0010000000474974513 / scale).
-            const double scale = 1000.0 / static_cast<double>(frequency);
-            const float perTickMilliseconds = static_cast<float>(scale);
-            const float millisecondsProduct = static_cast<float>(scale * 1000.0);
-            const float perTickSeconds = static_cast<float>(scale * 0.0010000000474974513);
-            const float reciprocal = static_cast<float>(0.0010000000474974513 / scale);
-
-            *targets[0] = perTickMilliseconds;
-            *targets[1] = millisecondsProduct;
-            *targets[2] = perTickSeconds;
-            *targets[3] = reciprocal;
-            *targets[4] = perTickMilliseconds;
-            *targets[5] = millisecondsProduct;
-            *targets[6] = perTickSeconds;
-            *targets[7] = reciprocal;
-        }
-
-        // 0x10050683..0x10050692: `mov ecx,[dword_101A849C]; add ecx,-51;
-        // call ecx; mov [esi],eax; mov [esi+4],edx`, and the answer is ESI. The
-        // call is unguarded: a scan miss leaves the slot zero and the call faults
-        // on 0xFFFFFFCD, exactly as the original's does.
-        using ClockFunction = __int64(__cdecl*)(void);
-        const __int64 stamp = reinterpret_cast<ClockFunction>(
-            static_cast<uintptr_t>(clock) - 51u)();
-        *reinterpret_cast<__int64*>(self) = stamp;
-        return self;
-    }
-
-    // Builds the eight destinations in the original's store order and runs the
-    // sequence. The body and the test-only seam below both go through this, so
-    // the order cannot drift between the shipped path and the measured one.
-    void* SpeedupBugFixRunPublished(void* self, uint32_t clock, SpeedupFrequencyReader read_frequency)
-    {
-        float* targets[8] = {
-            zpatch_speedup_t64, zpatch_speedup_t60, zpatch_speedup_t50, zpatch_speedup_t5c,
-            zpatch_speedup_t68, zpatch_speedup_t4c, zpatch_speedup_t54, zpatch_speedup_t58,
-        };
-        return SpeedupBugFixRun(self, targets, clock, read_frequency);
-    }
-}
-
-static void* __fastcall SpeedupBugFixBody(void* self, int)
-{
-    // sub_10050587's MSVC static-init guard: the scan runs once per process. A
-    // miss leaves the clock at zero, and the faithful `0 - 51` call below faults
-    // on 0xFFFFFFCD exactly as the original's does.
-    if (zpatch_speedup_scan_done.exchange(1u, std::memory_order_acq_rel) == 0)
-    {
-        auto pattern = find_pattern("1B D9 89 5C 24 24 0F 88");
-        if (!pattern.empty())
-            zpatch_speedup_clock = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(0)));
-    }
-
-    return SpeedupBugFixRunPublished(self, zpatch_speedup_clock, &ReadQueryPerformanceFrequency);
-}
-
-namespace
-{
-    // A captured pattern operand is a 32-bit VA of the image *as the loader mapped
-    // it*: the image's `.reloc` entries were applied before any arm ran, so the
-    // dword in the instruction already names the live object. The game is relocated
-    // on every run (GTAIV.exe carries DYNAMIC_BASE, and the observed bases include
-    // 0x4B0000 and 0xA60000), so converting the operand through the preferred base
-    // again would move every pointer by the run's whole relocation distance. The
-    // offline dump applies the same fixups to its own copy of the image
-    // (tests/dump_main.cpp), which is what makes this identity cast right there too.
-    template <typename T>
-    T* GameImagePointer(uint32_t value)
-    {
-        return reinterpret_cast<T*>(static_cast<uintptr_t>(value));
-    }
-
-    // SpeedupBugFix: the handler's eight operands, in its read order
-    // (`mov eax,[ebx+2Fh]` .. `mov eax,[ebx+129h]`, ebx = match - 21), are the
-    // absolute addresses of the floats the replacement body computes. Each one is
-    // the disp32 field of a `movss` in the timer-init function, so the four bytes
-    // before the field are that instruction's opcode and ModRM. Those bytes are the
-    // per-build evidence that the dword really is one of the timing floats and not
-    // something that happens to sit at the same distance from a coincidental
-    // signature match: they are identical on every image that carries the
-    // signature (tests/signatures.tsv records the recovered values).
-    struct TimingOperand final
-    {
-        ptrdiff_t offset;               // the handler's [ebx+disp], from the site
-        std::array<uint8_t, 4> opcode;  // the instruction bytes that precede it
-        float** slot;
-    };
-
-    constexpr TimingOperand kTimingOperands[] = {
-        { 0x02F, { 0xF3, 0x0F, 0x10, 0x05 }, &zpatch_speedup_t50 },  // movss xmm0,[dword_18CAE9C]
-        { 0x0BA, { 0xF3, 0x0F, 0x11, 0x0D }, &zpatch_speedup_t64 },  // movss [flt_18CAEA0],xmm1
-        { 0x0D1, { 0xF3, 0x0F, 0x11, 0x05 }, &zpatch_speedup_t60 },  // movss [dword_18CAEA4],xmm0
-        { 0x0F7, { 0xF3, 0x0F, 0x11, 0x1D }, &zpatch_speedup_t5c },  // movss [dword_1752078],xmm3
-        { 0x0FF, { 0xF3, 0x0F, 0x11, 0x0D }, &zpatch_speedup_t68 },  // movss [dword_18CAEAC],xmm1
-        { 0x10E, { 0xF3, 0x0F, 0x11, 0x1D }, &zpatch_speedup_t4c },  // movss [dword_18CAEB0],xmm3
-        { 0x11D, { 0xF3, 0x0F, 0x11, 0x15 }, &zpatch_speedup_t54 },  // movss [dword_18CAEA8],xmm2
-        { 0x129, { 0xF3, 0x0F, 0x11, 0x05 }, &zpatch_speedup_t58 },  // movss [dword_1752074],xmm0
-    };
-
-    constexpr size_t kTimingOperandCount = sizeof(kTimingOperands) / sizeof(kTimingOperands[0]);
-
-    // The body writes through all eight pointers, so every one of them has to be a
-    // writable word of the image in use before any of them is published: a
-    // signature that matched a different function would otherwise hand the body a
-    // code address or a constant to store floats into. The operand is a live
-    // address, so the *live* base is what says where it sits; the PE header still
-    // records the preferred base and is not the image this runs in.
-    bool WritableImageWord(uint32_t value)
-    {
-        const auto& game = Game::Get();
-        const auto host = static_cast<uint32_t>(game.ImageBase());
-        if (value < host ||
-            value - host > game.ImageSize() - sizeof(uint32_t))
-            return false;
-
-        const auto rva = value - host;
-        const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(game.ImageBase());
-        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(game.ImageBase() + dos->e_lfanew);
-        const auto* section = IMAGE_FIRST_SECTION(nt);
-        for (WORD index = 0; index < nt->FileHeader.NumberOfSections; ++index, ++section)
-        {
-            if (rva < section->VirtualAddress || rva - section->VirtualAddress >= section->Misc.VirtualSize)
-                continue;
-            return (section->Characteristics & IMAGE_SCN_MEM_WRITE) != 0;
-        }
-        return false;
-    }
-
-    // SpeedupBugFix's site, validated. The original's handler has no build gate --
-    // the loader calls it whenever the key is on (`cmp esi,1; jnz; call
-    // sub_100506B0`) and reads its eight operands at fixed site-relative offsets,
-    // so its row is the same on every build: a hit installs `E9` at match-21 and a
-    // miss is the handler's own `test eax,eax; jz` return. Reproducing that means
-    // reproducing it only where the site is really the timer-init function; the
-    // operand encodings and their writable targets are what say so, and a site that
-    // fails either test is not this build's layout, so nothing is published and
-    // nothing is installed.
-    std::byte* ResolveSpeedupBugFix()
-    {
-        auto pattern = find_pattern("50 64 89 25 00 00 00 00 83 EC 34");
-        if (pattern.empty())
-            return nullptr;
-
-        auto* site = pattern.get_first<std::byte>(-21);
-        uint32_t targets[kTimingOperandCount];
-        for (size_t index = 0; index < kTimingOperandCount; ++index)
-        {
-            const TimingOperand& operand = kTimingOperands[index];
-            const auto* field = site + operand.offset;
-            if (std::memcmp(field - operand.opcode.size(), operand.opcode.data(),
-                    operand.opcode.size()) != 0)
-                return nullptr;
-
-            targets[index] = *reinterpret_cast<const uint32_t*>(field);
-            if (!WritableImageWord(targets[index]))
-                return nullptr;
-        }
-
-        for (size_t index = 0; index < kTimingOperandCount; ++index)
-            *kTimingOperands[index].slot = GameImagePointer<float>(targets[index]);
-        return site;
-    }
-
-    // The publish tier runs before the install tier, so the site resolved there is
-    // the one the install patches; a null one keeps the install off.
-    std::byte* zpatch_speedup_site = nullptr;
-}
-
-// The test-only seam over the rebuilt SpeedupBugFix entry (tests/speedup_clock.cpp,
-// ctest `zp_speedup_clock`). SpeedupBugFixPublishForTest writes the eight pointers
-// ResolveSpeedupBugFix would publish from a real image's site operands, so a test
-// process with no game image can stand in the eight game addresses with floats of
-// its own; SpeedupBugFixForTest then runs the same SpeedupBugFixRunPublished the
-// shipped body calls, with the scan result and the frequency read injected. Neither
-// entry touches the install: no site is written, no body is registered and the
-// one-time scan is bypassed (its result is the parameter). The shipped ASI calls
-// neither.
-
-export namespace Misc
-{
-    // The eight published pointers, named by the ASI dword each one is.
-    struct SpeedupSlots
-    {
-        float* t4c;  // dword_1015934C
-        float* t50;  // dword_10159350
-        float* t54;  // dword_10159354
-        float* t58;  // dword_10159358
-        float* t5c;  // dword_1015935C
-        float* t60;  // dword_10159360
-        float* t64;  // dword_10159364
-        float* t68;  // dword_10159368
-    };
-
-    void SpeedupBugFixPublishForTest(const SpeedupSlots& slots);
-
-    // `clock` is the scan result the body calls at `clock - 51`; 0 is a miss.
-    // `read_frequency` is called only when dword_10159350 is zero.
-    void* SpeedupBugFixForTest(void* self, uint32_t clock,
-        uint64_t (__cdecl* read_frequency)());
-}
-
-void Misc::SpeedupBugFixPublishForTest(const Misc::SpeedupSlots& slots)
-{
-    zpatch_speedup_t4c = slots.t4c;
-    zpatch_speedup_t50 = slots.t50;
-    zpatch_speedup_t54 = slots.t54;
-    zpatch_speedup_t58 = slots.t58;
-    zpatch_speedup_t5c = slots.t5c;
-    zpatch_speedup_t60 = slots.t60;
-    zpatch_speedup_t64 = slots.t64;
-    zpatch_speedup_t68 = slots.t68;
-}
-
-void* Misc::SpeedupBugFixForTest(void* self, uint32_t clock,
-    uint64_t (__cdecl* read_frequency)())
-{
-    return SpeedupBugFixRunPublished(self, clock, read_frequency);
-}
 
 
 namespace
@@ -629,32 +310,6 @@ static void VramVerdict()
 
 namespace
 {
-    // DrivebyFOVFix: the site is the `movss xmm0,[esi+60h]` in front of the
-    // per-frame drive-by FOV subtraction. The publish reads the site's own next
-    // instruction (the `subss xmm1, xmm2` at the anchor's +5) for the resume before
-    // the install overwrites the five bytes the jump lands on.
-    void PublishDrivebyFOVFix()
-    {
-        if (!Loader::Enabled("DrivebyFOVFix"))
-            return;
-
-        auto pattern = find_pattern("F3 0F 10 46 60 F3 0F 5C CA");
-        if (!pattern.empty())
-            zpatch_driveby_resume = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first(5)));
-    }
-
-    // Publishing the eight floats before the install is what keeps the body's
-    // writes on the game's own words; the install only replaces the function's
-    // entry.
-    void PublishSpeedupBugFix()
-    {
-        if (!Loader::Enabled("SpeedupBugFix"))
-            return;
-
-        zpatch_speedup_site = ResolveSpeedupBugFix();
-    }
-
 
     // CopSirensFlag's three sites: the two model checks and the shared IDE hook,
     // installed at the parser anchor's -10 (the seven-byte compare).
@@ -756,34 +411,6 @@ namespace
     }
 
 
-    void InstallDrivebyFOVFix()
-    {
-        if (!Loader::Enabled("DrivebyFOVFix"))
-            return;
-
-        auto pattern = find_pattern("F3 0F 10 46 60 F3 0F 5C CA");
-        if (!pattern.empty())
-        {
-            Bodies::Register(reinterpret_cast<uintptr_t>(&DrivebyFovShimBody), 0x100064B0u);
-            Bodies::Register(reinterpret_cast<uintptr_t>(&DrivebyFovHelperBody), 0x10006450u);
-            // The helper's call names the original's guarded resolve entry; recording
-            // that VA keeps every registered branch in the original's coordinates.
-            Bodies::Register(reinterpret_cast<uintptr_t>(&DrivebyResolveEntry), 0x10003980u);
-            injector::MakeJMP(pattern.get_first(0),
-                reinterpret_cast<void*>(&DrivebyFovShimBody), true);
-        }
-    }
-
-    void InstallSpeedupBugFix()
-    {
-        if (!Loader::Enabled("SpeedupBugFix"))
-            return;
-
-        if (zpatch_speedup_site != nullptr)
-            injector::MakeJMP(zpatch_speedup_site, reinterpret_cast<void*>(&SpeedupBugFixBody),
-                true);
-    }
-
 
     void InstallCopSirensFlag()
     {
@@ -860,21 +487,16 @@ namespace
 // bytes, the install tier owns the gate.
 export void RegisterMisc()
 {
-    Loader::AddPublish(Loader::Entry::Misc, 0, PublishDrivebyFOVFix);
-    Loader::AddPublish(Loader::Entry::Misc, 1, PublishSpeedupBugFix);
     Loader::AddPublish(Loader::Entry::Misc, 3, PublishCopSirensFlag);
     Loader::AddPublish(Loader::Entry::Misc, 4, PublishPopupHeadlightsFlag);
 
     Loader::AddInstall(Loader::Entry::Misc, 0, InstallMiscFixes);
-    Loader::AddInstall(Loader::Entry::Misc, 2, InstallDrivebyFOVFix);
-    Loader::AddInstall(Loader::Entry::Misc, 3, InstallSpeedupBugFix);
     Loader::AddInstall(Loader::Entry::Misc, 5, InstallCopSirensFlag);
     Loader::AddInstall(Loader::Entry::Misc, 6, InstallPopupHeadlightsFlag);
     Loader::AddInstall(Loader::Entry::Misc, 7, InstallVRAMFix);
 
     // The bodies' recovered VAs, so the dump expresses each arm's branch in the
     // original's coordinates.
-    Bodies::Register(reinterpret_cast<uintptr_t>(&SpeedupBugFixBody), 0x10050540u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&CopSirensShimABody), 0x10006310u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&CopSirensShimBBody), 0x10006330u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&IdeHookBody), 0x100040E0u);
@@ -929,78 +551,6 @@ export void RegisterMisc()
 // because that is what it is; the code above is what installs it.
 // ---------------------------------------------------------------------------
 
-// The helper's call target. The original's helper does `call sub_10003980` (E8), so
-// ours must be a direct call; a module interface cannot name an imported function
-// from inline asm, so this six-byte forwarder jumps through the entry the native
-// layer publishes. ECX (the hash) and the stack reach the layer untouched, and the
-// layer's __try/__except frame is the one the original's SEH entry installs.
-static __declspec(naked) void DrivebyResolveEntry()
-{
-    __asm
-    {
-        jmp DWORD PTR [zpatch_native_resolve_entry]
-    }
-}
-
-// sub_10006450, recovered VA 0x10006450 (20 instructions): computes the drive-by
-// FOV once and caches the entry it reads it from. It resolves the native hash
-// dword_101580D4 through the call layer, walks the handler's two structures at
-// +0Eh/+0Fh/+14h, stores the entry in dword_1015BDF8 and reads the float at +60h
-// into dword_101580C4. The one-shot flag makes every later call only refresh the
-// default. The resolver result and the cached entry are dereferenced unguarded --
-// the same faults the original has (0x1000646E and 0x10006490) -- and 45.0f is
-// stored on every call, its own first instruction.
-//
-// Naked and internal: an external-linkage naked function is written to the module
-// and every importer fails (C2488).
-static __declspec(naked) void DrivebyFovHelperBody()
-{
-    __asm
-    {
-        cmp BYTE PTR [zpatch_driveby_done], 0
-        mov DWORD PTR [zpatch_driveby_fov], 42340000h  // 45.0f
-        jne driveby_have
-        mov ecx, DWORD PTR [zpatch_native_salt_101580D4]
-        call DrivebyResolveEntry
-        mov ecx, DWORD PTR [eax + 0Eh]
-        add eax, 0Eh
-        add ecx, eax
-        mov BYTE PTR [zpatch_driveby_done], 1
-        mov eax, DWORD PTR [ecx + 0Fh]
-        mov eax, DWORD PTR [eax + ecx + 14h]
-        mov DWORD PTR [zpatch_driveby_cached], eax
-        jmp driveby_read
-    driveby_have:
-        mov eax, DWORD PTR [zpatch_driveby_cached]
-    driveby_read:
-        mov eax, DWORD PTR [eax]
-        test eax, eax
-        je driveby_done
-        movss xmm0, DWORD PTR [eax + 60h]
-        movss DWORD PTR [zpatch_driveby_fov], xmm0
-    driveby_done:
-        ret
-    }
-}
-
-// sub_100064B0, recovered VA 0x100064B0 (5 instructions): the site's shim. It saves
-// every general register (the site resumes with its own GPRs and flags intact),
-// computes the FOV, restores them, loads the value into xmm0 and tail-jumps to the
-// site's own remaining `subss xmm1, xmm2` at the published resume.
-//
-// Naked and internal: an external-linkage naked function is written to the module
-// and every importer fails (C2488).
-static __declspec(naked) void DrivebyFovShimBody()
-{
-    __asm
-    {
-        __emit 0x60  // pushad (pushal)
-        call DrivebyFovHelperBody
-        __emit 0x61  // popad (popal)
-        movss xmm0, DWORD PTR [zpatch_driveby_fov]
-        jmp DWORD PTR [zpatch_driveby_resume]
-    }
-}
 
 
 // sub_10003FA0, recovered VA 0x10003FA0 (92 instructions, 314 bytes): the IDE parser

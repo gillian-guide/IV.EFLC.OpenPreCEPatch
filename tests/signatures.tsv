@@ -351,7 +351,7 @@ GarageModelFix.model	0x5659C3	0F B7 0E 50 51 E8	6
 # match-8/-4) is absent from the 1.0.8.0 image.
 NoLiveryLimit.collector	0x64A53B	74 52 8D B5 3C 01 00 00 83 FB 04	11
 NoLiveryLimit.livery	0x797A29	8B 8C 83 3C 01 00 00 0F BF 53 48	12
-# OutOfCommissionFix (source/ooc.ixx): the two anchors the original handler scans
+# OutOfCommissionFix (source/fixes.ixx): the two anchors the original handler scans
 # for itself. The first starts on the last byte of the `mov eax, <magic>` that
 # precedes the script resource's compare, so the E9 the arm writes at match+7
 # lands on the compare (and the body's resume, match+0x11, on the `movq` store two

@@ -12,10 +12,12 @@ module;
 #include <cstdlib>
 #include <cstring>
 
-export module ooc;
+export module fixes;
 
 import bodies;
+import bytes;
 import common;
+import game;
 import loader;
 import patch;
 
@@ -548,17 +550,934 @@ namespace
 // install tier overwrites, and the install tier owns the writes. The decoder pair
 // carries its recovered VAs too, so a tool that ever branches into it can express
 // the branch in the original's coordinates.
-export void RegisterOoc()
+namespace
+{
+    // VSyncFix: both call shapes load the vsync flag from an operand the
+    // original retargets to its own dword. The key's build mask excludes 1.0.8.0,
+    // where neither anchor exists, so the arm is inert on that image.
+    uint32_t zpatch_vsync_flag = 0;
+}
+
+    void InstallVSyncFix()
+    {
+        if (!Loader::Enabled("VSyncFix"))
+            return;
+
+        auto pattern = find_pattern("8B 08 8B 51 0C 6A 01 6A 00 6A 00 6A 00 6A 00 50 FF D2 8B F0 81 FE ? ? ? ? 74");
+        if (!pattern.empty())
+        {
+            injector::WriteMemory<uint32_t>(pattern.get_first<std::byte>(30),
+                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&zpatch_vsync_flag)), true);
+            Bodies::RegisterPublished(reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(30)));
+        }
+
+        pattern = find_pattern("8B 10 50 8B 82 A8 00 00 00 FF D0 83");
+        if (!pattern.empty())
+        {
+            injector::WriteMemory<uint32_t>(pattern.get_first<std::byte>(13),
+                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&zpatch_vsync_flag)), true);
+            Bodies::RegisterPublished(reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(13)));
+        }
+    }
+
+// ---------------------------------------------------------------------------
+
+static void MfAxisFloatBody();
+static void MfAxisNegBody();
+static void MfAxisIntBody();
+static void MfAxisFlagBody();
+static void MfAngleStepBody();
+static void MfAngleBody();
+static void MfAdvanceWindowsBody();
+static void MfAdvanceBody();
+
+// MouseFix's published state. Two pointers the game's mouse reader stores its axes
+// through, the game byte that flips the axis sign, the game's own frame-time
+// function, and the two resumes the site bodies tail-jump to. The floats and
+// doubles are the original ASI's literal pool: recovered `.data`, kept as raw words
+// so the bit patterns are exactly the original's.
+extern "C"
+{
+    uintptr_t zpatch_mf_x = 0;       // dword_10159C50 -> the game's mouse-X int
+    uintptr_t zpatch_mf_y = 0;       // dword_10159C3C -> the game's mouse-Y int
+    uintptr_t zpatch_mf_flag = 0;    // dword_10159C5C -> the game's invert byte
+    uintptr_t zpatch_mf_time = 0;    // dword_10159C34 -> the game's frame clock
+    uint32_t zpatch_mf_resume_a = 0; // dword_10159C60 -> the angle site's match
+    uint32_t zpatch_mf_resume_b = 0; // dword_10159C40 -> the advance site's +0x756
+
+    // The game's VirtualProtect import, called the way the original's advance
+    // helper calls it: `call dword ptr [slot]`.
+    uintptr_t zpatch_mf_virtual_protect = 0;
+
+    // The eight xmm words the two site bodies save and restore around their helper
+    // (the original's scratch dwords at 0x10159C30..0x10159C64).
+    float zpatch_mf_xmm_save[8] = {};
+
+    // The scalar constants the site bodies read with mulsd/movsd QWORD PTR [slot]
+    // and movss DWORD PTR [slot]. They are the original's .rdata values written as
+    // the numbers they are; three of them are not the mathematical constants they
+    // resemble, so each of those says so. No explicit alignment: a scalar load does
+    // not need one on x86, and the compiler gives doubles and floats their natural
+    // alignment anyway.
+    double zpatch_mf_scale = 0.0078125;
+    double zpatch_mf_scale_255 = 255.0;
+    double zpatch_mf_time_mul = 0.075000003;    // 0.075f printed to 9 digits, read back as a double
+    double zpatch_mf_time_add = 0.025;
+    double zpatch_mf_mul_neg1_d = -1.0;
+    double zpatch_mf_pi = 3.1415927;            // not pi: the original's value
+    double zpatch_mf_two_pi = 6.2831855;        // not 2*pi, same reason
+    double zpatch_mf_neg_pi = -3.1415927;
+    float zpatch_mf_sign = 127.5f;
+    float zpatch_mf_mul_neg1 = -1.0f;
+    float zpatch_mf_step_scale = 0.1f;
+
+    // The two xorps masks: four single-precision sign bits (0x101523F0) and two
+    // double-precision ones (0x101523E0). Both are 16 bytes in the original and
+    // `xorps` reads sixteen, so they must stay 16-byte aligned here too.
+    alignas(16) uint32_t zpatch_mf_single_sign[4] = { 0x80000000u, 0x80000000u, 0x80000000u, 0x80000000u };
+    alignas(16) uint64_t zpatch_mf_double_sign[2] = { 0x8000000000000000ull, 0x8000000000000000ull };
+}
+
+
+    // The two movd replacements: `cvtsi2ss xmmN, eax` becomes `movd xmmN, eax`,
+    // which moves the stored int bit-for-bit. Four bytes each; the bytes around
+    // them are untouched.
+    constexpr std::array<uint8_t, 4> kMovdXmm0Eax{ 0x66, 0x0F, 0x6E, 0xC0 };
+    constexpr std::array<uint8_t, 4> kMovdXmm1Eax{ 0x66, 0x0F, 0x6E, 0xC8 };
+
+
+    void PublishMouseFix()
+    {
+        if (!Loader::Enabled("MouseFix"))
+            return;
+
+        auto pattern = find_pattern("51 8B 44 24 0C 85 C0 0F 57 D2 56 8B 35 ? ? ? ? 57 8B 3D ? ? ? ? F3 0F 11 54 24 08 75 0C");
+        if (!pattern.empty())
+        {
+            zpatch_mf_x = *pattern.get_first<uint32_t>(13);
+            zpatch_mf_y = *pattern.get_first<uint32_t>(20);
+        }
+
+        pattern = find_pattern("8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? 83 C4 08 83 3D");
+        if (!pattern.empty())
+            zpatch_mf_flag = *pattern.get_first<uint32_t>(20);
+
+        pattern = find_pattern("83 EC 08 DB 05 ? ? ? ? 68");
+        if (!pattern.empty())
+        {
+            zpatch_mf_time =
+                reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(0));
+        }
+
+        pattern = find_pattern("53 56 8B F1 57 8B BE 40 01 00 00 85 FF F3 0F 11 46");
+        if (!pattern.empty())
+        {
+            const auto match = reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(0));
+            zpatch_mf_resume_a = static_cast<uint32_t>(match);
+            zpatch_mf_resume_b = static_cast<uint32_t>(match + 1878);
+        }
+
+        // The game's VirtualProtect, which the advance helper calls through its
+        // IAT slot in the original (`FF 15`), so it stays an indirect call here.
+        zpatch_mf_virtual_protect = reinterpret_cast<uintptr_t>(&VirtualProtect);
+    }
+
+    void InstallNoPhysicsSleep()
+    {
+        if (!Loader::Enabled("NoPhysicsSleep"))
+            return;
+
+        auto pattern = find_pattern("0F 00 00 00 C7 41 14 14 00 00 00 C7 41 1C 00 00");
+        if (pattern.empty())
+            return;
+
+        injector::WriteMemory<uint32_t>(*pattern.get_first<uint32_t>(-38), 0u, true);
+    }
+
+    void InstallMouseFix()
+    {
+        if (!Loader::Enabled("MouseFix"))
+            return;
+
+        auto pattern = find_pattern("51 8B 44 24 0C 85 C0 0F 57 D2 56 8B 35 ? ? ? ? 57 8B 3D ? ? ? ? F3 0F 11 54 24 08 75 0C");
+        if (!pattern.empty())
+        {
+            Bodies::Register(reinterpret_cast<uintptr_t>(&MfAxisFloatBody), 0x10024060u);
+            injector::MakeJMP(pattern.get_first(0),
+                reinterpret_cast<void*>(&MfAxisFloatBody), true);
+        }
+
+        // The negated-axis reader's anchor differs from the flagged one only in
+        // the instruction after the call, so it is its own signature.
+        pattern = find_pattern("8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? D8");
+        if (!pattern.empty())
+        {
+            Bodies::Register(reinterpret_cast<uintptr_t>(&MfAxisNegBody), 0x100240C0u);
+            injector::MakeJMP(pattern.get_first(0),
+                reinterpret_cast<void*>(&MfAxisNegBody), true);
+        }
+
+        constexpr std::string_view kMovdSites[] = {
+            "83 C4 08 F7 D8 F3 0F 2A C0 6A 00 8B CE F3 0F 11 07",
+            "83 C4 08 F7 D8 F3 0F 2A C0 6A 01 8B CB F3 0F 11 07",
+        };
+        for (const auto site : kMovdSites)
+        {
+            pattern = find_pattern(site);
+            if (pattern.empty())
+                continue;
+
+            injector::WriteMemoryRaw(pattern.get_first(5),
+                const_cast<uint8_t*>(kMovdXmm0Eax.data()), kMovdXmm0Eax.size(), true);
+            injector::WriteMemoryRaw(pattern.get_first(33),
+                const_cast<uint8_t*>(kMovdXmm0Eax.data()), kMovdXmm0Eax.size(), true);
+            injector::MakeNOP(pattern.get_first(3), 2, true);
+            injector::MakeNOP(pattern.get_first(31), 2, true);
+        }
+
+        pattern = find_pattern("83 C4 08 F7 D8 F3 0F 2A C8 F3 0F 10 46");
+        if (!pattern.empty())
+        {
+            injector::WriteMemoryRaw(pattern.get_first(5),
+                const_cast<uint8_t*>(kMovdXmm1Eax.data()), kMovdXmm1Eax.size(), true);
+            injector::MakeNOP(pattern.get_first(3), 2, true);
+        }
+
+        pattern = find_pattern("8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? 83 C4 08 83 3D");
+        if (!pattern.empty())
+        {
+            Bodies::Register(reinterpret_cast<uintptr_t>(&MfAxisFlagBody), 0x10024170u);
+            injector::MakeJMP(pattern.get_first(0),
+                reinterpret_cast<void*>(&MfAxisFlagBody), true);
+        }
+
+        // The int-axis helper is called from two places of one function (the
+        // anchor's +51 and +90), so both calls are retargeted from the one scan.
+        pattern = find_pattern("56 8B 74 24 08 57 8B 7C 24 10 C7 06 00 00 00 00");
+        if (!pattern.empty())
+        {
+            Bodies::Register(reinterpret_cast<uintptr_t>(&MfAxisIntBody), 0x10024120u);
+            injector::MakeCALL(pattern.get_first(51),
+                reinterpret_cast<void*>(&MfAxisIntBody), true);
+            injector::MakeCALL(pattern.get_first(90),
+                reinterpret_cast<void*>(&MfAxisIntBody), true);
+        }
+
+        // The two site bodies: the angle hook 15 bytes before the anchor and the
+        // advance hook 1862 bytes after it.
+        pattern = find_pattern("53 56 8B F1 57 8B BE 40 01 00 00 85 FF F3 0F 11 46");
+        if (!pattern.empty())
+        {
+            Bodies::Register(reinterpret_cast<uintptr_t>(&MfAngleBody), 0x10024560u);
+            Bodies::Register(reinterpret_cast<uintptr_t>(&MfAdvanceBody), 0x100243A0u);
+            Bodies::Register(reinterpret_cast<uintptr_t>(&MfAdvanceWindowsBody), 0x100241E0u);
+            injector::MakeJMP(pattern.get_first(-15),
+                reinterpret_cast<void*>(&MfAngleBody), true);
+            injector::MakeJMP(pattern.get_first(1862),
+                reinterpret_cast<void*>(&MfAdvanceBody), true);
+        }
+    }
+
+
+    // HighFPSSpeedupFix: the nine frame-time clamps inside CTimer::Update. One
+    // becomes a short jump (skipping the following test), the other eight are
+    // two-byte NOPs.
+    struct SpeedupSite final
+    {
+        ptrdiff_t offset;
+        bool shortJump;
+    };
+    constexpr SpeedupSite kSpeedupSites[] = {
+        { -7, false },
+        { 3, false },
+        { 224, true },
+        { 231, false },
+        { 367, false },
+        { 377, false },
+        { 607, false },
+        { 614, false },
+        { 764, false },
+    };
+
+    // The address of a body another module transcribed, by its recovered VA. The
+    // native-call layer publishes only its C entries, and a module interface cannot
+    // export a naked function, so the body registry is what makes its pieces
+    // reachable from here.
+    uint32_t RegisteredBody(uint32_t reference)
+    {
+        for (const auto& entry : Bodies::All())
+        {
+            if (entry.reference == reference)
+                return static_cast<uint32_t>(entry.address);
+        }
+        return 0;
+    }
+
+    void InstallHighFPSSpeedupFix()
+    {
+        if (!Loader::Enabled("HighFPSSpeedupFix"))
+            return;
+
+        auto pattern = find_pattern("0F 2F C1 76 03 0F 28 C8 F3 0F 10 15");
+        if (pattern.empty())
+            return;
+
+        for (const auto& site : kSpeedupSites)
+        {
+            if (site.shortJump)
+                injector::WriteMemory<std::byte>(pattern.get_first(site.offset), Bytes::ShortJmp, true);
+            else
+                injector::MakeNOP(pattern.get_first(site.offset), 2, true);
+        }
+    }
+
+// ---------------------------------------------------------------------------
+// CutsceneFixes, moved with its state and bodies.
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// CutsceneFixes
+//
+// One option, two halves of one chain. Chain B is the original's sub_100388C0: a
+// thiscall `char(float)` that the worker sub_10038B40 installs as a `call` at the
+// two places the game's camera function (1.0.8.0 `0xC9A640`) is entered, so both
+// callers run it. Chain A is the single `je` -> `jmp` inside that same function
+// that makes its "target found" test unconditional. The original runs them from
+// two loader arms under one option, so one arm installs both here.
+//
+// The body's mutable state sits in the original's .bss beside it
+// (dword_1015BDE4 / dword_1015BDF0 / dword_1015BDE8) and its constants in its
+// .rdata (0x101522F0, 0x101522F8, 0x101522FC, 0x10152340, 0x101523D0); the
+// transcribed asm names module slots instead, and the arm fills the two game
+// pointers from the site's own call operand before it overwrites the call.
+// ---------------------------------------------------------------------------
+extern "C"
+{
+    // dword_1015BDE4: the camera function the site calls. The worker publishes
+    // `match + [match - 4]` -- the destination of the `E8` it is about to
+    // overwrite -- and this is that address.
+    uint32_t zpatch_cutscene_target = 0;
+
+    // dword_1015BDF0: the same address + 0x4F. The camera function's
+    // `mov byte [esp + 1Ch], 1` sits at target + 0x4A and its immediate byte is the
+    // last one (target + 0x4E); the body's `dec esi` lands the store there.
+    uint32_t zpatch_cutscene_poke = 0;
+
+    // dword_1015BDE8: the accumulated scene-frame time, a double that starts at
+    // zero (the original's .bss).
+    uint64_t zpatch_cutscene_accum = 0;
+
+    // 0x10063010: the original's VirtualProtect import slot. The arm fills this
+    // with the module's own import; the body still calls it indirectly (`call edi`
+    // after `mov edi, [slot]`), exactly as the original does.
+    uint32_t zpatch_cutscene_virtual_protect = 0;
+
+    // The body's literal pool, from the original ASI's .rdata. Each is declared
+    // with the type its instruction reads and initialised with the number it is;
+    // every literal round-trips to the original's bytes at the VA in its comment.
+    // The one mask stays a hex word because it is not a number. No explicit
+    // alignment: a scalar load does not need one on x86.
+    double zpatch_cutscene_zero = 0.0;        // 0x101522F0
+    // 0x10152340: the double nearest 0.3333, not 1/3.
+    double zpatch_cutscene_limit = 0.3333;
+    // 0x101523D0: an `andps` sign mask, not a number (the body clears the sign bit
+    // of a difference before comparing it), so this one stays a hex word.
+    uint32_t zpatch_cutscene_abs_mask = 0x7FFFFFFFu;
+    float zpatch_cutscene_eps_a = 0.05f;      // 0x101522F8
+    float zpatch_cutscene_eps_b = 0.5f;       // 0x101522FC
+}
+
+// The loader preamble's salt this body resolves its native with (dword_1015803C)
+// and the native layer's guarded resolve entry, which is the original's
+// sub_10003980 rebuilt as C (source/native.ixx). Both live in another module
+// unit, so they are declared here with the C linkage they are defined with.
+extern "C"
+{
+    extern uint32_t zpatch_native_salt_1015803C;
+    extern uintptr_t zpatch_native_resolve_entry;
+}
+
+static void CutsceneResolveEntry();
+static void CutsceneChainBody();
+
+namespace
+{
+    // CutsceneFixes' published state. The worker publishes two game pointers from
+    // the primary site's own `E8` operand: the call's destination (the camera
+    // function) and that destination + 0x4F, one past the immediate the body
+    // pokes. Both are read here, before the install tier overwrites the call; the
+    // secondary site calls the same function and publishes nothing, as the
+    // original's second scan does.
+    void PublishCutsceneFixes()
+    {
+        if (!Loader::Enabled("CutsceneFixes"))
+            return;
+
+        auto pattern = find_pattern("8B 4C 24 2C 5F 5E 5B 33 CC B0 01 E8");
+        if (!pattern.empty())
+        {
+            auto* match = pattern.get_first<std::byte>(0);
+            const auto displacement = *pattern.get_first<int32_t>(-4);
+            zpatch_cutscene_target =
+                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + displacement));
+            zpatch_cutscene_poke =
+                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + displacement + 0x4F));
+            Log::Print("cutscene: match {:08X} disp {:08X} target {:08X} poke {:08X}",
+                       reinterpret_cast<uintptr_t>(match), displacement,
+                       zpatch_cutscene_target, zpatch_cutscene_poke);
+        }
+
+        // The body's VirtualProtect call goes through a slot because the original
+        // loads its IAT entry by absolute address; fill it from the module's own
+        // import, as audio.ixx does for its advance helper.
+        zpatch_cutscene_virtual_protect = reinterpret_cast<uintptr_t>(&VirtualProtect);
+    }
+
+    // CutsceneFixes: chain B's two camera call sites become calls into
+    // sub_100388C0, and chain A's `je` in the camera function becomes the
+    // unconditional `jmp` that skips its "target found" test. Each caller's
+    // pattern starts at the epilogue/a byte the call precedes, so the site is the
+    // five bytes before the match. Chain A's two texts are the original worker's
+    // first and fallback patterns: the first is the one the supported 1.0.8.0-class
+    // images carry, the second covers the older ones.
+    void InstallCutsceneFixes()
+    {
+        if (!Loader::Enabled("CutsceneFixes"))
+            return;
+
+        Bodies::Register(reinterpret_cast<uintptr_t>(&CutsceneChainBody), 0x100388C0u);
+        // The body's call names the resolve forwarder, which stands in for the
+        // original's sub_10003980; recording that VA keeps the registered branch in
+        // the original's coordinates.
+        Bodies::Register(reinterpret_cast<uintptr_t>(&CutsceneResolveEntry), 0x10003980u);
+
+        auto pattern = find_pattern("8B 4C 24 2C 5F 5E 5B 33 CC B0 01 E8");
+        if (!pattern.empty())
+        {
+            injector::MakeCALL(pattern.get_first(-5),
+                reinterpret_cast<void*>(&CutsceneChainBody), true);
+        }
+
+        pattern = find_pattern("8B CF 88 44 24 0F E8 ? ? ? ? A1");
+        if (!pattern.empty())
+        {
+            injector::MakeCALL(pattern.get_first(-5),
+                reinterpret_cast<void*>(&CutsceneChainBody), true);
+        }
+
+        pattern = find_pattern("74 24 8B 44 24 2C 83 F8 03");
+        if (pattern.empty())
+            pattern = find_pattern("74 0B 83 7C 24 2C 03");
+        if (!pattern.empty())
+            injector::WriteMemory<std::byte>(pattern.get_first(0), Bytes::ShortJmp, true);
+
+        Log::Print("cutscene: resolved={} target={:08X} poke={:08X} resolveEntry={:08X}",
+                   zpatch_cutscene_target != 0 ? 1 : 0, zpatch_cutscene_target,
+                   zpatch_cutscene_poke, zpatch_native_resolve_entry);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// HighFPSBikePhysicsFix / BikeFeetFix / BikePhoneAnimsFix, moved with their
+// state and bodies.
+// ---------------------------------------------------------------------------
+
+    // The bike-physics detour's published state: the incoming value the clamp
+    // rewrites, the caller's EAX saved across the clamp call, and the resume (the
+    // site's own `call`, match+9).
+    float zpatch_bike_value = 0.0f;    // dword_1015AD7C
+    uint32_t zpatch_bike_saved = 0;    // dword_1015AD80
+    uint32_t zpatch_bike_resume = 0;   // dword_1015AD84
+
+static void BikePhysicsDetour();
+
+namespace
+{
+// sub_1001EF30, recovered VA 0x1001EF30: HighFPSBikePhysicsFix's clamp, the helper
+// the detour calls between pushad/popad. The original converts the float value to
+// double, compares it against the 8-byte constant 0.006666666665 and replaces it
+// with 0x3BDA740E when it is below. Written as the same comparison rather than as
+// the SSE sequence: the value and the outcome are what the detour's contract is.
+static void BikePhysicsClamp() noexcept
+{
+    // The float the original's 0x3BDA740E immediate denotes, stored when the value
+    // is below the threshold; 0.006666667f is the shortest decimal that is that
+    // float. The comparison's own 8-byte constant is 0.006666666665 (the qword at
+    // 0x10152308).
+    constexpr float kBikeSpeedThreshold = 0.006666667f;
+
+    const float value = zpatch_bike_value;
+    if (0.006666666665 > static_cast<double>(value))
+        zpatch_bike_value = kBikeSpeedThreshold;
+}
+
+    // HighFPSBikePhysicsFix's resume: the site's own `call` at match+9, read before
+    // the install replaces the first five bytes with the jump. The body re-runs those
+    // five bytes' instructions and tail-jumps to the call, so the call and the rest of
+    // the function run unchanged.
+    void PublishHighFPSBikePhysicsFix()
+    {
+        if (!Loader::Enabled("HighFPSBikePhysicsFix"))
+            return;
+
+        auto pattern = find_pattern("D9 45 08 51 8B CE D9 1C 24 E8 ?? ?? ?? ?? 8A 86 90 14 00 00");
+        if (pattern.empty())
+            return;
+
+        zpatch_bike_resume =
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(9)));
+    }
+
+    // HighFPSBikePhysicsFix: the bike's per-frame speed value passes through the
+    // clamp before the physics step consumes it.
+    void InstallHighFPSBikePhysicsFix()
+    {
+        if (!Loader::Enabled("HighFPSBikePhysicsFix"))
+            return;
+
+        auto pattern = find_pattern("D9 45 08 51 8B CE D9 1C 24 E8 ?? ?? ?? ?? 8A 86 90 14 00 00");
+        if (pattern.empty())
+            return;
+
+        Bodies::Register(reinterpret_cast<uintptr_t>(&BikePhysicsDetour), 0x1001EF60u);
+        injector::MakeJMP(pattern.get_first<std::byte>(0), reinterpret_cast<void*>(&BikePhysicsDetour), true);
+    }
+
+    // BikeFeetFix: the 12-byte rider-foot block is deleted, so the chopper foot
+    // position is left to the game's own (correct) path.
+    void InstallBikeFeetFix()
+    {
+        if (!Loader::Enabled("BikeFeetFix"))
+            return;
+
+        auto pattern = find_pattern("39 82 54 13 00 00 0F 85 94 04 00 00");
+        if (!pattern.empty())
+            injector::MakeNOP(pattern.get_first(12), 12, true);
+    }
+
+    // BikePhoneAnimsFix: the six-byte phone-animation branch is deleted.
+    void InstallBikePhoneAnimsFix()
+    {
+        if (!Loader::Enabled("BikePhoneAnimsFix"))
+            return;
+
+        auto pattern = find_pattern("80 BE 18 02 00 00 00 0F 85 36 01 00 00 80 BE");
+        if (!pattern.empty())
+            injector::MakeNOP(pattern.get_first(33), 6, true);
+    }
+
+}
+
+// ---------------------------------------------------------------------------
+// DrivebyFOVFix and SpeedupBugFix, moved with their state, helpers, seams and
+// bodies.
+// ---------------------------------------------------------------------------
+
+// The DrivebyFOVFix published state, in C linkage because the transcribed bodies
+// name the slots directly (the original keeps them in its own .bss beside its
+// bodies). dword_101580D4 is the native hash the helper resolves; it is not seeded
+// here, because the original's loader preamble resolves it with its ten-word salt
+// rule (source/native.ixx): on 1.0.8.0 the probe hits and the slot keeps the
+// shipped `.data` value 0x75E005F1, while a probe miss substitutes 0x09399528.
+// dword_101580C4 is the FOV it caches (45.0f, the .data value and the helper's own
+// first instruction), dword_1015BDF8 the cached entry pointer, byte_1015AD4A the
+// one-shot flag, and dword_1015BDF4 the resume the arm publishes.
+
+extern "C"
+{
+    // The layer's resolved salt (source/native.ixx), dword_101580D4.
+    extern uint32_t zpatch_native_salt_101580D4;
+
+    float zpatch_driveby_fov = 45.0f;
+    uint32_t zpatch_driveby_cached = 0;
+    uint8_t zpatch_driveby_done = 0;
+    uint32_t zpatch_driveby_resume = 0;
+
+    // The native layer's resolve entry (source/native.ixx), for the helper's call.
+    extern uintptr_t zpatch_native_resolve_entry;
+
+    // SpeedupBugFix: the eight game timing floats the handler publishes, in its
+    // own read order (the last four repeat the first four for the episode path).
+    // The pointers are game addresses read from the site's operands; the body
+    // writes through them.
+    float* zpatch_speedup_t4c = nullptr;  // dword_1015934C: copy of dword_18CAEB0
+    float* zpatch_speedup_t50 = nullptr;  // dword_10159350: dword_18CAE9C, seconds per tick
+    float* zpatch_speedup_t54 = nullptr;  // dword_10159354: copy of dword_18CAE9C
+    float* zpatch_speedup_t58 = nullptr;  // dword_10159358: copy of dword_1752074
+    float* zpatch_speedup_t5c = nullptr;  // dword_1015935C: dword_1752078, 1 / milliseconds
+    float* zpatch_speedup_t60 = nullptr;  // dword_10159360: dword_18CAEA4, milliseconds * dword_FF2014
+    float* zpatch_speedup_t64 = nullptr;  // dword_10159364: flt_18CAEA0, milliseconds per tick
+    float* zpatch_speedup_t68 = nullptr;  // dword_10159368: copy of flt_18CAEA0
+
+}
+
+// SpeedupBugFix: the game's timer-init function (1.0.8.0 game 0x4571B0, the
+// `50 64 89 25 00 00 00 00 83 EC 34` prologue's match - 21) is replaced by the
+// original's sub_10050540. That body is compiled C -- an SEH frame, a /GS
+// cookie, the MSVC thread-safe static guard for its one-time signature scan and
+// SSE double arithmetic -- so this is a C++ reimplementation of the same
+// behaviour, not a transcription (docs/parity.md records the split).
+//
+// The original's handler has no build gate and reads its eight float pointers
+// from fixed site-relative operands, so the row is the same on every build that
+// carries the signature (0x4544B0 on 1.0.4.0 through 0x5AD550 on 1.1.3.0) and
+// 1.0.0.0, which has no hit, is a clean skip. tests/signatures.tsv records the
+// per-build sites and the eight operand encodings.
+//
+// It fills the game's eight timing floats from QueryPerformanceFrequency, then
+// stores the game clock's 64-bit stamp in *self and answers self. The clock
+// function is found by the original's own one-time scan ("1B D9 89 5C 24 24 0F
+// 88", 1.0.8.0 site 0x456F93) and is called at match - 51 = 0x456F60.
+static std::atomic<uint32_t> zpatch_speedup_scan_done{ 0 };
+static uint32_t zpatch_speedup_clock = 0;
+
+namespace
+{
+    using SpeedupFrequencyReader = uint64_t(__cdecl*)();
+
+    // QueryPerformanceFrequency, the original's `call dword ptr [0x10063050]` at
+    // 0x100505EF. The original reaches it only when dword_10159350 is still zero.
+    uint64_t ReadQueryPerformanceFrequency()
+    {
+        LARGE_INTEGER frequency{};
+        QueryPerformanceFrequency(&frequency);
+        return static_cast<uint64_t>(frequency.QuadPart);
+    }
+
+    // The sequence sub_10050540 runs after its one-time scan: the
+    // dword_10159350 guard, the four derived floats written through eight
+    // pointers, then the clock call. It is split out so tests/speedup_clock.cpp
+    // (ctest `zp_speedup_clock`) can inject the frequency, the scan result and
+    // the eight destinations; the shipped body below passes the published globals,
+    // the scan slot and QueryPerformanceFrequency, so the parameters change no
+    // shipped behaviour.
+    //
+    // `targets` is in the original's *store* order (0x10050635..0x1005067F):
+    // dword_10159364, _1360, _1350, _135C, _1368, _134C, _1354, _1358. That is not
+    // the handler's read order (0x100506E8..0x10050738); the two must not be
+    // conflated. `clock` is dword_101A849C, the scan's match; the original calls
+    // `clock - 51`, so 0 is its missing-scan 0xFFFFFFCD.
+    void* SpeedupBugFixRun(void* self, float** targets, uint32_t clock,
+        SpeedupFrequencyReader read_frequency)
+    {
+        // The original tests the float at dword_10159350, not the pointer
+        // (0x100505D1..0x100505E5), so the dereference stays unguarded; the arm
+        // publishes all eight pointers before this body can run.
+        if (*targets[2] == 0.0f)
+        {
+            const uint64_t frequency = read_frequency();
+
+            // 0x10152380 is the double 1000.0 (0x408F400000000000) and 0x10152300
+            // the double 0.0010000000474974513 (0x3F50624DE0000000). The original
+            // divides, multiplies and truncates to float in this order
+            // (0x10050600..0x10050653): scale = 1000.0 / frequency, then
+            // (float)scale, (float)(scale * 1000.0),
+            // (float)(scale * 0.0010000000474974513) and
+            // (float)(0.0010000000474974513 / scale).
+            const double scale = 1000.0 / static_cast<double>(frequency);
+            const float perTickMilliseconds = static_cast<float>(scale);
+            const float millisecondsProduct = static_cast<float>(scale * 1000.0);
+            const float perTickSeconds = static_cast<float>(scale * 0.0010000000474974513);
+            const float reciprocal = static_cast<float>(0.0010000000474974513 / scale);
+
+            *targets[0] = perTickMilliseconds;
+            *targets[1] = millisecondsProduct;
+            *targets[2] = perTickSeconds;
+            *targets[3] = reciprocal;
+            *targets[4] = perTickMilliseconds;
+            *targets[5] = millisecondsProduct;
+            *targets[6] = perTickSeconds;
+            *targets[7] = reciprocal;
+        }
+
+        // 0x10050683..0x10050692: `mov ecx,[dword_101A849C]; add ecx,-51;
+        // call ecx; mov [esi],eax; mov [esi+4],edx`, and the answer is ESI. The
+        // call is unguarded: a scan miss leaves the slot zero and the call faults
+        // on 0xFFFFFFCD, exactly as the original's does.
+        using ClockFunction = __int64(__cdecl*)(void);
+        const __int64 stamp = reinterpret_cast<ClockFunction>(
+            static_cast<uintptr_t>(clock) - 51u)();
+        *reinterpret_cast<__int64*>(self) = stamp;
+        return self;
+    }
+
+    // Builds the eight destinations in the original's store order and runs the
+    // sequence. The body and the test-only seam below both go through this, so
+    // the order cannot drift between the shipped path and the measured one.
+    void* SpeedupBugFixRunPublished(void* self, uint32_t clock, SpeedupFrequencyReader read_frequency)
+    {
+        float* targets[8] = {
+            zpatch_speedup_t64, zpatch_speedup_t60, zpatch_speedup_t50, zpatch_speedup_t5c,
+            zpatch_speedup_t68, zpatch_speedup_t4c, zpatch_speedup_t54, zpatch_speedup_t58,
+        };
+        return SpeedupBugFixRun(self, targets, clock, read_frequency);
+    }
+}
+
+static void* __fastcall SpeedupBugFixBody(void* self, int)
+{
+    // sub_10050587's MSVC static-init guard: the scan runs once per process. A
+    // miss leaves the clock at zero, and the faithful `0 - 51` call below faults
+    // on 0xFFFFFFCD exactly as the original's does.
+    if (zpatch_speedup_scan_done.exchange(1u, std::memory_order_acq_rel) == 0)
+    {
+        auto pattern = find_pattern("1B D9 89 5C 24 24 0F 88");
+        if (!pattern.empty())
+            zpatch_speedup_clock = static_cast<uint32_t>(
+                reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(0)));
+    }
+
+    return SpeedupBugFixRunPublished(self, zpatch_speedup_clock, &ReadQueryPerformanceFrequency);
+}
+
+namespace
+{
+    // A captured pattern operand is a 32-bit VA of the image *as the loader mapped
+    // it*: the image's `.reloc` entries were applied before any arm ran, so the
+    // dword in the instruction already names the live object. The game is relocated
+    // on every run (GTAIV.exe carries DYNAMIC_BASE, and the observed bases include
+    // 0x4B0000 and 0xA60000), so converting the operand through the preferred base
+    // again would move every pointer by the run's whole relocation distance. The
+    // offline dump applies the same fixups to its own copy of the image
+    // (tests/dump_main.cpp), which is what makes this identity cast right there too.
+    template <typename T>
+    T* GameImagePointer(uint32_t value)
+    {
+        return reinterpret_cast<T*>(static_cast<uintptr_t>(value));
+    }
+
+    // SpeedupBugFix: the handler's eight operands, in its read order
+    // (`mov eax,[ebx+2Fh]` .. `mov eax,[ebx+129h]`, ebx = match - 21), are the
+    // absolute addresses of the floats the replacement body computes. Each one is
+    // the disp32 field of a `movss` in the timer-init function, so the four bytes
+    // before the field are that instruction's opcode and ModRM. Those bytes are the
+    // per-build evidence that the dword really is one of the timing floats and not
+    // something that happens to sit at the same distance from a coincidental
+    // signature match: they are identical on every image that carries the
+    // signature (tests/signatures.tsv records the recovered values).
+    struct TimingOperand final
+    {
+        ptrdiff_t offset;               // the handler's [ebx+disp], from the site
+        std::array<uint8_t, 4> opcode;  // the instruction bytes that precede it
+        float** slot;
+    };
+
+    constexpr TimingOperand kTimingOperands[] = {
+        { 0x02F, { 0xF3, 0x0F, 0x10, 0x05 }, &zpatch_speedup_t50 },  // movss xmm0,[dword_18CAE9C]
+        { 0x0BA, { 0xF3, 0x0F, 0x11, 0x0D }, &zpatch_speedup_t64 },  // movss [flt_18CAEA0],xmm1
+        { 0x0D1, { 0xF3, 0x0F, 0x11, 0x05 }, &zpatch_speedup_t60 },  // movss [dword_18CAEA4],xmm0
+        { 0x0F7, { 0xF3, 0x0F, 0x11, 0x1D }, &zpatch_speedup_t5c },  // movss [dword_1752078],xmm3
+        { 0x0FF, { 0xF3, 0x0F, 0x11, 0x0D }, &zpatch_speedup_t68 },  // movss [dword_18CAEAC],xmm1
+        { 0x10E, { 0xF3, 0x0F, 0x11, 0x1D }, &zpatch_speedup_t4c },  // movss [dword_18CAEB0],xmm3
+        { 0x11D, { 0xF3, 0x0F, 0x11, 0x15 }, &zpatch_speedup_t54 },  // movss [dword_18CAEA8],xmm2
+        { 0x129, { 0xF3, 0x0F, 0x11, 0x05 }, &zpatch_speedup_t58 },  // movss [dword_1752074],xmm0
+    };
+
+    constexpr size_t kTimingOperandCount = sizeof(kTimingOperands) / sizeof(kTimingOperands[0]);
+
+    // The body writes through all eight pointers, so every one of them has to be a
+    // writable word of the image in use before any of them is published: a
+    // signature that matched a different function would otherwise hand the body a
+    // code address or a constant to store floats into. The operand is a live
+    // address, so the *live* base is what says where it sits; the PE header still
+    // records the preferred base and is not the image this runs in.
+    bool WritableImageWord(uint32_t value)
+    {
+        const auto& game = Game::Get();
+        const auto host = static_cast<uint32_t>(game.ImageBase());
+        if (value < host ||
+            value - host > game.ImageSize() - sizeof(uint32_t))
+            return false;
+
+        const auto rva = value - host;
+        const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(game.ImageBase());
+        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(game.ImageBase() + dos->e_lfanew);
+        const auto* section = IMAGE_FIRST_SECTION(nt);
+        for (WORD index = 0; index < nt->FileHeader.NumberOfSections; ++index, ++section)
+        {
+            if (rva < section->VirtualAddress || rva - section->VirtualAddress >= section->Misc.VirtualSize)
+                continue;
+            return (section->Characteristics & IMAGE_SCN_MEM_WRITE) != 0;
+        }
+        return false;
+    }
+
+    // SpeedupBugFix's site, validated. The original's handler has no build gate --
+    // the loader calls it whenever the key is on (`cmp esi,1; jnz; call
+    // sub_100506B0`) and reads its eight operands at fixed site-relative offsets,
+    // so its row is the same on every build: a hit installs `E9` at match-21 and a
+    // miss is the handler's own `test eax,eax; jz` return. Reproducing that means
+    // reproducing it only where the site is really the timer-init function; the
+    // operand encodings and their writable targets are what say so, and a site that
+    // fails either test is not this build's layout, so nothing is published and
+    // nothing is installed.
+    std::byte* ResolveSpeedupBugFix()
+    {
+        auto pattern = find_pattern("50 64 89 25 00 00 00 00 83 EC 34");
+        if (pattern.empty())
+            return nullptr;
+
+        auto* site = pattern.get_first<std::byte>(-21);
+        uint32_t targets[kTimingOperandCount];
+        for (size_t index = 0; index < kTimingOperandCount; ++index)
+        {
+            const TimingOperand& operand = kTimingOperands[index];
+            const auto* field = site + operand.offset;
+            if (std::memcmp(field - operand.opcode.size(), operand.opcode.data(),
+                    operand.opcode.size()) != 0)
+                return nullptr;
+
+            targets[index] = *reinterpret_cast<const uint32_t*>(field);
+            if (!WritableImageWord(targets[index]))
+                return nullptr;
+        }
+
+        for (size_t index = 0; index < kTimingOperandCount; ++index)
+            *kTimingOperands[index].slot = GameImagePointer<float>(targets[index]);
+        return site;
+    }
+
+    // The publish tier runs before the install tier, so the site resolved there is
+    // the one the install patches; a null one keeps the install off.
+    std::byte* zpatch_speedup_site = nullptr;
+}
+
+// The test-only seam over the rebuilt SpeedupBugFix entry (tests/speedup_clock.cpp,
+// ctest `zp_speedup_clock`). SpeedupBugFixPublishForTest writes the eight pointers
+// ResolveSpeedupBugFix would publish from a real image's site operands, so a test
+// process with no game image can stand in the eight game addresses with floats of
+// its own; SpeedupBugFixForTest then runs the same SpeedupBugFixRunPublished the
+// shipped body calls, with the scan result and the frequency read injected. Neither
+// entry touches the install: no site is written, no body is registered and the
+// one-time scan is bypassed (its result is the parameter). The shipped ASI calls
+// neither.
+
+export namespace Fixes
+{
+    // The eight published pointers, named by the ASI dword each one is.
+    struct SpeedupSlots
+    {
+        float* t4c;  // dword_1015934C
+        float* t50;  // dword_10159350
+        float* t54;  // dword_10159354
+        float* t58;  // dword_10159358
+        float* t5c;  // dword_1015935C
+        float* t60;  // dword_10159360
+        float* t64;  // dword_10159364
+        float* t68;  // dword_10159368
+    };
+
+    void SpeedupBugFixPublishForTest(const SpeedupSlots& slots);
+
+    // `clock` is the scan result the body calls at `clock - 51`; 0 is a miss.
+    // `read_frequency` is called only when dword_10159350 is zero.
+    void* SpeedupBugFixForTest(void* self, uint32_t clock,
+        uint64_t (__cdecl* read_frequency)());
+}
+
+void Fixes::SpeedupBugFixPublishForTest(const Fixes::SpeedupSlots& slots)
+{
+    zpatch_speedup_t4c = slots.t4c;
+    zpatch_speedup_t50 = slots.t50;
+    zpatch_speedup_t54 = slots.t54;
+    zpatch_speedup_t58 = slots.t58;
+    zpatch_speedup_t5c = slots.t5c;
+    zpatch_speedup_t60 = slots.t60;
+    zpatch_speedup_t64 = slots.t64;
+    zpatch_speedup_t68 = slots.t68;
+}
+
+void* Fixes::SpeedupBugFixForTest(void* self, uint32_t clock,
+    uint64_t (__cdecl* read_frequency)())
+{
+    return SpeedupBugFixRunPublished(self, clock, read_frequency);
+}
+
+static void DrivebyResolveEntry();
+static void DrivebyFovHelperBody();
+static void DrivebyFovShimBody();
+
+namespace
+{
+    // DrivebyFOVFix: the site is the `movss xmm0,[esi+60h]` in front of the
+    // per-frame drive-by FOV subtraction. The publish reads the site's own next
+    // instruction (the `subss xmm1, xmm2` at the anchor's +5) for the resume before
+    // the install overwrites the five bytes the jump lands on.
+    void PublishDrivebyFOVFix()
+    {
+        if (!Loader::Enabled("DrivebyFOVFix"))
+            return;
+
+        auto pattern = find_pattern("F3 0F 10 46 60 F3 0F 5C CA");
+        if (!pattern.empty())
+            zpatch_driveby_resume = static_cast<uint32_t>(
+                reinterpret_cast<uintptr_t>(pattern.get_first(5)));
+    }
+
+    // Publishing the eight floats before the install is what keeps the body's
+    // writes on the game's own words; the install only replaces the function's
+    // entry.
+    void PublishSpeedupBugFix()
+    {
+        if (!Loader::Enabled("SpeedupBugFix"))
+            return;
+
+        zpatch_speedup_site = ResolveSpeedupBugFix();
+    }
+
+    void InstallDrivebyFOVFix()
+    {
+        if (!Loader::Enabled("DrivebyFOVFix"))
+            return;
+
+        auto pattern = find_pattern("F3 0F 10 46 60 F3 0F 5C CA");
+        if (!pattern.empty())
+        {
+            Bodies::Register(reinterpret_cast<uintptr_t>(&DrivebyFovShimBody), 0x100064B0u);
+            Bodies::Register(reinterpret_cast<uintptr_t>(&DrivebyFovHelperBody), 0x10006450u);
+            // The helper's call names the original's guarded resolve entry; recording
+            // that VA keeps every registered branch in the original's coordinates.
+            Bodies::Register(reinterpret_cast<uintptr_t>(&DrivebyResolveEntry), 0x10003980u);
+            injector::MakeJMP(pattern.get_first(0),
+                reinterpret_cast<void*>(&DrivebyFovShimBody), true);
+        }
+    }
+
+    void InstallSpeedupBugFix()
+    {
+        if (!Loader::Enabled("SpeedupBugFix"))
+            return;
+
+        if (zpatch_speedup_site != nullptr)
+            injector::MakeJMP(zpatch_speedup_site, reinterpret_cast<void*>(&SpeedupBugFixBody),
+                true);
+    }
+
+}
+
+export void RegisterFixes()
 {
     Bodies::Register(reinterpret_cast<uintptr_t>(&OocStepBody), 0x1004B150u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&OocDecodeBody), 0x1004B570u);
 
     Loader::AddPublish(Loader::Entry::Ooc, 0, PublishOutOfCommissionFix);
-
     Loader::AddInstall(Loader::Entry::Ooc, 0, InstallOutOfCommissionFix);
+    Bodies::Register(reinterpret_cast<uintptr_t>(&SpeedupBugFixBody), 0x10050540u);
+    Loader::AddPublish(Loader::Entry::Misc, 0, PublishDrivebyFOVFix);
+    Loader::AddPublish(Loader::Entry::Misc, 1, PublishSpeedupBugFix);
+    Loader::AddInstall(Loader::Entry::Misc, 2, InstallDrivebyFOVFix);
+    Loader::AddInstall(Loader::Entry::Misc, 3, InstallSpeedupBugFix);
+    Loader::AddPublish(Loader::Entry::Vehicles, 4, PublishHighFPSBikePhysicsFix);
+    Loader::AddInstall(Loader::Entry::Vehicles, 7, InstallBikeFeetFix);
+    Loader::AddInstall(Loader::Entry::Vehicles, 8, InstallBikePhoneAnimsFix);
+    Loader::AddInstall(Loader::Entry::Vehicles, 10, InstallHighFPSBikePhysicsFix);
+    Loader::AddPublish(Loader::Entry::Graphics, 1, PublishCutsceneFixes);
+    Loader::AddInstall(Loader::Entry::Graphics, 3, InstallCutsceneFixes);
+    Loader::AddInstall(Loader::Entry::Loading, 6, InstallVSyncFix);
+    Loader::AddPublish(Loader::Entry::Audio, 1, PublishMouseFix);
+    Loader::AddInstall(Loader::Entry::Audio, 4, InstallNoPhysicsSleep);
+    Loader::AddInstall(Loader::Entry::Audio, 11, InstallMouseFix);
+    Loader::AddInstall(Loader::Entry::Stability, 14, InstallHighFPSSpeedupFix);
 }
-
-// ---------------------------------------------------------------------------
 // Transcribed bodies. Each is the original's instruction stream, kept as asm
 // because that is what it is; the code above is what installs it.
 // ---------------------------------------------------------------------------
@@ -1988,5 +2907,751 @@ static __declspec(naked) void OocWrapBody()
         mov esp, ebp
         pop ebp
         ret
+    }
+}
+
+
+static __declspec(naked) void MfAxisFloatBody()
+{
+    __asm
+    {
+        push ebp
+        mov ebp, esp
+        mov eax, DWORD PTR [ebp + 0Ch]
+        sub esp, 8
+        test eax, eax
+        jne mf_axis_float_y
+        mov eax, DWORD PTR [zpatch_mf_x]
+        movd xmm0, DWORD PTR [eax]
+        cvtdq2pd xmm0, xmm0
+        mulsd xmm0, QWORD PTR [zpatch_mf_scale]
+        movsd QWORD PTR [ebp - 8], xmm0
+        fld QWORD PTR [ebp - 8]
+        mov esp, ebp
+        pop ebp
+        ret
+    mf_axis_float_y:
+        cmp eax, 1
+        jne mf_axis_float_zero
+        mov eax, DWORD PTR [zpatch_mf_y]
+        movd xmm0, DWORD PTR [eax]
+        cvtdq2pd xmm0, xmm0
+        mulsd xmm0, QWORD PTR [zpatch_mf_scale]
+        movsd QWORD PTR [ebp - 8], xmm0
+        fld QWORD PTR [ebp - 8]
+        mov esp, ebp
+        pop ebp
+        ret
+    mf_axis_float_zero:
+        fldz
+        mov esp, ebp
+        pop ebp
+        ret
+    }
+}
+
+static __declspec(naked) void MfAxisNegBody()
+{
+    __asm
+    {
+        push ebp
+        mov ebp, esp
+        mov eax, DWORD PTR [ebp + 0Ch]
+        test eax, eax
+        jne mf_axis_neg_y
+        mov eax, DWORD PTR [zpatch_mf_x]
+    mf_axis_neg_xy:
+        movd xmm0, DWORD PTR [eax]
+        cvtdq2pd xmm0, xmm0
+        mulsd xmm0, QWORD PTR [zpatch_mf_scale]
+        jmp mf_axis_neg_scale
+    mf_axis_neg_y:
+        cmp eax, 1
+        jne mf_axis_neg_zero
+        mov eax, DWORD PTR [zpatch_mf_y]
+        jmp mf_axis_neg_xy
+    mf_axis_neg_zero:
+        xorps xmm0, xmm0
+    mf_axis_neg_scale:
+        movss xmm1, DWORD PTR [zpatch_mf_sign]
+        xorps xmm1, XMMWORD PTR [zpatch_mf_single_sign]
+        cvtpd2ps xmm0, xmm0
+        mulss xmm1, xmm0
+        movss DWORD PTR [ebp + 0Ch], xmm1
+        mov eax, DWORD PTR [ebp + 0Ch]
+        pop ebp
+        ret
+    }
+}
+
+static __declspec(naked) void MfAxisIntBody()
+{
+    __asm
+    {
+        push ebp
+        mov ebp, esp
+        mov eax, DWORD PTR [ebp + 0Ch]
+        test eax, eax
+        jne mf_axis_int_y
+        mov eax, DWORD PTR [zpatch_mf_x]
+    mf_axis_int_xy:
+        movd xmm0, DWORD PTR [eax]
+        cvtdq2pd xmm0, xmm0
+        mulsd xmm0, QWORD PTR [zpatch_mf_scale]
+        mulsd xmm0, QWORD PTR [zpatch_mf_scale_255]
+        cvttsd2si eax, xmm0
+        pop ebp
+        ret
+    mf_axis_int_y:
+        cmp eax, 1
+        jne mf_axis_int_zero
+        mov eax, DWORD PTR [zpatch_mf_y]
+        jmp mf_axis_int_xy
+    mf_axis_int_zero:
+        xorps xmm0, xmm0
+        mulsd xmm0, QWORD PTR [zpatch_mf_scale_255]
+        cvttsd2si eax, xmm0
+        pop ebp
+        ret
+    }
+}
+
+static __declspec(naked) void MfAxisFlagBody()
+{
+    __asm
+    {
+        push ebp
+        mov ebp, esp
+        mov eax, DWORD PTR [ebp + 0Ch]
+        test eax, eax
+        jne mf_axis_flag_y
+        mov eax, DWORD PTR [zpatch_mf_x]
+    mf_axis_flag_xy:
+        movd xmm0, DWORD PTR [eax]
+        cvtdq2pd xmm0, xmm0
+        mulsd xmm0, QWORD PTR [zpatch_mf_scale]
+        jmp mf_axis_flag_scale
+    mf_axis_flag_y:
+        cmp eax, 1
+        jne mf_axis_flag_zero
+        mov eax, DWORD PTR [zpatch_mf_y]
+        jmp mf_axis_flag_xy
+    mf_axis_flag_zero:
+        xorps xmm0, xmm0
+    mf_axis_flag_scale:
+        movss xmm1, DWORD PTR [zpatch_mf_sign]
+        xorps xmm1, XMMWORD PTR [zpatch_mf_single_sign]
+        mov eax, DWORD PTR [zpatch_mf_flag]
+        cvtpd2ps xmm0, xmm0
+        cmp BYTE PTR [eax], 0
+        mulss xmm1, xmm0
+        movss DWORD PTR [ebp + 0Ch], xmm1
+        jz mf_axis_flag_store
+        mulss xmm1, DWORD PTR [zpatch_mf_mul_neg1]
+        movss DWORD PTR [ebp + 0Ch], xmm1
+    mf_axis_flag_store:
+        mov eax, DWORD PTR [ebp + 0Ch]
+        pop ebp
+        ret
+    }
+}
+
+static __declspec(naked) void MfAngleStepBody()
+{
+    __asm
+    {
+        push ebp
+        mov ebp, esp
+        and esp, 0FFFFFFF8h
+        sub esp, 0Ch
+        push esi
+        mov esi, ecx
+        call DWORD PTR [zpatch_mf_time]
+        movss xmm2, DWORD PTR [zpatch_mf_step_scale]
+        mov eax, DWORD PTR [zpatch_mf_x]
+        fstp QWORD PTR [esp + 8]
+        movsd xmm0, QWORD PTR [esp + 8]
+        mulsd xmm0, QWORD PTR [zpatch_mf_time_mul]
+        movd xmm4, DWORD PTR [eax]
+        mov eax, DWORD PTR [zpatch_mf_y]
+        cvtdq2pd xmm4, xmm4
+        addsd xmm0, QWORD PTR [zpatch_mf_time_add]
+        movd xmm3, DWORD PTR [eax]
+        mulsd xmm4, QWORD PTR [zpatch_mf_scale]
+        mov eax, DWORD PTR [zpatch_mf_flag]
+        cvtdq2pd xmm3, xmm3
+        cmp BYTE PTR [eax], 0
+        xorps xmm4, XMMWORD PTR [zpatch_mf_double_sign]
+        mulsd xmm3, QWORD PTR [zpatch_mf_scale]
+        cvtpd2ps xmm0, xmm0
+        xorps xmm3, XMMWORD PTR [zpatch_mf_double_sign]
+        mulss xmm2, xmm0
+        mulss xmm2, DWORD PTR [esi + 60h]
+        jz mf_angle_step_skip
+        mulsd xmm3, QWORD PTR [zpatch_mf_mul_neg1_d]
+    mf_angle_step_skip:
+        movss xmm0, DWORD PTR [esi + 144h]
+        cvtps2pd xmm2, xmm2
+        cvtps2pd xmm0, xmm0
+        movaps xmm1, xmm2
+        mulsd xmm2, xmm4
+        mulsd xmm1, xmm3
+        addsd xmm1, xmm0
+        cvtpd2ps xmm0, xmm1
+        movss DWORD PTR [esi + 144h], xmm0
+        movss xmm0, DWORD PTR [esi + 148h]
+        cvtps2pd xmm0, xmm0
+        addsd xmm2, xmm0
+        cvtpd2ps xmm0, xmm2
+        cvtps2pd xmm1, xmm0
+        comisd xmm1, QWORD PTR [zpatch_mf_pi]
+        jbe mf_angle_step_low
+        subsd xmm1, QWORD PTR [zpatch_mf_two_pi]
+        cvtpd2ps xmm0, xmm1
+        movss DWORD PTR [esi + 148h], xmm0
+        pop esi
+        mov esp, ebp
+        pop ebp
+        ret
+    mf_angle_step_low:
+        movsd xmm0, QWORD PTR [zpatch_mf_neg_pi]
+        comisd xmm0, xmm1
+        jbe mf_angle_step_store
+        addsd xmm1, QWORD PTR [zpatch_mf_two_pi]
+    mf_angle_step_store:
+        cvtpd2ps xmm0, xmm1
+        movss DWORD PTR [esi + 148h], xmm0
+        pop esi
+        mov esp, ebp
+        pop ebp
+        ret
+    }
+}
+
+static __declspec(naked) void MfAngleBody()
+{
+    __asm
+    {
+        pushad
+        movss DWORD PTR [zpatch_mf_xmm_save], xmm0
+        movss DWORD PTR [zpatch_mf_xmm_save + 4], xmm1
+        movss DWORD PTR [zpatch_mf_xmm_save + 8], xmm2
+        movss DWORD PTR [zpatch_mf_xmm_save + 12], xmm3
+        movss DWORD PTR [zpatch_mf_xmm_save + 16], xmm4
+        movss DWORD PTR [zpatch_mf_xmm_save + 20], xmm5
+        movss DWORD PTR [zpatch_mf_xmm_save + 24], xmm6
+        movss DWORD PTR [zpatch_mf_xmm_save + 28], xmm7
+        call MfAngleStepBody
+        movss xmm0, DWORD PTR [zpatch_mf_xmm_save]
+        movss xmm1, DWORD PTR [zpatch_mf_xmm_save + 4]
+        movss xmm2, DWORD PTR [zpatch_mf_xmm_save + 8]
+        movss xmm3, DWORD PTR [zpatch_mf_xmm_save + 12]
+        movss xmm4, DWORD PTR [zpatch_mf_xmm_save + 16]
+        movss xmm5, DWORD PTR [zpatch_mf_xmm_save + 20]
+        movss xmm6, DWORD PTR [zpatch_mf_xmm_save + 24]
+        movss xmm7, DWORD PTR [zpatch_mf_xmm_save + 28]
+        popad
+        push ebp
+        mov ebp, esp
+        and esp, 0FFFFFFF0h
+        xorps xmm0, xmm0
+        sub esp, 94h
+        jmp DWORD PTR [zpatch_mf_resume_a]
+    }
+}
+
+static __declspec(naked) void MfAdvanceWindowsBody()
+{
+    __asm
+    {
+        push ebp
+        mov ebp, esp
+        and esp, 0FFFFFFF8h
+        sub esp, 0Ch
+        mov eax, DWORD PTR [__security_cookie]
+        xor eax, esp
+        mov DWORD PTR [esp + 8], eax
+        mov eax, DWORD PTR [zpatch_mf_x]
+        xorps xmm2, xmm2
+        movsd xmm1, QWORD PTR [zpatch_mf_scale]
+        push ebx
+        push esi
+        movd xmm0, DWORD PTR [eax]
+        cvtdq2pd xmm0, xmm0
+        push edi
+        mulsd xmm0, xmm1
+        ucomisd xmm0, xmm2
+        lahf
+        test ah, 44h
+        jp mf_advance_disabled_0
+        mov eax, DWORD PTR [zpatch_mf_y]
+        movd xmm0, DWORD PTR [eax]
+        cvtdq2pd xmm0, xmm0
+        mulsd xmm0, xmm1
+        ucomisd xmm0, xmm2
+        lahf
+        test ah, 44h
+        jp mf_advance_disabled_0
+        mov edi, 86110FF3h
+        mov ebx, 144h
+        jmp mf_advance_write_0
+    mf_advance_disabled_0:
+        mov edi, 90909090h
+        mov ebx, edi
+    mf_advance_write_0:
+        mov esi, DWORD PTR [zpatch_mf_resume_b]
+        lea eax, [esp + 0Ch]
+        push eax
+        push 40h
+        push 8
+        add esi, 34h
+        push esi
+        call DWORD PTR [zpatch_mf_virtual_protect]
+        lea eax, [esp + 0Ch]
+        mov DWORD PTR [esi + 4], ebx
+        mov ebx, DWORD PTR [zpatch_mf_virtual_protect]
+        push eax
+        push DWORD PTR [esp + 10h]
+        mov DWORD PTR [esi], edi
+        push 8
+        push esi
+        call ebx
+        mov eax, DWORD PTR [zpatch_mf_x]
+        xorps xmm2, xmm2
+        movsd xmm1, QWORD PTR [zpatch_mf_scale]
+        movd xmm0, DWORD PTR [eax]
+        cvtdq2pd xmm0, xmm0
+        mulsd xmm0, xmm1
+        ucomisd xmm0, xmm2
+        lahf
+        test ah, 44h
+        jp mf_advance_disabled_1
+        mov eax, DWORD PTR [zpatch_mf_y]
+        movd xmm0, DWORD PTR [eax]
+        cvtdq2pd xmm0, xmm0
+        mulsd xmm0, xmm1
+        ucomisd xmm0, xmm2
+        lahf
+        test ah, 44h
+        jp mf_advance_disabled_1
+        mov edi, 8E110FF3h
+        mov DWORD PTR [esp + 0Ch], 148h
+        jmp mf_advance_write_1
+    mf_advance_disabled_1:
+        mov edi, 90909090h
+        mov DWORD PTR [esp + 0Ch], edi
+    mf_advance_write_1:
+        mov esi, DWORD PTR [zpatch_mf_resume_b]
+        lea eax, [esp + 10h]
+        push eax
+        push 40h
+        push 8
+        add esi, 5Eh
+        push esi
+        call ebx
+        mov eax, DWORD PTR [esp + 0Ch]
+        mov DWORD PTR [esi + 4], eax
+        lea eax, [esp + 10h]
+        push eax
+        push DWORD PTR [esp + 14h]
+        mov DWORD PTR [esi], edi
+        push 8
+        push esi
+        call ebx
+        mov eax, DWORD PTR [zpatch_mf_x]
+        xorps xmm2, xmm2
+        movsd xmm1, QWORD PTR [zpatch_mf_scale]
+        movd xmm0, DWORD PTR [eax]
+        cvtdq2pd xmm0, xmm0
+        mulsd xmm0, xmm1
+        ucomisd xmm0, xmm2
+        lahf
+        test ah, 44h
+        jp mf_advance_disabled_2
+        mov eax, DWORD PTR [zpatch_mf_y]
+        movd xmm0, DWORD PTR [eax]
+        cvtdq2pd xmm0, xmm0
+        mulsd xmm0, xmm1
+        ucomisd xmm0, xmm2
+        lahf
+        test ah, 44h
+        jp mf_advance_disabled_2
+        mov edi, 1489ED9h
+        mov ebx, 5C8B0000h
+        jmp mf_advance_write_2
+    mf_advance_disabled_2:
+        mov edi, 9090D8DDh
+        mov ebx, 5C8B9090h
+    mf_advance_write_2:
+        mov esi, DWORD PTR [zpatch_mf_resume_b]
+        lea eax, [esp + 10h]
+        push eax
+        push 40h
+        push 8
+        add esi, 6Bh
+        push esi
+        call DWORD PTR [zpatch_mf_virtual_protect]
+        lea eax, [esp + 10h]
+        mov DWORD PTR [esi], edi
+        push eax
+        push DWORD PTR [esp + 14h]
+        mov DWORD PTR [esi + 4], ebx
+        push 8
+        push esi
+        call DWORD PTR [zpatch_mf_virtual_protect]
+        mov ecx, DWORD PTR [esp + 14h]
+        pop edi
+        pop esi
+        pop ebx
+        xor ecx, esp
+        call __security_check_cookie
+        mov esp, ebp
+        pop ebp
+        ret
+    }
+}
+
+static __declspec(naked) void MfAdvanceBody()
+{
+    __asm
+    {
+        pushad
+        movss DWORD PTR [zpatch_mf_xmm_save], xmm0
+        movss DWORD PTR [zpatch_mf_xmm_save + 4], xmm1
+        movss DWORD PTR [zpatch_mf_xmm_save + 8], xmm2
+        movss DWORD PTR [zpatch_mf_xmm_save + 12], xmm3
+        movss DWORD PTR [zpatch_mf_xmm_save + 16], xmm4
+        movss DWORD PTR [zpatch_mf_xmm_save + 20], xmm5
+        movss DWORD PTR [zpatch_mf_xmm_save + 24], xmm6
+        movss DWORD PTR [zpatch_mf_xmm_save + 28], xmm7
+        call MfAdvanceWindowsBody
+        movss xmm0, DWORD PTR [zpatch_mf_xmm_save]
+        movss xmm1, DWORD PTR [zpatch_mf_xmm_save + 4]
+        movss xmm2, DWORD PTR [zpatch_mf_xmm_save + 8]
+        movss xmm3, DWORD PTR [zpatch_mf_xmm_save + 12]
+        movss xmm4, DWORD PTR [zpatch_mf_xmm_save + 16]
+        movss xmm5, DWORD PTR [zpatch_mf_xmm_save + 20]
+        movss xmm6, DWORD PTR [zpatch_mf_xmm_save + 24]
+        movss xmm7, DWORD PTR [zpatch_mf_xmm_save + 28]
+        popad
+        mulss xmm0, xmm2
+        addss xmm0, xmm3
+        movss xmm3, DWORD PTR [esi + 150h]
+        jmp DWORD PTR [zpatch_mf_resume_b]
+    }
+}
+
+// The body's `call 0x10003980` must stay a direct `call`: the original's is an
+// `E8`, and an indirect `call [slot]` is a different instruction shape. A module
+// interface cannot export a naked function either (C2488), so the call names this
+// six-byte forwarder, which enters the layer's C entry with ECX (the salt) and
+// the stack untouched -- the same shape as misc.ixx's drive-by forwarder.
+static __declspec(naked) void CutsceneResolveEntry()
+{
+    __asm
+    {
+        jmp DWORD PTR [zpatch_native_resolve_entry]
+    }
+}
+
+// sub_100388C0, recovered VA 0x100388C0: chain B's body, 146 instructions and 592
+// bytes to its `ret 4`, plus the restore block at 0x10038B10..0x10038B3F that the
+// six `ja` exits reach (the proof sweeps the 146; the restore block follows the
+// `ret` and is not decoded by it). Its frame is the original's 0xA18: two
+// 0x140-dword object copies (ebp-504h and ebp-0A04h), the 8-byte block
+// VirtualProtect writes its old protection to, and the three scratch words the
+// camera call uses.
+//
+// It resolves a game native through the loader salt dword_1015803C, copies the
+// scene object it answers with into the first block and accumulates that object's
+// frame delta (a float at +8) into the double accumulator. It then makes the
+// camera function's `mov byte [esp + 1Ch], 1` immediate readable, writes 1 over
+// it, calls the function with the body's own float argument and keeps the call's
+// double result as a flag. Once the recovered limit (0.3333) has accumulated it
+// calls again with that immediate forced to 0, and if the two runs' position
+// floats differ by more than (0.05, 0.05, 0.05, 0.5, 0.5, 0.5) it restores the
+// object as it was before the second call and resets the accumulator; otherwise
+// it answers the second call's flag.
+//
+// The `ucomisd`/`lahf`/`test ah,44h`/`jnp` sequences are the original's own
+// codegen for its `!= 0` tests: `mov al,1` when the comparison is non-zero or
+// unordered. `rep movsd` is one instruction (F3 A5) on both sides.
+//
+// Naked and internal: an external-linkage naked function is written to the module
+// and every importer fails (C2488).
+static __declspec(naked) void CutsceneChainBody()
+{
+    __asm
+    {
+        push ebp
+        mov ebp, esp
+        sub esp, 0A18h
+        mov eax, DWORD PTR [__security_cookie]
+        xor eax, ebp
+        mov DWORD PTR [ebp - 4], eax
+        push esi
+        mov esi, ecx
+        mov ecx, DWORD PTR [zpatch_native_salt_1015803C]
+        push edi
+        mov DWORD PTR [ebp - 0A10h], esi
+        call CutsceneResolveEntry
+        lea edi, [ebp - 504h]
+        mov ecx, DWORD PTR [eax + 0Eh]
+        mov eax, DWORD PTR [ecx + eax + 18h]
+        mov ecx, 140h
+        rep movsd
+        movss xmm0, DWORD PTR [eax + 8]
+        lea eax, [ebp - 0A08h]
+        mov esi, DWORD PTR [zpatch_cutscene_poke]
+        mov edi, DWORD PTR [zpatch_cutscene_virtual_protect]
+        dec esi
+        cvtps2pd xmm0, xmm0
+        push eax
+        push 40h
+        push 1
+        push esi
+        addsd xmm0, QWORD PTR [zpatch_cutscene_accum]
+        movsd QWORD PTR [zpatch_cutscene_accum], xmm0
+        call edi
+        lea eax, [ebp - 0A08h]
+        mov BYTE PTR [esi], 1
+        push eax
+        push DWORD PTR [ebp - 0A08h]
+        push 1
+        push esi
+        call edi
+        mov eax, DWORD PTR [zpatch_cutscene_target]
+        movss xmm0, DWORD PTR [ebp + 8]
+        push ecx
+        mov ecx, DWORD PTR [ebp - 0A10h]
+        mov DWORD PTR [ebp - 0A14h], eax
+        movss DWORD PTR [esp], xmm0
+        call DWORD PTR [ebp - 0A14h]
+        fstp QWORD PTR [ebp - 0A18h]
+        movsd xmm0, QWORD PTR [ebp - 0A18h]
+        ucomisd xmm0, QWORD PTR [zpatch_cutscene_zero]
+        lahf
+        test ah, 44h
+        jnp ccb_al_zero
+        mov al, 1
+        jmp ccb_al_done
+    ccb_al_zero:
+        xor al, al
+    ccb_al_done:
+        mov edx, DWORD PTR [ebp - 0A10h]
+        lea edi, [ebp - 0A04h]
+        movsd xmm0, QWORD PTR [zpatch_cutscene_limit]
+        mov ecx, 140h
+        comisd xmm0, QWORD PTR [zpatch_cutscene_accum]
+        mov esi, edx
+        mov BYTE PTR [ebp - 0A09h], al
+        rep movsd
+        ja ccb_return_al
+        mov edi, edx
+        lea eax, [ebp - 0A08h]
+        push eax
+        mov ecx, 140h
+        lea esi, [ebp - 504h]
+        rep movsd
+        mov esi, DWORD PTR [zpatch_cutscene_poke]
+        mov edi, DWORD PTR [zpatch_cutscene_virtual_protect]
+        dec esi
+        push 40h
+        push 1
+        push esi
+        call edi
+        lea eax, [ebp - 0A08h]
+        mov BYTE PTR [esi], 0
+        push eax
+        push DWORD PTR [ebp - 0A08h]
+        push 1
+        push esi
+        call edi
+        mov eax, DWORD PTR [zpatch_cutscene_target]
+        movss xmm0, DWORD PTR [ebp + 8]
+        push ecx
+        mov ecx, DWORD PTR [ebp - 0A10h]
+        mov DWORD PTR [ebp - 0A14h], eax
+        movss DWORD PTR [esp], xmm0
+        call DWORD PTR [ebp - 0A14h]
+        fstp QWORD PTR [ebp - 0A18h]
+        movsd xmm0, QWORD PTR [ebp - 0A18h]
+        xorps xmm3, xmm3
+        ucomisd xmm0, xmm3
+        lahf
+        test ah, 44h
+        jnp ccb_dl_zero
+        mov dl, 1
+        jmp ccb_dl_done
+    ccb_dl_zero:
+        xor dl, dl
+    ccb_dl_done:
+        mov eax, DWORD PTR [ebp - 0A10h]
+        lea edi, [ebp - 504h]
+        movss xmm1, DWORD PTR [zpatch_cutscene_abs_mask]
+        mov ecx, 140h
+        movss xmm2, DWORD PTR [zpatch_cutscene_eps_a]
+        mov esi, eax
+        rep movsd
+        movss xmm0, DWORD PTR [ebp - 4E4h]
+        subss xmm0, DWORD PTR [ebp - 9E4h]
+        andps xmm0, xmm1
+        comiss xmm0, xmm2
+        ja ccb_restore
+        movss xmm0, DWORD PTR [ebp - 4E0h]
+        subss xmm0, DWORD PTR [ebp - 9E0h]
+        andps xmm0, xmm1
+        comiss xmm0, xmm2
+        ja ccb_restore
+        movss xmm0, DWORD PTR [ebp - 4DCh]
+        subss xmm0, DWORD PTR [ebp - 9DCh]
+        andps xmm0, xmm1
+        comiss xmm0, xmm2
+        ja ccb_restore
+        movss xmm0, DWORD PTR [ebp - 4C4h]
+        subss xmm0, DWORD PTR [ebp - 9C4h]
+        movss xmm2, DWORD PTR [zpatch_cutscene_eps_b]
+        andps xmm0, xmm1
+        comiss xmm0, xmm2
+        ja ccb_restore
+        movss xmm0, DWORD PTR [ebp - 4C0h]
+        subss xmm0, DWORD PTR [ebp - 9C0h]
+        andps xmm0, xmm1
+        comiss xmm0, xmm2
+        ja ccb_restore
+        movss xmm0, DWORD PTR [ebp - 4BCh]
+        subss xmm0, DWORD PTR [ebp - 9BCh]
+        andps xmm0, xmm1
+        comiss xmm0, xmm2
+        ja ccb_restore
+        pop edi
+        mov al, dl
+        pop esi
+        mov ecx, DWORD PTR [ebp - 4]
+        xor ecx, ebp
+        call __security_check_cookie
+        mov esp, ebp
+        pop ebp
+        ret 4
+    ccb_restore:
+        mov edi, eax
+        movsd QWORD PTR [zpatch_cutscene_accum], xmm3
+        mov al, BYTE PTR [ebp - 0A09h]
+        lea esi, [ebp - 0A04h]
+        mov ecx, 140h
+        rep movsd
+    ccb_return_al:
+        mov ecx, DWORD PTR [ebp - 4]
+        pop edi
+        xor ecx, ebp
+        pop esi
+        call __security_check_cookie
+        mov esp, ebp
+        pop ebp
+        ret 4
+        __emit 0CCh
+    }
+}
+
+// sub_1001EF60, recovered VA 0x1001EF60: the bike-physics detour. It saves the
+// incoming bike value, clamps it through the helper, writes the clamped value back
+// into the caller's argument slot, leaves EAX as the caller had it, then re-runs the
+// site's first four instructions (`fld [ebp+8]; push ecx; mov ecx,esi; fstp [esp]`)
+// and tail-jumps to the site's own `call` (match+9), so the call and the rest of the
+// function run unchanged.
+//
+// `pushad`/`popad` are emitted as bytes because the inline assembler renders those
+// mnemonics with a 0x66 operand-size prefix, which the original does not have.
+static __declspec(naked) void BikePhysicsDetour()
+{
+    __asm
+    {
+        fld DWORD PTR [ebp + 8]
+        fstp DWORD PTR [zpatch_bike_value]
+        __emit 0x60                       // pushad
+        call BikePhysicsClamp
+        __emit 0x61                       // popad
+        mov DWORD PTR [zpatch_bike_saved], eax
+        mov eax, DWORD PTR [zpatch_bike_value]
+        mov DWORD PTR [ebp + 8], eax
+        mov eax, DWORD PTR [zpatch_bike_saved]
+        fld DWORD PTR [ebp + 8]
+        push ecx
+        mov ecx, esi
+        fstp DWORD PTR [esp]
+        jmp DWORD PTR [zpatch_bike_resume]
+    }
+}
+
+// The helper's call target. The original's helper does `call sub_10003980` (E8), so
+// ours must be a direct call; a module interface cannot name an imported function
+// from inline asm, so this six-byte forwarder jumps through the entry the native
+// layer publishes. ECX (the hash) and the stack reach the layer untouched, and the
+// layer's __try/__except frame is the one the original's SEH entry installs.
+static __declspec(naked) void DrivebyResolveEntry()
+{
+    __asm
+    {
+        jmp DWORD PTR [zpatch_native_resolve_entry]
+    }
+}
+
+// sub_10006450, recovered VA 0x10006450 (20 instructions): computes the drive-by
+// FOV once and caches the entry it reads it from. It resolves the native hash
+// dword_101580D4 through the call layer, walks the handler's two structures at
+// +0Eh/+0Fh/+14h, stores the entry in dword_1015BDF8 and reads the float at +60h
+// into dword_101580C4. The one-shot flag makes every later call only refresh the
+// default. The resolver result and the cached entry are dereferenced unguarded --
+// the same faults the original has (0x1000646E and 0x10006490) -- and 45.0f is
+// stored on every call, its own first instruction.
+//
+// Naked and internal: an external-linkage naked function is written to the module
+// and every importer fails (C2488).
+static __declspec(naked) void DrivebyFovHelperBody()
+{
+    __asm
+    {
+        cmp BYTE PTR [zpatch_driveby_done], 0
+        mov DWORD PTR [zpatch_driveby_fov], 42340000h  // 45.0f
+        jne driveby_have
+        mov ecx, DWORD PTR [zpatch_native_salt_101580D4]
+        call DrivebyResolveEntry
+        mov ecx, DWORD PTR [eax + 0Eh]
+        add eax, 0Eh
+        add ecx, eax
+        mov BYTE PTR [zpatch_driveby_done], 1
+        mov eax, DWORD PTR [ecx + 0Fh]
+        mov eax, DWORD PTR [eax + ecx + 14h]
+        mov DWORD PTR [zpatch_driveby_cached], eax
+        jmp driveby_read
+    driveby_have:
+        mov eax, DWORD PTR [zpatch_driveby_cached]
+    driveby_read:
+        mov eax, DWORD PTR [eax]
+        test eax, eax
+        je driveby_done
+        movss xmm0, DWORD PTR [eax + 60h]
+        movss DWORD PTR [zpatch_driveby_fov], xmm0
+    driveby_done:
+        ret
+    }
+}
+
+// sub_100064B0, recovered VA 0x100064B0 (5 instructions): the site's shim. It saves
+// every general register (the site resumes with its own GPRs and flags intact),
+// computes the FOV, restores them, loads the value into xmm0 and tail-jumps to the
+// site's own remaining `subss xmm1, xmm2` at the published resume.
+//
+// Naked and internal: an external-linkage naked function is written to the module
+// and every importer fails (C2488).
+static __declspec(naked) void DrivebyFovShimBody()
+{
+    __asm
+    {
+        __emit 0x60  // pushad (pushal)
+        call DrivebyFovHelperBody
+        __emit 0x61  // popad (popal)
+        movss xmm0, DWORD PTR [zpatch_driveby_fov]
+        jmp DWORD PTR [zpatch_driveby_resume]
     }
 }

@@ -1,4 +1,4 @@
-module;
+﻿module;
 
 #include <common.hxx>
 // The /GS cookie the transcribed helpers' prologues read and their epilogues check
@@ -33,7 +33,7 @@ extern "C"
     // dword_1015B5B8, defined in source/config.ixx: the original keeps it in `.data`
     // immediately after the [HeadlightConeOffsets] hash array, and the cone check's
     // walk reads it as the 513th hash, so this tree defines it as the next object after
-    // that array (docs/rebuilt.md §2g). This arm publishes the same value into it.
+    // that array (docs/rebuilt.md Â§2g). This arm publishes the same value into it.
     extern uint32_t zpatch_carparts_shadow_fn;
 
 
@@ -45,17 +45,11 @@ extern "C"
     // resume, published from the site's own prologue before the E9 replaces it, and
     // defined in source/config.ixx as the second word of the [HeadlightConeOffsets]
     // block (the original keeps it between the cone's hashes and its offsets, and the
-    // cone walk can read it -- docs/rebuilt.md §2g).
+    // cone walk can read it -- docs/rebuilt.md Â§2g).
     uint32_t zpatch_fchs_param = 0;
     float zpatch_fchs_offset = 2.0f;
     extern uint32_t zpatch_fchs_resume;
 
-    // The bike-physics detour's published state: the incoming value the clamp
-    // rewrites, the caller's EAX saved across the clamp call, and the resume (the
-    // site's own `call`, match+9).
-    float zpatch_bike_value = 0.0f;    // dword_1015AD7C
-    uint32_t zpatch_bike_saved = 0;    // dword_1015AD80
-    uint32_t zpatch_bike_resume = 0;   // dword_1015AD84
 
     // DualVehicleHeadlights' published state, one word per operand its two bodies
     // read: the light-state global the site pushes (the `push 0x1252D90` at
@@ -210,7 +204,6 @@ static void CarDynamicShadowShimB();
 static void FchsCheckBody();
 static void FchsShimBody();
 static void CarDecalsSelectorShim();
-static void BikePhysicsDetour();
 static void DualHeadlightsNewBody();
 static void DualHeadlightsOldBody();
 static void* __fastcall VehicleComponentBody(void*, const char*);
@@ -233,23 +226,6 @@ static void NoliveryBodyD();
 static void NoliveryBodyE();
 
 
-// sub_1001EF30, recovered VA 0x1001EF30: HighFPSBikePhysicsFix's clamp, the helper
-// the detour calls between pushad/popad. The original converts the float value to
-// double, compares it against the 8-byte constant 0.006666666665 and replaces it
-// with 0x3BDA740E when it is below. Written as the same comparison rather than as
-// the SSE sequence: the value and the outcome are what the detour's contract is.
-static void BikePhysicsClamp() noexcept
-{
-    // The float the original's 0x3BDA740E immediate denotes, stored when the value
-    // is below the threshold; 0.006666667f is the shortest decimal that is that
-    // float. The comparison's own 8-byte constant is 0.006666666665 (the qword at
-    // 0x10152308).
-    constexpr float kBikeSpeedThreshold = 0.006666667f;
-
-    const float value = zpatch_bike_value;
-    if (0.006666666665 > static_cast<double>(value))
-        zpatch_bike_value = kBikeSpeedThreshold;
-}
 
 // sub_100064D0, recovered VA 0x100064D0: the two light indices the dual-headlight
 // bodies push. The original's bodies call it inside pushad/popad, so the clobbering
@@ -387,22 +363,6 @@ namespace
     }
 
 
-    // HighFPSBikePhysicsFix's resume: the site's own `call` at match+9, read before
-    // the install replaces the first five bytes with the jump. The body re-runs those
-    // five bytes' instructions and tail-jumps to the call, so the call and the rest of
-    // the function run unchanged.
-    void PublishHighFPSBikePhysicsFix()
-    {
-        if (!Loader::Enabled("HighFPSBikePhysicsFix"))
-            return;
-
-        auto pattern = find_pattern("D9 45 08 51 8B CE D9 1C 24 E8 ?? ?? ?? ?? 8A 86 90 14 00 00");
-        if (pattern.empty())
-            return;
-
-        zpatch_bike_resume =
-            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(9)));
-    }
 
     // DualVehicleHeadlights' published operands, all read from the one match: the
     // light-state global the site pushes at match+207, the ped getter's call target
@@ -619,20 +579,6 @@ namespace
     }
 
 
-    // HighFPSBikePhysicsFix: the bike's per-frame speed value passes through the
-    // clamp before the physics step consumes it.
-    void InstallHighFPSBikePhysicsFix()
-    {
-        if (!Loader::Enabled("HighFPSBikePhysicsFix"))
-            return;
-
-        auto pattern = find_pattern("D9 45 08 51 8B CE D9 1C 24 E8 ?? ?? ?? ?? 8A 86 90 14 00 00");
-        if (pattern.empty())
-            return;
-
-        Bodies::Register(reinterpret_cast<uintptr_t>(&BikePhysicsDetour), 0x1001EF60u);
-        injector::MakeJMP(pattern.get_first<std::byte>(0), reinterpret_cast<void*>(&BikePhysicsDetour), true);
-    }
 
     // DualVehicleHeadlights: both recovered arms jump to their own body at the same
     // site, and the original's handler picks the body from the build id it classified
@@ -873,28 +819,7 @@ namespace
             injector::WriteMemory<std::byte>(pattern.get_first(8), Bytes::Slot60, true);
     }
 
-    // BikeFeetFix: the 12-byte rider-foot block is deleted, so the chopper foot
-    // position is left to the game's own (correct) path.
-    void InstallBikeFeetFix()
-    {
-        if (!Loader::Enabled("BikeFeetFix"))
-            return;
 
-        auto pattern = find_pattern("39 82 54 13 00 00 0F 85 94 04 00 00");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(12), 12, true);
-    }
-
-    // BikePhoneAnimsFix: the six-byte phone-animation branch is deleted.
-    void InstallBikePhoneAnimsFix()
-    {
-        if (!Loader::Enabled("BikePhoneAnimsFix"))
-            return;
-
-        auto pattern = find_pattern("80 BE 18 02 00 00 00 0F 85 36 01 00 00 80 BE");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(33), 6, true);
-    }
 
 
 
@@ -1059,7 +984,6 @@ export void RegisterVehicles()
     Loader::AddPublish(Loader::Entry::Vehicles, 1, PublishCarPartsShadowFix);
     Loader::AddPublish(Loader::Entry::Vehicles, 2, PublishCarDynamicShadowFix);
     Loader::AddPublish(Loader::Entry::Vehicles, 3, PublishForceCarHeadlightShadows);
-    Loader::AddPublish(Loader::Entry::Vehicles, 4, PublishHighFPSBikePhysicsFix);
     Loader::AddPublish(Loader::Entry::Vehicles, 5, PublishDualVehicleHeadlights);
     Loader::AddPublish(Loader::Entry::Vehicles, 6, PublishMovingSteeringWheelSupport);
     Loader::AddPublish(Loader::Entry::Vehicles, 7, PublishShakingEngineBlock);
@@ -1076,9 +1000,6 @@ export void RegisterVehicles()
     Loader::AddInstall(Loader::Entry::Vehicles, 4, InstallForceCarHeadlightShadows);
     Loader::AddInstall(Loader::Entry::Vehicles, 5, InstallInfiniteCarBottomDistance);
     Loader::AddInstall(Loader::Entry::Vehicles, 6, InstallReversingLightFix);
-    Loader::AddInstall(Loader::Entry::Vehicles, 7, InstallBikeFeetFix);
-    Loader::AddInstall(Loader::Entry::Vehicles, 8, InstallBikePhoneAnimsFix);
-    Loader::AddInstall(Loader::Entry::Vehicles, 10, InstallHighFPSBikePhysicsFix);
     Loader::AddInstall(Loader::Entry::Vehicles, 13, InstallDualVehicleHeadlights);
     Loader::AddInstall(Loader::Entry::Vehicles, 14, InstallIncreaseVehicleModelLimit);
     Loader::AddInstall(Loader::Entry::Vehicles, 15, InstallIncreaseVehicleStructLimit);
@@ -1127,7 +1048,7 @@ export void RegisterVehicles()
     // slot 511 (dword_1015B5B8) -- so the proof compares that read too. The word is not
     // a copy: it is CarDynamicShadowFix's published shadow-function slot, defined
     // immediately after the array in source/config.ixx so the layout matches the
-    // original's .data (docs/rebuilt.md §2g). The offsets array is registered at its
+    // original's .data (docs/rebuilt.md Â§2g). The offsets array is registered at its
     // own base, which the original places 2,056 bytes into the block.
     Bodies::RegisterTable(reinterpret_cast<uintptr_t>(zpatch_headlight_cone_hashes),
         0x1015ADB8u, sizeof(zpatch_headlight_cone_hashes) + sizeof(uint32_t));  // 2052
@@ -1278,7 +1199,7 @@ static __declspec(naked) void CarDynamicShadowShimB()
 // in source/config.ixx). Our layout reproduces it as the same slot, with the check's
 // own resume word (0x1015B5BC) after it, so the walk reads the value the original's
 // does rather than a placeholder -- which is what makes this transcription possible
-// instead of a bounded walk (docs/rebuilt.md §2g). The two arrays are registered with
+// instead of a bounded walk (docs/rebuilt.md Â§2g). The two arrays are registered with
 // their original VAs; the hash table's registration is the extended 2,052 bytes
 // (512 words + the neighbour).
 //
@@ -1397,35 +1318,6 @@ static __declspec(naked) void CarDecalsSelectorShim()
     }
 }
 
-// sub_1001EF60, recovered VA 0x1001EF60: the bike-physics detour. It saves the
-// incoming bike value, clamps it through the helper, writes the clamped value back
-// into the caller's argument slot, leaves EAX as the caller had it, then re-runs the
-// site's first four instructions (`fld [ebp+8]; push ecx; mov ecx,esi; fstp [esp]`)
-// and tail-jumps to the site's own `call` (match+9), so the call and the rest of the
-// function run unchanged.
-//
-// `pushad`/`popad` are emitted as bytes because the inline assembler renders those
-// mnemonics with a 0x66 operand-size prefix, which the original does not have.
-static __declspec(naked) void BikePhysicsDetour()
-{
-    __asm
-    {
-        fld DWORD PTR [ebp + 8]
-        fstp DWORD PTR [zpatch_bike_value]
-        __emit 0x60                       // pushad
-        call BikePhysicsClamp
-        __emit 0x61                       // popad
-        mov DWORD PTR [zpatch_bike_saved], eax
-        mov eax, DWORD PTR [zpatch_bike_value]
-        mov DWORD PTR [ebp + 8], eax
-        mov eax, DWORD PTR [zpatch_bike_saved]
-        fld DWORD PTR [ebp + 8]
-        push ecx
-        mov ecx, esi
-        fstp DWORD PTR [esp]
-        jmp DWORD PTR [zpatch_bike_resume]
-    }
-}
 
 // sub_100064F0, recovered VA 0x100064F0: DualVehicleHeadlights' new-build body. It
 // saves every GPR (and ESP) into the module words, draws the two headlights through
@@ -1703,7 +1595,7 @@ static __declspec(naked) void SteerResolveEntry()
 // `cmova` -- and none of that blocks a transcription: the cookie is an absolute
 // slot, the check is a call slot, the .rdata constants are absolute slots, and the
 // two 512-slot wheelangle tables are indexed absolutes the table registry covers
-// (tests/bodies.tsv table rows `1015A538` / `10159D38`, docs/rebuilt.md §2c).
+// (tests/bodies.tsv table rows `1015A538` / `10159D38`, docs/rebuilt.md Â§2c).
 //
 // What the operands are:
 //   * `[0x1015A538 + esi*4]` / `[0x10159D38 + esi*4]` are the wheelangle model and

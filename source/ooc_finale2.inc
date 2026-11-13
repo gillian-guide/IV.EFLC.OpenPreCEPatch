@@ -19,7 +19,7 @@
 // seeded 0, both reduced modulo 0xFFF1, 5552-byte blocks). On this resource it
 // produces 179536 bytes in 446 opcodes, ending at file offset 0x27FCE with trailer
 // 0x41E794AB; the decoded table is sha256 86d2bb26100061f6af79ed9dc359a8e82c47a0a37f06d6a1b02c81ec6d0bcce0
-// and starts `73 63 72 0E` ("scr" + 0x0E). `source/ooc.ixx` rebuilds both
+// and starts `73 63 72 0E` ("scr" + 0x0E). `source/fixes.ixx` rebuilds both
 // functions, and its decode of this file must reproduce that trailer -- the
 // trailer is what makes the extraction checkable without the game.
 //

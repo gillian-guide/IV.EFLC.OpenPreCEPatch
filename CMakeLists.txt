@@ -80,7 +80,7 @@ target_sources(zp_modules PUBLIC
     source/audio.ixx
     source/misc.ixx
     source/menu.ixx
-    source/ooc.ixx
+    source/fixes.ixx
     source/episodic.ixx
     source/performance.ixx
     source/compatibility.ixx

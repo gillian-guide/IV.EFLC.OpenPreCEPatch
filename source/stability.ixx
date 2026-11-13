@@ -65,30 +65,6 @@ static void PlaneCrashShim();
 static void FreezeGunShim();
 
 
-namespace
-{
-
-    // HighFPSSpeedupFix: the nine frame-time clamps inside CTimer::Update. One
-    // becomes a short jump (skipping the following test), the other eight are
-    // two-byte NOPs.
-    struct SpeedupSite final
-    {
-        ptrdiff_t offset;
-        bool shortJump;
-    };
-    constexpr SpeedupSite kSpeedupSites[] = {
-        { -7, false },
-        { 3, false },
-        { 224, true },
-        { 231, false },
-        { 367, false },
-        { 377, false },
-        { 607, false },
-        { 614, false },
-        { 764, false },
-    };
-
-}
 
 namespace
 {
@@ -368,23 +344,6 @@ namespace
     }
 
 
-    void InstallHighFPSSpeedupFix()
-    {
-        if (!Loader::Enabled("HighFPSSpeedupFix"))
-            return;
-
-        auto pattern = find_pattern("0F 2F C1 76 03 0F 28 C8 F3 0F 10 15");
-        if (pattern.empty())
-            return;
-
-        for (const auto& site : kSpeedupSites)
-        {
-            if (site.shortJump)
-                injector::WriteMemory<std::byte>(pattern.get_first(site.offset), Bytes::ShortJmp, true);
-            else
-                injector::MakeNOP(pattern.get_first(site.offset), 2, true);
-        }
-    }
 
 
 }
@@ -408,7 +367,6 @@ export void RegisterStability()
     Loader::AddInstall(Loader::Entry::Stability, 9, InstallEpisodeSwitchFreezeFix);
     Loader::AddInstall(Loader::Entry::Stability, 10, InstallSMPA60Fix);
     Loader::AddInstall(Loader::Entry::Stability, 12, InstallTryToSkipAllErrors);
-    Loader::AddInstall(Loader::Entry::Stability, 14, InstallHighFPSSpeedupFix);
 }
 
 // ---------------------------------------------------------------------------

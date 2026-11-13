@@ -16,7 +16,7 @@ import loading;
 import audio;
 import misc;
 import menu;
-import ooc;
+import fixes;
 import episodic;
 import performance;
 import compatibility;
@@ -81,7 +81,7 @@ namespace
         // death-music installs are the second half of the original's
         // `RestoreDeathMusic == 1 || sub_10052380()` OR.
         RegisterMenu();
-        RegisterOoc();
+        RegisterFixes();
         // The section modules register their own arms with the position the arm
         // had in the old modules; the ordering lives in Loader, not here.
         RegisterEpisodic();
