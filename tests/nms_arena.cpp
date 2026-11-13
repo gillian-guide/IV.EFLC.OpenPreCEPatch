@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-import loading;
+import performance;
 
 // The NewMemorySystem arena, asserted by behaviour rather than by its disassembly.
 //
@@ -16,7 +16,7 @@ import loading;
 // frame; the free inlines the erase unlink over the map's own globals), so the
 // evidence for the rebuild is behaviour. This test drives the module's own three
 // bodies - the same three `PublishNmsVtable` puts in the table - on the process
-// heap, with no game image and no ASI load (`MemoryArena::Get`, loading.ixx).
+// heap, with no game image and no ASI load (`MemoryArena::Get`, performance.ixx).
 //
 // What the original's instructions say, read off
 // ../game_refs/ZolikaPatch_original.asi.off (image base 0x10000000):

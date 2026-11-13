@@ -157,10 +157,6 @@ static void EmissiveLerpShim();
 static void HqrBody();
 static void SuperLodModel();
 static void SuperLodShim();
-static void ShaderStreamingFilterHpe();
-static void ShaderStreamingFilterV();
-static void ShaderStreamingFindHpe();
-static void ShaderStreamingFindV();
 static void BorderlessWindowBodyW();
 static void BorderlessWindowBodyA();
 static void CutsceneResolveEntry();
@@ -570,34 +566,6 @@ namespace
         injector::MakeJMP(pattern.get_first(0), reinterpret_cast<void*>(&SuperLodShim), true);
     }
 
-    // ImprovedShaderStreaming: the name-by-name LookupShader walks become one call
-    // each into a shader-array walk with a kind filter, and the rest of the old
-    // chain is jumped over. The original's handler sub_10045AD0 writes the four
-    // sites at match + 0x55 (E8 body A), + 0x62 (E9, displacement 0x8E), + 0xFD
-    // (E8 body B) and + 0x10A (E9, displacement 0x377); the displacement it writes
-    // is the constant but it encodes exactly the two targets below, so the jumps
-    // are computed rather than hardcoded. The finders are the bodies the calls
-    // name; the filters are only called by the finders, so they appear in the body
-    // manifest rather than as branch targets.
-    void InstallImprovedShaderStreaming()
-    {
-        if (!Loader::Enabled("ImprovedShaderStreaming"))
-            return;
-
-        auto pattern = find_pattern(
-            "33 F6 8B 4C 24 08 8B 06 8B 50 04 51 8B CE FF D2 F6 D8 1B C0 23 C6 5E C3 8B 44 24 0C 8B 74 24");
-        if (pattern.empty())
-            return;
-
-        auto* match = pattern.get_first<std::byte>(0);
-        Bodies::Register(reinterpret_cast<uintptr_t>(&ShaderStreamingFindHpe), 0x10045A30u);
-        Bodies::Register(reinterpret_cast<uintptr_t>(&ShaderStreamingFindV), 0x10045A80u);
-
-        injector::MakeCALL(match + 85, reinterpret_cast<void*>(&ShaderStreamingFindHpe), true);
-        injector::MakeJMP(match + 98, match + 245, true);
-        injector::MakeCALL(match + 253, reinterpret_cast<void*>(&ShaderStreamingFindV), true);
-        injector::MakeJMP(match + 266, match + 1158, true);
-    }
 
     // CutsceneFixes: chain B's two camera call sites become calls into
     // sub_100388C0, and chain A's `je` in the camera function becomes the
@@ -661,7 +629,6 @@ export void RegisterGraphics()
     Loader::AddInstall(Loader::Entry::Graphics, 5, InstallForceDynamicShadowsEverywhere);
     Loader::AddInstall(Loader::Entry::Graphics, 6, InstallForceShadowsOnObjects);
     Loader::AddInstall(Loader::Entry::Graphics, 7, InstallHighQualityReflections);
-    Loader::AddInstall(Loader::Entry::Graphics, 8, InstallImprovedShaderStreaming);
     Loader::AddInstall(Loader::Entry::Graphics, 9, InstallNoImpostorHeightCutoff);
     Loader::AddInstall(Loader::Entry::Graphics, 10, InstallNoLODLightHeightCutoff);
     Loader::AddInstall(Loader::Entry::Graphics, 11, InstallRemoveBoundingBoxCulling);
@@ -1003,155 +970,6 @@ static __declspec(naked) void SuperLodShim()
     }
 }
 
-// sub_100459E0, recovered VA 0x100459E0: the HPE filter the shader finder calls
-// with the shader-name object. The finder takes the entry whose filter result is 0,
-// so 0 means "this is the name kind we want": the kind byte 'h', or 'p' followed by
-// 'e'. Every other name returns 2, which the finder reads as "keep looking".
-static __declspec(naked) void ShaderStreamingFilterHpe()
-{
-    __asm
-    {
-        push ebp
-        mov ebp, esp
-        mov eax, DWORD PTR [ebp + 0Ch]
-        mov cl, BYTE PTR [eax + 4]
-        cmp cl, 68h
-        jz hpe_match
-        cmp cl, 70h
-        jnz hpe_skip
-        cmp BYTE PTR [eax + 5], 65h
-        jz hpe_match
-    hpe_skip:
-        mov eax, 2
-        pop ebp
-        ret
-    hpe_match:
-        xor eax, eax
-        pop ebp
-        ret
-    }
-}
-
-// sub_10045A10, recovered VA 0x10045A10: the V filter, the same 0-for-match /
-// 2-for-skip contract for the single kind byte 'v'.
-static __declspec(naked) void ShaderStreamingFilterV()
-{
-    __asm
-    {
-        push ebp
-        mov ebp, esp
-        mov ecx, DWORD PTR [ebp + 0Ch]
-        xor edx, edx
-        mov eax, 2
-        cmp BYTE PTR [ecx + 4], 76h
-        cmovz eax, edx
-        pop ebp
-        ret
-    }
-}
-
-// sub_10045A30, recovered VA 0x10045A30: the replacement for the
-// `LookupShader("gta_ped")` call (the arm's second write then jumps over the
-// following ped-name lookups). It walks the shader group's array (count at +0Ch,
-// array at +8), asks each shader's virtual +0x10 for its name object and takes
-// the first one the HPE filter reports as the wanted kind (a 0 result; 2 means
-// keep looking), or returns null. `ret 4` because the caller pushed two arguments.
-static __declspec(naked) void ShaderStreamingFindHpe()
-{
-    __asm
-    {
-        push ebx
-        push esi
-        push edi
-        mov edi, ecx
-        xor esi, esi
-        cmp WORD PTR [edi + 0Ch], si
-        jbe hpe_none
-        mov ebx, DWORD PTR [esp + 10h]
-    hpe_loop:
-        mov eax, DWORD PTR [edi + 8]
-        mov ecx, DWORD PTR [eax + esi * 4]
-        test ecx, ecx
-        jz hpe_advance
-        mov edx, DWORD PTR [ecx]
-        mov eax, DWORD PTR [edx + 10h]
-        call eax
-        push eax
-        push ebx
-        call ShaderStreamingFilterHpe
-        add esp, 8
-        test eax, eax
-        jz hpe_found
-    hpe_advance:
-        movzx ecx, WORD PTR [edi + 0Ch]
-        add esi, 1
-        cmp esi, ecx
-        jl hpe_loop
-    hpe_none:
-        pop edi
-        pop esi
-        xor eax, eax
-        pop ebx
-        ret 4
-    hpe_found:
-        mov edx, DWORD PTR [edi + 8]
-        mov eax, DWORD PTR [edx + esi * 4]
-        pop edi
-        pop esi
-        pop ebx
-        ret 4
-    }
-}
-
-// sub_10045A80, recovered VA 0x10045A80: the same walk for the V filter, the
-// replacement for the `LookupShader("gta_vehicle_default")` call (the arm's fourth
-// write then jumps to the end of the shader chain).
-static __declspec(naked) void ShaderStreamingFindV()
-{
-    __asm
-    {
-        push ebx
-        push esi
-        push edi
-        mov edi, ecx
-        xor esi, esi
-        cmp WORD PTR [edi + 0Ch], si
-        jbe v_none
-        mov ebx, DWORD PTR [esp + 10h]
-    v_loop:
-        mov eax, DWORD PTR [edi + 8]
-        mov ecx, DWORD PTR [eax + esi * 4]
-        test ecx, ecx
-        jz v_advance
-        mov edx, DWORD PTR [ecx]
-        mov eax, DWORD PTR [edx + 10h]
-        call eax
-        push eax
-        push ebx
-        call ShaderStreamingFilterV
-        add esp, 8
-        test eax, eax
-        jz v_found
-    v_advance:
-        movzx ecx, WORD PTR [edi + 0Ch]
-        add esi, 1
-        cmp esi, ecx
-        jl v_loop
-    v_none:
-        pop edi
-        pop esi
-        xor eax, eax
-        pop ebx
-        ret 4
-    v_found:
-        mov edx, DWORD PTR [edi + 8]
-        mov eax, DWORD PTR [edx + esi * 4]
-        pop edi
-        pop esi
-        pop ebx
-        ret 4
-    }
-}
 
 // 0x10005890: the Unicode window proc's shim. EBP+8 is the window handle, EBP+0C
 // the message, and EBP+10/EBP+14 its two arguments; EBX carries the handle into

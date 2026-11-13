@@ -18,6 +18,7 @@ import misc;
 import menu;
 import ooc;
 import episodic;
+import performance;
 
 extern "C" __declspec(dllexport) void InitializeASI();
 
@@ -82,6 +83,7 @@ namespace
         // The section modules register their own arms with the position the arm
         // had in the old modules; the ordering lives in Loader, not here.
         RegisterEpisodic();
+        RegisterPerformance();
         Loader::Run();
 
 #ifdef ZP_TRACE
