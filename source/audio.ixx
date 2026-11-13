@@ -647,27 +647,21 @@ export void RegisterAudio()
     zpatch_audio_cleanup_bool = RegisteredBody(0x1005DE80u);
     zpatch_audio_call_hash = RegisteredBody(0x1005B150u);
 
-    Loader::PublishEvent() += []
-    {
-        PublishRestoreDeathMusic();
-        PublishMouseFix();
-    };
+    Loader::AddPublish(Loader::EntryAudio, 0, PublishRestoreDeathMusic);
+    Loader::AddPublish(Loader::EntryAudio, 1, PublishMouseFix);
 
-    Loader::InstallEvent() += []
-    {
-        InstallAllowHashesForIDE();
-        InstallCombinedRadioFreezeFix();
-        InstallBetterMPSync();
-        InstallIncreasePtrNodes();
-        InstallNoPhysicsSleep();
-        InstallDoNotPauseOnMinimize();
-        InstallEpisodicWeaponSupport();
-        InstallPoliceEpisodicWeaponSupport();
-        InstallTBoGTHeliHeightLimit();
-        InstallPedModelsInCutscenesFix();
-        InstallRestoreDeathMusic();
-        InstallMouseFix();
-    };
+    Loader::AddInstall(Loader::EntryAudio, 0, InstallAllowHashesForIDE);
+    Loader::AddInstall(Loader::EntryAudio, 1, InstallCombinedRadioFreezeFix);
+    Loader::AddInstall(Loader::EntryAudio, 2, InstallBetterMPSync);
+    Loader::AddInstall(Loader::EntryAudio, 3, InstallIncreasePtrNodes);
+    Loader::AddInstall(Loader::EntryAudio, 4, InstallNoPhysicsSleep);
+    Loader::AddInstall(Loader::EntryAudio, 5, InstallDoNotPauseOnMinimize);
+    Loader::AddInstall(Loader::EntryAudio, 6, InstallEpisodicWeaponSupport);
+    Loader::AddInstall(Loader::EntryAudio, 7, InstallPoliceEpisodicWeaponSupport);
+    Loader::AddInstall(Loader::EntryAudio, 8, InstallTBoGTHeliHeightLimit);
+    Loader::AddInstall(Loader::EntryAudio, 9, InstallPedModelsInCutscenesFix);
+    Loader::AddInstall(Loader::EntryAudio, 10, InstallRestoreDeathMusic);
+    Loader::AddInstall(Loader::EntryAudio, 11, InstallMouseFix);
 }
 
 // ---------------------------------------------------------------------------

@@ -776,12 +776,10 @@ export void RegisterLauncher()
     // slot (zpatch_dfa_create_file_slot) is the publish tier's, not this one's.
     PublishDfaForwarders();
 
-    Loader::PublishEvent() += [] { PublishDfaCapture(); };
-    Loader::InstallEvent() += []
-    {
-        InstallLaunchWithPlayGTAIV();
-        InstallSkipLauncher();
-    };
+    Loader::AddPublish(Loader::EntryLauncher, 0, PublishDfaCapture);
+
+    Loader::AddInstall(Loader::EntryLauncher, 0, InstallLaunchWithPlayGTAIV);
+    Loader::AddInstall(Loader::EntryLauncher, 1, InstallSkipLauncher);
 
     // The hook bodies carry their recovered VAs so the dump can express every
     // branch in the original's coordinates.

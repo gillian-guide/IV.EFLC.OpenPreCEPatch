@@ -1603,49 +1603,44 @@ export void RegisterVehicles()
     // CitizenIV.exe at the same point; none of it writes an image byte.
     ResolveSteerHelpers();
 
-    Loader::PublishEvent() += []
-    {
-        PublishCollisionDeadlockFix();
-        PublishCarPartsShadowFix();
-        PublishCarDynamicShadowFix();
-        PublishForceCarHeadlightShadows();
-        PublishHighFPSBikePhysicsFix();
-        PublishDualVehicleHeadlights();
-        PublishMovingSteeringWheelSupport();
-        PublishShakingEngineBlock();
-        PublishMovingPlaneParts();
-        PublishGarageModelFix();
-        PublishNoLiveryLimit();
-        PublishFreezeCarFix();
-    };
-    Loader::InstallEvent() += []
-    {
-        InstallCarDecalsFix();
-        InstallCollisionDeadlockFix();
-        InstallCarPartsShadowFix();
-        InstallCarDynamicShadowFix();
-        // After the shadow arm: the original's ForceCarHeadlightShadows handler runs
-        // after the CarDynamicShadowFix block, and its tail restores what that block
-        // rewrites -- so with both keys on, the restore is what the game sees.
-        InstallForceCarHeadlightShadows();
-        InstallInfiniteCarBottomDistance();
-        InstallReversingLightFix();
-        InstallBikeFeetFix();
-        InstallBikePhoneAnimsFix();
-        InstallEpisodicVehicleSupport();
-        InstallHighFPSBikePhysicsFix();
-        InstallPipeBombDropIconSupport();
-        InstallTeleportProtection();
-        InstallDualVehicleHeadlights();
-        InstallIncreaseVehicleModelLimit();
-        InstallIncreaseVehicleStructLimit();
-        InstallMovingSteeringWheelSupport();
-        InstallShakingEngineBlock();
-        InstallMovingPlaneParts();
-        InstallGarageModelFix();
-        InstallNoLiveryLimit();
-        InstallFreezeCarFix();
-    };
+    Loader::AddPublish(Loader::EntryVehicles, 0, PublishCollisionDeadlockFix);
+    Loader::AddPublish(Loader::EntryVehicles, 1, PublishCarPartsShadowFix);
+    Loader::AddPublish(Loader::EntryVehicles, 2, PublishCarDynamicShadowFix);
+    Loader::AddPublish(Loader::EntryVehicles, 3, PublishForceCarHeadlightShadows);
+    Loader::AddPublish(Loader::EntryVehicles, 4, PublishHighFPSBikePhysicsFix);
+    Loader::AddPublish(Loader::EntryVehicles, 5, PublishDualVehicleHeadlights);
+    Loader::AddPublish(Loader::EntryVehicles, 6, PublishMovingSteeringWheelSupport);
+    Loader::AddPublish(Loader::EntryVehicles, 7, PublishShakingEngineBlock);
+    Loader::AddPublish(Loader::EntryVehicles, 8, PublishMovingPlaneParts);
+    Loader::AddPublish(Loader::EntryVehicles, 9, PublishGarageModelFix);
+    Loader::AddPublish(Loader::EntryVehicles, 10, PublishNoLiveryLimit);
+    Loader::AddPublish(Loader::EntryVehicles, 11, PublishFreezeCarFix);
+
+    Loader::AddInstall(Loader::EntryVehicles, 0, InstallCarDecalsFix);
+    Loader::AddInstall(Loader::EntryVehicles, 1, InstallCollisionDeadlockFix);
+    Loader::AddInstall(Loader::EntryVehicles, 2, InstallCarPartsShadowFix);
+    Loader::AddInstall(Loader::EntryVehicles, 3, InstallCarDynamicShadowFix);
+    // After the shadow arm: the original's ForceCarHeadlightShadows handler runs
+    // after the CarDynamicShadowFix block, and its tail restores what that block
+    // rewrites -- so with both keys on, the restore is what the game sees.
+    Loader::AddInstall(Loader::EntryVehicles, 4, InstallForceCarHeadlightShadows);
+    Loader::AddInstall(Loader::EntryVehicles, 5, InstallInfiniteCarBottomDistance);
+    Loader::AddInstall(Loader::EntryVehicles, 6, InstallReversingLightFix);
+    Loader::AddInstall(Loader::EntryVehicles, 7, InstallBikeFeetFix);
+    Loader::AddInstall(Loader::EntryVehicles, 8, InstallBikePhoneAnimsFix);
+    Loader::AddInstall(Loader::EntryVehicles, 9, InstallEpisodicVehicleSupport);
+    Loader::AddInstall(Loader::EntryVehicles, 10, InstallHighFPSBikePhysicsFix);
+    Loader::AddInstall(Loader::EntryVehicles, 11, InstallPipeBombDropIconSupport);
+    Loader::AddInstall(Loader::EntryVehicles, 12, InstallTeleportProtection);
+    Loader::AddInstall(Loader::EntryVehicles, 13, InstallDualVehicleHeadlights);
+    Loader::AddInstall(Loader::EntryVehicles, 14, InstallIncreaseVehicleModelLimit);
+    Loader::AddInstall(Loader::EntryVehicles, 15, InstallIncreaseVehicleStructLimit);
+    Loader::AddInstall(Loader::EntryVehicles, 16, InstallMovingSteeringWheelSupport);
+    Loader::AddInstall(Loader::EntryVehicles, 17, InstallShakingEngineBlock);
+    Loader::AddInstall(Loader::EntryVehicles, 18, InstallMovingPlaneParts);
+    Loader::AddInstall(Loader::EntryVehicles, 19, InstallGarageModelFix);
+    Loader::AddInstall(Loader::EntryVehicles, 20, InstallNoLiveryLimit);
+    Loader::AddInstall(Loader::EntryVehicles, 21, InstallFreezeCarFix);
 
     // The bodies' recovered VAs, so the dump expresses each arm's branch in the
     // original's coordinates. The three steer keys all jump to the same two detour

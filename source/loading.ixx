@@ -1682,34 +1682,29 @@ export void RegisterLoading()
     zpatch_dlc_strcat_s = static_cast<uint32_t>(
         reinterpret_cast<uintptr_t>(static_cast<SafeCopyFn>(&strcat_s)));
 
-    Loader::PublishEvent() += []
-    {
-        PublishLocalSettingsPath();
-        CopyOverrideDatPath();
-        PublishNewMemorySystem();
-        PublishNewFilesCompatibility();
-        PublishNewSavesCompatibility();
-        PublishLoadDLCs();
-    };
-    Loader::InstallEvent() += []
-    {
-        InstallFastLoading();
-        InstallNoLoadingSleep();
-        InstallLocalSettingsPath();
-        InstallRemoveGFWLUpdatePopup();
-        InstallRemoveRGSCLoginRequirement();
-        InstallStartupTimeFix();
-        InstallVSyncFix();
-        InstallBenchmarkFix();
-        InstallOverrideGTADatPath();
-        InstallSkipIntro();
-        InstallSkipMenu();
-        InstallSavegameFix();
-        InstallNewMemorySystem();
-        InstallNewFilesCompatibility();
-        InstallNewSavesCompatibility();
-        InstallLoadDLCs();
-    };
+    Loader::AddPublish(Loader::EntryLoading, 0, PublishLocalSettingsPath);
+    Loader::AddPublish(Loader::EntryLoading, 1, CopyOverrideDatPath);
+    Loader::AddPublish(Loader::EntryLoading, 2, PublishNewMemorySystem);
+    Loader::AddPublish(Loader::EntryLoading, 3, PublishNewFilesCompatibility);
+    Loader::AddPublish(Loader::EntryLoading, 4, PublishNewSavesCompatibility);
+    Loader::AddPublish(Loader::EntryLoading, 5, PublishLoadDLCs);
+
+    Loader::AddInstall(Loader::EntryLoading, 0, InstallFastLoading);
+    Loader::AddInstall(Loader::EntryLoading, 1, InstallNoLoadingSleep);
+    Loader::AddInstall(Loader::EntryLoading, 2, InstallLocalSettingsPath);
+    Loader::AddInstall(Loader::EntryLoading, 3, InstallRemoveGFWLUpdatePopup);
+    Loader::AddInstall(Loader::EntryLoading, 4, InstallRemoveRGSCLoginRequirement);
+    Loader::AddInstall(Loader::EntryLoading, 5, InstallStartupTimeFix);
+    Loader::AddInstall(Loader::EntryLoading, 6, InstallVSyncFix);
+    Loader::AddInstall(Loader::EntryLoading, 7, InstallBenchmarkFix);
+    Loader::AddInstall(Loader::EntryLoading, 8, InstallOverrideGTADatPath);
+    Loader::AddInstall(Loader::EntryLoading, 9, InstallSkipIntro);
+    Loader::AddInstall(Loader::EntryLoading, 10, InstallSkipMenu);
+    Loader::AddInstall(Loader::EntryLoading, 11, InstallSavegameFix);
+    Loader::AddInstall(Loader::EntryLoading, 12, InstallNewMemorySystem);
+    Loader::AddInstall(Loader::EntryLoading, 13, InstallNewFilesCompatibility);
+    Loader::AddInstall(Loader::EntryLoading, 14, InstallNewSavesCompatibility);
+    Loader::AddInstall(Loader::EntryLoading, 15, InstallLoadDLCs);
 
     // The hook bodies carry their recovered VAs so the dump can express every
     // branch in the original's coordinates.

@@ -553,15 +553,9 @@ export void RegisterOoc()
     Bodies::Register(reinterpret_cast<uintptr_t>(&OocStepBody), 0x1004B150u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&OocDecodeBody), 0x1004B570u);
 
-    Loader::PublishEvent() += []
-    {
-        PublishOutOfCommissionFix();
-    };
+    Loader::AddPublish(Loader::EntryOoc, 0, PublishOutOfCommissionFix);
 
-    Loader::InstallEvent() += []
-    {
-        InstallOutOfCommissionFix();
-    };
+    Loader::AddInstall(Loader::EntryOoc, 0, InstallOutOfCommissionFix);
 }
 
 // ---------------------------------------------------------------------------

@@ -120,5 +120,5 @@ export namespace UselessChecks
 // Registered like every other arm: the install tier owns the gate.
 export void RegisterUselessChecks()
 {
-    Loader::InstallEvent() += [] { UselessChecks::Install(); };
+    Loader::AddInstall(Loader::EntryUselessChecks, 0, UselessChecks::Install);
 }

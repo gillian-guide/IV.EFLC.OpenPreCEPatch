@@ -793,40 +793,35 @@ export void RegisterStability()
     zpatch_bpm_stdio_common_vsprintf = static_cast<uint32_t>(
         reinterpret_cast<uintptr_t>(&__stdio_common_vsprintf));
 
-    Loader::PublishEvent() += []
-    {
-        PublishFreezeGunFix();
-        PublishGroupHackFix();
-        PublishPathNodeCrashFix();
-        PublishPlaneCrashFix();
-        PublishBlackscreenFix();
-        PublishCrashMsgFix();
-        PublishWantedLevelCrashFix();
-        PublishEpisodeSwitchFreezeFix();
-        PublishSMPA60Fix();
-        PublishPlayerAsPedComponentsFix();
-        PublishBadPlayerModelCrashFix();
-    };
-    Loader::InstallEvent() += []
-    {
-        InstallMPNikoCrashFix();
-        InstallBlackscreenFix();
-        InstallCrashMsgFix();
-        InstallFreezeGunFix();
-        InstallGroupHackFix();
-        InstallPathNodeCrashFix();
-        InstallPlaneCrashFix();
-        InstallPlayerAsPedComponentsFix();
-        InstallWantedLevelCrashFix();
-        InstallEpisodeSwitchFreezeFix();
-        InstallSMPA60Fix();
-        InstallSCOSignatureFix();
-        InstallTryToSkipAllErrors();
-        InstallRemoveAllWeaponsProtection();
-        InstallHighFPSSpeedupFix();
-        InstallAimProjectileCrashFix();
-        InstallBadPlayerModelCrashFix();
-    };
+    Loader::AddPublish(Loader::EntryStability, 0, PublishFreezeGunFix);
+    Loader::AddPublish(Loader::EntryStability, 1, PublishGroupHackFix);
+    Loader::AddPublish(Loader::EntryStability, 2, PublishPathNodeCrashFix);
+    Loader::AddPublish(Loader::EntryStability, 3, PublishPlaneCrashFix);
+    Loader::AddPublish(Loader::EntryStability, 4, PublishBlackscreenFix);
+    Loader::AddPublish(Loader::EntryStability, 5, PublishCrashMsgFix);
+    Loader::AddPublish(Loader::EntryStability, 6, PublishWantedLevelCrashFix);
+    Loader::AddPublish(Loader::EntryStability, 7, PublishEpisodeSwitchFreezeFix);
+    Loader::AddPublish(Loader::EntryStability, 8, PublishSMPA60Fix);
+    Loader::AddPublish(Loader::EntryStability, 9, PublishPlayerAsPedComponentsFix);
+    Loader::AddPublish(Loader::EntryStability, 10, PublishBadPlayerModelCrashFix);
+
+    Loader::AddInstall(Loader::EntryStability, 0, InstallMPNikoCrashFix);
+    Loader::AddInstall(Loader::EntryStability, 1, InstallBlackscreenFix);
+    Loader::AddInstall(Loader::EntryStability, 2, InstallCrashMsgFix);
+    Loader::AddInstall(Loader::EntryStability, 3, InstallFreezeGunFix);
+    Loader::AddInstall(Loader::EntryStability, 4, InstallGroupHackFix);
+    Loader::AddInstall(Loader::EntryStability, 5, InstallPathNodeCrashFix);
+    Loader::AddInstall(Loader::EntryStability, 6, InstallPlaneCrashFix);
+    Loader::AddInstall(Loader::EntryStability, 7, InstallPlayerAsPedComponentsFix);
+    Loader::AddInstall(Loader::EntryStability, 8, InstallWantedLevelCrashFix);
+    Loader::AddInstall(Loader::EntryStability, 9, InstallEpisodeSwitchFreezeFix);
+    Loader::AddInstall(Loader::EntryStability, 10, InstallSMPA60Fix);
+    Loader::AddInstall(Loader::EntryStability, 11, InstallSCOSignatureFix);
+    Loader::AddInstall(Loader::EntryStability, 12, InstallTryToSkipAllErrors);
+    Loader::AddInstall(Loader::EntryStability, 13, InstallRemoveAllWeaponsProtection);
+    Loader::AddInstall(Loader::EntryStability, 14, InstallHighFPSSpeedupFix);
+    Loader::AddInstall(Loader::EntryStability, 15, InstallAimProjectileCrashFix);
+    Loader::AddInstall(Loader::EntryStability, 16, InstallBadPlayerModelCrashFix);
 }
 
 // ---------------------------------------------------------------------------
