@@ -19,6 +19,7 @@ import menu;
 import ooc;
 import episodic;
 import performance;
+import compatibility;
 
 extern "C" __declspec(dllexport) void InitializeASI();
 
@@ -84,6 +85,7 @@ namespace
         // had in the old modules; the ordering lives in Loader, not here.
         RegisterEpisodic();
         RegisterPerformance();
+        RegisterCompatibility();
         Loader::Run();
 
 #ifdef ZP_TRACE

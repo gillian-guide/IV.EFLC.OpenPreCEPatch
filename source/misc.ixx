@@ -6,9 +6,6 @@ module;
 #include <intrin.h>
 #include <cstdlib>
 #include <cstring>
-// SHDeleteValueW: the FixPCIDKickbug arm's whole effect (the tree already links
-// shlwapi; this is the only symbol it takes from it).
-#include <shlwapi.h>
 
 export module misc;
 
@@ -924,31 +921,6 @@ namespace
                 reinterpret_cast<void*>(&IdeHookBody), true);
     }
 
-    // FixPCIDKickbug: the original deletes the XLive PCID value and ignores the
-    // result:
-    //
-    //   100523C0: v332 = sub_1005C160(v469, "FixPCIDKickbug", "1");
-    //             if ( v334 == 1 )
-    //               SHDeleteValueW(HKEY_CURRENT_USER,
-    //                              L"Software\\Classes\\Software\\Microsoft\\XLive",
-    //                              L"PCID");
-    //
-    // No image byte is written and the call has no build gate; the result is not
-    // examined, exactly as the original ignores it. The registry value belongs to
-    // the user, not to the image, so the arm stays out of the offline dump (which
-    // attaches an image, not a loaded module) the same way LaunchWithPlayGTAIV
-    // does: the module guard is the only difference from the original's call.
-    void InstallFixPCIDKickbug()
-    {
-        if (!Loader::Enabled("FixPCIDKickbug"))
-            return;
-
-        if (Game::Get().Module() == nullptr)
-            return;
-
-        SHDeleteValueW(HKEY_CURRENT_USER,
-            L"Software\\Classes\\Software\\Microsoft\\XLive", L"PCID");
-    }
 
     // VRAMFix: the matched function's entry becomes a jump to the shim.
     void InstallVRAMFix()
@@ -1017,7 +989,6 @@ export void RegisterMisc()
     Loader::AddInstall(Loader::Entry::Misc, 5, InstallCopSirensFlag);
     Loader::AddInstall(Loader::Entry::Misc, 6, InstallPopupHeadlightsFlag);
     Loader::AddInstall(Loader::Entry::Misc, 7, InstallVRAMFix);
-    Loader::AddInstall(Loader::Entry::Misc, 8, InstallFixPCIDKickbug);
 
     // The bodies' recovered VAs, so the dump expresses each arm's branch in the
     // original's coordinates.
