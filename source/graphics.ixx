@@ -46,16 +46,6 @@ extern "C"
     void* zpatch_hqr_builder = nullptr;  // dword_10159D04 = match + [match+0x0F] + 0x13
 }
 
-// The SuperLODFix pair's published state: the two resumes the shim tails into
-// (dword_101580AC and dword_101580B0) and the lookup the model helper calls
-// (dword_101580B4). The original keeps them in .bss beside its code; the
-// transcribed asm names the slots directly, so they carry C linkage.
-extern "C"
-{
-    uint32_t zpatch_super_lod_fail = 0;    // dword_101580AC
-    uint32_t zpatch_super_lod_ok = 0;      // dword_101580B0
-    uint32_t zpatch_super_lod_lookup = 0;  // dword_101580B4
-}
 
 // BorderlessWindowed's two window-proc shims: 0x10005890 for the Unicode window
 // proc and 0x10005900 for the ANSI one. The original's handler (0x10005970) scans
@@ -155,8 +145,6 @@ static void BuildingsDynamicShadowsShim();
 static void EmissiveLerpHelper();
 static void EmissiveLerpShim();
 static void HqrBody();
-static void SuperLodModel();
-static void SuperLodShim();
 static void BorderlessWindowBodyW();
 static void BorderlessWindowBodyA();
 static void CutsceneResolveEntry();
@@ -210,20 +198,6 @@ namespace
         injector::WriteMemory<uint32_t>(at + 1, displacement, true);
     }
 
-    // The per-build set InstallSuperLODFix publishes: the site's two continuations
-    // and the hash lookup the model helper calls, each a game RVA from the
-    // recovered handler's own base + RVA pairs (the suffix is the build).
-    struct SuperLodTargets
-    {
-        Build build;
-        uint32_t fail;
-        uint32_t ok;
-        uint32_t lookup;
-    };
-    constexpr SuperLodTargets kSuperLodTargets[] = {
-        { Build::v1070, 0x4A3D37u, 0x4A3CEFu, 0x58AAE0u },
-        { Build::v1080, 0x540E67u, 0x540E1Fu, 0x4DD2D0u },
-    };
 
     // BuildingDynamicShadows' published state: both resumes come from the site's
     // original bytes (match+15 and match+112) and the two hash slots take the same
@@ -288,28 +262,6 @@ namespace
         zpatch_emissive_resume = static_cast<uint32_t>(match - 12);
     }
 
-    // SuperLODFix's published state: the site's two continuations and the hash lookup
-    // the model helper calls, each a game RVA from the recovered handler's own base +
-    // RVA pairs (the suffix is the build).
-    void PublishSuperLODFix()
-    {
-        if (!Loader::Enabled("SuperLODFix"))
-            return;
-
-        auto pattern = find_pattern("F6 40 ? ? 74 ? 85 ED 0F 85 ? ? ? ? 55 6A ? E8 ? ? ? ? 8B F8");
-        if (pattern.empty())
-            return;
-
-        const auto base = Game::Get().ImageBase();
-        for (const SuperLodTargets& targets : kSuperLodTargets)
-        {
-            if (targets.build != Loader::Current())
-                continue;
-            zpatch_super_lod_fail = static_cast<uint32_t>(base + targets.fail);
-            zpatch_super_lod_ok = static_cast<uint32_t>(base + targets.ok);
-            zpatch_super_lod_lookup = static_cast<uint32_t>(base + targets.lookup);
-        }
-    }
 
     // CutsceneFixes' published state. The worker publishes two game pointers from
     // the primary site's own `E8` operand: the call's destination (the camera
@@ -548,23 +500,6 @@ namespace
         injector::MakeJMP(pattern.get_first(-24), EmissiveLerpShimAddress(), true);
     }
 
-    // SuperLODFix: the two-byte pair `test byte [eax+72h], 10h` / `jz` that decides
-    // whether the detailed LOD is used is replaced by the model-hash test. The fail
-    // path is the `jz` target, the ok path the instruction after the six-byte pair,
-    // and the lookup is the game's hash function.
-    void InstallSuperLODFix()
-    {
-        if (!Loader::Enabled("SuperLODFix"))
-            return;
-
-        auto pattern = find_pattern("F6 40 ? ? 74 ? 85 ED 0F 85 ? ? ? ? 55 6A ? E8 ? ? ? ? 8B F8");
-        if (pattern.empty())
-            return;
-
-        Bodies::Register(reinterpret_cast<uintptr_t>(&SuperLodModel), 0x100469A0u);
-        Bodies::Register(reinterpret_cast<uintptr_t>(&SuperLodShim), 0x100469E0u);
-        injector::MakeJMP(pattern.get_first(0), reinterpret_cast<void*>(&SuperLodShim), true);
-    }
 
 
     // CutsceneFixes: chain B's two camera call sites become calls into
@@ -619,7 +554,6 @@ export void RegisterGraphics()
     Loader::AddPublish(Loader::Entry::Graphics, 1, PublishCutsceneFixes);
     Loader::AddPublish(Loader::Entry::Graphics, 2, PublishEmissiveLerpFix);
     Loader::AddPublish(Loader::Entry::Graphics, 3, PublishHighQualityReflections);
-    Loader::AddPublish(Loader::Entry::Graphics, 4, PublishSuperLODFix);
 
     Loader::AddInstall(Loader::Entry::Graphics, 0, InstallBorderlessWindowed);
     Loader::AddInstall(Loader::Entry::Graphics, 1, InstallBuildingAlphaFix);
@@ -634,7 +568,6 @@ export void RegisterGraphics()
     Loader::AddInstall(Loader::Entry::Graphics, 11, InstallRemoveBoundingBoxCulling);
     Loader::AddInstall(Loader::Entry::Graphics, 12, InstallRemoveStaticCarShadows);
     Loader::AddInstall(Loader::Entry::Graphics, 13, InstallRemoveStaticCutsceneCarShadows);
-    Loader::AddInstall(Loader::Entry::Graphics, 14, InstallSuperLODFix);
 }
 
 // ---------------------------------------------------------------------------
@@ -907,68 +840,7 @@ static __declspec(naked) void HqrBody()
     }
 }
 
-// sub_100469A0, recovered VA 0x100469A0: the model test the shim calls with the
-// ESI argument still on the stack. It resolves the constant 0xAE4B15D6 through
-// the published lookup and compares the object's signed word at +0x2E with the
-// answer. The frame is the body's own /GS frame: the cookie word and the cookie
-// check are the module's, exactly as a compiled function of this module has
-// them, and both are absolute/slot operands in the proof.
-static __declspec(naked) void SuperLodModel()
-{
-    __asm
-    {
-        push ebp
-        mov ebp, esp
-        sub esp, 8
-        mov eax, DWORD PTR [__security_cookie]
-        xor eax, ebp
-        mov DWORD PTR [ebp - 4], eax
-        lea eax, [ebp - 8]
-        push eax
-        push 0AE4B15D6h
-        call DWORD PTR [zpatch_super_lod_lookup]
-        mov eax, DWORD PTR [ebp + 8]
-        add esp, 8
-        mov ecx, DWORD PTR [ebp - 4]
-        movsx eax, WORD PTR [eax + 2Eh]
-        cmp eax, DWORD PTR [ebp - 8]
-        setz al
-        xor ecx, ebp
-        call __security_check_cookie
-        mov esp, ebp
-        pop ebp
-        ret
-    }
-}
 
-// sub_100469E0, recovered VA 0x100469E0: the body the SuperLODFix arm installs at
-// the `test byte [eax+72h], 10h` / `jz` pair. EAX is the object and ESI the model
-// the test reads. A model that resolves to the published hash continues at the
-// site's continuation (ok); otherwise the object's 0x10 flag decides, and the
-// `jz` it would have taken is the site's branch target (fail).
-static __declspec(naked) void SuperLodShim()
-{
-    __asm
-    {
-        jmp slod_main
-    slod_fail:
-        jmp DWORD PTR [zpatch_super_lod_fail]
-    slod_main:
-        push eax
-        push ecx
-        push esi
-        call SuperLodModel
-        add esp, 4
-        pop ecx
-        test al, al
-        pop eax
-        jnz slod_ok
-        test byte ptr [eax + 72h], 10h
-        jz slod_fail
-    slod_ok:
-        jmp DWORD PTR [zpatch_super_lod_ok]
-    }
-}
 
 
 // 0x10005890: the Unicode window proc's shim. EBP+8 is the window handle, EBP+0C

@@ -59,11 +59,6 @@ extern "C"
     float* zpatch_speedup_t64 = nullptr;  // dword_10159364: flt_18CAEA0, milliseconds per tick
     float* zpatch_speedup_t68 = nullptr;  // dword_10159368: copy of flt_18CAEA0
 
-    // Patch4RemoveModChecks: dword_10159C18, the continuation (match + 12) of the
-    // game's date arithmetic. loading.ixx owns the same original slot for its
-    // RemoveGFWLUpdatePopup arm; each arm publishes its own copy because the two
-    // arms live in different modules.
-    uint32_t zpatch_patch4_resume = 0;
 }
 
 // CopSirensFlag: the two model checks (sub_10005F70 and sub_10006260) and the
@@ -177,7 +172,6 @@ extern "C"
 static void DrivebyResolveEntry();
 static void DrivebyFovHelperBody();
 static void DrivebyFovShimBody();
-static void Patch4StubBody();
 static void IdeParseBody();
 static void CopSirensCheckABody();
 static void CopSirensCheckBBody();
@@ -605,48 +599,6 @@ void* Misc::SpeedupBugFixForTest(void* self, uint32_t clock,
     return SpeedupBugFixRunPublished(self, clock, read_frequency);
 }
 
-// Patch4RemoveModChecks: the game's date arithmetic at 1.0.8.0 game 0x7CBF70
-// (the `2B C1 1B D6 ...` anchor) is replaced by the original's sub_100054E0, an
-// 8-instruction stub that runs the shared flag-gated helper between pusha/popa,
-// replays the 64-bit subtraction and its two stack stores, and resumes at
-// match + 12.
-//
-// The helper (sub_10005340, 145 instructions) has two branches. The GFWL one is
-// RemoveGFWLUpdatePopup's and already lives in loading.ixx; this module owns the
-// Patch4 one: a one-time scan for "33 C4 89 84 24 A8 01 00 00 53 8B 5D 08 56 57"
-// (the original's own scanner call), then a zero store to the dword the matched
-// code points at (site + 30). That signature has no hit on 1.0.8.0, so on the
-// user's build the branch is a scan and nothing else -- the key's visible effect
-// there is the stub install itself, exactly as in the original. The scan is kept
-// so builds where the target exists behave the same.
-//
-// The helper is compiler output for a C function (a thread-safe static guard and
-// VirtualProtect calls), so it is rebuilt, not transcribed; the stub is
-// transcribed and proven whole.
-static std::atomic<uint32_t> zpatch_patch4_scan_done{ 0 };
-static uint32_t zpatch_patch4_site = 0;
-
-static void Patch4Step()
-{
-    if (zpatch_patch4_scan_done.exchange(1u, std::memory_order_acq_rel) == 0)
-    {
-        auto pattern = find_pattern("33 C4 89 84 24 A8 01 00 00 53 8B 5D 08 56 57");
-        if (!pattern.empty())
-            zpatch_patch4_site = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(0)));
-    }
-
-    if (zpatch_patch4_site != 0)
-    {
-        // 0x10005427 reads *[site + 30] without a null check; the zero store goes
-        // through the injector, which is the original's VirtualProtect/write/restore.
-        uint32_t target = 0;
-        std::memcpy(&target,
-            reinterpret_cast<const void*>(static_cast<uintptr_t>(zpatch_patch4_site) + 30u),
-            sizeof(target));
-        injector::WriteMemory<uint32_t>(target, 0u, true);
-    }
-}
 
 namespace
 {
@@ -703,19 +655,6 @@ namespace
         zpatch_speedup_site = ResolveSpeedupBugFix();
     }
 
-    // Patch4RemoveModChecks: the anchor's first twelve bytes are the subtraction
-    // and the two stores; the stub replays them and resumes at match + 12.
-    void PublishPatch4RemoveModChecks()
-    {
-        if (!Loader::Enabled("Patch4RemoveModChecks"))
-            return;
-
-        auto pattern = find_pattern(
-            "2B C1 1B D6 89 44 24 0C 89 54 24 10 DF 6C 24 0C D8 0D ? ? ? ? D9 5C 24 08");
-        if (!pattern.empty())
-            zpatch_patch4_resume = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first(12)));
-    }
 
     // CopSirensFlag's three sites: the two model checks and the shared IDE hook,
     // installed at the parser anchor's -10 (the seven-byte compare).
@@ -816,49 +755,6 @@ namespace
         }
     }
 
-    void InstallPatch6and7RemoveModChecks()
-    {
-        // The original has one handler for two keys: `stoi(ini.get(
-        // "Patch6and7RemoveModChecks","0")) == 1 || stoi(ini.get(
-        // "Patch7RemoveModChecks","0")) == 1` (0x10053FBD..0x10053FE5), both feeding
-        // 0x10044710. Patch7RemoveModChecks is therefore not an alias that does
-        // nothing -- it is the alternate trigger for the same full write set, and a
-        // Patch7-only INI installs all 16/21 bytes on 1.0.6.0/1.0.7.0.
-        if (!Loader::Enabled("Patch6and7RemoveModChecks")
-            && !Loader::Enabled("Patch7RemoveModChecks"))
-            return;
-
-        for (const auto& row : kModChecksSites)
-        {
-            if (row.build != Loader::Current())
-                continue;
-
-            for (const auto& site : row.sites)
-            {
-                auto pattern = find_pattern(site.signature);
-                if (pattern.empty())
-                    continue;
-
-                auto* match = pattern.get_first<std::byte>(0);
-                switch (site.kind)
-                {
-                case ModCheckWrite::zero:
-                    injector::WriteMemory<std::byte>(match, Bytes::Zero, true);
-                    break;
-                case ModCheckWrite::jmpOpcode:
-                    injector::WriteMemory<std::byte>(match, Bytes::ShortJmp, true);
-                    break;
-                case ModCheckWrite::jump:
-                    injector::MakeJMP(match,
-                        reinterpret_cast<void*>(Game::Get().ImageBase() + site.target), true);
-                    break;
-                case ModCheckWrite::nopSeven:
-                    injector::MakeNOP(match, 7, true);
-                    break;
-                }
-            }
-        }
-    }
 
     void InstallDrivebyFOVFix()
     {
@@ -888,17 +784,6 @@ namespace
                 true);
     }
 
-    void InstallPatch4RemoveModChecks()
-    {
-        if (!Loader::Enabled("Patch4RemoveModChecks"))
-            return;
-
-        auto pattern = find_pattern(
-            "2B C1 1B D6 89 44 24 0C 89 54 24 10 DF 6C 24 0C D8 0D ? ? ? ? D9 5C 24 08");
-        if (!pattern.empty())
-            injector::MakeJMP(pattern.get_first<std::byte>(0),
-                reinterpret_cast<void*>(&Patch4StubBody), true);
-    }
 
     void InstallCopSirensFlag()
     {
@@ -977,15 +862,12 @@ export void RegisterMisc()
 {
     Loader::AddPublish(Loader::Entry::Misc, 0, PublishDrivebyFOVFix);
     Loader::AddPublish(Loader::Entry::Misc, 1, PublishSpeedupBugFix);
-    Loader::AddPublish(Loader::Entry::Misc, 2, PublishPatch4RemoveModChecks);
     Loader::AddPublish(Loader::Entry::Misc, 3, PublishCopSirensFlag);
     Loader::AddPublish(Loader::Entry::Misc, 4, PublishPopupHeadlightsFlag);
 
     Loader::AddInstall(Loader::Entry::Misc, 0, InstallMiscFixes);
-    Loader::AddInstall(Loader::Entry::Misc, 1, InstallPatch6and7RemoveModChecks);
     Loader::AddInstall(Loader::Entry::Misc, 2, InstallDrivebyFOVFix);
     Loader::AddInstall(Loader::Entry::Misc, 3, InstallSpeedupBugFix);
-    Loader::AddInstall(Loader::Entry::Misc, 4, InstallPatch4RemoveModChecks);
     Loader::AddInstall(Loader::Entry::Misc, 5, InstallCopSirensFlag);
     Loader::AddInstall(Loader::Entry::Misc, 6, InstallPopupHeadlightsFlag);
     Loader::AddInstall(Loader::Entry::Misc, 7, InstallVRAMFix);
@@ -993,7 +875,6 @@ export void RegisterMisc()
     // The bodies' recovered VAs, so the dump expresses each arm's branch in the
     // original's coordinates.
     Bodies::Register(reinterpret_cast<uintptr_t>(&SpeedupBugFixBody), 0x10050540u);
-    Bodies::Register(reinterpret_cast<uintptr_t>(&Patch4StubBody), 0x100054E0u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&CopSirensShimABody), 0x10006310u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&CopSirensShimBBody), 0x10006330u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&IdeHookBody), 0x100040E0u);
@@ -1036,7 +917,6 @@ export void RegisterMisc()
     // Each stub's inline `call` is invisible to C++; naming the helper here keeps
     // its out-of-line definition in the image.
     [[maybe_unused]] const uintptr_t helpers[] = {
-        reinterpret_cast<uintptr_t>(&Patch4Step),
         reinterpret_cast<uintptr_t>(&CopSirensCheckABody),
         reinterpret_cast<uintptr_t>(&CopSirensCheckBBody),
         reinterpret_cast<uintptr_t>(&IdeParseBody),
@@ -1122,23 +1002,6 @@ static __declspec(naked) void DrivebyFovShimBody()
     }
 }
 
-// sub_100054E0, recovered VA 0x100054E0 (8 instructions). `pusha`/`popa` are
-// emitted as bytes: the inline assembler renders both with a 0x66 operand-size
-// prefix, which the original does not have.
-static __declspec(naked) void Patch4StubBody()
-{
-    __asm
-    {
-        __emit 0x60  // pusha
-        call Patch4Step
-        __emit 0x61  // popa
-        sub eax, ecx
-        sbb edx, esi
-        mov DWORD PTR [esp + 0Ch], eax
-        mov DWORD PTR [esp + 10h], edx
-        jmp DWORD PTR [zpatch_patch4_resume]
-    }
-}
 
 // sub_10003FA0, recovered VA 0x10003FA0 (92 instructions, 314 bytes): the IDE parser
 // hook's payload, transcribed instruction for instruction.

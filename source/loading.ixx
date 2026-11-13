@@ -20,20 +20,6 @@ import shared;
 // The load-time arms: the fixes the original applies while the game is loading,
 // one arm per INI key, each anchored to its own recovered signature.
 
-// RemoveGFWLUpdatePopup, as the original handler sub_10005500 applies it: the
-// update window's date arithmetic at game 0x7CBF70 is replaced by a stub that
-// first disables the four xlive.dll update-window flag slots, then replays the
-// four instructions the jump overwrites and resumes at the anchor's +12.
-// The published state of the arms below, in C linkage because the transcribed
-// code names the slots directly (the original keeps them in its own .bss beside
-// its bodies).
-
-extern "C"
-{
-    uint32_t zpatch_gfwl_resume = 0;  // dword_10159C18
-    uint32_t zpatch_xlive_base = 0;   // dword_10159C10
-}
-
 
 // The published state of the two build-gated arms below, in C linkage because the
 // transcribed code names the slots directly. Each comment names the original's own
@@ -73,8 +59,6 @@ extern "C"
 // __declspec(naked) declaration (C2488: "'naked' can only be applied to non-member
 // function definitions"), so the readable code above them names each body through a
 // plain prototype; only the definition in the tail keeps the attribute.
-static void GfwlStubBody();
-static void RgscLoginRemovedBody();
 static void BenchmarkBodyA();
 static void BenchmarkBodyB();
 static void SkipIntroBody();
@@ -98,15 +82,6 @@ static bool FusionFixGateClosed()
     return first != 0xC7C47589u || second != 0x00002446u;
 }
 
-// sub_10005340's RemoveGFWLUpdatePopup branch: store the "update disabled" dword
-// into the four xlive.dll flag slots. `zpatch_xlive_base` is the module the
-// loader captured; when xlive.dll is absent it is null and the write lands on the
-// low 0x66F770 page, which is the original's fault (preserved, not guarded).
-static void GfwlPatch()
-{
-    for (const uint32_t offset : { 0x66F770u, 0x66F774u, 0x6B55D0u, 0x6B55F0u })
-        injector::WriteMemory<uint32_t>(zpatch_xlive_base + offset, 0x10000E83u, true);
-}
 
 
 
@@ -133,48 +108,7 @@ namespace
 namespace
 {
 
-    // RemoveGFWLUpdatePopup: the anchor's first twelve bytes are the subtraction
-    // and its two stores; the stub replays them and resumes at match + 12.
-    void InstallRemoveGFWLUpdatePopup()
-    {
-        if (!Loader::Enabled("RemoveGFWLUpdatePopup"))
-            return;
 
-        // dword_10159C10: the xlive.dll module the original's loader captures.
-        zpatch_xlive_base =
-            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(GetModuleHandleA("xlive.dll")));
-
-        auto pattern = find_pattern("2B C1 1B D6 89 44 24 0C 89 54 24 10 DF 6C 24 0C D8 0D ? ? ? ? D9 5C 24 08");
-        if (!pattern.empty())
-        {
-            auto* match = pattern.get_first<std::byte>(0);
-            zpatch_gfwl_resume = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match) + 12);
-            injector::MakeJMP(match, reinterpret_cast<void*>(&GfwlStubBody), true);
-        }
-    }
-
-    // RemoveRGSCLoginRequirement: the login-required branch of the RGSC launch
-    // path. On 1.0.8.0 the original writes the same five-byte jump twice (the
-    // duplicate is kept); the second anchor never matches on that build but does
-    // on the ones the key was gated for.
-    void InstallRemoveRGSCLoginRequirement()
-    {
-        if (!Loader::Enabled("RemoveRGSCLoginRequirement"))
-            return;
-
-        auto pattern = find_pattern("8B 44 24 ? 85 C0 74 ? F3 0F 7E 05 ? ? ? ? 66 0F D6 00");
-        if (Loader::Current() == Build::v1080 && !pattern.empty())
-        {
-            auto* site = pattern.get_first<std::byte>(0);  // 0x498460
-            injector::MakeJMP(site, reinterpret_cast<void*>(&RgscLoginRemovedBody), true);
-            injector::MakeJMP(site, reinterpret_cast<void*>(&RgscLoginRemovedBody), true);
-        }
-
-        pattern = find_pattern("83 EC 44 A1 ? ? ? ? 33 C4 89 44 24 40 53 8B 5C 24 4C 56 68 ? ? ? ? E8 ? ? ? ? 83 C4");
-        if (!pattern.empty())
-            injector::MakeJMP(pattern.get_first<std::byte>(0),
-                reinterpret_cast<void*>(&RgscLoginRemovedBody), true);
-    }
 
 
     void InstallVSyncFix()
@@ -315,8 +249,6 @@ export void RegisterLoading()
 {
     Loader::AddPublish(Loader::Entry::Loading, 1, CopyOverrideDatPath);
 
-    Loader::AddInstall(Loader::Entry::Loading, 3, InstallRemoveGFWLUpdatePopup);
-    Loader::AddInstall(Loader::Entry::Loading, 4, InstallRemoveRGSCLoginRequirement);
     Loader::AddInstall(Loader::Entry::Loading, 6, InstallVSyncFix);
     Loader::AddInstall(Loader::Entry::Loading, 7, InstallBenchmarkFix);
     Loader::AddInstall(Loader::Entry::Loading, 8, InstallOverrideGTADatPath);
@@ -325,8 +257,6 @@ export void RegisterLoading()
 
     // The hook bodies carry their recovered VAs so the dump can express every
     // branch in the original's coordinates.
-    Bodies::Register(reinterpret_cast<uintptr_t>(&GfwlStubBody), 0x100054E0u);
-    Bodies::Register(reinterpret_cast<uintptr_t>(&RgscLoginRemovedBody), 0x10038550u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&BenchmarkBodyA), 0x10005650u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&BenchmarkBodyB), 0x10005670u);
     Bodies::Register(reinterpret_cast<uintptr_t>(&SkipIntroBody), 0x10045C30u);
@@ -338,39 +268,7 @@ export void RegisterLoading()
 // because that is what it is; the code above is what installs it.
 // ---------------------------------------------------------------------------
 
-// sub_100054E0, recovered VA 0x100054E0 (8 instructions): the shared
-// Patch4RemoveModChecks / RemoveGFWLUpdatePopup stub. It runs the flag-gated
-// helper between pusha/popa, replays the 64-bit ECX:ESI subtraction from EDX:EAX
-// the site held (and the two stores of its result into the caller's argument
-// slots), then tail-jumps to the replayed site's continuation. `pusha`/`popa` are
-// emitted as bytes: the inline assembler renders both with a 0x66 operand-size
-// prefix, which the original does not have.
-static __declspec(naked) void GfwlStubBody()
-{
-    __asm
-    {
-        __emit 0x60  // pusha
-        call GfwlPatch
-        __emit 0x61  // popa
-        sub eax, ecx
-        sbb edx, esi
-        mov DWORD PTR [esp + 0Ch], eax
-        mov DWORD PTR [esp + 10h], edx
-        jmp DWORD PTR [zpatch_gfwl_resume]
-    }
-}
 
-// sub_10038550, recovered VA 0x10038550 (2 instructions): the RGSC login check's
-// replacement. It sets only AL, so the caller sees "already signed in" and the
-// upper 24 bits of EAX stay whatever the caller had, exactly as the original.
-static __declspec(naked) void RgscLoginRemovedBody()
-{
-    __asm
-    {
-        mov al, 1
-        ret
-    }
-}
 
 // sub_10005650, recovered VA 0x10005650: BenchmarkFix's first match-site shim. It
 // checks the benchmark object, runs the interposed callback (ESI with EDI), then

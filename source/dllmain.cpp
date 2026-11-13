@@ -20,6 +20,7 @@ import ooc;
 import episodic;
 import performance;
 import compatibility;
+import multiplayer;
 
 extern "C" __declspec(dllexport) void InitializeASI();
 
@@ -86,6 +87,7 @@ namespace
         RegisterEpisodic();
         RegisterPerformance();
         RegisterCompatibility();
+        RegisterMultiplayer();
         Loader::Run();
 
 #ifdef ZP_TRACE

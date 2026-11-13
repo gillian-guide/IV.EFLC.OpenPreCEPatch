@@ -149,7 +149,6 @@ extern "C"
 // on a declaration (C2488), so these carry the signature only; each
 // definition in the tail is naked.
 static void CombinedRadioFreezeFixBody();
-static void BetterMPSyncBody();
 static void ValueResolverThunk();
 static void PedModelsInCutscenesCheckBody();
 static void AudioContextInitEntry();
@@ -333,45 +332,7 @@ namespace
         }
     }
 
-    // BetterMPSync: the sync path's virtual call is the five bytes at the anchor's
-    // +6 (`push ebp; mov ecx,esi; call edx`); the call is replaced by a call into
-    // the body, which answers 0 and leaves the stack balanced (the argument push
-    // and the callee's own pop are both gone).
-    void InstallBetterMPSync()
-    {
-        if (!Loader::Enabled("BetterMPSync"))
-            return;
 
-        auto pattern = find_pattern("8B 90 E8 00 00 00 55 8B CE FF");
-        if (!pattern.empty())
-        {
-            Bodies::Register(reinterpret_cast<uintptr_t>(&BetterMPSyncBody), 0x100057F0u);
-            injector::MakeCALL(pattern.get_first(6),
-                reinterpret_cast<void*>(&BetterMPSyncBody), true);
-        }
-    }
-
-    // IncreasePtrNodes: the three atPool sizes the pointer-node lists allocate.
-    // Each site is `push <flags>; push <name>; push <count>`, so the arm rewrites
-    // the count at the anchor's +8: 80,000 -> 320,000 for the single-node pool and
-    // 16,000 -> 64,000 for the two double-node pools.
-    void InstallIncreasePtrNodes()
-    {
-        if (!Loader::Enabled("IncreasePtrNodes"))
-            return;
-
-        auto pattern = find_pattern("6A 08 ? ? ? ? ? 68 80 38 01 00");
-        if (!pattern.empty())
-            injector::WriteMemory<uint32_t>(pattern.get_first(8), 320'000u, true);
-
-        pattern = find_pattern("6A 10 ? ? ? ? ? 68 80 3E 00 00");
-        if (!pattern.empty())
-            injector::WriteMemory<uint32_t>(pattern.get_first(8), 64'000u, true);
-
-        pattern = find_pattern("6A 14 ? ? ? ? ? 68 80 3E 00 00");
-        if (!pattern.empty())
-            injector::WriteMemory<uint32_t>(pattern.get_first(8), 64'000u, true);
-    }
 
     // NoPhysicsSleep: the physics sleep threshold is the float the anchor's -38
     // operand names (0.005f at game 0x1090B18, RVA 0xC90B18), so the arm writes a
@@ -592,8 +553,6 @@ export void RegisterAudio()
 
     Loader::AddInstall(Loader::Entry::Audio, 0, InstallAllowHashesForIDE);
     Loader::AddInstall(Loader::Entry::Audio, 1, InstallCombinedRadioFreezeFix);
-    Loader::AddInstall(Loader::Entry::Audio, 2, InstallBetterMPSync);
-    Loader::AddInstall(Loader::Entry::Audio, 3, InstallIncreasePtrNodes);
     Loader::AddInstall(Loader::Entry::Audio, 4, InstallNoPhysicsSleep);
     Loader::AddInstall(Loader::Entry::Audio, 5, InstallDoNotPauseOnMinimize);
     Loader::AddInstall(Loader::Entry::Audio, 9, InstallPedModelsInCutscenesFix);
@@ -634,17 +593,6 @@ static __declspec(naked) void CombinedRadioFreezeFixBody()
     }
 }
 
-// sub_100057F0, recovered VA 0x100057F0 (3 bytes, 2 instructions): the MP sync
-// value. The site is the virtual call the sync path makes; the body answers it
-// with 0 instead. Naked and internal.
-static __declspec(naked) void BetterMPSyncBody()
-{
-    __asm
-    {
-        xor eax, eax
-        ret
-    }
-}
 
 // A one-instruction thunk onto the shared resolver (`jmp DWORD PTR [slot]`, six
 // bytes): the `jmp` pushes nothing, so the resolver sees the same stack and flags
