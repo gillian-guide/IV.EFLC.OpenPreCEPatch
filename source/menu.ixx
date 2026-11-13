@@ -484,11 +484,11 @@ export void RegisterMenu()
     // handler and before VSyncFix's read, is the interleave of a walk this tree
     // splits into tiers; the move is unobservable for this call (nothing here
     // depends on an arm's write, and the failure path ends the process).
-    Loader::AddPublish(Loader::EntryMenu, 0, ZMenuVersionGuardBody);
+    Loader::AddPublish(Loader::Entry::Menu, 0, ZMenuVersionGuardBody);
 
-    Loader::AddPublish(Loader::EntryMenu, 1, PublishAddOptionsInMenu);
+    Loader::AddPublish(Loader::Entry::Menu, 1, PublishAddOptionsInMenu);
 
-    Loader::AddInstall(Loader::EntryMenu, 0, InstallAddOptionsInMenu);
+    Loader::AddInstall(Loader::Entry::Menu, 0, InstallAddOptionsInMenu);
 
     // The bodies' recovered VAs, so the dump expresses every branch in the
     // original's coordinates. The death-music pair is registered by the install

@@ -502,11 +502,6 @@ namespace
             reinterpret_cast<uintptr_t>(match + next) + static_cast<uint32_t>(displacementValue));
     }
 
-    // EpisodicVehicleSupport's own episode word: the game's unk_10158128, an int
-    // holding 2, which every `cmp [episode], 2` below tests. The arm hands the game
-    // this module's word instead, so the four 1.0.7.0/1.0.8.0 sites read a value
-    // this module owns; the dump canonicalises the four published operands.
-    uint32_t zpatch_episode_flag = 2;
     // The address of a body another module transcribed, by its recovered VA. The
     // shared IDE parser hook lives in source/misc.ixx, and a module interface cannot
     // export a naked function; the body registry is what makes it reachable (the same
@@ -1261,170 +1256,6 @@ namespace
             injector::MakeNOP(pattern.get_first(33), 6, true);
     }
 
-    // PipeBombDropIconSupport: the nine-byte check before the anchor is deleted, so
-    // the pipe-bomb drop icon is accepted on the episodic builds.
-    void InstallPipeBombDropIconSupport()
-    {
-        if (!Loader::Enabled("PipeBombDropIconSupport"))
-            return;
-
-        auto pattern = find_pattern("83 7D 18 1C 75 14");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(-9), 9, true);
-    }
-
-    // EpisodicVehicleSupport: the episode test at each site is deleted, so every
-    // vehicle check that is gated on "not episodic" runs on the episodic builds.
-    //
-    // Two parts, because the original's handler has two:
-    //   * 1.0.7.0 and 1.0.8.0 each retarget the absolute operand of two
-    //     `cmp dword ptr [episode], 2` sites (the first also a `jnz`, the second a
-    //     `jne rel32`) at this module's episode word. The original's recovered table
-    //     does that as four *RVA installs* -- a rebased pointer store at a fixed RVA
-    //     (build 8: 0x21500 and 0x7D91AE; build 9: 0x95040 and 0x684ABE), not a
-    //     pattern hit. The store value proves it: it is this module's own pointer,
-    //     which a signature could not name. Spelling the game's absolute operand out
-    //     in a signature would also bake in the preferred-base VA, which the loader
-    //     rewrites on every run (the executable carries DYNAMIC_BASE), so such an
-    //     arm could never match the live image and would never fire in the game;
-    //   * every gated build then gets the 23 signature-driven NOP rows, in the
-    //     original's row order. The first two rows write every hit of a multi-hit
-    //     scan (two each on this image) and two rows carry a second window.
-    void InstallEpisodicVehicleSupport()
-    {
-        if (!Loader::Enabled("EpisodicVehicleSupport"))
-            return;
-
-        const auto flag = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&zpatch_episode_flag));
-        struct FlagStore final
-        {
-            Build build;
-            uint32_t rva;
-        };
-        static constexpr FlagStore kEpisodeFlagStores[] = {
-            { Build::v1070, 0x021500u },
-            { Build::v1070, 0x7D91AEu },
-            { Build::v1080, 0x095040u },
-            { Build::v1080, 0x684ABEu },
-        };
-        for (const auto& store : kEpisodeFlagStores)
-        {
-            if (Loader::Current() != store.build)
-                continue;
-
-            auto* const site =
-                reinterpret_cast<std::byte*>(Game::Get().ImageBase() + store.rva);
-            injector::WriteMemory<uint32_t>(site, flag, true);
-            Bodies::RegisterPublished(reinterpret_cast<uintptr_t>(site));
-        }
-
-        // Row 1: the `jl` of a loop that only runs on the episodic builds. Two
-        // sites, both rewritten (the original writes hits[0] and hits[1]).
-        auto pattern = find_pattern<2>("7C 18 0F BF 4E 2E");
-        for (size_t hit = 0; hit < pattern.size(); ++hit)
-            injector::MakeNOP(pattern.get(hit).get<std::byte>(-6), 8, true);
-
-        // Row 2: the same `cmp [episode], 2` shape twice in two functions.
-        pattern = find_pattern<2>("83 3D ?? ?? ?? ?? 02 75 17 F3 0F 10 44 24 08");
-        for (size_t hit = 0; hit < pattern.size(); ++hit)
-            injector::MakeNOP(pattern.get(hit).get<std::byte>(0), 9, true);
-
-        // Rows 3-20: one window each.
-        pattern = find_pattern("39 35 ?? ?? ?? ?? 75 0E 80 3D");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(6), 2, true);
-
-        pattern = find_pattern("74 17 83 3D ?? ?? ?? ?? 02 75 0E F3 0F 10 05");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(2), 9, true);
-
-        pattern = find_pattern("7C 22 83 F8 28 75 1D");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 2, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 0F 8C 0E 05 00 00");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 13, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 75 08 3B 05");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 75 17 F3 0F 10 44 24 0C");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 75 1F 8B 44 24 04");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 75 21 8B 96 20 08 00 00");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 75 24 F6 87 6C 02 00 00 04");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 75 35 0F BF 46 2E");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 75 38 8B 16");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 7C 11 8B 4E");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(7), 2, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 7C 1F 8B");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(7), 2, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 7C 26 8B 85 40 0B 00 00");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 7C 35 0F BF 43 2E");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 9, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 7C 43");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(7), 2, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 7C 4A 0F BF 46 2E");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(0), 13, true);
-
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 89 44 24 38");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(11), 6, true);
-
-        // Row 21: the branch and the byte it would skip to (a second window at +17).
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 8A 0D");
-        if (!pattern.empty())
-        {
-            auto* match = pattern.get_first<std::byte>(0);
-            injector::MakeNOP(match, 7, true);
-            injector::MakeNOP(match + 17, 2, true);
-        }
-
-        // Row 22: the float load's branch.
-        pattern = find_pattern("83 3D ?? ?? ?? ?? 02 F3 0F 10 05 ?? ?? ?? ?? F3 0F 11 44 24 20 75 4C");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(21), 2, true);
-
-        // Row 23: the loop head and its `jl` (a second window at +10).
-        pattern = find_pattern("8B 56 04 8B 4A 0C 89 4C 24 1C 7C 18");
-        if (!pattern.empty())
-        {
-            auto* match = pattern.get_first<std::byte>(0);
-            injector::MakeNOP(match - 15, 7, true);
-            injector::MakeNOP(match + 10, 2, true);
-        }
-    }
 
     // TeleportProtection: the entry becomes `ret 8`. The original writes exactly three
     // bytes -- C2 08 over the opcode and 00 over the byte after the immediate -- and
@@ -1603,44 +1434,42 @@ export void RegisterVehicles()
     // CitizenIV.exe at the same point; none of it writes an image byte.
     ResolveSteerHelpers();
 
-    Loader::AddPublish(Loader::EntryVehicles, 0, PublishCollisionDeadlockFix);
-    Loader::AddPublish(Loader::EntryVehicles, 1, PublishCarPartsShadowFix);
-    Loader::AddPublish(Loader::EntryVehicles, 2, PublishCarDynamicShadowFix);
-    Loader::AddPublish(Loader::EntryVehicles, 3, PublishForceCarHeadlightShadows);
-    Loader::AddPublish(Loader::EntryVehicles, 4, PublishHighFPSBikePhysicsFix);
-    Loader::AddPublish(Loader::EntryVehicles, 5, PublishDualVehicleHeadlights);
-    Loader::AddPublish(Loader::EntryVehicles, 6, PublishMovingSteeringWheelSupport);
-    Loader::AddPublish(Loader::EntryVehicles, 7, PublishShakingEngineBlock);
-    Loader::AddPublish(Loader::EntryVehicles, 8, PublishMovingPlaneParts);
-    Loader::AddPublish(Loader::EntryVehicles, 9, PublishGarageModelFix);
-    Loader::AddPublish(Loader::EntryVehicles, 10, PublishNoLiveryLimit);
-    Loader::AddPublish(Loader::EntryVehicles, 11, PublishFreezeCarFix);
+    Loader::AddPublish(Loader::Entry::Vehicles, 0, PublishCollisionDeadlockFix);
+    Loader::AddPublish(Loader::Entry::Vehicles, 1, PublishCarPartsShadowFix);
+    Loader::AddPublish(Loader::Entry::Vehicles, 2, PublishCarDynamicShadowFix);
+    Loader::AddPublish(Loader::Entry::Vehicles, 3, PublishForceCarHeadlightShadows);
+    Loader::AddPublish(Loader::Entry::Vehicles, 4, PublishHighFPSBikePhysicsFix);
+    Loader::AddPublish(Loader::Entry::Vehicles, 5, PublishDualVehicleHeadlights);
+    Loader::AddPublish(Loader::Entry::Vehicles, 6, PublishMovingSteeringWheelSupport);
+    Loader::AddPublish(Loader::Entry::Vehicles, 7, PublishShakingEngineBlock);
+    Loader::AddPublish(Loader::Entry::Vehicles, 8, PublishMovingPlaneParts);
+    Loader::AddPublish(Loader::Entry::Vehicles, 9, PublishGarageModelFix);
+    Loader::AddPublish(Loader::Entry::Vehicles, 10, PublishNoLiveryLimit);
+    Loader::AddPublish(Loader::Entry::Vehicles, 11, PublishFreezeCarFix);
 
-    Loader::AddInstall(Loader::EntryVehicles, 0, InstallCarDecalsFix);
-    Loader::AddInstall(Loader::EntryVehicles, 1, InstallCollisionDeadlockFix);
-    Loader::AddInstall(Loader::EntryVehicles, 2, InstallCarPartsShadowFix);
-    Loader::AddInstall(Loader::EntryVehicles, 3, InstallCarDynamicShadowFix);
+    Loader::AddInstall(Loader::Entry::Vehicles, 0, InstallCarDecalsFix);
+    Loader::AddInstall(Loader::Entry::Vehicles, 1, InstallCollisionDeadlockFix);
+    Loader::AddInstall(Loader::Entry::Vehicles, 2, InstallCarPartsShadowFix);
+    Loader::AddInstall(Loader::Entry::Vehicles, 3, InstallCarDynamicShadowFix);
     // After the shadow arm: the original's ForceCarHeadlightShadows handler runs
     // after the CarDynamicShadowFix block, and its tail restores what that block
     // rewrites -- so with both keys on, the restore is what the game sees.
-    Loader::AddInstall(Loader::EntryVehicles, 4, InstallForceCarHeadlightShadows);
-    Loader::AddInstall(Loader::EntryVehicles, 5, InstallInfiniteCarBottomDistance);
-    Loader::AddInstall(Loader::EntryVehicles, 6, InstallReversingLightFix);
-    Loader::AddInstall(Loader::EntryVehicles, 7, InstallBikeFeetFix);
-    Loader::AddInstall(Loader::EntryVehicles, 8, InstallBikePhoneAnimsFix);
-    Loader::AddInstall(Loader::EntryVehicles, 9, InstallEpisodicVehicleSupport);
-    Loader::AddInstall(Loader::EntryVehicles, 10, InstallHighFPSBikePhysicsFix);
-    Loader::AddInstall(Loader::EntryVehicles, 11, InstallPipeBombDropIconSupport);
-    Loader::AddInstall(Loader::EntryVehicles, 12, InstallTeleportProtection);
-    Loader::AddInstall(Loader::EntryVehicles, 13, InstallDualVehicleHeadlights);
-    Loader::AddInstall(Loader::EntryVehicles, 14, InstallIncreaseVehicleModelLimit);
-    Loader::AddInstall(Loader::EntryVehicles, 15, InstallIncreaseVehicleStructLimit);
-    Loader::AddInstall(Loader::EntryVehicles, 16, InstallMovingSteeringWheelSupport);
-    Loader::AddInstall(Loader::EntryVehicles, 17, InstallShakingEngineBlock);
-    Loader::AddInstall(Loader::EntryVehicles, 18, InstallMovingPlaneParts);
-    Loader::AddInstall(Loader::EntryVehicles, 19, InstallGarageModelFix);
-    Loader::AddInstall(Loader::EntryVehicles, 20, InstallNoLiveryLimit);
-    Loader::AddInstall(Loader::EntryVehicles, 21, InstallFreezeCarFix);
+    Loader::AddInstall(Loader::Entry::Vehicles, 4, InstallForceCarHeadlightShadows);
+    Loader::AddInstall(Loader::Entry::Vehicles, 5, InstallInfiniteCarBottomDistance);
+    Loader::AddInstall(Loader::Entry::Vehicles, 6, InstallReversingLightFix);
+    Loader::AddInstall(Loader::Entry::Vehicles, 7, InstallBikeFeetFix);
+    Loader::AddInstall(Loader::Entry::Vehicles, 8, InstallBikePhoneAnimsFix);
+    Loader::AddInstall(Loader::Entry::Vehicles, 10, InstallHighFPSBikePhysicsFix);
+    Loader::AddInstall(Loader::Entry::Vehicles, 12, InstallTeleportProtection);
+    Loader::AddInstall(Loader::Entry::Vehicles, 13, InstallDualVehicleHeadlights);
+    Loader::AddInstall(Loader::Entry::Vehicles, 14, InstallIncreaseVehicleModelLimit);
+    Loader::AddInstall(Loader::Entry::Vehicles, 15, InstallIncreaseVehicleStructLimit);
+    Loader::AddInstall(Loader::Entry::Vehicles, 16, InstallMovingSteeringWheelSupport);
+    Loader::AddInstall(Loader::Entry::Vehicles, 17, InstallShakingEngineBlock);
+    Loader::AddInstall(Loader::Entry::Vehicles, 18, InstallMovingPlaneParts);
+    Loader::AddInstall(Loader::Entry::Vehicles, 19, InstallGarageModelFix);
+    Loader::AddInstall(Loader::Entry::Vehicles, 20, InstallNoLiveryLimit);
+    Loader::AddInstall(Loader::Entry::Vehicles, 21, InstallFreezeCarFix);
 
     // The bodies' recovered VAs, so the dump expresses each arm's branch in the
     // original's coordinates. The three steer keys all jump to the same two detour

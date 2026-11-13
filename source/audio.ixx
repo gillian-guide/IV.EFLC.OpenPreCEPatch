@@ -240,29 +240,6 @@ namespace
     // six, so the arm does too.
     constexpr std::byte kMinimizePauseTick{ 0x06 };
 
-    // One site of the episode gate: the recovered signature, the offset from its
-    // anchor the NOP starts at, and how many bytes it covers. A row NOPs either
-    // the comparison itself or the branch after the six-byte `cmp [episode],2`.
-    struct EpisodeGateSite final
-    {
-        std::string_view signature;
-        ptrdiff_t offset;
-        size_t length;
-    };
-
-    // EpisodicWeaponSupport: the eight episode gates in front of the episodic
-    // weapons. The key's build mask is the original's ten-build set (options.inc),
-    // so the arm needs no gate of its own.
-    constexpr EpisodeGateSite kEpisodicWeaponSites[] = {
-        { "75 5B 83 3D ? ? ? ? 00 75", 0, 2 },
-        { "83 3D ? ? ? ? 02 0F 85 8C 01 00 00", 7, 6 },
-        { "83 3D ? ? ? ? 02 0F 8C D5 00", 0, 13 },
-        { "83 3D ? ? ? ? 02 75 20 8B CD E8", 7, 2 },
-        { "83 3D ? ? ? ? 02 75 50", 7, 2 },
-        { "83 3D ? ? ? ? 02 7C 21 8B 44 24 0C", 7, 2 },
-        { "83 3D ? ? ? ? 02 7C 32 8B 41", 7, 2 },
-        { "83 3D ? ? ? ? 02 7C 7D 8B 4C 24 0C", 7, 2 },
-    };
 
     // The two movd replacements: `cvtsi2ss xmmN, eax` becomes `movd xmmN, eax`,
     // which moves the stored int bit-for-bit. Four bytes each; the bytes around
@@ -430,43 +407,6 @@ namespace
             injector::MakeNOP(pattern.get_first(0), 2, true);
     }
 
-    void InstallEpisodicWeaponSupport()
-    {
-        if (!Loader::Enabled("EpisodicWeaponSupport"))
-            return;
-
-        for (const auto& site : kEpisodicWeaponSites)
-        {
-            auto pattern = find_pattern(site.signature);
-            if (!pattern.empty())
-                injector::MakeNOP(pattern.get_first(site.offset), site.length, true);
-        }
-    }
-
-    // PoliceEpisodicWeaponSupport: the police-vehicle episode gate; the two-byte
-    // branch after the `cmp [episode],2` at the anchor is NOPed.
-    void InstallPoliceEpisodicWeaponSupport()
-    {
-        if (!Loader::Enabled("PoliceEpisodicWeaponSupport"))
-            return;
-
-        auto pattern = find_pattern("39 2D ? ? ? ? 75 3E");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(6), 2, true);
-    }
-
-    // TBoGTHeliHeightLimit: the helicopter ceiling's episode gate -- the branch
-    // after the `cmp [episode],2` at the anchor is NOPed, so the ceiling applies
-    // on every episode.
-    void InstallTBoGTHeliHeightLimit()
-    {
-        if (!Loader::Enabled("TBoGTHeliHeightLimit"))
-            return;
-
-        auto pattern = find_pattern("83 3D ? ? ? ? 02 7C 0A F3 0F");
-        if (!pattern.empty())
-            injector::MakeNOP(pattern.get_first(7), 2, true);
-    }
 
     // PedModelsInCutscenesFix: the cutscene code's player-model check becomes the
     // body, which re-derives the player model's index through the shared resolver
@@ -647,21 +587,18 @@ export void RegisterAudio()
     zpatch_audio_cleanup_bool = RegisteredBody(0x1005DE80u);
     zpatch_audio_call_hash = RegisteredBody(0x1005B150u);
 
-    Loader::AddPublish(Loader::EntryAudio, 0, PublishRestoreDeathMusic);
-    Loader::AddPublish(Loader::EntryAudio, 1, PublishMouseFix);
+    Loader::AddPublish(Loader::Entry::Audio, 0, PublishRestoreDeathMusic);
+    Loader::AddPublish(Loader::Entry::Audio, 1, PublishMouseFix);
 
-    Loader::AddInstall(Loader::EntryAudio, 0, InstallAllowHashesForIDE);
-    Loader::AddInstall(Loader::EntryAudio, 1, InstallCombinedRadioFreezeFix);
-    Loader::AddInstall(Loader::EntryAudio, 2, InstallBetterMPSync);
-    Loader::AddInstall(Loader::EntryAudio, 3, InstallIncreasePtrNodes);
-    Loader::AddInstall(Loader::EntryAudio, 4, InstallNoPhysicsSleep);
-    Loader::AddInstall(Loader::EntryAudio, 5, InstallDoNotPauseOnMinimize);
-    Loader::AddInstall(Loader::EntryAudio, 6, InstallEpisodicWeaponSupport);
-    Loader::AddInstall(Loader::EntryAudio, 7, InstallPoliceEpisodicWeaponSupport);
-    Loader::AddInstall(Loader::EntryAudio, 8, InstallTBoGTHeliHeightLimit);
-    Loader::AddInstall(Loader::EntryAudio, 9, InstallPedModelsInCutscenesFix);
-    Loader::AddInstall(Loader::EntryAudio, 10, InstallRestoreDeathMusic);
-    Loader::AddInstall(Loader::EntryAudio, 11, InstallMouseFix);
+    Loader::AddInstall(Loader::Entry::Audio, 0, InstallAllowHashesForIDE);
+    Loader::AddInstall(Loader::Entry::Audio, 1, InstallCombinedRadioFreezeFix);
+    Loader::AddInstall(Loader::Entry::Audio, 2, InstallBetterMPSync);
+    Loader::AddInstall(Loader::Entry::Audio, 3, InstallIncreasePtrNodes);
+    Loader::AddInstall(Loader::Entry::Audio, 4, InstallNoPhysicsSleep);
+    Loader::AddInstall(Loader::Entry::Audio, 5, InstallDoNotPauseOnMinimize);
+    Loader::AddInstall(Loader::Entry::Audio, 9, InstallPedModelsInCutscenesFix);
+    Loader::AddInstall(Loader::Entry::Audio, 10, InstallRestoreDeathMusic);
+    Loader::AddInstall(Loader::Entry::Audio, 11, InstallMouseFix);
 }
 
 // ---------------------------------------------------------------------------

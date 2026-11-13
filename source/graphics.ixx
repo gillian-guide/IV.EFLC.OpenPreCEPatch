@@ -647,27 +647,27 @@ namespace
 // tier is about to overwrite, and the install tier owns the gate and the writes.
 export void RegisterGraphics()
 {
-    Loader::AddPublish(Loader::EntryGraphics, 0, PublishBuildingDynamicShadows);
-    Loader::AddPublish(Loader::EntryGraphics, 1, PublishCutsceneFixes);
-    Loader::AddPublish(Loader::EntryGraphics, 2, PublishEmissiveLerpFix);
-    Loader::AddPublish(Loader::EntryGraphics, 3, PublishHighQualityReflections);
-    Loader::AddPublish(Loader::EntryGraphics, 4, PublishSuperLODFix);
+    Loader::AddPublish(Loader::Entry::Graphics, 0, PublishBuildingDynamicShadows);
+    Loader::AddPublish(Loader::Entry::Graphics, 1, PublishCutsceneFixes);
+    Loader::AddPublish(Loader::Entry::Graphics, 2, PublishEmissiveLerpFix);
+    Loader::AddPublish(Loader::Entry::Graphics, 3, PublishHighQualityReflections);
+    Loader::AddPublish(Loader::Entry::Graphics, 4, PublishSuperLODFix);
 
-    Loader::AddInstall(Loader::EntryGraphics, 0, InstallBorderlessWindowed);
-    Loader::AddInstall(Loader::EntryGraphics, 1, InstallBuildingAlphaFix);
-    Loader::AddInstall(Loader::EntryGraphics, 2, InstallBuildingDynamicShadows);
-    Loader::AddInstall(Loader::EntryGraphics, 3, InstallCutsceneFixes);
-    Loader::AddInstall(Loader::EntryGraphics, 4, InstallEmissiveLerpFix);
-    Loader::AddInstall(Loader::EntryGraphics, 5, InstallForceDynamicShadowsEverywhere);
-    Loader::AddInstall(Loader::EntryGraphics, 6, InstallForceShadowsOnObjects);
-    Loader::AddInstall(Loader::EntryGraphics, 7, InstallHighQualityReflections);
-    Loader::AddInstall(Loader::EntryGraphics, 8, InstallImprovedShaderStreaming);
-    Loader::AddInstall(Loader::EntryGraphics, 9, InstallNoImpostorHeightCutoff);
-    Loader::AddInstall(Loader::EntryGraphics, 10, InstallNoLODLightHeightCutoff);
-    Loader::AddInstall(Loader::EntryGraphics, 11, InstallRemoveBoundingBoxCulling);
-    Loader::AddInstall(Loader::EntryGraphics, 12, InstallRemoveStaticCarShadows);
-    Loader::AddInstall(Loader::EntryGraphics, 13, InstallRemoveStaticCutsceneCarShadows);
-    Loader::AddInstall(Loader::EntryGraphics, 14, InstallSuperLODFix);
+    Loader::AddInstall(Loader::Entry::Graphics, 0, InstallBorderlessWindowed);
+    Loader::AddInstall(Loader::Entry::Graphics, 1, InstallBuildingAlphaFix);
+    Loader::AddInstall(Loader::Entry::Graphics, 2, InstallBuildingDynamicShadows);
+    Loader::AddInstall(Loader::Entry::Graphics, 3, InstallCutsceneFixes);
+    Loader::AddInstall(Loader::Entry::Graphics, 4, InstallEmissiveLerpFix);
+    Loader::AddInstall(Loader::Entry::Graphics, 5, InstallForceDynamicShadowsEverywhere);
+    Loader::AddInstall(Loader::Entry::Graphics, 6, InstallForceShadowsOnObjects);
+    Loader::AddInstall(Loader::Entry::Graphics, 7, InstallHighQualityReflections);
+    Loader::AddInstall(Loader::Entry::Graphics, 8, InstallImprovedShaderStreaming);
+    Loader::AddInstall(Loader::Entry::Graphics, 9, InstallNoImpostorHeightCutoff);
+    Loader::AddInstall(Loader::Entry::Graphics, 10, InstallNoLODLightHeightCutoff);
+    Loader::AddInstall(Loader::Entry::Graphics, 11, InstallRemoveBoundingBoxCulling);
+    Loader::AddInstall(Loader::Entry::Graphics, 12, InstallRemoveStaticCarShadows);
+    Loader::AddInstall(Loader::Entry::Graphics, 13, InstallRemoveStaticCutsceneCarShadows);
+    Loader::AddInstall(Loader::Entry::Graphics, 14, InstallSuperLODFix);
 }
 
 // ---------------------------------------------------------------------------

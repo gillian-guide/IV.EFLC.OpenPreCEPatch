@@ -22,6 +22,7 @@ import audio;
 import misc;
 import menu;
 import ooc;
+import episodic;
 
 // The write-set dump: load a copy of a game image into this process, apply the
 // image's own relocations to it (which is what the game's loader does), run the
@@ -587,6 +588,7 @@ int main(int argc, char** argv)
     RegisterMisc();
     RegisterMenu();
     RegisterOoc();
+    RegisterEpisodic();
 
     if (perOption)
     {

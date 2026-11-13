@@ -1003,21 +1003,21 @@ namespace
 // bytes, the install tier owns the gate.
 export void RegisterMisc()
 {
-    Loader::AddPublish(Loader::EntryMisc, 0, PublishDrivebyFOVFix);
-    Loader::AddPublish(Loader::EntryMisc, 1, PublishSpeedupBugFix);
-    Loader::AddPublish(Loader::EntryMisc, 2, PublishPatch4RemoveModChecks);
-    Loader::AddPublish(Loader::EntryMisc, 3, PublishCopSirensFlag);
-    Loader::AddPublish(Loader::EntryMisc, 4, PublishPopupHeadlightsFlag);
+    Loader::AddPublish(Loader::Entry::Misc, 0, PublishDrivebyFOVFix);
+    Loader::AddPublish(Loader::Entry::Misc, 1, PublishSpeedupBugFix);
+    Loader::AddPublish(Loader::Entry::Misc, 2, PublishPatch4RemoveModChecks);
+    Loader::AddPublish(Loader::Entry::Misc, 3, PublishCopSirensFlag);
+    Loader::AddPublish(Loader::Entry::Misc, 4, PublishPopupHeadlightsFlag);
 
-    Loader::AddInstall(Loader::EntryMisc, 0, InstallMiscFixes);
-    Loader::AddInstall(Loader::EntryMisc, 1, InstallPatch6and7RemoveModChecks);
-    Loader::AddInstall(Loader::EntryMisc, 2, InstallDrivebyFOVFix);
-    Loader::AddInstall(Loader::EntryMisc, 3, InstallSpeedupBugFix);
-    Loader::AddInstall(Loader::EntryMisc, 4, InstallPatch4RemoveModChecks);
-    Loader::AddInstall(Loader::EntryMisc, 5, InstallCopSirensFlag);
-    Loader::AddInstall(Loader::EntryMisc, 6, InstallPopupHeadlightsFlag);
-    Loader::AddInstall(Loader::EntryMisc, 7, InstallVRAMFix);
-    Loader::AddInstall(Loader::EntryMisc, 8, InstallFixPCIDKickbug);
+    Loader::AddInstall(Loader::Entry::Misc, 0, InstallMiscFixes);
+    Loader::AddInstall(Loader::Entry::Misc, 1, InstallPatch6and7RemoveModChecks);
+    Loader::AddInstall(Loader::Entry::Misc, 2, InstallDrivebyFOVFix);
+    Loader::AddInstall(Loader::Entry::Misc, 3, InstallSpeedupBugFix);
+    Loader::AddInstall(Loader::Entry::Misc, 4, InstallPatch4RemoveModChecks);
+    Loader::AddInstall(Loader::Entry::Misc, 5, InstallCopSirensFlag);
+    Loader::AddInstall(Loader::Entry::Misc, 6, InstallPopupHeadlightsFlag);
+    Loader::AddInstall(Loader::Entry::Misc, 7, InstallVRAMFix);
+    Loader::AddInstall(Loader::Entry::Misc, 8, InstallFixPCIDKickbug);
 
     // The bodies' recovered VAs, so the dump expresses each arm's branch in the
     // original's coordinates.

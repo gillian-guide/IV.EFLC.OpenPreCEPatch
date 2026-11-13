@@ -17,6 +17,7 @@ import audio;
 import misc;
 import menu;
 import ooc;
+import episodic;
 
 extern "C" __declspec(dllexport) void InitializeASI();
 
@@ -78,6 +79,9 @@ namespace
         // `RestoreDeathMusic == 1 || sub_10052380()` OR.
         RegisterMenu();
         RegisterOoc();
+        // The section modules register their own arms with the position the arm
+        // had in the old modules; the ordering lives in Loader, not here.
+        RegisterEpisodic();
         Loader::Run();
 
 #ifdef ZP_TRACE

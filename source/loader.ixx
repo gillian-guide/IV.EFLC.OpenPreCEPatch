@@ -41,18 +41,18 @@ export namespace Loader
     // module `Register*` functions. The names are historical: they stay after a
     // module is merged into a section module, because an arm keeps the entry it
     // was registered from when it moves.
-    enum Entry : int
+    enum class Entry : int
     {
-        EntryStability = 0,
-        EntryVehicles,
-        EntryUselessChecks,
-        EntryGraphics,
-        EntryLauncher,
-        EntryLoading,
-        EntryAudio,
-        EntryMisc,
-        EntryMenu,
-        EntryOoc,
+        Stability = 0,
+        Vehicles,
+        UselessChecks,
+        Graphics,
+        Launcher,
+        Loading,
+        Audio,
+        Misc,
+        Menu,
+        Ooc,
     };
 
     // Publishes hand a site's original operands to a body before the site is
@@ -85,14 +85,14 @@ export namespace Loader
     // An arm is queued from its module's `Register*` function with the position
     // the original driver gave it: the entry it was registered from and its index
     // inside that entry.
-    inline void AddPublish(int entry, int index, void (*run)())
+    inline void AddPublish(Entry entry, int index, void (*run)())
     {
-        PublishArms().push_back({ entry, index, run });
+        PublishArms().push_back({ static_cast<int>(entry), index, run });
     }
 
-    inline void AddInstall(int entry, int index, void (*run)())
+    inline void AddInstall(Entry entry, int index, void (*run)())
     {
-        InstallArms().push_back({ entry, index, run });
+        InstallArms().push_back({ static_cast<int>(entry), index, run });
     }
 
     // An arm runs only when its key is on and the current build is in the key's
