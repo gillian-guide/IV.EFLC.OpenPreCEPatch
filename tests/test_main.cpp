@@ -303,8 +303,15 @@ namespace
 
     void TestLoads(const std::filesystem::path& asi)
     {
-        HMODULE module = LoadLibraryW(asi.c_str());
-        Check(module != nullptr, "load: the ASI loads", asi.string());
+        // Map the image as a data/image resource: the file loads and its resources are
+        // readable, but DllMain (and with it the game-startup path and its warnings) does
+        // not run. A plain LoadLibrary would raise the unsupported-version task dialog,
+        // which no headless CI runner can answer - it blocks there. The startup path is
+        // exercised by the game, not by the suite; this check proves the artifact is a
+        // loadable image. (The companion's xla_asi_load uses the same flags.)
+        HMODULE module = LoadLibraryExW(asi.c_str(), nullptr,
+            LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+        Check(module != nullptr, "load: the ASI image maps without running DllMain", asi.string());
         if (module == nullptr)
             return;
         FreeLibrary(module);
