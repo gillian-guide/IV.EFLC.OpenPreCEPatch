@@ -62,17 +62,6 @@ gfwl_stub 100054E0 ?GfwlStubBody@@YAXXZ 8
 rgsc_login_removed 10038550 ?RgscLoginRemovedBody@@YAXXZ 2
 benchmark_a 10005650 ?BenchmarkBodyA@@YAXXZ 12
 benchmark_b 10005670 ?BenchmarkBodyB@@YAXXZ 12
-savegame_fix_null 10038570 ?SavegameNullBody@@YAXXZ 2
-savegame_fix_close 10045580 ?SavegameCloseBody@@YAXXZ 7
-savegame_fix_copy 100455A0 ?SavegameCopyBody@@YAXXZ 28
-savegame_fix_mutex 100455E0 ?SavegameMutexBody@@YAXXZ 19
-# The four DFA file-API forwarders (source/launcher.ixx): `__cdecl` wrappers that
-# push the caller's arguments and call the kernel32 entry through the original's
-# IAT slot. The module has no IAT, so each `call ds:[â€¦]` reads a slot the arm fills
-# with the same function; the proof compares an absolute operand as a slot. The
-# fifth, close_handle (0x10004790), keeps its C++ rebuild: its original stream is an
-# EH4 frame (`__except_handler4`, scope table 0x10153FC0) with the funclet outside
-# the linear range.
 # The native-script call layer (source/native.ixx). Its two SEH entries,
 # sub_100038E0 (59 instructions) and sub_10003980 (52), are compiler output for a
 # C function with __try/__except and are rebuilt rather than transcribed; their

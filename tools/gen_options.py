@@ -69,7 +69,9 @@ REMOVED_KEYS = {
     # moved to XLivelessAddon
     "BorderlessWindowed",
     "DoNotPauseOnMinimize",
+    "LaunchWithPlayGTAIV",
     "LocalSettingsPath",
+    "SavegameFix",
     "SkipIntro",
     "SkipLauncher",
     "SkipMenu",
@@ -191,7 +193,7 @@ def main():
         print(f"skip: {INVENTORY} is absent, so the catalogue has nothing to be checked against")
         return
     rows = parse()
-    expected = 99 - len(REMOVED_KEYS)
+    expected = 99 - len(REMOVED_KEYS)  # 82: the 99-key original minus 17 removed/moved
     if len(rows) != expected:
         raise SystemExit(f"{len(rows)} option rows parsed, expected {expected} "
                          f"(the inventory layout changed)")

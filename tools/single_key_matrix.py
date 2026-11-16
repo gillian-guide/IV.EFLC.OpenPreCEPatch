@@ -18,7 +18,7 @@ Any other non-zero exit does.
     python tools/single_key_matrix.py --tsv build/single-key.tsv
 
 Exit status: 0 when every cell exits 0 except the documented one, 1 otherwise.
-This is a measurement tool, not a ctest: 9 x 84 process launches.
+This is a measurement tool, not a ctest: 9 x 82 process launches.
 """
 
 import argparse

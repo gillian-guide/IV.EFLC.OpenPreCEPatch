@@ -185,8 +185,6 @@ StartupTimeFix	0x477A42	68 00 C2 EC 80 68	6
 OverrideGTADatPath	0x493948	68 ? ? ? ? E8 ? ? ? ? 83 C4 04 E8 ? ? ? ? E8 ? ? ? ? E8	24
 SkipIntro	0x4A347E	89 91 ? ? ? ? 8D 44 24 ? 68 ? ? ? ? 50	16
 SkipMenu	0x47D240	83 F8 03 75 ? A1 ? ? ? ? 80 88 ? ? ? ? ? 84 DB 74 0A 6A 00 E8 ? ? ? ? 83 C4 04 5F 5E	33
-SavegameFix.a	0x61EDB5	75 ? 83 C1 01 83 C0 01 83 F9 04	10
-SavegameFix.b	0x61EBA1	8D 4C 24 18 51 6A 00 6A 0C 57	10
 # DrivebyFOVFix: the site's `movss xmm0,[esi+60h]`; the install is the five-byte jump
 # that replaces it and the resume is the `subss xmm1, xmm2` at the anchor's +5.
 DrivebyFOVFix	0x85031F	F3 0F 10 46 60 F3 0F 5C CA	10
@@ -409,23 +407,6 @@ VSyncFix.1110.a	0x4072D4	8B 10 50 8B 82 A8 00 00 00 FF D0 83	12
 VSyncFix.1110.b	0x4073B9	8B 08 8B 51 0C 6A 01 6A 00 6A 00 6A 00 6A 00 50 FF D2 8B F0 81 FE ? ? ? ? 74	26
 VSyncFix.1120.a	0x407304	8B 10 50 8B 82 A8 00 00 00 FF D0 83	12
 VSyncFix.1120.b	0x4073E9	8B 08 8B 51 0C 6A 01 6A 00 6A 00 6A 00 6A 00 50 FF D2 8B F0 81 FE ? ? ? ? 74	26
-# LaunchWithPlayGTAIV (source/launcher.ixx): handler 0x100441B0's two launch
-# slots. The handler writes fixed RVAs per case; the arm scans the 16-byte slot
-# text and the two hits on each build below are exactly those RVAs, so the scan
-# is write-equivalent. The 16 bytes written are "PlayGTAIV.exe\0e\0"
-# (50 6C 61 79 47 54 41 49 56 2E 65 78 65 00 65 00), and only when a
-# PlayGTAIV.exe process is alive (sub_10003A10). 1.0.0.4 also carries two slots
-# and EFLC one, but the handler's switch has no case for those builds.
-LaunchWithPlayGTAIV.1000.a	0xDF043C	4C 61 75 6E 63 68 47 54 41 49 56 2E 65 78 65 00	16
-LaunchWithPlayGTAIV.1000.b	0xD8FA0C	4C 61 75 6E 63 68 47 54 41 49 56 2E 65 78 65 00	16
-LaunchWithPlayGTAIV.1040.a	0xDEA184	4C 61 75 6E 63 68 47 54 41 49 56 2E 65 78 65 00	16
-LaunchWithPlayGTAIV.1040.b	0xDDD8A0	4C 61 75 6E 63 68 47 54 41 49 56 2E 65 78 65 00	16
-LaunchWithPlayGTAIV.1060.a	0xDF8F40	4C 61 75 6E 63 68 47 54 41 49 56 2E 65 78 65 00	16
-LaunchWithPlayGTAIV.1060.b	0xE9D0D8	4C 61 75 6E 63 68 47 54 41 49 56 2E 65 78 65 00	16
-LaunchWithPlayGTAIV.1070.a	0xDF9F70	4C 61 75 6E 63 68 47 54 41 49 56 2E 65 78 65 00	16
-LaunchWithPlayGTAIV.1070.b	0xE9E118	4C 61 75 6E 63 68 47 54 41 49 56 2E 65 78 65 00	16
-LaunchWithPlayGTAIV.1080.a	0xE508F8	4C 61 75 6E 63 68 47 54 41 49 56 2E 65 78 65 00	16
-LaunchWithPlayGTAIV.1080.b	0xE5A5E4	4C 61 75 6E 63 68 47 54 41 49 56 2E 65 78 65 00	16
 
 # AddOptionsInMenu (source/menu.ixx): the key has no handler of its own, but its
 # chain runs the same recovered scans the two audio arms use: the writer's

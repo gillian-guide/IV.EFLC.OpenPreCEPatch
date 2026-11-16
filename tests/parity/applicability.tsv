@@ -71,7 +71,6 @@ OverrideGTADatPath	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 OverrideGTADatPathTo	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 RemoveGFWLUpdatePopup	loading	pattern	0x00000062	A	A	A	.	.	.	.	.	.	.	.	.
 RemoveRGSCLoginRequirement	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
-SavegameFix	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 StartupTimeFix	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 VSyncFix	loading	recovered	0x00049DC0	.	R	.	R	R	R	.	R	R	R	.	R
 CopSirensFlag	misc	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
@@ -82,4 +81,3 @@ Patch7RemoveModChecks	misc	recovered	0x00000180	.	.	.	R	.	R	.	.	.	.	.	.
 PopupHeadlightsFlag	misc	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 SpeedupBugFix	misc	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 DebugPrintSpawns	misc	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
-LaunchWithPlayGTAIV	misc	recovered	0x000003A2	R	.	R	R	.	R	R	.	.	.	.	.

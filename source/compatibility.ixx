@@ -25,11 +25,9 @@ import options;
 import patch;
 import shared;
 
-// COMPATIBILITY: NewFilesCompatibility, NewSavesCompatibility, SavegameFix,
-// GFWLProtectionDisabler and SteamAchievements. `LaunchWithPlayGTAIV` is this
-// section's sixth key; its launcher string-slot subsystem is the `launcher`
-// module. The old `steam` module is the achievement bridge of the
-// SteamAchievements arm and lives here now.
+// COMPATIBILITY: NewFilesCompatibility, NewSavesCompatibility,
+// GFWLProtectionDisabler and SteamAchievements. The old `steam` module is the
+// achievement bridge of the SteamAchievements arm and lives here now.
 export namespace Compatibility
 {
     void Prepare();
@@ -39,7 +37,6 @@ export namespace Compatibility
 
     void InstallNewFilesCompatibility();
     void InstallNewSavesCompatibility();
-    void InstallSavegameFix();
     void InstallGFWLProtectionDisabler();
     void InstallSteamAchievements();
 }
@@ -90,21 +87,12 @@ extern "C"
     uint8_t zpatch_new_saves_force_read = 0;    // byte_1015AD98: chunk 9 has the newer size
     uint8_t zpatch_new_saves_new_chunk16 = 0;   // byte_1015AD9A: chunk 16 has the newer size
     uint8_t zpatch_new_saves_extra_block = 0;   // byte_1015AD99: chunk 13 has the newer size
-
-    // SavegameFix's two imports: the original calls them through its own IAT
-    // slots, so the bodies call through these published addresses.
-    uintptr_t zpatch_savegame_close_handle = 0;   // &CloseHandle
-    uintptr_t zpatch_savegame_create_mutex = 0;   // &CreateMutexA
 }
 
 // The transcribed bodies are defined in the tail of this file. MSVC rejects a
 // __declspec(naked) declaration (C2488), so the readable code above them names
 // each body through a plain prototype; only the definition in the tail keeps the
 // attribute.
-static void SavegameNullBody();
-static void SavegameCloseBody();
-static void SavegameMutexBody();
-static void SavegameCopyBody();
 static void NewfilesRegisterBody();
 static void NewSavesReadHook();
 static void NewSavesSecondLoadHook();
@@ -166,18 +154,6 @@ namespace Compatibility
 {
     void Prepare()
     {
-        // SavegameFix's two imports: the original calls them through its own IAT
-        // slots, so the bodies call through these published addresses.
-        zpatch_savegame_close_handle = reinterpret_cast<uintptr_t>(&CloseHandle);
-        zpatch_savegame_create_mutex = reinterpret_cast<uintptr_t>(&CreateMutexA);
-
-        // The savegame bodies branch to the game's own functions, so they carry
-        // their recovered VAs like every other branch target.
-        Bodies::Register(reinterpret_cast<uintptr_t>(&SavegameNullBody), 0x10038570u);
-        Bodies::Register(reinterpret_cast<uintptr_t>(&SavegameCloseBody), 0x10045580u);
-        Bodies::Register(reinterpret_cast<uintptr_t>(&SavegameCopyBody), 0x100455A0u);
-        Bodies::Register(reinterpret_cast<uintptr_t>(&SavegameMutexBody), 0x100455E0u);
-
         // NewFilesCompatibility's registration tail (transcribed) and its two
         // update bodies (rebuilt, so they carry no proof row).
         Bodies::Register(reinterpret_cast<uintptr_t>(&NewfilesRegisterBody), 0x10051600u);
@@ -195,15 +171,6 @@ namespace Compatibility
 }
 
 // The savegame-load converter's walk, its helpers and its test-only seam.
-
-// The inline assembler refuses `call memcpy` (it is a compiler intrinsic), so the
-// copy path calls this thin wrapper instead; the original calls the CRT directly.
-// The call shape is the same (`call imm`), the caller cleans the three arguments,
-// and the copy itself is the CRT's.
-static void __cdecl SavegameCopyBlock(void* destination, const void* source, std::size_t size)
-{
-    std::memcpy(destination, source, size);
-}
 
     // The original's gate: NewFilesCompatibility is skipped entirely when GTAC.dll
     // or JacksIVFixes.asi is loaded, because both install the same feature.
@@ -759,38 +726,6 @@ namespace Compatibility
             (void)Steam::Install();
     }
 
-    // SavegameFix: two anchors, eleven call retargets and one two-byte NOP, in
-    // the original handler's write order. The call displacements are excluded
-    // from the parity comparison; the NOP is not.
-    void InstallSavegameFix()
-    {
-        if (!Loader::Enabled("SavegameFix"))
-            return;
-
-        auto pattern = find_pattern("75 ? 83 C1 01 83 C0 01 83 F9 04");
-        if (!pattern.empty())
-        {
-            auto* match = pattern.get_first<std::byte>(0);
-            injector::MakeCALL(match - 73, reinterpret_cast<void*>(&SavegameCloseBody), true);
-            injector::MakeCALL(match - 143, reinterpret_cast<void*>(&SavegameCopyBody), true);
-            injector::MakeCALL(match - 176, reinterpret_cast<void*>(&SavegameCopyBody), true);
-            injector::MakeCALL(match - 280, reinterpret_cast<void*>(&SavegameMutexBody), true);
-            injector::MakeCALL(match - 240, reinterpret_cast<void*>(&SavegameNullBody), true);
-            injector::MakeNOP(match, 2, true);
-        }
-
-        pattern = find_pattern("8D 4C 24 18 51 6A 00 6A 0C 57");
-        if (!pattern.empty())
-        {
-            auto* match = pattern.get_first<std::byte>(0);
-            injector::MakeCALL(match - 86, reinterpret_cast<void*>(&SavegameMutexBody), true);
-            injector::MakeCALL(match - 47, reinterpret_cast<void*>(&SavegameNullBody), true);
-            injector::MakeCALL(match + 10, reinterpret_cast<void*>(&SavegameCopyBody), true);
-            injector::MakeCALL(match + 90, reinterpret_cast<void*>(&SavegameCopyBody), true);
-            injector::MakeCALL(match + 128, reinterpret_cast<void*>(&SavegameCloseBody), true);
-        }
-    }
-
     void InstallNewFilesCompatibility()
     {
         if (!Loader::Enabled("NewFilesCompatibility") || ConflictingFileModulePresent())
@@ -1225,102 +1160,6 @@ namespace Steam
 // Transcribed bodies. Each is the original's instruction stream, kept as asm
 // because that is what it is; the code above is what installs it.
 // ---------------------------------------------------------------------------
-
-// sub_10038570, recovered VA 0x10038570 (2 instructions): the "no savegame"
-// path returns 0.
-static __declspec(naked) void SavegameNullBody()
-{
-    __asm
-    {
-        xor eax, eax
-        ret 8
-    }
-}
-
-// sub_10045580, recovered VA 0x10045580 (7 instructions): close the save
-// handle and report success.
-static __declspec(naked) void SavegameCloseBody()
-{
-    __asm
-    {
-        push ebp
-        mov ebp, esp
-        push DWORD PTR [ebp + 8]
-        call DWORD PTR [zpatch_savegame_close_handle]
-        xor eax, eax
-        pop ebp
-        ret 4
-    }
-}
-
-// sub_100455E0, recovered VA 0x100455E0 (19 instructions): create the save
-// mutex into the caller's handle slot; a null slot reports 1.
-static __declspec(naked) void SavegameMutexBody()
-{
-    __asm
-    {
-        push ebp
-        mov ebp, esp
-        push esi
-        mov esi, DWORD PTR [ebp + 0Ch]
-        test esi, esi
-        jz savegame_mutex_null
-        push 0
-        push 0
-        push 0
-        call DWORD PTR [zpatch_savegame_create_mutex]
-        mov DWORD PTR [esi], eax
-        xor eax, eax
-        pop esi
-        pop ebp
-        ret 8
-    savegame_mutex_null:
-        mov eax, 1
-        pop esi
-        pop ebp
-        ret 8
-    }
-}
-
-// sub_100455A0, recovered VA 0x100455A0 (28 instructions): the read/copy path.
-// It refuses when the destination buffer is smaller than the requested size
-// (0x8007007A), otherwise copies through the CRT and records the size.
-static __declspec(naked) void SavegameCopyBody()
-{
-    __asm
-    {
-        push ebp
-        mov ebp, esp
-        push esi
-        mov esi, DWORD PTR [ebp + 0Ch]
-        push edi
-        mov edi, DWORD PTR [ebp + 14h]
-        cmp DWORD PTR [edi], esi
-        jnb savegame_copy_room
-        mov DWORD PTR [edi], esi
-        mov eax, 8007007Ah
-        pop edi
-        pop esi
-        pop ebp
-        ret 14h
-    savegame_copy_room:
-        mov eax, DWORD PTR [ebp + 10h]
-        test eax, eax
-        jz savegame_copy_skip
-        push esi
-        push DWORD PTR [ebp + 8]
-        push eax
-        call SavegameCopyBlock
-        add esp, 0Ch
-    savegame_copy_skip:
-        mov DWORD PTR [edi], esi
-        xor eax, eax
-        pop edi
-        pop esi
-        pop ebp
-        ret 14h
-    }
-}
 
 // sub_10051600, recovered VA 0x10051600 (4 instructions): the registrar's
 // replacement tail. The original runs the registration between pushad/popad so

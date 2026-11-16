@@ -8,7 +8,6 @@ import compatibility;
 import episodic;
 import fixes;
 import graphics;
-import launcher;
 import loader;
 import misc;
 import multiplayer;
@@ -151,7 +150,6 @@ void Registration::RegisterAll()
         Graphics::InstallRemoveStaticCarShadows();
         Graphics::InstallRemoveStaticCutsceneCarShadows();
         Multiplayer::InstallSuperLODFix();
-        Launcher::Install();
         Performance::InstallFastLoading();
         Performance::InstallNoLoadingSleep();
         Multiplayer::InstallRemoveGFWLUpdatePopup();
@@ -160,7 +158,6 @@ void Registration::RegisterAll()
         Fixes::InstallVSyncFix();
         Stability::InstallBenchmarkFix();
         Misc::InstallOverrideGTADatPath();
-        Compatibility::InstallSavegameFix();
         Performance::InstallNewMemorySystem();
         Compatibility::InstallNewFilesCompatibility();
         Compatibility::InstallNewSavesCompatibility();

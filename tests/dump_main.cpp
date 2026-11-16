@@ -14,7 +14,6 @@ import patch;
 import shared;
 import native;
 import fixes;
-import launcher;
 import registration;
 
 // The write-set dump: load a copy of a game image into this process, apply the
@@ -531,7 +530,6 @@ int main(int argc, char** argv)
     std::filesystem::path ini = "ZolikaPatch.ini";
     bool perOption = false;
     bool oocSelfTest = false;
-    bool launcherProbe = false;
     std::string only;
     std::vector<std::string> failsafeMissing;
 
@@ -546,8 +544,6 @@ int main(int argc, char** argv)
             perOption = true;
         else if (argument == "--only" && index + 1 < argc)
             only = argv[++index];
-        else if (argument == "--launcher-probe")
-            launcherProbe = true;
         else if (argument == "--failsafe-missing" && index + 1 < argc)
             failsafeMissing.emplace_back(argv[++index]);
         else if (argument == "--ooc-selftest")
@@ -577,7 +573,7 @@ int main(int argc, char** argv)
     if (output.empty())
     {
         std::printf("usage: zp_dump [--exe <image>] [--build <compact>] [--per-option]\n"
-                    "               [--only <key>] [--launcher-probe] [--failsafe-missing <name>]\n"
+                    "               [--only <key>] [--failsafe-missing <name>]\n"
                     "               <out> [ini]\n"
                     "       zp_dump --ooc-selftest\n");
         return 2;
@@ -589,12 +585,6 @@ int main(int argc, char** argv)
 
     auto& game = Game::Get();
     game.AttachImage(reinterpret_cast<uintptr_t>(image.bytes), image.size, executable, {});
-    // The dump has no `PlayGTAIV.exe` parent process to find, so a cell that wants
-    // the launcher's write set asks for the launched-through-the-launcher answer
-    // explicitly (`--launcher-probe`, `zp_launcher_dump`). The default cells keep
-    // the gate off, which is the baseline's own convention for this arm.
-    if (launcherProbe)
-        Launcher::SetProbeOverride(1);
     Loader::Current() = FromId(static_cast<uint32_t>(std::atoi(build.c_str())));
     if (!std::filesystem::exists(ini))
         std::printf("no ini at %s: every option keeps its default\n", ini.string().c_str());

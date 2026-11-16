@@ -293,3 +293,20 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
   `parity_report.py 9` = 79 closed / 5 expected deltas / 0 open;
   `gen_applicability.py --check` up to date; `tools/dump_matrix.py` full cells
   diff 0 on all nine builds.
+
+## 2026-11-16 - the companion's launcher family and SavegameFix leave the surface
+
+- `SavegameFix` and `LaunchWithPlayGTAIV` join the removed/moved keys: the
+  savegame CRC bypass is XLivelessAddon's `[Options] SavegameFix`, and the whole
+  launcher family (`SkipLauncher`, `LegacyLauncher`, `LaunchWithPlayGTAIV`) is
+  the companion's too. `tools/gen_options.py` gains both in `REMOVED_KEYS`
+  (99 - 17 = 82 rows); the catalogue, the parity INI and the applicability
+  table are regenerated.
+- The SavegameFix arm is gone with everything only it used: the two IAT slots,
+  the four transcribed bodies and their proof/ABI rows, the install function and
+  its registration. `source/launcher.ixx` is deleted with `zp_launcher`,
+  `zp_launcher_dump`, `check_launcher_dump.py`, `verify_launcher_slots.py`, the
+  dump's `--launcher-probe` seam and the CMake module/target entries.
+- Proof: the per-option dump is identical apart from the `SavegameFix` cell
+  (missing 42 rows, extra 0, differing 0); `parity_report.py 9` = 77 closed /
+  5 expected deltas / 0 open; 35/35 ctest; 142-body proof / 0 failures.

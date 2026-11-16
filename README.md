@@ -8,11 +8,11 @@ It targets improvements to the pre-CE experience to bring it closer to the Compl
 general stability and the multiplayer experience. Options FusionFix already owns are gated off
 automatically when a FusionFix ASI is next to the game. It is meant to be used with
 [this fork of XLivelessAddon](https://github.com/gillian-guide/XLivelessAddon) as a companion,
-because some features belong there.
+because some features belong there: the launcher steps (`SkipLauncher`, `LegacyLauncher` and
+`LaunchWithPlayGTAIV`) and the savegame CRC32 bypass (`SavegameFix`).
 
 ## Features
 
-- Use a (non-SecuROM) launcher renamed to `PlayGTAIV.exe`.
 - Fix the 15+ second startup times before the game window even pops up, cut loading times in half or more, and get to the main menu faster.
 - Fix benchmark, Concrete Jungle, episode-switch, ROCKET, wanted-level, SuperLOD and SMPA60 crashes.
 - Fix the multiplayer crashes and freezes, including the modmenu crash methods.
