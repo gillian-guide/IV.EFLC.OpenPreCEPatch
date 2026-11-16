@@ -442,6 +442,130 @@ namespace
 // bytes, the install tier owns the gate and the writes. RegisterMenu() runs
 // after RegisterAudio(), because the AddOptionsInMenu install checks whether the
 // RestoreDeathMusic arm already owns the death-music hooks.
+// ---------------------------------------------------------------------------
+// SkipIntro and SkipMenu, moved from the load-time module with the FusionFix
+// gate they share.
+// ---------------------------------------------------------------------------
+
+extern "C"
+{
+    uint32_t zpatch_skip_intro_match = 0;    // dword_1015AD74
+    uint32_t zpatch_skip_menu_resume = 0;    // dword_10159348
+    uint8_t zpatch_skip_menu_flag = 0;       // byte_101A8450
+}
+
+static void SkipIntroBody();
+static void SkipMenuBody();
+
+// The original's FusionFix probe (sub_10003E20): a loaded
+// GTAIV.EFLC.FusionFix.asi whose two signature dwords do not match the known
+// build closes SkipIntro/SkipMenu (FusionFix owns those fixes there). A loaded
+// module probes the dwords unconditionally, as the original does.
+static bool FusionFixGateClosed()
+{
+    const HMODULE module = GetModuleHandleW(L"GTAIV.EFLC.FusionFix.asi");
+    if (module == nullptr)
+        return false;
+
+    const auto* image = reinterpret_cast<const std::byte*>(module);
+    uint32_t first{};
+    uint32_t second{};
+    std::memcpy(&first, image + 0x20D3, sizeof(first));
+    std::memcpy(&second, image + 0x20D7, sizeof(second));
+    return first != 0xC7C47589u || second != 0x00002446u;
+}
+
+namespace
+{
+    // SkipIntro: the anchor is the intro sequence's store; the arm jumps from the
+    // anchor's -6, and the body resumes at the anchor itself.
+    void InstallSkipIntro()
+    {
+        if (!Loader::Enabled("SkipIntro") || FusionFixGateClosed())
+            return;
+
+        auto pattern = find_pattern("89 91 ? ? ? ? 8D 44 24 ? 68 ? ? ? ? 50");
+        if (!pattern.empty())
+        {
+            auto* match = pattern.get_first<std::byte>(0);
+            zpatch_skip_intro_match = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match));
+            injector::MakeJMP(match - 6, reinterpret_cast<void*>(&SkipIntroBody), true);
+        }
+    }
+
+    // SkipMenu: each anchor's call is retargeted to the body, and the resume is
+    // the call's original target (the call's displacement is read before the
+    // site is overwritten).
+    void InstallSkipMenu()
+    {
+        if (!Loader::Enabled("SkipMenu") || FusionFixGateClosed())
+            return;
+
+        auto pattern = find_pattern("83 F8 03 75 ? A1 ? ? ? ? 80 88 ? ? ? ? ? 84 DB 74 0A 6A 00 E8 ? ? ? ? 83 C4 04 5F 5E");
+        if (!pattern.empty())
+        {
+            auto* match = pattern.get_first<std::byte>(0);
+            int32_t displacement{};
+            std::memcpy(&displacement, match + 24, sizeof(displacement));
+            zpatch_skip_menu_resume = static_cast<uint32_t>(
+                reinterpret_cast<uintptr_t>(match) + 28 + displacement);
+            injector::MakeCALL(match + 23, reinterpret_cast<void*>(&SkipMenuBody), true);
+        }
+
+        pattern = find_pattern("6A 00 E8 ? ? ? ? 83 C4 04 8B 8C 24 ? ? ? ? 5F 5E 5D 5B 33 CC E8 ? ? ? ? 81 C4 ? ? ? ? C3");
+        if (!pattern.empty())
+        {
+            auto* match = pattern.get_first<std::byte>(0);
+            int32_t displacement{};
+            std::memcpy(&displacement, match + 3, sizeof(displacement));
+            zpatch_skip_menu_resume = static_cast<uint32_t>(
+                reinterpret_cast<uintptr_t>(match) + 7 + displacement);
+            injector::MakeCALL(match + 2, reinterpret_cast<void*>(&SkipMenuBody), true);
+        }
+
+        pattern = find_pattern("6A 00 E8 ? ? ? ? 83 C4 04 8B 8C 24 ? ? ? ? 5F 5E 5B 33 CC E8 ? ? ? ? 8B E5 5D C3");
+        if (!pattern.empty())
+        {
+            auto* match = pattern.get_first<std::byte>(0);
+            int32_t displacement{};
+            std::memcpy(&displacement, match + 3, sizeof(displacement));
+            zpatch_skip_menu_resume = static_cast<uint32_t>(
+                reinterpret_cast<uintptr_t>(match) + 7 + displacement);
+            injector::MakeCALL(match + 2, reinterpret_cast<void*>(&SkipMenuBody), true);
+        }
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// DoNotPauseOnMinimize, moved from the audio module.
+// ---------------------------------------------------------------------------
+
+    // The game waits ten ticks when the window is minimized; the original writes
+    // six, so the arm does too.
+    constexpr std::byte kMinimizePauseTick{ 0x06 };
+
+namespace
+{
+
+    // DoNotPauseOnMinimize: the wait's tick count drops to six, and the branch
+    // that pauses the game when the window loses focus is NOPed.
+    void InstallDoNotPauseOnMinimize()
+    {
+        if (!Loader::Enabled("DoNotPauseOnMinimize"))
+            return;
+
+        auto pattern = find_pattern("6A 0A 56 50 FF D2 A1");
+        if (!pattern.empty())
+            injector::WriteMemory<std::byte>(pattern.get_first(1), kMinimizePauseTick, true);
+
+        pattern = find_pattern("75 ? 8B 0D ? ? ? ? 51 FF 15 ? ? ? ? 85 C0 75 ? 8B 15");
+        if (!pattern.empty())
+            injector::MakeNOP(pattern.get_first(0), 2, true);
+    }
+}
+
+
 export void RegisterMenu()
 {
     // The imported calls the transcribed writers make.
@@ -489,6 +613,11 @@ export void RegisterMenu()
     Loader::AddPublish(Loader::Entry::Menu, 1, PublishAddOptionsInMenu);
 
     Loader::AddInstall(Loader::Entry::Menu, 0, InstallAddOptionsInMenu);
+    Loader::AddInstall(Loader::Entry::Audio, 5, InstallDoNotPauseOnMinimize);
+    Loader::AddInstall(Loader::Entry::Loading, 9, InstallSkipIntro);
+    Loader::AddInstall(Loader::Entry::Loading, 10, InstallSkipMenu);
+    Bodies::Register(reinterpret_cast<uintptr_t>(&SkipIntroBody), 0x10045C30u);
+    Bodies::Register(reinterpret_cast<uintptr_t>(&SkipMenuBody), 0x10046610u);
 
     // The bodies' recovered VAs, so the dump expresses every branch in the
     // original's coordinates. The death-music pair is registered by the install
@@ -1086,4 +1215,46 @@ static __declspec(naked) void MenuCleanupBoolEntry()
 static __declspec(naked) void MenuCallHashEntry()
 {
     __asm { jmp DWORD PTR [zpatch_menu_call_hash] }
+}
+
+// sub_10045C30, recovered VA 0x10045C30 (6 instructions): the intro-screen
+// detour. Entered through a jump from the anchor's -6 with the site's ECX and
+// EDX; it scales ECX by 400 and zeroes EDX below the 8000 threshold, which is
+// what skips the intro outright, then resumes at the anchor.
+static __declspec(naked) void SkipIntroBody()
+{
+    __asm
+    {
+        imul ecx, ecx, 190h
+        cmp edx, 1F40h
+        jge skip_intro_ok
+        xor edx, edx
+    skip_intro_ok:
+        jmp DWORD PTR [zpatch_skip_intro_match]
+    }
+}
+
+// sub_10046610, recovered VA 0x10046610 (12 instructions): the menu detour. The
+// site's call is retargeted to this body, whose first call with a zero argument
+// switches the menu id to 6 (one-shot through the flag), then tail-jumps to the
+// original call's target; the call's own return address stays on the stack, so
+// the target returns to the game's next instruction.
+static __declspec(naked) void SkipMenuBody()
+{
+    __asm
+    {
+        push ebp
+        mov ebp, esp
+        cmp BYTE PTR [zpatch_skip_menu_flag], 0
+        mov eax, DWORD PTR [ebp + 8]
+        jne skip_menu_go
+        test eax, eax
+        jne skip_menu_go
+        mov eax, 6
+        mov BYTE PTR [zpatch_skip_menu_flag], 1
+    skip_menu_go:
+        mov DWORD PTR [ebp + 8], eax
+        pop ebp
+        jmp DWORD PTR [zpatch_skip_menu_resume]
+    }
 }

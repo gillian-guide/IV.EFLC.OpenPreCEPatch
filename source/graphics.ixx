@@ -1,4 +1,4 @@
-module;
+﻿module;
 
 #include <common.hxx>
 
@@ -412,12 +412,61 @@ namespace
 
 // Registered like every other arm: the publish tier reads every site the install
 // tier is about to overwrite, and the install tier owns the gate and the writes.
+// ---------------------------------------------------------------------------
+// VRAMFix, moved from the misc module.
+// ---------------------------------------------------------------------------
+
+extern "C"
+{
+    uint32_t zpatch_vram_arg_a = 0;  // dword_1015D630
+    uint32_t zpatch_vram_arg_b = 0;  // dword_1015D634
+    uint8_t zpatch_vram_flag = 0;    // byte_1015D638
+}
+
+static void VramFixShimBody();
+
+
+// sub_1004AA80, rebuilt: the shim's verdict helper. The compiler's own compares
+// are `test eax,eax / js set`, `cmp dword_1015D630,0 / jne set` and
+// `cmp eax,3E800000h / jge clear` -- a signed compare of the second argument's
+// float bits against 0.25f. It is ordinary C++ because the original's frame (/GS
+// cookie, saved registers) is compiler output, not a hand-written stream.
+static void VramVerdict()
+{
+    const auto second = static_cast<int32_t>(zpatch_vram_arg_b);
+    zpatch_vram_flag = 0;
+    if (second < 0 || zpatch_vram_arg_a != 0
+        || second < static_cast<int32_t>(0x3E800000u))
+    {
+        zpatch_vram_flag = 1;
+    }
+}
+namespace
+{
+    // VRAMFix: the matched function's entry becomes a jump to the shim.
+    void InstallVRAMFix()
+    {
+        if (!Loader::Enabled("VRAMFix"))
+            return;
+
+        auto pattern = find_pattern("8B 44 24 10 D9 2C 24 83 C4 1C C3");
+        if (pattern.empty())
+            return;
+
+        Bodies::Register(reinterpret_cast<uintptr_t>(&VramFixShimBody), 0x1004AAB0u);
+        injector::MakeJMP(pattern.get_first<std::byte>(0),
+            reinterpret_cast<void*>(&VramFixShimBody), true);
+    }
+}
+
+
 export void RegisterGraphics()
 {
     Loader::AddPublish(Loader::Entry::Graphics, 0, PublishBuildingDynamicShadows);
     Loader::AddPublish(Loader::Entry::Graphics, 2, PublishEmissiveLerpFix);
     Loader::AddPublish(Loader::Entry::Graphics, 3, PublishHighQualityReflections);
 
+    Loader::AddInstall(Loader::Entry::Misc, 7, InstallVRAMFix);
     Loader::AddInstall(Loader::Entry::Graphics, 0, InstallBorderlessWindowed);
     Loader::AddInstall(Loader::Entry::Graphics, 1, InstallBuildingAlphaFix);
     Loader::AddInstall(Loader::Entry::Graphics, 2, InstallBuildingDynamicShadows);
@@ -805,3 +854,31 @@ static __declspec(naked) void BorderlessWindowBodyA()
     }
 }
 
+// sub_1004AAB0, recovered VA 0x1004AAB0 (13 instructions): the argument/verdict
+// shim. It stashes two of the replaced function's arguments, runs the verdict under
+// pushad/popad, returns INT_MAX when the verdict is set, then reproduces the
+// original tail whose `fldcw [esp]` reads the E9 site's return address as the FPU
+// control word (the preserved quirk).
+//
+// Naked and internal: an external-linkage naked function is written to the module
+// and every importer fails (C2488).
+static __declspec(naked) void VramFixShimBody()
+{
+    __asm
+    {
+        mov eax, DWORD PTR [esp + 14h]
+        mov DWORD PTR [zpatch_vram_arg_a], eax
+        mov eax, DWORD PTR [esp + 10h]
+        mov DWORD PTR [zpatch_vram_arg_b], eax
+        __emit 0x60  // pushad
+        call VramVerdict
+        __emit 0x61  // popad
+        cmp BYTE PTR [zpatch_vram_flag], 0
+        je vram_skip
+        mov eax, 7FFFFFFFh
+    vram_skip:
+        fldcw WORD PTR [esp]
+        add esp, 1Ch
+        ret
+    }
+}

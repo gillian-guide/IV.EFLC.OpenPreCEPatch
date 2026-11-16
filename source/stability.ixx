@@ -36,8 +36,6 @@ import shared;
 extern "C"
 {
     uint32_t zpatch_freeze_gun_resume = 0;  // dword_1015AD64
-    uint32_t zpatch_plane_crash_resume_a = 0;   // dword_1015BE18
-    uint32_t zpatch_plane_crash_resume_b = 0;   // dword_1015BE14
     uint32_t zpatch_wanted_level_resume = 0;      // dword_1015AD6C
     uint32_t zpatch_episode_switch_resume_a = 0;  // dword_10159BBC
     uint32_t zpatch_episode_switch_resume_b = 0;  // dword_10159BB4
@@ -61,7 +59,6 @@ static void EpisodeSwitchShimB();
 static void EpisodeSwitchShimC();
 static void EpisodeSwitchSum();
 static void EpisodeSwitchVcall();
-static void PlaneCrashShim();
 static void FreezeGunShim();
 
 
@@ -86,22 +83,6 @@ namespace
 
 
 
-    // PlaneCrashFix's published resumes: the normal one is the anchor's +14 (after
-    // the vtable read the body replays), the null one is the anchor's -705, the head
-    // of the same function.
-    void PublishPlaneCrashFix()
-    {
-        if (!Loader::Enabled("PlaneCrashFix"))
-            return;
-
-        auto pattern = find_pattern("83 C4 04 88 58 26 8B 16 8B 82 F4 00 00 00");
-        if (pattern.empty())
-            return;
-
-        const auto match = reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(0));
-        zpatch_plane_crash_resume_b = static_cast<uint32_t>(match + 14);
-        zpatch_plane_crash_resume_a = static_cast<uint32_t>(match - 705);
-    }
 
 
 
@@ -170,20 +151,6 @@ namespace
         zpatch_smpa60_resume_b = static_cast<uint32_t>(shim + 14);
     }
 
-    // PlayerAsPedComponentsFix's published resume: the anchor's +14 (the
-    // `add ecx,80h` after the two pushes the shim replays).
-    void PublishPlayerAsPedComponentsFix()
-    {
-        if (!Loader::Enabled("PlayerAsPedComponentsFix"))
-            return;
-
-        auto pattern = find_pattern("8B 54 24 10 52 0F B6 90 19 02 00 00");
-        if (pattern.empty())
-            return;
-
-        Shared::PublishPlayerPedComponentsResume(static_cast<uint32_t>(
-            reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(0)) + 14));
-    }
 
 }
 
@@ -207,20 +174,6 @@ namespace
 
 
 
-    // PlaneCrashFix: the anchor's +3 is the state store the body replays after its
-    // null check.
-    void InstallPlaneCrashFix()
-    {
-        if (!Loader::Enabled("PlaneCrashFix"))
-            return;
-
-        auto pattern = find_pattern("83 C4 04 88 58 26 8B 16 8B 82 F4 00 00 00");
-        if (pattern.empty())
-            return;
-
-        Bodies::Register(reinterpret_cast<uintptr_t>(&PlaneCrashShim), 0x1003D870u);
-        injector::MakeJMP(pattern.get_first(3), reinterpret_cast<void*>(&PlaneCrashShim), true);
-    }
 
 
 
@@ -312,23 +265,6 @@ namespace
         injector::MakeJMP(shim, reinterpret_cast<void*>(&Smpa60Shim), true);
     }
 
-    // PlayerAsPedComponentsFix: the anchor's +5 is the `movzx edx,[eax+219h]` whose
-    // result becomes CPedVariationMgr::SetVariation's `bool` argument; the site
-    // becomes a jump into the shared shim (recovered VA 0x1003D9A0, hosted in
-    // shared.ixx), which pushes the computed "this is the player model" flag and the
-    // `push ecx` at the anchor's +13 instead.
-    void InstallPlayerAsPedComponentsFix()
-    {
-        if (!Loader::Enabled("PlayerAsPedComponentsFix"))
-            return;
-
-        auto pattern = find_pattern("8B 54 24 10 52 0F B6 90 19 02 00 00");
-        if (pattern.empty())
-            return;
-
-        injector::MakeJMP(pattern.get_first(5),
-            reinterpret_cast<void*>(Shared::PlayerPedComponentsShim()), true);
-    }
 
 
     // TryToSkipAllErrors: the error handler returns immediately instead of walking
@@ -350,22 +286,103 @@ namespace
 
 // Registered like every other arm: the publish tier reads every site the install
 // tier is about to overwrite, and the install tier owns the gate and the writes.
+// ---------------------------------------------------------------------------
+// BenchmarkFix, moved from the load-time module.
+// ---------------------------------------------------------------------------
+
+// The published state of the two build-gated arms below, in C linkage because the
+// transcribed code names the slots directly. Each comment names the original's own
+// resume word, the dword its body's `jmp` reads (0x10005659 and 0x10005679).
+
+extern "C"
+{
+    uint32_t zpatch_benchmark_resume_a = 0;  // dword_1015AD50
+    uint32_t zpatch_benchmark_resume_b = 0;  // dword_1015AD54
+}
+
+static void BenchmarkBodyA();
+static void BenchmarkBodyB();
+
+namespace
+{
+    // BenchmarkFix: two match sites eight bytes into the matched call sequence.
+    // The resume is the anchor's +13, read before the sites are overwritten; the
+    // key's build mask excludes 1.0.8.0, so this arm is inert on that image.
+    void InstallBenchmarkFix()
+    {
+        if (!Loader::Enabled("BenchmarkFix"))
+            return;
+
+        auto pattern = find_pattern<2>("E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20");
+        if (!pattern.empty())
+        {
+            // The two resumes are each match's own +13, not one shared value:
+            // `mov eax,[edx]; add eax,0Dh; mov dword_1015AD50,eax` publishes the
+            // first, `mov eax,[ecx+4]; add eax,0Dh; mov dword_1015AD54,eax` the
+            // second, and the bodies read their own word
+            // (`jmp [dword_1015AD50]` / `jmp [dword_1015AD54]`, 0x10005667 /
+            // 0x10005687). The matches sit in different functions, so one shared
+            // resume sends body B to body A's continuation.
+            zpatch_benchmark_resume_a = static_cast<uint32_t>(
+                reinterpret_cast<uintptr_t>(pattern.get(0).get<std::byte>(0)) + 13);
+            if (pattern.size() > 1)
+                zpatch_benchmark_resume_b = static_cast<uint32_t>(
+                    reinterpret_cast<uintptr_t>(pattern.get(1).get<std::byte>(0)) + 13);
+
+            injector::MakeJMP(pattern.get(0).get<std::byte>(8), reinterpret_cast<void*>(&BenchmarkBodyA), true);
+            if (pattern.size() > 1)
+                injector::MakeJMP(pattern.get(1).get<std::byte>(8), reinterpret_cast<void*>(&BenchmarkBodyB), true);
+        }
+    }
+}
+
+// The hook bodies carry their recovered VAs so the dump can express every
+// branch in the original's coordinates.
+
+// ---------------------------------------------------------------------------
+// CombinedRadioFreezeFix, moved from the audio module.
+// ---------------------------------------------------------------------------
+
+static void CombinedRadioFreezeFixBody();
+
+namespace
+{
+
+    // CombinedRadioFreezeFix: the call at the anchor is the radio update; it
+    // becomes a call into the body, which returns the freeze value instead of
+    // running the update.
+    void InstallCombinedRadioFreezeFix()
+    {
+        if (!Loader::Enabled("CombinedRadioFreezeFix"))
+            return;
+
+        auto pattern = find_pattern("E8 ? ? ? ? 8B 35 ? ? ? ? 3B F0");
+        if (!pattern.empty())
+        {
+            Bodies::Register(reinterpret_cast<uintptr_t>(&CombinedRadioFreezeFixBody), 0x10005ED0u);
+            injector::MakeCALL(pattern.get_first(0),
+                reinterpret_cast<void*>(&CombinedRadioFreezeFixBody), true);
+        }
+    }
+}
+
+
 export void RegisterStability()
 {
 
     Loader::AddPublish(Loader::Entry::Stability, 0, PublishFreezeGunFix);
-    Loader::AddPublish(Loader::Entry::Stability, 3, PublishPlaneCrashFix);
     Loader::AddPublish(Loader::Entry::Stability, 6, PublishWantedLevelCrashFix);
     Loader::AddPublish(Loader::Entry::Stability, 7, PublishEpisodeSwitchFreezeFix);
     Loader::AddPublish(Loader::Entry::Stability, 8, PublishSMPA60Fix);
-    Loader::AddPublish(Loader::Entry::Stability, 9, PublishPlayerAsPedComponentsFix);
 
     Loader::AddInstall(Loader::Entry::Stability, 3, InstallFreezeGunFix);
-    Loader::AddInstall(Loader::Entry::Stability, 6, InstallPlaneCrashFix);
-    Loader::AddInstall(Loader::Entry::Stability, 7, InstallPlayerAsPedComponentsFix);
     Loader::AddInstall(Loader::Entry::Stability, 8, InstallWantedLevelCrashFix);
     Loader::AddInstall(Loader::Entry::Stability, 9, InstallEpisodeSwitchFreezeFix);
     Loader::AddInstall(Loader::Entry::Stability, 10, InstallSMPA60Fix);
+    Loader::AddInstall(Loader::Entry::Loading, 7, InstallBenchmarkFix);
+    Bodies::Register(reinterpret_cast<uintptr_t>(&BenchmarkBodyA), 0x10005650u);
+    Bodies::Register(reinterpret_cast<uintptr_t>(&BenchmarkBodyB), 0x10005670u);
+    Loader::AddInstall(Loader::Entry::Audio, 1, InstallCombinedRadioFreezeFix);
     Loader::AddInstall(Loader::Entry::Stability, 12, InstallTryToSkipAllErrors);
 }
 
@@ -542,26 +559,6 @@ static __declspec(naked) void EpisodeSwitchVcall()
     }
 }
 
-// abi_plane_crash_shim, recovered VA 0x1003D870: the plane's destruction tail. The
-// `mov [eax+26h],bl` at the anchor's +3 is replaced, so the body replays it after a
-// null check and takes the null state's path (the anchor's -705, the head of the
-// same function) instead of dereferencing a missing vehicle. Naked and internal: an
-// external-linkage naked function is written to the module and every importer
-// fails.
-static __declspec(naked) void PlaneCrashShim()
-{
-    __asm
-    {
-        cmp eax, 0
-        jz plane_crash_null
-        mov BYTE PTR [eax + 26h], bl
-        mov edx, DWORD PTR [esi]
-        mov eax, DWORD PTR [edx + 0F4h]
-        jmp DWORD PTR [zpatch_plane_crash_resume_b]
-    plane_crash_null:
-        jmp DWORD PTR [zpatch_plane_crash_resume_a]
-    }
-}
 
 
 
@@ -629,16 +626,61 @@ static __declspec(naked) void FreezeGunShim()
 // the registration instead of its displacement. docs/rebuilt.md §2b records it.
 // ---------------------------------------------------------------------------
 
+// sub_10005650, recovered VA 0x10005650: BenchmarkFix's first match-site shim. It
+// checks the benchmark object, runs the interposed callback (ESI with EDI), then
+// resumes, or unwinds through the enclosing function's tail when the object is
+// null.
+static __declspec(naked) void BenchmarkBodyA()
+{
+    __asm
+    {
+        test eax, eax
+        jz benchmark_a_zero
+        push edi
+        mov ebx, eax
+        call esi
+        jmp DWORD PTR [zpatch_benchmark_resume_a]
+    benchmark_a_zero:
+        xor al, al
+        pop esi
+        pop ebp
+        pop ebx
+        add esp, 10h
+        ret
+    }
+}
 
+// sub_10005670, recovered VA 0x10005670: BenchmarkFix's second match-site shim,
+// the same shape as the first with its own resume.
+static __declspec(naked) void BenchmarkBodyB()
+{
+    __asm
+    {
+        test eax, eax
+        jz benchmark_b_zero
+        push edi
+        mov ebx, eax
+        call esi
+        jmp DWORD PTR [zpatch_benchmark_resume_b]
+    benchmark_b_zero:
+        xor al, al
+        pop esi
+        pop ebp
+        pop ebx
+        add esp, 10h
+        ret
+    }
+}
 
-
-
-
-
-
-
-
-
-
-
-
+// sub_10005ED0, recovered VA 0x10005ED0 (6 bytes, 2 instructions): the radio
+// freeze value. The site is a call into the game's radio update; the body returns
+// 19 in its place. Naked and internal: an external-linkage naked function is
+// written to the module and every importer fails (C2488).
+static __declspec(naked) void CombinedRadioFreezeFixBody()
+{
+    __asm
+    {
+        mov eax, 13h
+        ret
+    }
+}

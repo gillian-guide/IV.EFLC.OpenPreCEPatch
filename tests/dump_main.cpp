@@ -14,11 +14,11 @@ import shared;
 import native;
 import stability;
 import vehicles;
-import useless_checks;
+
 import graphics;
 import launcher;
-import loading;
-import audio;
+
+
 import misc;
 import menu;
 import fixes;
@@ -583,11 +583,11 @@ int main(int argc, char** argv)
     Native::Register();
     RegisterStability();
     RegisterVehicles();
-    RegisterUselessChecks();
+
     RegisterGraphics();
     RegisterLauncher();
-    RegisterLoading();
-    RegisterAudio();
+
+
     RegisterMisc();
     RegisterMenu();
     RegisterFixes();

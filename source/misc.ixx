@@ -1,4 +1,4 @@
-module;
+﻿module;
 
 #include <common.hxx>
 // The /GS cookie the transcribed second siren check reads and checks
@@ -24,124 +24,10 @@ import shared;
 // for the stubs, to the recovered per-build site table).
 
 
-// CopSirensFlag: the two model checks (sub_10005F70 and sub_10006260) and the
-// shared IDE hook (sub_100040E0), which fills the 512-slot model-hash tables the
-// checks walk from the game's IDE parser entries.
-
-extern "C"
-{
-    // dword_10159C0C, defined in source/shared.ixx: the game's model-index lookup,
-    // `int lookup(uint32_t nameHash, int32_t *index)`.
-    extern uintptr_t zpatch_model_lookup;
-
-    // dword_1015937C / dword_10159374 (the resumes), dword_10159370 and
-    // dword_1015936C (the two model indices the sites computed), dword_10159B80 /
-    // dword_10159378 (the two flags), and the IDE parser's arguments and resume
-    // (dword_1015BE08 the string, dword_1015BE0C the model object, dword_1015BE10
-    // the continuation).
-    uint32_t zpatch_copsirens_resume = 0;
-    uint32_t zpatch_copsirens_resume_b = 0;
-    uint32_t zpatch_copsirens_index = 0;
-    uint32_t zpatch_copsirens_index_b = 0;
-    uint32_t zpatch_copsirens_flag = 0;
-    uint32_t zpatch_copsirens_flag_b = 0;
-    uint32_t zpatch_ide_string = 0;
-    uint32_t zpatch_ide_model = 0;
-    uint32_t zpatch_ide_hook_slot = 0;
-
-    // The 512-slot tables sub_10003FA0 fills: dword_10159380 (sirens),
-    // dword_1015CE28 (popuplights), and dword_1015A538 / dword_10159D38
-    // (wheelangle models and the float bits of their angles).
-    uint32_t zpatch_copsirens_models[512] = {};
-    uint32_t zpatch_popuplights_models[512] = {};
-    uint32_t zpatch_wheelangle_models[512] = {};
-    uint32_t zpatch_wheelangle_angles[512] = {};
-
-    // The names the two siren checks resolve, each the original's own .rdata string
-    // and each pushed with `push imm32`: the first check's thirteen built-in police
-    // models in its order (0x1013A6B4 ... 0x10129DB4) and the second check's
-    // "police2" (0x1013A734, the same string the first check uses second).
-    const char zpatch_copsirens_police[] = "police";
-    const char zpatch_copsirens_police2[] = "police2";
-    const char zpatch_copsirens_police3[] = "police3";
-    const char zpatch_copsirens_police4[] = "police4";
-    const char zpatch_copsirens_noose[] = "noose";
-    const char zpatch_copsirens_pstockade[] = "pstockade";
-    const char zpatch_copsirens_nstockade[] = "nstockade";
-    const char zpatch_copsirens_polpatriot[] = "polpatriot";
-    const char zpatch_copsirens_fbi[] = "fbi";
-    const char zpatch_copsirens_n_police[] = "n_police";
-    const char zpatch_copsirens_n_police2[] = "n_police2";
-    const char zpatch_copsirens_n_polpatriot[] = "n_polpatriot";
-    const char zpatch_copsirens_n_pstockade[] = "n_pstockade";
-
-    // The IDE parser's third arm compares the site's string against this literal
-    // (original 0x10128DF4, "wheelangle:" and its NUL) and parses the degrees that
-    // follow it with the CRT's strtof (original IAT slot 0x100632D4, `call ds:[...]`,
-    // which stays a pointer slot because the original's call is memory indirect).
-    const char zpatch_ide_wheelangle_prefix[] = "wheelangle:";
-    uintptr_t zpatch_ide_strtof = 0;
-}
-
-// PopupHeadlightsFlag: the checkbox that makes a vehicle's pop-up headlights
-// deserve their own light cone. The two shims (sub_10044530 and its EDX twin
-// sub_10044560) run the popuplights checker (sub_10044310) and continue into the
-// site's own headlight test.
-
-extern "C"
-{
-    // dword_1015BE20 (the site's model word), dword_1015BE24 (the check's flag),
-    // dword_1015BE1C (the popuplights model index), dword_101580CC (the angle the
-    // site's `fld` loads), and dword_1015D628 / dword_1015D62C (the two resumes).
-    uint32_t zpatch_popup_model = 0;
-    uint32_t zpatch_popup_flag = 0;
-    uint32_t zpatch_popup_index = 0;
-    float zpatch_popup_angle = 1.57079632679489661923f;  // pi/2, dword_101580CC
-    uint32_t zpatch_popup_resume_a = 0;
-    uint32_t zpatch_popup_resume_b = 0;
-
-    // The two 512-slot [PopupLightAngles] tables the checker walks
-    // (dword_1015C628 / dword_1015BE28) are Config::PopupLightAngles()'s arrays, filled
-    // by the loader preamble's reader and registered beside this arm. When the section
-    // is empty the hashes are all zero, so the checker keeps the pi/2 above -- the
-    // original's own default.
-}
-
-// ---- VRAMFix -----------------------------------------------------------------
-//
-// The recovered catalogue attributes this key to the graphics module, but it is a
-// single-write install with no other site, so it lives here with the tree's other
-// one-off installers. (The reference tree keeps it in graphics.ixx; moving this
-// block there is only a move.)
-//
-// The original's handler 0x1004AAE0 scans
-// "8B 44 24 10 D9 2C 24 83 C4 1C C3" and writes an `E9` plus its rel32 to
-// 0x1004AAB0 at the match. The handler carries no build gate: the signature is
-// present on 1.0.4.0 / 1.0.0.4 / 1.0.6.0 / 1.0.7.0 / 1.1.1.0 / 1.1.2.0 and absent
-// on 1.0.0.0 / 1.0.8.0 / 1.1.3.0, which are the original's own clean skips. This
-// arm adds no gate either -- the scan is the gate.
-
-extern "C"
-{
-    uint32_t zpatch_vram_arg_a = 0;  // dword_1015D630
-    uint32_t zpatch_vram_arg_b = 0;  // dword_1015D634
-    uint8_t zpatch_vram_flag = 0;    // byte_1015D638
-}
-
 // The transcribed bodies are defined in the tail of this file. MSVC rejects a
 // __declspec(naked) declaration (C2488: "'naked' can only be applied to non-member
 // function definitions"), so the readable code above them names each body through a
 // plain prototype; only the definition in the tail keeps the attribute.
-static void IdeParseBody();
-static void CopSirensCheckABody();
-static void CopSirensCheckBBody();
-static void CopSirensShimABody();
-static void CopSirensShimBBody();
-static void IdeHookBody();
-static void PopupHeadlightsCheckBody();
-static void PopupHeadlightsBodyA();
-static void PopupHeadlightsBodyB();
-static void VramFixShimBody();
 
 // `mov eax, imm32`: the MiscFixes token-activation row writes it. bytes.ixx does
 // not carry it, and that module is outside this task's edit scope, so the opcode
@@ -283,88 +169,12 @@ namespace
 
 namespace
 {
-    // sub_10003E50 (source/shared.ixx), the original's own name resolver/hasher.
-    // The checks call it rather than a C++ hash, so the "hash:" and quoted forms
-    // resolve exactly as in the original.
-    uint32_t ResolveModelName(const char* name)
-    {
-        return reinterpret_cast<uint32_t(__cdecl*)(const char*)>(Shared::ValueResolver())(name);
-    }
-}
-
-// sub_1004AA80, rebuilt: the shim's verdict helper. The compiler's own compares
-// are `test eax,eax / js set`, `cmp dword_1015D630,0 / jne set` and
-// `cmp eax,3E800000h / jge clear` -- a signed compare of the second argument's
-// float bits against 0.25f. It is ordinary C++ because the original's frame (/GS
-// cookie, saved registers) is compiler output, not a hand-written stream.
-static void VramVerdict()
-{
-    const auto second = static_cast<int32_t>(zpatch_vram_arg_b);
-    zpatch_vram_flag = 0;
-    if (second < 0 || zpatch_vram_arg_a != 0
-        || second < static_cast<int32_t>(0x3E800000u))
-    {
-        zpatch_vram_flag = 1;
-    }
 }
 
 namespace
 {
 
-    // CopSirensFlag's three sites: the two model checks and the shared IDE hook,
-    // installed at the parser anchor's -10 (the seven-byte compare).
-    void PublishCopSirensFlag()
-    {
-        if (!Loader::Enabled("CopSirensFlag"))
-            return;
 
-        auto pattern = find_pattern("E8 ? ? ? ? C0 E0 ? 32 86 6F 0F 00");
-        if (!pattern.empty())
-            zpatch_copsirens_resume = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first(5)));
-
-        pattern = find_pattern("0F BF 41 2E 39 05");
-        if (!pattern.empty())
-            zpatch_copsirens_resume_b = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first(28)));
-
-        pattern = find_pattern("0C 83 88 94 00 00 00 04");
-        if (!pattern.empty())
-            zpatch_ide_hook_slot = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first(-1)));
-    }
-
-    // PopupHeadlightsFlag's sites: the EAX anchor (jump, its +10 branch forced to
-    // a short jump, and the `fld` operand at +82 retargeted to our pi/2 float),
-    // the shared IDE hook, and the EDX twin when the image has it.
-    void PublishPopupHeadlightsFlag()
-    {
-        if (!Loader::Enabled("PopupHeadlightsFlag"))
-            return;
-
-        auto pattern = find_pattern("0F BF 46 2E 3B 05 ? ? ? ? 75 ? A1");
-        if (!pattern.empty())
-        {
-            zpatch_popup_resume_b = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first(10)));
-            zpatch_popup_resume_a = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first(12)));
-        }
-
-        pattern = find_pattern("0C 83 88 94 00 00 00 04");
-        if (!pattern.empty())
-            zpatch_ide_hook_slot = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first(-1)));
-
-        pattern = find_pattern("0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1");
-        if (!pattern.empty())
-        {
-            zpatch_popup_resume_b = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first(10)));
-            zpatch_popup_resume_a = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get_first(12)));
-        }
-    }
 }
 
 namespace
@@ -412,138 +222,489 @@ namespace
 
 
 
-    void InstallCopSirensFlag()
-    {
-        if (!Loader::Enabled("CopSirensFlag"))
-            return;
-
-        auto pattern = find_pattern("E8 ? ? ? ? C0 E0 ? 32 86 6F 0F 00");
-        if (!pattern.empty())
-            injector::MakeJMP(pattern.get_first<std::byte>(0),
-                reinterpret_cast<void*>(&CopSirensShimABody), true);
-
-        pattern = find_pattern("0F BF 41 2E 39 05");
-        if (!pattern.empty())
-            injector::MakeJMP(pattern.get_first<std::byte>(22),
-                reinterpret_cast<void*>(&CopSirensShimBBody), true);
-
-        pattern = find_pattern("0C 83 88 94 00 00 00 04");
-        if (!pattern.empty())
-            injector::MakeJMP(pattern.get_first<std::byte>(-10),
-                reinterpret_cast<void*>(&IdeHookBody), true);
-    }
 
 
-    // VRAMFix: the matched function's entry becomes a jump to the shim.
-    void InstallVRAMFix()
-    {
-        if (!Loader::Enabled("VRAMFix"))
-            return;
 
-        auto pattern = find_pattern("8B 44 24 10 D9 2C 24 83 C4 1C C3");
-        if (pattern.empty())
-            return;
-
-        Bodies::Register(reinterpret_cast<uintptr_t>(&VramFixShimBody), 0x1004AAB0u);
-        injector::MakeJMP(pattern.get_first<std::byte>(0),
-            reinterpret_cast<void*>(&VramFixShimBody), true);
-    }
-
-    void InstallPopupHeadlightsFlag()
-    {
-        if (!Loader::Enabled("PopupHeadlightsFlag"))
-            return;
-
-        auto pattern = find_pattern("0F BF 46 2E 3B 05 ? ? ? ? 75 ? A1");
-        if (!pattern.empty())
-        {
-            auto* match = pattern.get_first<std::byte>(0);
-            injector::MakeJMP(match, reinterpret_cast<void*>(&PopupHeadlightsBodyA), true);
-            injector::WriteMemory<std::byte>(match + 10, Bytes::ShortJmp, true);
-            injector::WriteMemory<uint32_t>(match + 82,
-                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&zpatch_popup_angle)), true);
-            Bodies::RegisterPublished(reinterpret_cast<uintptr_t>(match + 82));
-        }
-
-        pattern = find_pattern("0C 83 88 94 00 00 00 04");
-        if (!pattern.empty())
-            injector::MakeJMP(pattern.get_first<std::byte>(-10),
-                reinterpret_cast<void*>(&IdeHookBody), true);
-
-        pattern = find_pattern("0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1");
-        if (!pattern.empty())
-        {
-            auto* match = pattern.get_first<std::byte>(0);
-            injector::MakeJMP(match, reinterpret_cast<void*>(&PopupHeadlightsBodyB), true);
-            injector::WriteMemory<std::byte>(match + 10, Bytes::ShortJmp, true);
-            injector::WriteMemory<uint32_t>(match + 82,
-                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&zpatch_popup_angle)), true);
-            Bodies::RegisterPublished(reinterpret_cast<uintptr_t>(match + 82));
-        }
-    }
 }
 
 // Registered like every other arm: the publish tier reads the site's original
 // bytes, the install tier owns the gate.
+// ---------------------------------------------------------------------------
+// OverrideGTADatPath, moved from the load-time module.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+    // OverrideGTADatPath's sibling key: the path the game's gta.dat push is
+    // retargeted to. The original's buffer is 64 bytes and its static initializer
+    // holds the stock path; the loader overwrites it from OverrideGTADatPathTo
+    // with strcpy_s, so a value of 64 bytes or more faults through the CRT's
+    // invalid-parameter path (preserved). Absent or "0" leaves the initializer.
+    char zpatch_dat_path[64] = "common:/data/gta.dat";
+}
+
+namespace
+{
+namespace
+{
+    void CopyOverrideDatPath()
+    {
+        const std::string fallback("0");
+        const auto& value = Feather::Value(Config::Ini(), "Options", "OverrideGTADatPathTo", fallback);
+        if (value == "0")
+            return;
+
+        strcpy_s(zpatch_dat_path, sizeof(zpatch_dat_path), value.c_str());
+    }
+}
+
+    // OverrideGTADatPath: the anchor is the gta.dat loader's `push <char*>`, and
+    // the original rewrites just that immediate (the anchor's +1).
+    void InstallOverrideGTADatPath()
+    {
+        if (!Loader::Enabled("OverrideGTADatPath"))
+            return;
+
+        auto pattern = find_pattern("68 ? ? ? ? E8 ? ? ? ? 83 C4 04 E8 ? ? ? ? E8 ? ? ? ? E8");
+        if (!pattern.empty())
+        {
+            injector::WriteMemory<uint32_t>(pattern.get_first<std::byte>(1),
+                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(zpatch_dat_path)), true);
+            Bodies::RegisterPublished(reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(1)));
+        }
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// RestoreDeathMusic, AllowHashesForIDE and PedModelsInCutscenesFix, moved
+// from the audio module with their state, wrappers and bodies.
+// ---------------------------------------------------------------------------
+
+extern "C"
+{
+    // dword_10159C0C, the game's model-index lookup shared.ixx publishes: the
+    // PedModels body reads it through the same slot (the C name resolves across
+    // module units; a second definition would be a second scan).
+    extern uintptr_t zpatch_model_lookup;
+
+    // The shared resolver's address, for the thunk below. The original's body calls
+    // sub_10003E50 with one direct `E8`; ours cannot name it: the resolver is
+    // `static` in shared.ixx (internal linkage), and C2488 forbids giving a naked
+    // function external linkage in a module interface unit, so no importer can use
+    // it as a link-time call target. The body calls this module's one-instruction
+    // thunk instead, which jumps through this slot -- the single deviation from the
+    // original's instruction stream in this body (docs/parity.md).
+    uintptr_t zpatch_audio_value_resolver = 0;
+
+    // The "player" model name the PedModels body pushes (original 0x1013A038). A
+    // copy rather than shared.ixx's literal: a module-attached literal is not
+    // visible to an importer, and the proof compares the push as a slot anyway.
+    const char zpatch_audio_player_name[] = "player";
+}
+
+// RestoreDeathMusic's published state. The gate body reads the original's option
+// word and three hash salts; the install body keeps the site it resolves once and
+// the clock word its seed guard compares against. Every salt below is a copy of
+// one of the native layer's ten resolved words, taken with `Native::Salt(ref)` at
+// registration time and never written as a literal: on 1.0.8.0 the probe hits and
+// the shipped `.data` values stand, while 1.0.0.0 and 1.0.4.0 miss and the
+// preamble's fallback set applies (source/native.ixx, docs/parity.md).
+extern "C"
+{
+    // byte_10159B86: the option word the gate body tests. The original's loader
+    // preamble stores it from the INI before any body runs.
+    uint8_t zpatch_audio_death_music_flag = 0;
+
+    // dword_101A84B8: the `6A 06 68 ? ? ? ? 8D 8C` site the install body resolves
+    // once. The original's other word, dword_101A84C0, is the guard for its CRT
+    // clock/seed block; the rebuild does not carry that block (docs/parity.md), so
+    // the slot is not published.
+    uint32_t zpatch_audio_death_music_site = 0;
+
+    // The five preamble salts this key's bodies and wrappers read:
+    //   dword_1015805C / dword_101580A8 / dword_10158050 -- sub_10050A50
+    //   dword_10158054 -- the two-argument wrapper sub_1005B1E0
+    //   dword_10158028 -- the byte wrapper sub_1005B490
+    uint32_t zpatch_audio_salt_10158054 = 0;
+    uint32_t zpatch_audio_salt_10158050 = 0;
+    uint32_t zpatch_audio_salt_101580A8 = 0;
+    uint32_t zpatch_audio_salt_1015805C = 0;
+    uint32_t zpatch_audio_salt_10158028 = 0;
+
+    // The native-layer pieces the three wrappers call, reached through
+    // one-instruction `jmp` forwarders for the reason stability.ixx's
+    // BadPlayerModelCrashFix forwarders exist: a module interface cannot export a
+    // naked function, and a C entry's decorated name is not nameable from inline
+    // asm. Filled from the body registry by each piece's recovered VA.
+    uintptr_t zpatch_audio_context_init = 0;
+    uintptr_t zpatch_audio_invoke_entry = 0;
+    uintptr_t zpatch_audio_cleanup_dword = 0;
+    uintptr_t zpatch_audio_cleanup_bool = 0;
+    uintptr_t zpatch_audio_call_hash = 0;
+}
+
+static void ValueResolverThunk();
+static void PedModelsInCutscenesCheckBody();
+static void AudioContextInitEntry();
+static void AudioInvokeEntry();
+static void AudioCleanupDwordEntry();
+static void AudioCleanupBoolEntry();
+static void AudioCallHashEntry();
+static unsigned int __fastcall AudioCallTwoBody(unsigned int, unsigned int);
+static unsigned int __fastcall AudioCallZeroBoolBody(unsigned int);
+static unsigned int __fastcall AudioCallByteBody(unsigned int, unsigned int);
+static bool DeathMusicGateBody();
+static char DeathMusicInstallBody();
+static void __cdecl AudioZeroBlock(void*, int, unsigned int);
+
+// The CRT `memset` the three wrappers open with. The original calls the CRT's own
+// thunk (0x10060D6E) with the same argument order; the inline assembler rejects a
+// direct call to the intrinsic's name (C2420), so the call names this cdecl
+// forwarder, which is still one `E8`. Same shape as native.ixx's NativeZeroBlock.
+static void __cdecl AudioZeroBlock(void* destination, int value, unsigned int count)
+{
+    std::memset(destination, value, count);
+}
+
+// sub_10050AD0, recovered VA 0x10050AD0 (75 instructions to its `ret`): the
+// death-music track install. Called through the game's track-select function
+// entry, it asks the gate body first, resolves the `6A 06 68 ? ? ? ? 8D 8C` site
+// once, and writes a random track number 1..5 into the push immediate at site+1.
+//
+// Rebuilt rather than transcribed, so it has no proof row: the original is
+// compiler output for a C function with an EH4 frame (prologue 0x10050AD3 ..
+// 0x10050AF4, handler 0x100619C1 with its scope table at 0x10154384, epilogue
+// 0x10050BAE .. 0x10050BC8), and its clock/seed block calls the static CRT's own
+// helpers (0x1005FFC3 and 0x1005FF77), which reach the CRT's per-thread state
+// through `fs:[2Ch]` and the TLS index dword_10159328 -- image-internal addresses
+// a rebuilt module cannot name (docs/parity.md). The state word it keeps is
+// published above, the gate call is the transcribed body, and the write it makes
+// is the original's: `rand() % 5 + 1` at site+1.
+static char DeathMusicInstallBody()
+{
+    if (!DeathMusicGateBody())
+        return 0;
+
+    if (zpatch_audio_death_music_site == 0)
+    {
+        auto pattern = find_pattern("6A 06 68 ? ? ? ? 8D 8C");
+        if (!pattern.empty())
+        {
+            zpatch_audio_death_music_site = static_cast<uint32_t>(
+                reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(0)));
+        }
+    }
+
+    if (zpatch_audio_death_music_site != 0)
+    {
+        // The site is `push 6`; the second byte is the immediate the track number
+        // replaces. The original writes it unguarded, and so does this.
+        auto* site = reinterpret_cast<std::byte*>(
+            static_cast<uintptr_t>(zpatch_audio_death_music_site) + 1);
+        injector::WriteMemory<std::byte>(site,
+            static_cast<std::byte>(std::rand() % 5 + 1), true);
+    }
+    return 1;
+}
+
+    // The address of a body another module transcribed, by its recovered VA. The
+    // native layer publishes only its C entries -- a module interface cannot
+    // export a naked function -- so the body registry is what makes its pieces
+    // reachable from here (the same helper stability.ixx uses).
+    uint32_t RegisteredBody(uint32_t reference)
+    {
+        for (const auto& entry : Bodies::All())
+        {
+            if (entry.reference == reference)
+                return static_cast<uint32_t>(entry.address);
+        }
+        return 0;
+    }
+
+namespace
+{
+
+
+    // RestoreDeathMusic's option word. The original's loader preamble stores it
+    // from the INI before any body runs and the gate body tests it at run time;
+    // ours is set in the publish tier, once the key is known to be on.
+    void PublishRestoreDeathMusic()
+    {
+        if (!Loader::Enabled("RestoreDeathMusic"))
+            return;
+
+        zpatch_audio_death_music_flag = 1;
+    }
+
+    // AllowHashesForIDE: the game's model-name hash function becomes the shared
+    // resolver (sub_10003E50), so an IDE entry may name a model by `hash:NNNN`.
+    // The game calls the hash function with two arguments; the resolver is
+    // __cdecl and reads only the first, so its plain `ret` leaves the second for
+    // the caller to pop, exactly as the original's body does.
+    void InstallAllowHashesForIDE()
+    {
+        if (!Loader::Enabled("AllowHashesForIDE"))
+            return;
+
+        auto pattern = find_pattern("8B 4C 24 08 56 8B 74 24 08 80 3E 22");
+        if (!pattern.empty())
+            injector::MakeJMP(pattern.get_first(0),
+                reinterpret_cast<void*>(Shared::ValueResolver()), true);
+    }
+
+
+    // PedModelsInCutscenesFix: the cutscene code's player-model check becomes the
+    // body, which re-derives the player model's index through the shared resolver
+    // and the game lookup and compares that with the object's model word.
+    void InstallPedModelsInCutscenesFix()
+    {
+        if (!Loader::Enabled("PedModelsInCutscenesFix"))
+            return;
+
+        auto pattern = find_pattern("56 8B F1 E8 ? ? ? ? 85 C0 74 0E 66 8B 40 2E");
+        if (!pattern.empty())
+        {
+            Bodies::Register(reinterpret_cast<uintptr_t>(&PedModelsInCutscenesCheckBody),
+                0x10050870u);
+            injector::MakeJMP(pattern.get_first(0),
+                reinterpret_cast<void*>(&PedModelsInCutscenesCheckBody), true);
+        }
+    }
+
+    // RestoreDeathMusic: the game's track-select function entry and its two
+    // callers become calls into the install body and the gate body. All three
+    // sites are already `E8` calls in the image, so only the displacement moves.
+    void InstallRestoreDeathMusic()
+    {
+        if (!Loader::Enabled("RestoreDeathMusic"))
+            return;
+
+        auto pattern = find_pattern("0F 57 C0 F3 0F 11 86 20 02 00 00");
+        if (!pattern.empty())
+        {
+            Bodies::Register(reinterpret_cast<uintptr_t>(&DeathMusicInstallBody), 0x10050AD0u);
+            injector::MakeCALL(pattern.get_first(-13),
+                reinterpret_cast<void*>(&DeathMusicInstallBody), true);
+        }
+
+        pattern = find_pattern("C7 86 04 02 00 00 04 00 00 00 E9");
+        if (!pattern.empty())
+        {
+            Bodies::Register(reinterpret_cast<uintptr_t>(&DeathMusicGateBody), 0x10050A50u);
+            injector::MakeCALL(pattern.get_first(-13),
+                reinterpret_cast<void*>(&DeathMusicGateBody), true);
+        }
+
+        pattern = find_pattern("E8 ? ? ? ? 84 C0 74 C6 8B BE");
+        if (!pattern.empty())
+        {
+            injector::MakeCALL(pattern.get_first(0),
+                reinterpret_cast<void*>(&DeathMusicGateBody), true);
+        }
+    }
+
+}
+
+
+// ---------------------------------------------------------------------------
+// RemoveUselessChecks, moved from its own module: the recovered per-build
+// sweep tables and the one installer.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+    // One single write: `length` bytes of `byte` at game base + rva.
+    struct UselessCheckSingle
+    {
+        uint32_t rva;
+        uint8_t length;
+        uint8_t byte;
+    };
+
+    #include "../data/useless_checks.inc"
+
+    static_assert(std::size(kUselessBuild9Nop5) == 2230u);
+    static_assert(std::size(kUselessBuild9MovAl1) == 45u);
+    static_assert(std::size(kUselessBuild9XorAlAl) == 56u);
+    static_assert(std::size(kUselessBuild8Nop5) == 2288u);
+    static_assert(std::size(kUselessBuild5Nop5) == 2466u);
+    static_assert(std::size(kUselessSingles9) == 19u);
+    static_assert(std::size(kUselessSingles8) == 2u);
+    static_assert(std::size(kUselessSingles5) == 2u);
+
+    // The five-byte patterns the build tables write live in bytes.ixx with every
+    // other recovered opcode byte; a NOP run uses MakeNOP while every other single
+    // is a single byte store.
+    void SweepSingles(uintptr_t base, std::span<const UselessCheckSingle> rows)
+    {
+        for (const auto& row : rows)
+        {
+            if (row.byte == std::to_integer<uint8_t>(Bytes::Nop))
+                injector::MakeNOP(base + row.rva, row.length, true);
+            else
+                injector::WriteMemory<uint8_t>(base + row.rva, row.byte, true);
+        }
+    }
+
+    // One protected five-byte write per site.
+    void SweepNop5(uintptr_t base, std::span<const uint32_t> rows)
+    {
+        for (const auto rva : rows)
+        {
+            injector::WriteMemoryRaw(base + rva,
+                const_cast<uint8_t*>(
+                    reinterpret_cast<const uint8_t*>(Bytes::FiveNops.data())),
+                Bytes::FiveNops.size(), true);
+        }
+    }
+
+    // The 45/56 tables protect each byte separately: this must not collapse into
+    // one five-byte write, or the write set differs.
+    void SweepBytes(uintptr_t base, std::span<const uint32_t> rows,
+        std::span<const std::byte> bytes)
+    {
+        for (const auto rva : rows)
+        {
+            for (size_t index = 0; index < bytes.size(); ++index)
+                injector::WriteMemory<uint8_t>(
+                    base + rva + index, std::to_integer<uint8_t>(bytes[index]), true);
+        }
+    }
+
+    struct BuildSweep final
+    {
+        Build build;
+        std::span<const UselessCheckSingle> singles;
+        std::span<const uint32_t> nop5;
+        std::span<const uint32_t> first;
+        std::span<const std::byte> firstPattern;
+        std::span<const uint32_t> second;
+        std::span<const std::byte> secondPattern;
+    };
+
+    constexpr BuildSweep kSweeps[] = {
+        { Build::v1080, kUselessSingles9, kUselessBuild9Nop5, kUselessBuild9MovAl1, Bytes::MovAl1, kUselessBuild9XorAlAl, Bytes::XorAlAl },
+        { Build::v1070, kUselessSingles8, kUselessBuild8Nop5, {}, {}, {}, {} },
+        { Build::v1040, kUselessSingles5, kUselessBuild5Nop5, {}, {}, {}, {} },
+    };
+}
+
+export namespace UselessChecks
+{
+    void Install()
+    {
+        if (!Loader::Enabled("RemoveUselessChecks"))
+            return;
+
+        const auto base = Game::Get().ImageBase();
+        for (const auto& sweep : kSweeps)
+        {
+            if (sweep.build != Loader::Current())
+                continue;
+
+            SweepSingles(base, sweep.singles);
+            SweepNop5(base, sweep.nop5);
+            SweepBytes(base, sweep.first, sweep.firstPattern);
+            SweepBytes(base, sweep.second, sweep.secondPattern);
+            return;
+        }
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// PlayerAsPedComponentsFix, moved from the stability module; its shim and
+// helper bodies live in shared.ixx.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+    // PlayerAsPedComponentsFix's published resume: the anchor's +14 (the
+    // `add ecx,80h` after the two pushes the shim replays).
+    void PublishPlayerAsPedComponentsFix()
+    {
+        if (!Loader::Enabled("PlayerAsPedComponentsFix"))
+            return;
+
+        auto pattern = find_pattern("8B 54 24 10 52 0F B6 90 19 02 00 00");
+        if (pattern.empty())
+            return;
+
+        Shared::PublishPlayerPedComponentsResume(static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(pattern.get_first<std::byte>(0)) + 14));
+    }
+
+    // PlayerAsPedComponentsFix: the anchor's +5 is the `movzx edx,[eax+219h]` whose
+    // result becomes CPedVariationMgr::SetVariation's `bool` argument; the site
+    // becomes a jump into the shared shim (recovered VA 0x1003D9A0, hosted in
+    // shared.ixx), which pushes the computed "this is the player model" flag and the
+    // `push ecx` at the anchor's +13 instead.
+    void InstallPlayerAsPedComponentsFix()
+    {
+        if (!Loader::Enabled("PlayerAsPedComponentsFix"))
+            return;
+
+        auto pattern = find_pattern("8B 54 24 10 52 0F B6 90 19 02 00 00");
+        if (pattern.empty())
+            return;
+
+        injector::MakeJMP(pattern.get_first(5),
+            reinterpret_cast<void*>(Shared::PlayerPedComponentsShim()), true);
+    }
+}
+
 export void RegisterMisc()
 {
-    Loader::AddPublish(Loader::Entry::Misc, 3, PublishCopSirensFlag);
-    Loader::AddPublish(Loader::Entry::Misc, 4, PublishPopupHeadlightsFlag);
 
+    Loader::AddPublish(Loader::Entry::Loading, 1, CopyOverrideDatPath);
+    Loader::AddInstall(Loader::Entry::Loading, 8, InstallOverrideGTADatPath);
+    // RestoreDeathMusic's published words, filled before any tier runs.
+    zpatch_audio_value_resolver = Shared::ValueResolver();
+    zpatch_audio_salt_10158054 = Native::Salt(0x10158054u);
+    zpatch_audio_salt_10158050 = Native::Salt(0x10158050u);
+    zpatch_audio_salt_101580A8 = Native::Salt(0x101580A8u);
+    zpatch_audio_salt_1015805C = Native::Salt(0x1015805Cu);
+    zpatch_audio_salt_10158028 = Native::Salt(0x10158028u);
+    zpatch_audio_context_init = RegisteredBody(0x100038C0u);
+    zpatch_audio_invoke_entry = RegisteredBody(0x100038E0u);
+    zpatch_audio_cleanup_dword = RegisteredBody(0x1005DE40u);
+    zpatch_audio_cleanup_bool = RegisteredBody(0x1005DE80u);
+    zpatch_audio_call_hash = RegisteredBody(0x1005B150u);
+    Loader::AddPublish(Loader::Entry::Audio, 0, PublishRestoreDeathMusic);
+    Loader::AddInstall(Loader::Entry::Audio, 0, InstallAllowHashesForIDE);
+    Loader::AddInstall(Loader::Entry::Audio, 9, InstallPedModelsInCutscenesFix);
+    Loader::AddInstall(Loader::Entry::Audio, 10, InstallRestoreDeathMusic);
+    Loader::AddInstall(Loader::Entry::UselessChecks, 0, UselessChecks::Install);
+    Loader::AddPublish(Loader::Entry::Stability, 9, PublishPlayerAsPedComponentsFix);
+    Loader::AddInstall(Loader::Entry::Stability, 7, InstallPlayerAsPedComponentsFix);
     Loader::AddInstall(Loader::Entry::Misc, 0, InstallMiscFixes);
-    Loader::AddInstall(Loader::Entry::Misc, 5, InstallCopSirensFlag);
-    Loader::AddInstall(Loader::Entry::Misc, 6, InstallPopupHeadlightsFlag);
-    Loader::AddInstall(Loader::Entry::Misc, 7, InstallVRAMFix);
 
     // The bodies' recovered VAs, so the dump expresses each arm's branch in the
     // original's coordinates.
-    Bodies::Register(reinterpret_cast<uintptr_t>(&CopSirensShimABody), 0x10006310u);
-    Bodies::Register(reinterpret_cast<uintptr_t>(&CopSirensShimBBody), 0x10006330u);
-    Bodies::Register(reinterpret_cast<uintptr_t>(&IdeHookBody), 0x100040E0u);
-    Bodies::Register(reinterpret_cast<uintptr_t>(&PopupHeadlightsBodyA), 0x10044530u);
-    Bodies::Register(reinterpret_cast<uintptr_t>(&PopupHeadlightsBodyB), 0x10044560u);
 
     // The second siren check's table: the IDE parser hook's +siren list, which the
     // transcription reads as `[esi + zpatch_copsirens_models]` and as a plain absolute
     // at slot 0. The registration pairs this module's array with the original's VA and
     // the length there (512 words); its tests/bodies.tsv `table` row is the offline
-    // projection of this call (docs/rebuilt.md §3). Unlike the wheelangle tables this
+    // projection of this call (docs/rebuilt.md Â§3). Unlike the wheelangle tables this
     // one is *filled* at run time by the transcribed IDE hook, so a content hash of it
     // compares the shipped all-zero state, not the populated one.
-    Bodies::RegisterTable(reinterpret_cast<uintptr_t>(zpatch_copsirens_models),
-        0x10159380u, sizeof(zpatch_copsirens_models));   // 512 * 4 = 2048
 
     // The IDE payload's popuplights list, dword_1015CE28: the same 512 words the
     // transcribed payload fills and the popup-headlights checker walks. It is the
     // third of the four tables the payload touches (the siren list and the wheelangle
     // pair are registered beside their own bodies' arms). All-zero at load, like the
     // others, because the original keeps it in `.data`'s uninitialised tail.
-    Bodies::RegisterTable(reinterpret_cast<uintptr_t>(zpatch_popuplights_models),
-        0x1015CE28u, sizeof(zpatch_popuplights_models));  // 512 * 4 = 2048
 
     // The popup-headlights checker's two [PopupLightAngles] arrays: dword_1015C628
     // (the hashes) and dword_1015BE28 (the angles). They are Config's own storage, not
     // copies: the loader preamble's reader fills them, and the checker reads them
     // through eight interleaved columns, which is why the registration names the
     // array's base and the comparator resolves the seven column displacements inside
-    // it (docs/rebuilt.md §2f). Both are all-zero at load.
-    Bodies::RegisterTable(reinterpret_cast<uintptr_t>(zpatch_popup_angle_hashes),
-        0x1015C628u, sizeof(zpatch_popup_angle_hashes));  // 512 * 4 = 2048
-    Bodies::RegisterTable(reinterpret_cast<uintptr_t>(zpatch_popup_angle_values),
-        0x1015BE28u, sizeof(zpatch_popup_angle_values));  // 512 * 4 = 2048
+    // it (docs/rebuilt.md Â§2f). Both are all-zero at load.
 
-    // The IDE payload's third arm calls the CRT's strtof through the original's IAT
-    // slot shape; the static CRT has no IAT, so the call goes through this word.
-    zpatch_ide_strtof = reinterpret_cast<uintptr_t>(&strtof);
-
-    // Each stub's inline `call` is invisible to C++; naming the helper here keeps
-    // its out-of-line definition in the image.
-    [[maybe_unused]] const uintptr_t helpers[] = {
-        reinterpret_cast<uintptr_t>(&CopSirensCheckABody),
-        reinterpret_cast<uintptr_t>(&CopSirensCheckBBody),
-        reinterpret_cast<uintptr_t>(&IdeParseBody),
-        reinterpret_cast<uintptr_t>(&PopupHeadlightsCheckBody),
-    };
 }
 
 // ---------------------------------------------------------------------------
@@ -553,166 +714,31 @@ export void RegisterMisc()
 
 
 
-// sub_10003FA0, recovered VA 0x10003FA0 (92 instructions, 314 bytes): the IDE parser
-// hook's payload, transcribed instruction for instruction.
-//
-// Three independent tests on the site's string (dword_1015BE08), in the original's
-// order, each of which appends the model word (dword_1015BE0C + 60, read unguarded)
-// to a 512-slot table when it is not already there: "popuplights" by three dword
-// compares, "siren" by a dword and a word compare, and the "wheelangle:" prefix
-// through the CRT's _strnicmp followed by strtof of the text eleven bytes in. The
-// first two fall through to the next arm; the third ends the function.
-//
-// Every one of the four tables is a registered table (docs/rebuilt.md §2b-§2e): the
-// popuplights list at 0x1015CE28, the siren list at 0x10159380, and the wheelangle
-// model/angle pair at 0x1015A538 / 0x10159D38. Three of them are read through an
-// absolute *with* a base and no index (`cmp [eax+table],esi`, the §2d shape) and the
-// stores through an indexed absolute (`mov [ecx*4+table],eax`, the §2b shape); the
-// slot-0 entry check is a plain absolute and therefore an `abs` slot.
-//
-// The three loop paddings are emitted as bytes because the inline assembler picks
-// its own: `66 90` at 0x10003FDE, `0F 1F 00` at 0x1000402D and
-// `66 0F 1F 44 00 00` at 0x1000409A. No exception frame and no TLS static-init
-// guard, so nothing blocks the transcription.
-//
-// Naked and internal: an external-linkage naked function is written to the module
-// and every importer fails (C2488).
-static __declspec(naked) void IdeParseBody()
+
+
+
+// A one-instruction thunk onto the shared resolver (`jmp DWORD PTR [slot]`, six
+// bytes): the `jmp` pushes nothing, so the resolver sees the same stack and flags
+// the original's `call sub_10003E50` gives it, and its `ret` returns to the body.
+// The slot's declaration above records why the call cannot name the resolver
+// directly.
+static __declspec(naked) void ValueResolverThunk()
 {
     __asm
     {
-        push ebp
-        mov ebp, esp
-        push ecx
-        mov edx, DWORD PTR [zpatch_ide_string]
-        mov eax, 75706F70h            // "popu"
-        push esi
-        push edi
-        mov edi, DWORD PTR [zpatch_ide_model]
-        cmp eax, DWORD PTR [edx]
-        jne ide_not_popuplights
-        mov eax, 67696C70h            // "plig"
-        cmp eax, DWORD PTR [edx + 4]
-        jne ide_not_popuplights
-        mov eax, 737468h              // "hts\0"
-        cmp eax, DWORD PTR [edx + 8]
-        jne ide_not_popuplights
-        xor ecx, ecx
-        cmp DWORD PTR [zpatch_popuplights_models], ecx
-        je ide_popuplights_append
-        mov esi, DWORD PTR [edi + 3Ch]
-        xor eax, eax
-        __emit 0x66
-        __emit 0x90                   // nop (the original's two-byte form)
-    ide_popuplights_walk:
-        cmp DWORD PTR [eax + zpatch_popuplights_models], esi
-        je ide_not_popuplights
-        add eax, 4
-        inc ecx
-        cmp eax, 7FCh
-        ja ide_done
-        cmp DWORD PTR [eax + zpatch_popuplights_models], 0
-        jne ide_popuplights_walk
-    ide_popuplights_append:
-        mov eax, DWORD PTR [edi + 3Ch]
-        mov DWORD PTR [ecx*4 + zpatch_popuplights_models], eax
-    ide_not_popuplights:
-        mov eax, 65726973h            // "sire"
-        cmp eax, DWORD PTR [edx]
-        jne ide_not_siren
-        mov eax, 6Eh                  // "n\0"
-        cmp ax, WORD PTR [edx + 4]
-        jne ide_not_siren
-        xor ecx, ecx
-        cmp DWORD PTR [zpatch_copsirens_models], ecx
-        je ide_siren_append
-        mov esi, DWORD PTR [edi + 3Ch]
-        xor eax, eax
-        __emit 0x0F
-        __emit 0x1F
-        __emit 0x00                  // nop dword ptr [eax]
-    ide_siren_walk:
-        cmp DWORD PTR [eax + zpatch_copsirens_models], esi
-        je ide_not_siren
-        add eax, 4
-        inc ecx
-        cmp eax, 7FCh
-        ja ide_done
-        cmp DWORD PTR [eax + zpatch_copsirens_models], 0
-        jne ide_siren_walk
-    ide_siren_append:
-        mov eax, DWORD PTR [edi + 3Ch]
-        mov DWORD PTR [ecx*4 + zpatch_copsirens_models], eax
-    ide_not_siren:
-        push 0Bh
-        push OFFSET zpatch_ide_wheelangle_prefix
-        push edx
-        call DWORD PTR [zpatch_resolver_strnicmp]
-        add esp, 0Ch
-        test eax, eax
-        jne ide_done
-        push eax                      // endptr = the null the compare left in EAX
-        mov eax, DWORD PTR [zpatch_ide_string]
-        add eax, 0Bh
-        push eax
-        call DWORD PTR [zpatch_ide_strtof]
-        mov esi, DWORD PTR [zpatch_ide_model]
-        xor ecx, ecx
-        add esp, 8
-        fstp DWORD PTR [ebp - 4]
-        cmp DWORD PTR [zpatch_wheelangle_models], ecx
-        je ide_wheelangle_append
-        mov edx, DWORD PTR [esi + 3Ch]
-        xor eax, eax
-        __emit 0x66
-        __emit 0x0F
-        __emit 0x1F
-        __emit 0x44
-        __emit 0x00
-        __emit 0x00                  // nop word ptr [eax+eax]
-    ide_wheelangle_walk:
-        cmp DWORD PTR [eax + zpatch_wheelangle_models], edx
-        je ide_done
-        add eax, 4
-        inc ecx
-        cmp eax, 7FCh
-        ja ide_done
-        cmp DWORD PTR [eax + zpatch_wheelangle_models], 0
-        jne ide_wheelangle_walk
-    ide_wheelangle_append:
-        movss xmm0, DWORD PTR [ebp - 4]
-        mov eax, DWORD PTR [esi + 3Ch]
-        mov DWORD PTR [ecx*4 + zpatch_wheelangle_models], eax
-        movss DWORD PTR [ecx*4 + zpatch_wheelangle_angles], xmm0
-    ide_done:
-        pop edi
-        pop esi
-        mov esp, ebp
-        pop ebp
-        ret
+        jmp DWORD PTR [zpatch_audio_value_resolver]
     }
 }
 
-// sub_10005F70, recovered VA 0x10005F70 (191 instructions, 750 bytes): the first
-// siren check, transcribed instruction for instruction.
-//
-// Thirteen built-in police model names are resolved through the original's own
-// resolver (sub_10003E50) and the game's model-index lookup, in the original's order;
-// the first match sets the flag and leaves through the shared epilogue. Otherwise the
-// IDE parser's +siren list is walked: `push dword ptr [edi + 0x10159380]` reads slot N
-// of the 512-word table as a base-plus-displacement absolute, `cmove` keeps the flag
-// byte the walk read, and the loop ends at the first zero word or past slot 511
-// (`cmp edi, 7FCh`). The entry check reads the same table's first word as a plain
-// absolute.
-//
-// The /GS frame is the original's, and the 3-byte `nop dword ptr [eax]` at
-// 0x100061ED (0F 1F 00) is emitted as bytes so the assembler cannot choose another
-// padding. No exception frame, no TLS static-init guard: nothing blocks the
-// transcription.
+// sub_10050870, recovered VA 0x10050870 (75 bytes, 26 instructions): the "does
+// this object use the player model" check the cutscene code calls. It resolves
+// "player" through the shared resolver, asks the game's model lookup for that
+// model's index and compares it with the object's model word (+2Eh). The /GS
+// prologue and epilogue are the original's, including the CRT check call.
 //
 // Naked and internal: an external-linkage naked function is written to the module
 // and every importer fails (C2488).
-static __declspec(naked) void CopSirensCheckABody()
+static __declspec(naked) void PedModelsInCutscenesCheckBody()
 {
     __asm
     {
@@ -723,601 +749,293 @@ static __declspec(naked) void CopSirensCheckABody()
         xor eax, ebp
         mov DWORD PTR [ebp - 4], eax
         push esi
-        mov esi, DWORD PTR [zpatch_copsirens_index]
-        push OFFSET zpatch_copsirens_police
-        mov DWORD PTR [zpatch_copsirens_flag], 0
-        call ResolveModelName
+        push OFFSET zpatch_audio_player_name
+        mov esi, ecx
+        call ValueResolverThunk
         lea ecx, [ebp - 8]
         mov DWORD PTR [ebp - 8], 0FFFFFFFFh
         push ecx
         push eax
         call DWORD PTR [zpatch_model_lookup]
-        add esp, 0Ch
-        cmp DWORD PTR [ebp - 8], esi
-        je copsirens_a_hit
-        mov esi, DWORD PTR [zpatch_copsirens_index]
-        push OFFSET zpatch_copsirens_police2
-        call ResolveModelName
-        lea ecx, [ebp - 8]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        push ecx
-        push eax
-        call DWORD PTR [zpatch_model_lookup]
-        add esp, 0Ch
-        cmp DWORD PTR [ebp - 8], esi
-        je copsirens_a_hit
-        mov esi, DWORD PTR [zpatch_copsirens_index]
-        push OFFSET zpatch_copsirens_police3
-        call ResolveModelName
-        lea ecx, [ebp - 8]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        push ecx
-        push eax
-        call DWORD PTR [zpatch_model_lookup]
-        add esp, 0Ch
-        cmp DWORD PTR [ebp - 8], esi
-        je copsirens_a_hit
-        mov esi, DWORD PTR [zpatch_copsirens_index]
-        push OFFSET zpatch_copsirens_police4
-        call ResolveModelName
-        lea ecx, [ebp - 8]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        push ecx
-        push eax
-        call DWORD PTR [zpatch_model_lookup]
-        add esp, 0Ch
-        cmp DWORD PTR [ebp - 8], esi
-        je copsirens_a_hit
-        mov esi, DWORD PTR [zpatch_copsirens_index]
-        push OFFSET zpatch_copsirens_noose
-        call ResolveModelName
-        lea ecx, [ebp - 8]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        push ecx
-        push eax
-        call DWORD PTR [zpatch_model_lookup]
-        add esp, 0Ch
-        cmp DWORD PTR [ebp - 8], esi
-        je copsirens_a_hit
-        mov esi, DWORD PTR [zpatch_copsirens_index]
-        push OFFSET zpatch_copsirens_pstockade
-        call ResolveModelName
-        lea ecx, [ebp - 8]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        push ecx
-        push eax
-        call DWORD PTR [zpatch_model_lookup]
-        add esp, 0Ch
-        cmp DWORD PTR [ebp - 8], esi
-        je copsirens_a_hit
-        mov esi, DWORD PTR [zpatch_copsirens_index]
-        push OFFSET zpatch_copsirens_nstockade
-        call ResolveModelName
-        lea ecx, [ebp - 8]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        push ecx
-        push eax
-        call DWORD PTR [zpatch_model_lookup]
-        add esp, 0Ch
-        cmp DWORD PTR [ebp - 8], esi
-        je copsirens_a_hit
-        mov esi, DWORD PTR [zpatch_copsirens_index]
-        push OFFSET zpatch_copsirens_polpatriot
-        call ResolveModelName
-        lea ecx, [ebp - 8]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        push ecx
-        push eax
-        call DWORD PTR [zpatch_model_lookup]
-        add esp, 0Ch
-        cmp DWORD PTR [ebp - 8], esi
-        je copsirens_a_hit
-        mov esi, DWORD PTR [zpatch_copsirens_index]
-        push OFFSET zpatch_copsirens_fbi
-        call ResolveModelName
-        lea ecx, [ebp - 8]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        push ecx
-        push eax
-        call DWORD PTR [zpatch_model_lookup]
-        add esp, 0Ch
-        cmp DWORD PTR [ebp - 8], esi
-        je copsirens_a_hit
-        mov esi, DWORD PTR [zpatch_copsirens_index]
-        push OFFSET zpatch_copsirens_n_police
-        call ResolveModelName
-        lea ecx, [ebp - 8]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        push ecx
-        push eax
-        call DWORD PTR [zpatch_model_lookup]
-        add esp, 0Ch
-        cmp DWORD PTR [ebp - 8], esi
-        je copsirens_a_hit
-        mov esi, DWORD PTR [zpatch_copsirens_index]
-        push OFFSET zpatch_copsirens_n_police2
-        call ResolveModelName
-        lea ecx, [ebp - 8]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        push ecx
-        push eax
-        call DWORD PTR [zpatch_model_lookup]
-        add esp, 0Ch
-        cmp DWORD PTR [ebp - 8], esi
-        je copsirens_a_hit
-        mov esi, DWORD PTR [zpatch_copsirens_index]
-        push OFFSET zpatch_copsirens_n_polpatriot
-        call ResolveModelName
-        lea ecx, [ebp - 8]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        push ecx
-        push eax
-        call DWORD PTR [zpatch_model_lookup]
-        add esp, 0Ch
-        cmp DWORD PTR [ebp - 8], esi
-        je copsirens_a_hit
-        mov esi, DWORD PTR [zpatch_copsirens_index]
-        push OFFSET zpatch_copsirens_n_pstockade
-        call ResolveModelName
-        lea ecx, [ebp - 8]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        push ecx
-        push eax
-        call DWORD PTR [zpatch_model_lookup]
-        add esp, 0Ch
-        cmp DWORD PTR [ebp - 8], esi
-        je copsirens_a_hit
-        cmp DWORD PTR [zpatch_copsirens_models], 0
-        je copsirens_a_no_walk
-        push ebx
-        push edi
-        xor edi, edi
-        lea ebx, [edi + 1]
-        // The original's loop alignment: 0F 1F 00 (`nop dword ptr [eax]`).
-        __emit 0x0F
-        __emit 0x1F
-        __emit 0x00
-    copsirens_a_walk:
-        mov esi, DWORD PTR [zpatch_copsirens_index]
-        lea eax, [ebp - 8]
-        push eax
-        push DWORD PTR [edi + zpatch_copsirens_models]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        call DWORD PTR [zpatch_model_lookup]
-        mov eax, DWORD PTR [zpatch_copsirens_flag]
-        add esp, 8
-        cmp DWORD PTR [ebp - 8], esi
-        cmove eax, ebx
-        add edi, 4
-        mov DWORD PTR [zpatch_copsirens_flag], eax
-        cmp edi, 7FCh
-        ja copsirens_a_walk_done
-        cmp DWORD PTR [edi + zpatch_copsirens_models], 0
-        jne copsirens_a_walk
-    copsirens_a_walk_done:
-        pop edi
-        pop ebx
-    copsirens_a_no_walk:
-        pop esi
-        mov ecx, DWORD PTR [ebp - 4]
-        xor ecx, ebp
-        call __security_check_cookie
-        mov esp, ebp
-        pop ebp
-        ret
-    copsirens_a_hit:
-        mov ecx, DWORD PTR [ebp - 4]
-        xor ecx, ebp
-        mov DWORD PTR [zpatch_copsirens_flag], 1
-        pop esi
-        call __security_check_cookie
-        mov esp, ebp
-        pop ebp
-        ret
-    }
-}
-
-// sub_10006260, recovered VA 0x10006260 (53 instructions, 174 bytes): the second
-// siren check, transcribed instruction for instruction.
-//
-// It resolves "police2" through the original's own resolver (sub_10003E50) and the
-// game's model-index lookup, and answers flag 1 when the index matches. Otherwise it
-// walks the IDE parser's +siren list: `push dword ptr [esi + 0x10159380]` reads slot
-// N of the 512-word table, an absolute *with* a base register and no index -- the
-// shape the table registry canonicalises as `[esi+table:<hash>]`, with the base
-// register still compared (docs/rebuilt.md §2d). The walk stops at the first
-// zero word (`cmp dword ptr [esi+0x10159380], 0`), and the check before the loop
-// reads the same table's first word as a plain absolute.
-//
-// Its /GS frame is the original's: the cookie is an absolute slot and the check a
-// call slot. The body has no exception frame and no TLS static-init guard, so
-// nothing blocks a transcription.
-//
-// Naked and internal: an external-linkage naked function is written to the module
-// and every importer fails (C2488).
-static __declspec(naked) void CopSirensCheckBBody()
-{
-    __asm
-    {
-        push ebp
-        mov ebp, esp
-        sub esp, 8
-        mov eax, DWORD PTR [__security_cookie]
-        xor eax, ebp
-        mov DWORD PTR [ebp - 4], eax
-        push esi
-        push edi
-        mov edi, DWORD PTR [zpatch_copsirens_index_b]
-        push OFFSET zpatch_copsirens_police2
-        mov DWORD PTR [zpatch_copsirens_flag_b], 0
-        call ResolveModelName
-        lea ecx, [ebp - 8]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        push ecx
-        push eax
-        call DWORD PTR [zpatch_model_lookup]
-        add esp, 0Ch
-        cmp DWORD PTR [ebp - 8], edi
-        je sirens_hit
-        cmp DWORD PTR [zpatch_copsirens_models], 0
-        je sirens_done
-        xor esi, esi
-    sirens_walk:
-        lea eax, [ebp - 8]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        push eax
-        push DWORD PTR [esi + zpatch_copsirens_models]
-        call DWORD PTR [zpatch_model_lookup]
-        add esp, 8
-        cmp DWORD PTR [ebp - 8], edi
-        je sirens_hit
-        add esi, 4
-        cmp esi, 7FCh
-        ja sirens_done
-        cmp DWORD PTR [esi + zpatch_copsirens_models], 0
-        jne sirens_walk
-        pop edi
-        pop esi
-        mov ecx, DWORD PTR [ebp - 4]
-        xor ecx, ebp
-        call __security_check_cookie
-        mov esp, ebp
-        pop ebp
-        ret
-    sirens_hit:
-        mov DWORD PTR [zpatch_copsirens_flag_b], 1
-    sirens_done:
-        mov ecx, DWORD PTR [ebp - 4]
-        pop edi
-        xor ecx, ebp
-        pop esi
-        call __security_check_cookie
-        mov esp, ebp
-        pop ebp
-        ret
-    }
-}
-
-// sub_10006310, recovered VA 0x10006310 (8 instructions): the first siren shim.
-// It stores the site's model index (EDX), runs the check between pusha/pushfd and
-// popa/popfd, and resumes with EAX = the flag, which the site's `shl al, 6;
-// xor al, [esi+0F6Fh]` continues on. pusha/popa are emitted as bytes: the inline
-// assembler renders both with a 0x66 operand-size prefix.
-static __declspec(naked) void CopSirensShimABody()
-{
-    __asm
-    {
-        mov DWORD PTR [zpatch_copsirens_index], edx
-        __emit 0x60  // pusha
-        __emit 0x9C  // pushfd
-        call CopSirensCheckABody
-        __emit 0x9D  // popfd
-        __emit 0x61  // popa
-        mov eax, DWORD PTR [zpatch_copsirens_flag]
-        jmp DWORD PTR [zpatch_copsirens_resume]
-    }
-}
-
-// sub_10006330, recovered VA 0x10006330 (8 instructions): the second siren shim.
-// It is installed at the anchor's +22 over the first five bytes of a six-byte
-// `cmp`, and its own `cmp [flag], 1` is what the resumed `je` at the anchor's +28
-// consumes; the replaced comparison's sixth byte is dead.
-static __declspec(naked) void CopSirensShimBBody()
-{
-    __asm
-    {
-        mov DWORD PTR [zpatch_copsirens_index_b], eax
-        __emit 0x60  // pusha
-        __emit 0x9C  // pushfd
-        call CopSirensCheckBBody
-        __emit 0x9D  // popfd
-        __emit 0x61  // popa
-        cmp DWORD PTR [zpatch_copsirens_flag_b], 1
-        jmp DWORD PTR [zpatch_copsirens_resume_b]
-    }
-}
-
-// sub_100040E0, recovered VA 0x100040E0 (9 instructions): the shared IDE hook.
-// After the payload it replays the site's `mov ecx,7; xor edx,edx; repe cmpsb`
-// (the in-place copies are skipped by the resume at the anchor's -1), so the
-// resumed `jne` still sees the compare's flags. `repe cmpsb` is emitted as bytes
-// so the assembler cannot choose another form.
-static __declspec(naked) void IdeHookBody()
-{
-    __asm
-    {
-        __emit 0x60  // pusha
-        mov DWORD PTR [zpatch_ide_string], edi
-        mov DWORD PTR [zpatch_ide_model], eax
-        call IdeParseBody
-        __emit 0x61  // popa
-        mov ecx, 7
-        xor edx, edx
-        __emit 0xF3
-        __emit 0xA6  // repe cmpsb
-        jmp DWORD PTR [zpatch_ide_hook_slot]
-    }
-}
-
-// sub_10044310, recovered VA 0x10044310 (125 instructions, 534 bytes): the
-// popup-headlights checker, transcribed instruction for instruction.
-//
-// It seeds the site's angle slot (dword_101580CC) with pi/2 as a *dword* store
-// (`mov dword ptr [0x101580CC], 3FC90FDBh`), asks the game's model store for the
-// model the original names by the literal hash 0xEB9F21D3 (`push 0EB9F21D3h` at
-// 0x1004432E), and answers flag 1 when that is the site's model word. Otherwise it
-// walks the +popuplights list the IDE payload filled: the same lookup per slot, a
-// bounded `cmp edi,7FCh` walk that ends at the first zero word, and on a match flag 1
-// plus the column scan below. The lookup slot is unguarded, as the original's
-// `call dword_10159C0C` is.
-//
-// The column scan is the reason this body needed the table registry extended: it
-// reads the [PopupLightAngles] tables as **eight interleaved columns** of 64 rows,
-// `mov ecx,ds:[eax+0x1015C628]` through `[eax+0x1015C644]` and the same eight at
-// 0x1015BE28, with EAX stepping 0x20 (`add eax,20h` / `cmp eax,800h` / `jl`). Seven
-// of each eight displacements are therefore four bytes into the table rather than at
-// its base; the registry resolves a displacement inside a registered table to that
-// table plus the offset, and the offset is compared (docs/rebuilt.md §2f). Each column
-// keeps the last matching row's angle, which is what the original's in-place
-// overwrite does.
-//
-// The /GS frame is the original's (cookie slot, check call slot). The two loop
-// paddings are emitted as bytes because the inline assembler picks its own:
-// `66 0F 1F 84 00 00 00 00 00` at 0x10044387 and `0F 1F 80 00 00 00 00` at
-// 0x100443E9. No exception frame, no TLS static-init guard.
-//
-// Naked and internal: an external-linkage naked function is written to the module
-// and every importer fails (C2488).
-static __declspec(naked) void PopupHeadlightsCheckBody()
-{
-    __asm
-    {
-        push ebp
-        mov ebp, esp
-        sub esp, 8
-        mov eax, DWORD PTR [__security_cookie]
-        xor eax, ebp
-        mov DWORD PTR [ebp - 4], eax
-        lea eax, [ebp - 8]
-        mov DWORD PTR [zpatch_popup_angle], 3FC90FDBh   // pi/2, the .data seed
-        push eax
-        push 0EB9F21D3h
-        mov DWORD PTR [zpatch_popup_flag], 0
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        call DWORD PTR [zpatch_model_lookup]
-        mov eax, DWORD PTR [ebp - 8]
-        add esp, 8
-        mov DWORD PTR [zpatch_popup_index], eax
-        cmp eax, DWORD PTR [zpatch_popup_model]
-        jne popup_walk
-        mov DWORD PTR [zpatch_popup_flag], 1
-        mov ecx, DWORD PTR [ebp - 4]
-        xor ecx, ebp
-        call __security_check_cookie
-        mov esp, ebp
-        pop ebp
-        ret
-    popup_walk:
-        push esi
-        xor esi, esi
-        cmp DWORD PTR [zpatch_popuplights_models], esi
-        je popup_no_list
-        push edi
-        xor edi, edi
-        __emit 0x66
-        __emit 0x0F
-        __emit 0x1F
-        __emit 0x84
-        __emit 0x00
-        __emit 0x00
-        __emit 0x00
-        __emit 0x00
-        __emit 0x00                  // nop word ptr [eax+eax]
-    popup_search_loop:
-        lea eax, [ebp - 8]
-        mov DWORD PTR [ebp - 8], 0FFFFFFFFh
-        push eax
-        push DWORD PTR [edi + zpatch_popuplights_models]
-        call DWORD PTR [zpatch_model_lookup]
-        mov eax, DWORD PTR [zpatch_popup_model]
-        add esp, 8
-        cmp eax, DWORD PTR [ebp - 8]
-        je popup_search_hit
-        add edi, 4
-        inc esi
-        cmp edi, 7FCh
-        ja popup_walk_done
-        cmp DWORD PTR [edi + zpatch_popuplights_models], 0
-        jne popup_search_loop
-        pop edi
-        pop esi
-        mov ecx, DWORD PTR [ebp - 4]
-        xor ecx, ebp
-        call __security_check_cookie
-        mov esp, ebp
-        pop ebp
-        ret
-    popup_search_hit:
-        mov DWORD PTR [zpatch_popup_flag], 1
-        xor eax, eax
-        __emit 0x0F
-        __emit 0x1F
-        __emit 0x80
-        __emit 0x00
-        __emit 0x00
-        __emit 0x00
-        __emit 0x00                  // nop dword ptr [eax]
-    popup_column_0:
-        mov ecx, DWORD PTR [eax + zpatch_popup_angle_hashes]
-        test ecx, ecx
-        je popup_column_1
-        cmp DWORD PTR [esi*4 + zpatch_popuplights_models], ecx
-        jne popup_column_1
-        movss xmm0, DWORD PTR [eax + zpatch_popup_angle_values]
-        movss DWORD PTR [zpatch_popup_angle], xmm0
-    popup_column_1:
-        mov ecx, DWORD PTR [eax + zpatch_popup_angle_hashes + 4]
-        test ecx, ecx
-        je popup_column_2
-        cmp DWORD PTR [esi*4 + zpatch_popuplights_models], ecx
-        jne popup_column_2
-        movss xmm0, DWORD PTR [eax + zpatch_popup_angle_values + 4]
-        movss DWORD PTR [zpatch_popup_angle], xmm0
-    popup_column_2:
-        mov ecx, DWORD PTR [eax + zpatch_popup_angle_hashes + 8]
-        test ecx, ecx
-        je popup_column_3
-        cmp DWORD PTR [esi*4 + zpatch_popuplights_models], ecx
-        jne popup_column_3
-        movss xmm0, DWORD PTR [eax + zpatch_popup_angle_values + 8]
-        movss DWORD PTR [zpatch_popup_angle], xmm0
-    popup_column_3:
-        mov ecx, DWORD PTR [eax + zpatch_popup_angle_hashes + 0Ch]
-        test ecx, ecx
-        je popup_column_4
-        cmp DWORD PTR [esi*4 + zpatch_popuplights_models], ecx
-        jne popup_column_4
-        movss xmm0, DWORD PTR [eax + zpatch_popup_angle_values + 0Ch]
-        movss DWORD PTR [zpatch_popup_angle], xmm0
-    popup_column_4:
-        mov ecx, DWORD PTR [eax + zpatch_popup_angle_hashes + 10h]
-        test ecx, ecx
-        je popup_column_5
-        cmp DWORD PTR [esi*4 + zpatch_popuplights_models], ecx
-        jne popup_column_5
-        movss xmm0, DWORD PTR [eax + zpatch_popup_angle_values + 10h]
-        movss DWORD PTR [zpatch_popup_angle], xmm0
-    popup_column_5:
-        mov ecx, DWORD PTR [eax + zpatch_popup_angle_hashes + 14h]
-        test ecx, ecx
-        je popup_column_6
-        cmp DWORD PTR [esi*4 + zpatch_popuplights_models], ecx
-        jne popup_column_6
-        movss xmm0, DWORD PTR [eax + zpatch_popup_angle_values + 14h]
-        movss DWORD PTR [zpatch_popup_angle], xmm0
-    popup_column_6:
-        mov ecx, DWORD PTR [eax + zpatch_popup_angle_hashes + 18h]
-        test ecx, ecx
-        je popup_column_7
-        cmp DWORD PTR [esi*4 + zpatch_popuplights_models], ecx
-        jne popup_column_7
-        movss xmm0, DWORD PTR [eax + zpatch_popup_angle_values + 18h]
-        movss DWORD PTR [zpatch_popup_angle], xmm0
-    popup_column_7:
-        mov ecx, DWORD PTR [eax + zpatch_popup_angle_hashes + 1Ch]
-        test ecx, ecx
-        je popup_column_done
-        cmp DWORD PTR [esi*4 + zpatch_popuplights_models], ecx
-        jne popup_column_done
-        movss xmm0, DWORD PTR [eax + zpatch_popup_angle_values + 1Ch]
-        movss DWORD PTR [zpatch_popup_angle], xmm0
-    popup_column_done:
-        add eax, 20h
-        cmp eax, 800h
-        jl popup_column_0
-    popup_walk_done:
-        pop edi
-    popup_no_list:
-        mov ecx, DWORD PTR [ebp - 4]
-        xor ecx, ebp
-        pop esi
-        call __security_check_cookie
-        mov esp, ebp
-        pop ebp
-        ret
-    }
-}
-
-// sub_10044530, recovered VA 0x10044530 (10 instructions): the EAX site's shim.
-// It stores the site's model word, runs the check between pusha/popa, then takes
-// the site's second branch when the model is a popuplights model, or falls into
-// the anchor's +10 short jump (which the arm rewrites to unconditional) with the
-// site's own `cmp eax, [index]` replayed first. pusha/popa are emitted as bytes
-// because the inline assembler adds a 0x66 prefix.
-static __declspec(naked) void PopupHeadlightsBodyA()
-{
-    __asm
-    {
         movsx eax, WORD PTR [esi + 2Eh]
-        __emit 0x60  // pusha
-        mov DWORD PTR [zpatch_popup_model], eax
-        call PopupHeadlightsCheckBody
-        __emit 0x61  // popa
-        cmp DWORD PTR [zpatch_popup_flag], 1
-        je popup_body_a_resume_a
-        cmp eax, DWORD PTR [zpatch_popup_index]
-        jmp DWORD PTR [zpatch_popup_resume_b]
-    popup_body_a_resume_a:
-        jmp DWORD PTR [zpatch_popup_resume_a]
+        add esp, 0Ch
+        cmp eax, DWORD PTR [ebp - 8]
+        mov ecx, DWORD PTR [ebp - 4]
+        setz al
+        xor ecx, ebp
+        pop esi
+        call __security_check_cookie
+        mov esp, ebp
+        pop ebp
+        ret
     }
 }
 
-// sub_10044560, recovered VA 0x10044560 (10 instructions): the EDX twin for the
-// second site pattern, absent on 1.0.8.0 but present on the builds the key was
-// gated for.
-static __declspec(naked) void PopupHeadlightsBodyB()
+// The forwarders into the native layer's transcribed pieces. Each is one `jmp`
+// through a slot the registration fills from the body registry; they touch no
+// register, no stack slot and no flag, so the piece sees exactly the call the
+// original's `E8` gives it.
+static __declspec(naked) void AudioContextInitEntry()
+{
+    __asm { jmp DWORD PTR [zpatch_audio_context_init] }
+}
+
+static __declspec(naked) void AudioInvokeEntry()
+{
+    __asm { jmp DWORD PTR [zpatch_audio_invoke_entry] }
+}
+
+static __declspec(naked) void AudioCleanupDwordEntry()
+{
+    __asm { jmp DWORD PTR [zpatch_audio_cleanup_dword] }
+}
+
+static __declspec(naked) void AudioCleanupBoolEntry()
+{
+    __asm { jmp DWORD PTR [zpatch_audio_cleanup_bool] }
+}
+
+static __declspec(naked) void AudioCallHashEntry()
+{
+    __asm { jmp DWORD PTR [zpatch_audio_call_hash] }
+}
+
+// sub_1005B1E0, recovered VA 0x1005B1E0 (48 instructions): the two-argument native
+// wrapper. The hash is the salt dword_10158054, the two arguments travel in EDX
+// and on the stack, and the answer is args[0]. __fastcall-shaped, and the first
+// register argument (ECX) is unused exactly as in the original. The /GS frame is
+// the original's.
+static __declspec(naked) unsigned int __fastcall AudioCallTwoBody(unsigned int, unsigned int)
 {
     __asm
     {
-        movsx edx, WORD PTR [esi + 2Eh]
-        __emit 0x60  // pusha
-        mov DWORD PTR [zpatch_popup_model], edx
-        call PopupHeadlightsCheckBody
-        __emit 0x61  // popa
-        cmp DWORD PTR [zpatch_popup_flag], 1
-        je popup_body_b_resume_a
-        cmp edx, DWORD PTR [zpatch_popup_index]
-        jmp DWORD PTR [zpatch_popup_resume_b]
-    popup_body_b_resume_a:
-        jmp DWORD PTR [zpatch_popup_resume_a]
+        push ebp
+        mov ebp, esp
+        and esp, 0FFFFFFF8h
+        sub esp, 0ACh
+        mov eax, DWORD PTR [__security_cookie]
+        xor eax, esp
+        mov DWORD PTR [esp + 0A8h], eax
+        mov eax, DWORD PTR [zpatch_audio_salt_10158054]
+        push ebx
+        push esi
+        push edi
+        push 0A0h
+        mov DWORD PTR [esp + 10h], eax
+        mov ebx, edx
+        lea eax, [esp + 14h]
+        push 0
+        push eax
+        call AudioZeroBlock
+        add esp, 0Ch
+        lea edi, [esp + 30h]
+        mov esi, 4
+    audio_two_records:
+        mov ecx, edi
+        call AudioContextInitEntry
+        add edi, 10h
+        sub esi, 1
+        jnz audio_two_records
+        mov ecx, DWORD PTR [esp + 0Ch]
+        lea eax, [esp + 70h]
+        mov DWORD PTR [esp + 18h], eax
+        lea edx, [esp + 10h]
+        mov DWORD PTR [esp + 10h], eax
+        mov eax, DWORD PTR [ebp + 8]
+        mov DWORD PTR [esp + 1Ch], esi
+        mov DWORD PTR [esp + 70h], ebx
+        mov DWORD PTR [esp + 74h], eax
+        mov DWORD PTR [esp + 14h], 2
+        call AudioInvokeEntry
+        lea ecx, [esp + 10h]
+        call AudioCleanupDwordEntry
+        mov ecx, DWORD PTR [esp + 0B4h]
+        pop edi
+        pop esi
+        pop ebx
+        xor ecx, esp
+        call __security_check_cookie
+        mov esp, ebp
+        pop ebp
+        ret
     }
 }
 
-// sub_1004AAB0, recovered VA 0x1004AAB0 (13 instructions): the argument/verdict
-// shim. It stashes two of the replaced function's arguments, runs the verdict under
-// pushad/popad, returns INT_MAX when the verdict is set, then reproduces the
-// original tail whose `fldcw [esp]` reads the E9 site's return address as the FPU
-// control word (the preserved quirk).
+// sub_1005B360, recovered VA 0x1005B360 (44 instructions): the zero-argument
+// wrapper that answers a byte. The hash arrives in ECX and the answer is the low
+// byte of args[0].
+static __declspec(naked) unsigned int __fastcall AudioCallZeroBoolBody(unsigned int)
+{
+    __asm
+    {
+        push ebp
+        mov ebp, esp
+        and esp, 0FFFFFFF8h
+        sub esp, 0ACh
+        mov eax, DWORD PTR [__security_cookie]
+        xor eax, esp
+        mov DWORD PTR [esp + 0A8h], eax
+        push ebx
+        push esi
+        push edi
+        push 0A0h
+        lea eax, [esp + 14h]
+        mov ebx, ecx
+        push 0
+        push eax
+        call AudioZeroBlock
+        add esp, 0Ch
+        lea edi, [esp + 30h]
+        mov esi, 4
+        // The original's loop alignment (0F 1F 40 00), emitted as bytes so the
+        // assembler cannot choose a shorter nop.
+        __emit 0x0F
+        __emit 0x1F
+        __emit 0x40
+        __emit 0x00
+    audio_zero_records:
+        mov ecx, edi
+        call AudioContextInitEntry
+        add edi, 10h
+        sub esi, 1
+        jnz audio_zero_records
+        lea eax, [esp + 70h]
+        mov DWORD PTR [esp + 14h], esi
+        lea edx, [esp + 10h]
+        mov DWORD PTR [esp + 18h], eax
+        mov ecx, ebx
+        mov DWORD PTR [esp + 10h], eax
+        mov DWORD PTR [esp + 1Ch], esi
+        call AudioInvokeEntry
+        lea ecx, [esp + 10h]
+        call AudioCleanupBoolEntry
+        mov ecx, DWORD PTR [esp + 0B4h]
+        pop edi
+        pop esi
+        pop ebx
+        xor ecx, esp
+        call __security_check_cookie
+        mov esp, ebp
+        pop ebp
+        ret
+    }
+}
+
+// sub_1005B490, recovered VA 0x1005B490 (46 instructions): the one-argument
+// wrapper whose answer is a byte. The argument travels in EDX, the hash is the
+// salt dword_10158028.
+static __declspec(naked) unsigned int __fastcall AudioCallByteBody(unsigned int, unsigned int)
+{
+    __asm
+    {
+        push ebp
+        mov ebp, esp
+        and esp, 0FFFFFFF8h
+        sub esp, 0ACh
+        mov eax, DWORD PTR [__security_cookie]
+        xor eax, esp
+        mov DWORD PTR [esp + 0A8h], eax
+        mov eax, DWORD PTR [zpatch_audio_salt_10158028]
+        push ebx
+        push esi
+        push edi
+        push 0A0h
+        mov DWORD PTR [esp + 10h], eax
+        mov ebx, edx
+        lea eax, [esp + 14h]
+        push 0
+        push eax
+        call AudioZeroBlock
+        add esp, 0Ch
+        lea edi, [esp + 30h]
+        mov esi, 4
+    audio_byte_records:
+        mov ecx, edi
+        call AudioContextInitEntry
+        add edi, 10h
+        sub esi, 1
+        jnz audio_byte_records
+        mov ecx, DWORD PTR [esp + 0Ch]
+        lea eax, [esp + 70h]
+        lea edx, [esp + 10h]
+        mov DWORD PTR [esp + 18h], eax
+        mov DWORD PTR [esp + 10h], eax
+        mov DWORD PTR [esp + 1Ch], esi
+        mov DWORD PTR [esp + 70h], ebx
+        mov DWORD PTR [esp + 14h], 1
+        call AudioInvokeEntry
+        lea ecx, [esp + 10h]
+        call AudioCleanupBoolEntry
+        mov ecx, DWORD PTR [esp + 0B4h]
+        pop edi
+        pop esi
+        pop ebx
+        xor ecx, esp
+        call __security_check_cookie
+        mov esp, ebp
+        pop ebp
+        ret
+    }
+}
+
+// sub_10050A50, recovered VA 0x10050A50 (41 instructions): the death-music gate.
+// It answers 0 when the option word is clear, then asks the game three questions
+// through the hash salts: the current "death music enabled" state (a zero-argument
+// call, an out-parameter read by the two-argument call, then a byte answer), and
+// the two flags dword_101580A8 and dword_10158050. The /GS frame is the original's.
 //
 // Naked and internal: an external-linkage naked function is written to the module
 // and every importer fails (C2488).
-static __declspec(naked) void VramFixShimBody()
+static __declspec(naked) bool DeathMusicGateBody()
 {
     __asm
     {
-        mov eax, DWORD PTR [esp + 14h]
-        mov DWORD PTR [zpatch_vram_arg_a], eax
-        mov eax, DWORD PTR [esp + 10h]
-        mov DWORD PTR [zpatch_vram_arg_b], eax
-        __emit 0x60  // pushad
-        call VramVerdict
-        __emit 0x61  // popad
-        cmp BYTE PTR [zpatch_vram_flag], 0
-        je vram_skip
-        mov eax, 7FFFFFFFh
-    vram_skip:
-        fldcw WORD PTR [esp]
-        add esp, 1Ch
+        push ebp
+        mov ebp, esp
+        sub esp, 8
+        mov eax, DWORD PTR [__security_cookie]
+        xor eax, ebp
+        mov DWORD PTR [ebp - 4], eax
+        cmp BYTE PTR [zpatch_audio_death_music_flag], 0
+        jne death_music_enabled
+    death_music_answer_zero:
+        // The original's shared "no" epilogue: both `je`s below jump back here
+        // (0x10050AA9/0x10050ABA to 0x10050A69), so it sits ahead of the enabled
+        // path exactly as it does in the original.
+        xor al, al
+        mov ecx, DWORD PTR [ebp - 4]
+        xor ecx, ebp
+        call __security_check_cookie
+        mov esp, ebp
+        pop ebp
+        ret
+    death_music_enabled:
+        mov ecx, DWORD PTR [zpatch_audio_salt_1015805C]
+        call AudioCallHashEntry
+        lea ecx, [ebp - 8]
+        mov edx, eax
+        push ecx
+        call AudioCallTwoBody
+        mov edx, DWORD PTR [ebp - 8]
+        add esp, 4
+        call AudioCallByteBody
+        test al, al
+        jne death_music_answer_one
+        mov ecx, DWORD PTR [zpatch_audio_salt_101580A8]
+        call AudioCallZeroBoolBody
+        test al, al
+        je death_music_answer_zero
+        mov ecx, DWORD PTR [zpatch_audio_salt_10158050]
+        call AudioCallZeroBoolBody
+        test al, al
+        je death_music_answer_zero
+    death_music_answer_one:
+        mov ecx, DWORD PTR [ebp - 4]
+        mov al, 1
+        xor ecx, ebp
+        call __security_check_cookie
+        mov esp, ebp
+        pop ebp
         ret
     }
 }

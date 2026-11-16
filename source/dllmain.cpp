@@ -9,11 +9,11 @@ import shared;
 import native;
 import stability;
 import vehicles;
-import useless_checks;
+
 import graphics;
 import launcher;
-import loading;
-import audio;
+
+
 import misc;
 import menu;
 import fixes;
@@ -71,11 +71,11 @@ namespace
         Native::Register();
         RegisterStability();
         RegisterVehicles();
-        RegisterUselessChecks();
+
         RegisterGraphics();
         RegisterLauncher();
-        RegisterLoading();
-        RegisterAudio();
+
+
         RegisterMisc();
         // The IVMenuAPI integration runs after the audio arm: AddOptionsInMenu's
         // death-music installs are the second half of the original's

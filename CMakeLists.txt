@@ -73,11 +73,8 @@ target_sources(zp_modules PUBLIC
     source/native.ixx
     source/stability.ixx
     source/vehicles.ixx
-    source/useless_checks.ixx
     source/graphics.ixx
     source/launcher.ixx
-    source/loading.ixx
-    source/audio.ixx
     source/misc.ixx
     source/menu.ixx
     source/fixes.ixx
