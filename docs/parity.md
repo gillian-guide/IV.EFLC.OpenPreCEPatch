@@ -975,8 +975,7 @@ displacements and their encodings.
 
 `Patch4RemoveModChecks` and `RemoveGFWLUpdatePopup` are the two flags of the
 original's one shared handler (the stub `sub_100054E0` plus the helper
-`sub_10005340`, 145 instructions). `loading.ixx` owns the GFWL branch; `misc.ixx`
-owns the Patch4 branch: a one-time scan for
+`sub_10005340`, 145 instructions). `multiplayer.ixx` owns both the GFWL and the Patch4 branch: a one-time scan for
 `33 C4 89 84 24 A8 01 00 00 53 8B 5D 08 56 57`, then a zero store to the dword
 the matched code points at (`site + 30`). **That signature has no hit on
 1.0.8.0**, so on the user's build the branch is the scan and nothing else -- the
@@ -1032,10 +1031,10 @@ the scoreboard excludes branch bytes. It now has its arm.
 - The gate body reads the original's salt words `dword_1015805C`,
   `dword_101580A8` and `dword_10158050`; the two wrappers it calls read
   `dword_10158054` and `dword_10158028`. All five are copied from
-  `Native::Salt(ref)` in `RegisterAudio()`, never from a literal, so a hit build
+  `Native::Salt(ref)` in `RegisterMenu()`, never from a literal, so a hit build
   keeps the shipped `.data` values and 1.0.0.0/1.0.4.0 get the preamble's fallback
   set (the rule the section above records).
-- The wrappers are transcribed in `audio.ixx` rather than added to the layer
+- The wrappers are transcribed in `menu.ixx` rather than added to the layer
   because only four of the layer's pieces are exported and none of the wrappers
   is: they reach `sub_100038C0`, `sub_100038E0`, `sub_1005DE40`, `sub_1005DE80`
   and `sub_1005B150` through six-byte `jmp` forwarders filled from the body
@@ -1223,7 +1222,8 @@ the registration is the ASI's own, not the game's.
 
 ### The three loading keys closed in this pass
 
-`NewMemorySystem`, `NewFilesCompatibility` and `LoadDLCs` in `source/loading.ixx`.
+`NewMemorySystem`, `NewFilesCompatibility` and `LoadDLCs` in `source/performance.ixx`,
+`source/compatibility.ixx` and `source/episodic.ixx`.
 The first two are new arms; `LoadDLCs` is the earlier attempt's blocker resolved: its
 discovery pass is reimplemented, and the EDX contract the attempt could not verify
 turned out to be unobservable (measured below, not assumed).
@@ -1244,7 +1244,7 @@ pointer ("captured operands are live addresses", above).
 The table is the original's 24-slot vtable at `0x100B5038`, read entry by entry:
 slots 10 and 12 point at the RGSC-login stub and the savegame null path, which this
 unit already owns, and slots 8/9/20/21 at the two-instruction MP-sync stub — the
-original's own table shares them, so the rebuild does too. `audio.ixx` owns that
+original's own table shares them, so the rebuild does too. `multiplayer.ixx` owns that
 stub's body but keeps it internal to its unit, so the table gets a second copy with
 its own proof row. Eleven methods are transcribed (constructor 17 instructions,
 reject-pointer 2, self 2, null 2, no-op `ret 0` 1, paired no-op 1, reject 2, sync 2,
@@ -1682,11 +1682,12 @@ offline dump was *correct* under that formula, which is why no check caught it.
 Two halves fix it, and they must stay together:
 
 - **The arms treat the operand as the address it is.** `GamePointer` /
-  `GameImagePointer` are identity casts (`loading.ixx`, `vehicles.ixx`, `misc.ixx`);
+  `GameImagePointer` are identity casts (`performance.ixx`, `compatibility.ixx`, `episodic.ixx`, `vehicles.ixx`,
+  `misc.ixx`);
   the two inline rebases (`InstallNoPhysicsSleep`'s threshold, `CrashMsgFix`'s thunk)
   and `WritableImageWord`'s range test use the live address too, and the two
   `GameAddress` helpers were deleted where a plain read reads better
-  (`stability.ixx`'s ped array, `audio.ixx`'s three MouseFix words). This is the
+  (`stability.ixx`'s ped array, `fixes.ixx`'s three MouseFix words). This is the
   behaviour the original has and `readable/` uses; the arm-written bytes are
   unchanged in the dump.
 - **The dump relocates its copy at a pinned base.** `tests/dump_main.cpp` maps the
@@ -1995,7 +1996,7 @@ the loader can produce that is >= 6), so `Loader::Enabled` already applies exact
 that gate. `RemoveRGSCLoginRequirement` is the one arm in this set with a real
 either/or ladder: its handler (`0x10045490`) patches its primary signature when it
 hits and otherwise, only when the build id is 9, patches the fixed fallback site;
-`source/loading.ixx` has the same shape (the original's primary string, and a
+`source/episodic.ixx` has the same shape (the original's primary string, and a
 `Build::v1080`-gated fallback site).
 
 **The guard.** `tools/check_signature_parity.py` (ctest `zp_signature_parity`) keeps the
@@ -2718,7 +2719,7 @@ The four callbacks are the original's streams, not approximations:
 1001edcf  jmp sub_1001ECB0
 ```
 
-The gate and its three wrappers are the same recovered pieces `source/audio.ixx`
+The gate and its three wrappers are the same recovered pieces `source/misc.ixx`
 carries for `RestoreDeathMusic`; that module keeps them internal, and this arm needs
 them under its own key, so `source/menu.ixx` carries and proves its own copies. Only
 one copy is live in any configuration: audio's when `RestoreDeathMusic` is on (this

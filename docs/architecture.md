@@ -16,21 +16,22 @@ This tree is one 32-bit ASI built from C++23 module units, in the shape GTAIV.EF
 | `source/bodies.ixx` | the body, published-slot and registered-table registries |
 | `source/shared.ixx` | the recovered value resolver and model lookup, transcribed |
 | `source/native.ixx` | the native-script call layer and the loader preamble's salt rule |
-| `source/stability.ixx` | 18 crash-fix keys |
-| `source/vehicles.ixx` | 21 vehicle, steer and shadow keys |
-| `source/useless_checks.ixx` | `RemoveUselessChecks`: the recovered per-build RVA tables and single writes |
-| `source/graphics.ixx` | 16 rendering, light and shadow keys |
+| `source/stability.ixx` | the [STABILITY] keys, the two site-gated crash fixes and the four flag stubs |
+| `source/fixes.ixx` | the [FIXES] keys, including the `OutOfCommissionFix` payload (the decoder, the archive builder and the mount) |
+| `source/performance.ixx` | the [PERFORMANCE] keys |
+| `source/compatibility.ixx` | the [COMPATIBILITY] keys |
+| `source/multiplayer.ixx` | the [MULTIPLAYER] keys and the recovered mod-check keys |
+| `source/episodic.ixx` | the [EPISODIC] keys |
+| `source/graphics.ixx` | the [GRAPHICS] keys, including the vehicle light and shadow arms and their `[HeadlightConeOffsets]` tables |
+| `source/vehicles.ixx` | the [VEHICLES] keys |
+| `source/misc.ixx` | the [MISC] keys |
+| `source/menu.ixx` | the IVMenuAPI integration behind `AddOptionsInMenu`, plus `SkipIntro`/`SkipMenu`/`DoNotPauseOnMinimize` |
 | `source/launcher.ixx` | the 25-row launcher stage, and the DFA and ROM stages |
-| `source/loading.ixx` | 18 startup, loading, save and file-compatibility keys |
-| `source/audio.ixx` | 13 keys the original groups with the radio and the world: audio, input, pointer pools, MP sync and the episodic weapons |
-| `source/misc.ixx` | 13 misc keys: the bundled `MiscFixes` table, the mod-check stubs, the flags, the menu gate and the process gate |
-| `source/menu.ixx` | the IVMenuAPI integration behind `AddOptionsInMenu` |
-| `source/ooc.ixx` | the `OutOfCommissionFix` payload: the decoder, the archive builder and the mount |
 | `source/dllmain.cpp` | the plain TU: `DllMain`, `InitializeASI` and the startup order |
 | `source/common.hxx` | the include header every unit starts from |
 | `external/injector/`, `external/hooking/` | the pinned memory-write library and signature scanner |
 
-The catalogue's `module` field names one of six feature modules - `stability`, `vehicles`, `graphics`, `loading`, `audio` and `misc` - which own 18, 21, 16, 18, 13 and 13 keys: the 99-key catalogue. A feature module owns its patterns, its published slots, its config reads, its arms and its bodies, and the catalogue itself is generated data. The other units are infrastructure, or the implementation behind a single key: `useless_checks` carries `RemoveUselessChecks` (a `misc` key), `menu` carries `AddOptionsInMenu` (`misc`), `launcher` backs the `SkipLauncher` and `LaunchWithPlayGTAIV` stages, and `ooc` carries `OutOfCommissionFix` (an `audio` key).
+The feature modules follow the grouped INI's sections, one module per section: `stability` (7 keys), `fixes` (11), `performance` (5), `graphics` (19), `episodic` (7), `compatibility` (5), `multiplayer` (20), `vehicles` (11) and `misc` (8), with `menu` and `launcher` beside them for the IVMenuAPI integration and the launcher stages. A section module owns its arms' whole footprint - published slots, bodies, tables and registrations - and registers them through `Loader::AddPublish`/`Loader::AddInstall` with the driver position each arm had before the recategorisation, so the tier order does not depend on which file an arm lives in. `source/options.inc`'s `module` column is the recovered inventory's provenance, not the current ownership: the legacy-INI import still uses it for the first-run section assignment.
 
 ## Startup
 
@@ -43,7 +44,9 @@ Classify(FileVersion)       four fields -> compact product version -> Build
 FusionFix::onInitEvent
 Shared::Register            the recovered resolver and model lookup
 Native::Register            the native-call layer and the salt rule
-RegisterStability ... RegisterOoc   one call per module, in this order
+RegisterStability, RegisterVehicles, RegisterGraphics, RegisterLauncher, RegisterMisc,
+RegisterMenu, RegisterFixes, RegisterEpisodic, RegisterPerformance, RegisterCompatibility,
+RegisterMultiplayer                 one call per section module, in this order
 Loader::Run                 PublishEvent, InstallEvent, PostEvent
 ```
 

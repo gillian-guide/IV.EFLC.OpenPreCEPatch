@@ -17,12 +17,11 @@ published state, bodies and tables - and registers them through
 `Loader::AddPublish`/`Loader::AddInstall` with the driver position each arm had before
 the move, so the tier order is independent of which module file an arm lives in.
 
-The recategorisation is not finished: the six GRAPHICS-category keys
-`CarPartsShadowFix`, `CarDynamicShadowFix`, `ForceCarHeadlightShadows`,
-`DualVehicleHeadlights`, `InfiniteCarBottomDistance` and `ReversingLightFix` (and the
-`[PopupLightAngles]`/`[HeadlightConeOffsets]` tables they read) are still registered
-from `vehicles.ixx`, and the design mapping in `../.agents/refactor/readable-fusion.md`
-says which module they belong to.
+The recategorisation is complete: the six GRAPHICS-category vehicle light and shadow
+arms (`CarPartsShadowFix`, `CarDynamicShadowFix`, `ForceCarHeadlightShadows`,
+`DualVehicleHeadlights`, `InfiniteCarBottomDistance`, `ReversingLightFix`) and their
+`[HeadlightConeOffsets]` registrations live in `graphics.ixx`, and the end of this
+section lists the module of every key.
 
 98 of the 99
 catalogue keys are closed on 1.0.8.0, with 164 hook bodies transcribed and proven

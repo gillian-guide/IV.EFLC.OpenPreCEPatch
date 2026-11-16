@@ -440,7 +440,7 @@ namespace
 
 // Registered like every other arm: the publish tier reads the site's original
 // bytes, the install tier owns the gate and the writes. RegisterMenu() runs
-// after RegisterAudio(), because the AddOptionsInMenu install checks whether the
+// after RegisterMisc(), because the AddOptionsInMenu install checks whether the
 // RestoreDeathMusic arm already owns the death-music hooks.
 // ---------------------------------------------------------------------------
 // SkipIntro and SkipMenu, moved from the load-time module with the FusionFix
