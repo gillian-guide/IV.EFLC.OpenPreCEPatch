@@ -2,6 +2,7 @@ name: build
 
 on:
   push:
+    branches: [master]
     paths-ignore:
       - "**/*.md"
       - "**/*.txt"
@@ -29,9 +30,18 @@ jobs:
         with:
           fetch-depth: 1
 
+      # The companion ships next to this ASI; CI clones and builds it so the
+      # download is the complete install: both ASIs and both INIs.
+      - name: Checkout XLivelessAddon companion
+        uses: actions/checkout@v4
+        with:
+          repository: gillian-guide/XLivelessAddon
+          path: companion/XLivelessAddon
+          fetch-depth: 1
+
       # No -G: use whichever Visual Studio generator the image provides (the
       # windows-latest image moves between VS 2022 and VS 2026). -A Win32 is the
-      # part that matters, because the game and the ASI are 32-bit.
+      # part that matters, because the game and the ASIs are 32-bit.
       - name: Configure
         shell: pwsh
         run: |
@@ -42,8 +52,19 @@ jobs:
       - name: Build
         run: cmake --build build/win-x86 --config Release -- /m
 
-      # The CI artifact is deliberately just the two files a user installs.
-      - name: Package (ASI + INI)
+      - name: Configure companion
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake -S companion/XLivelessAddon -B companion-build -A Win32 -DCMAKE_CONFIGURATION_TYPES="Debug;Release;Trace"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build companion
+        run: cmake --build companion-build --config Release -- /m
+
+      # The download is deliberately just the four files a user installs; the
+      # artifact GitHub wraps them in is the only archive.
+      - name: Stage (both ASIs and INIs)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -51,25 +72,24 @@ jobs:
           New-Item -ItemType Directory -Force $dist | Out-Null
           Copy-Item 'build/win-x86/Release/IV.EFLC.OpenPreCEPatch.asi' $dist
           Copy-Item 'build/win-x86/Release/IV.EFLC.OpenPreCEPatch.ini' $dist
+          Copy-Item 'companion-build/Release/XLivelessAddon.asi' $dist
+          Copy-Item 'companion-build/Release/XLivelessAddon.ini' $dist
 
-          $expected = @('IV.EFLC.OpenPreCEPatch.asi', 'IV.EFLC.OpenPreCEPatch.ini')
+          $expected = @(
+            'IV.EFLC.OpenPreCEPatch.asi',
+            'IV.EFLC.OpenPreCEPatch.ini',
+            'XLivelessAddon.asi',
+            'XLivelessAddon.ini')
           $actual = @(Get-ChildItem $dist -File | Select-Object -ExpandProperty Name | Sort-Object)
           if (Compare-Object -ReferenceObject ($expected | Sort-Object) -DifferenceObject $actual) {
             throw "release folder contains unexpected files: $($actual -join ', ')"
           }
 
-          Compress-Archive -Force -Path "$dist/IV.EFLC.OpenPreCEPatch.asi", "$dist/IV.EFLC.OpenPreCEPatch.ini" `
-            -DestinationPath "$dist/IV.EFLC.OpenPreCEPatch.zip"
-          $hash = (Get-FileHash "$dist/IV.EFLC.OpenPreCEPatch.zip" -Algorithm SHA256).Hash.ToLower()
-          "$hash  IV.EFLC.OpenPreCEPatch.zip" | Set-Content "$dist/IV.EFLC.OpenPreCEPatch.zip.sha256"
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: IV.EFLC.OpenPreCEPatch
-          path: |
-            dist/IV.EFLC.OpenPreCEPatch.zip
-            dist/IV.EFLC.OpenPreCEPatch.zip.sha256
+          path: dist/*
           if-no-files-found: error
 
   tests:
