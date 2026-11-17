@@ -288,7 +288,7 @@ namespace Stability
 
         auto pattern = find_pattern("81 EC 40 08 00 00 53 55 8B AC 24 4C 08 00 00");
         if (!pattern.empty())
-            injector::WriteMemory<std::byte>(pattern.get_first(0), Bytes::Ret, true);
+            injector::MakeRET(pattern.get_first(0), 0, true);
     }
 
     // BenchmarkFix: two match sites eight bytes into the matched call sequence.

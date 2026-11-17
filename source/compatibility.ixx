@@ -449,11 +449,8 @@ export namespace Compatibility
         // the newer one). The original target is read before the call is replaced.
         if (const uintptr_t site = NewSavesReadSite(); site != 0)
         {
-            int32_t displacement{};
-            std::memcpy(&displacement, reinterpret_cast<const void*>(site + kNewSavesCallOperand),
-                sizeof(displacement));
-            const uint32_t originalTarget = static_cast<uint32_t>(site + kNewSavesCallSite + 5) +
-                                            static_cast<uint32_t>(displacement);
+            const uint32_t originalTarget = static_cast<uint32_t>(
+                injector::ReadRelativeOffset(site + kNewSavesCallOperand).as_int());
 
             injector::MakeCALL(reinterpret_cast<void*>(site + kNewSavesCallSite),
                 reinterpret_cast<void*>(&NewSavesReadHook), true);
@@ -469,22 +466,16 @@ export namespace Compatibility
         // (the `E8` at the anchor's +0x1D), which is the entry both hooks then use.
         if (const uintptr_t site = NewSavesLoadSite(); site != 0)
         {
-            int32_t displacement{};
-            std::memcpy(&displacement, reinterpret_cast<const void*>(site + kNewSavesCallOperand),
-                sizeof(displacement));
-            const uint32_t originalTarget = static_cast<uint32_t>(site + kNewSavesCallSite + 5) +
-                                            static_cast<uint32_t>(displacement);
+            const uint32_t originalTarget = static_cast<uint32_t>(
+                injector::ReadRelativeOffset(site + kNewSavesCallOperand).as_int());
 
             injector::MakeCALL(reinterpret_cast<void*>(site + kNewSavesCallSite),
                 reinterpret_cast<void*>(&NewSavesSecondLoadHook), true);
             if (zpatch_new_saves_p3_original == 0)
                 zpatch_new_saves_p3_original = originalTarget;
 
-            int32_t loadDisplacement{};
-            std::memcpy(&loadDisplacement, reinterpret_cast<const void*>(site + kNewSavesLoadOperand),
-                sizeof(loadDisplacement));
-            zpatch_new_saves_loaddata = static_cast<uint32_t>(site + kNewSavesLoadOperand + 4) +
-                                        static_cast<uint32_t>(loadDisplacement);
+            zpatch_new_saves_loaddata = static_cast<uint32_t>(
+                injector::ReadRelativeOffset(site + kNewSavesLoadOperand).as_int());
         }
     }
 
@@ -660,10 +651,8 @@ namespace Compatibility
         if (!pattern.empty())
         {
             auto* match = pattern.get_first<std::byte>(0);
-            int32_t displacement{};
-            std::memcpy(&displacement, match + 6, sizeof(displacement));
             zpatch_newfiles_register_slot = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(match) + 10 + displacement);
+                injector::ReadRelativeOffset(match + 6).as_int());
         }
     }
 

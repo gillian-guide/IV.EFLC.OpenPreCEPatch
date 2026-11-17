@@ -511,13 +511,11 @@ void* Fixes::SpeedupBugFixForTest(void* self, uint32_t clock,
         {
             for (const uint32_t offset : offsets)
             {
-                int32_t displacement{};
-                std::memcpy(&displacement, source + offset + 1, sizeof(displacement));
-                const auto target = reinterpret_cast<uintptr_t>(source + offset + 5) +
-                                    static_cast<intptr_t>(displacement);
-                const auto next = reinterpret_cast<uintptr_t>(destination + offset + 5);
-                const auto relative = static_cast<intptr_t>(target) -
-                                      static_cast<intptr_t>(next);
+                const auto target = injector::ReadRelativeOffset(
+                    reinterpret_cast<uintptr_t>(source + offset + 1));
+                const auto relative = static_cast<intptr_t>(
+                    injector::GetRelativeOffset(target,
+                        reinterpret_cast<uintptr_t>(destination + offset + 5)));
                 if (relative < INT32_MIN || relative > INT32_MAX)
                     return false;
                 const auto narrowed = static_cast<int32_t>(relative);
@@ -638,14 +636,6 @@ namespace
     constexpr std::string_view kOocBranchSignature = "A9 39 44 24 18";
     constexpr std::string_view kOocWrapperSignature =
         "E8 ? ? ? ? 8B 74 24 14 83 C4 08 6A 00 56";
-
-    // sub_10001670: the target a `call` at `site` names (`site + 5 + disp32`).
-    uint32_t CallTarget(const std::byte* site)
-    {
-        int32_t displacement{};
-        std::memcpy(&displacement, site + 1, sizeof(displacement));
-        return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(site) + 5 + displacement);
-    }
 }
 
 extern "C"
@@ -1097,8 +1087,10 @@ namespace Fixes
         if (!pattern.empty())
         {
             const auto* match = pattern.get_first<std::byte>(0);
-            zpatch_ooc_mount = CallTarget(match - 0x33);
-            zpatch_ooc_original = CallTarget(match);
+            zpatch_ooc_mount = static_cast<uint32_t>(
+                injector::ReadRelativeOffset(reinterpret_cast<uintptr_t>(match - 0x32)).as_int());
+            zpatch_ooc_original = static_cast<uint32_t>(
+                injector::ReadRelativeOffset(reinterpret_cast<uintptr_t>(match + 1)).as_int());
         }
     }
 

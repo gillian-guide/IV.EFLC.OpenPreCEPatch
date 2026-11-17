@@ -14,9 +14,12 @@ import game;
 // site.
 
 // A recovered signature is written the way IDA prints it: two characters per
-// byte, `??` for a wildcard, sometimes a three-digit token. This scanner wants
-// one `?` per wildcard byte, so recovered strings are normalised here, once, at
-// the boundary -- the feature modules keep the recovered text verbatim.
+// byte, `??` for a wildcard, sometimes a three-digit token. Hooking.Patterns'
+// TransformPattern pushes one wildcard byte per `?` character, so the library
+// would read IDA's two-character `??` as *two* wildcard bytes; collapsing the
+// token to one `?` is the one thing this boundary does that the library cannot.
+// The normalisation happens here, once -- the feature modules keep the
+// recovered text verbatim.
 export std::string NormaliseSignature(std::string_view recovered)
 {
     std::string result;
@@ -53,14 +56,14 @@ export std::string NormaliseSignature(std::string_view recovered)
 // a minimum: the scan stops after that many hits and returns what it found.
 //
 // The scan covers the game image's executable range (game.ixx), which is what
-// the vendor scanner covers for a module -- and it keeps working when the tools
-// have loaded a copy of that image instead of the image itself.
+// the Hooking.Patterns scanner covers for a module -- and it keeps working when
+// the tools have loaded a copy of that image instead of the image itself.
 //
 // Each call constructs a fresh scanner over the image's executable range
-// (~9.9 MB on 1.0.8.0) and scans until the count hint is reached; the vendored
-// scanner has no cross-call memo. The publish and install tiers therefore scan
-// a shared signature twice. That is a measured startup cost, not a free cache:
-// a cross-tier memo would be unsound because an earlier install can overwrite a
+// (~9.9 MB on 1.0.8.0) and scans until the count hint is reached; the scanner
+// has no cross-call memo. The publish and install tiers therefore scan a shared
+// signature twice. That is a measured startup cost, not a free cache: a
+// cross-tier memo would be unsound because an earlier install can overwrite a
 // later arm's site.
 export template <size_t count = 1, typename... Args>
 hook::pattern find_pattern(Args... args)
@@ -221,228 +224,4 @@ export namespace Failsafe
     }
 }
 
-export template <size_t n>
-std::string pattern_str(const std::array<uint8_t, n>& bytes){
-    std::string result;
-    for (size_t i = 0; i < n; ++i)
-        result += std::format("{:02X} ", bytes[i]);
-    return result;
-}
 
-export template <std::integral T>
-std::string pattern_str(T value)
-{
-    if constexpr (std::is_same_v<T, char>)
-        return std::format("{} ", value);
-    else
-        return std::format("{:02X} ", value);
-}
-
-export template <std::integral T, typename... Rest>
-std::string pattern_str(T value, Rest... rest)
-{
-    return pattern_str(value) + pattern_str(rest...);
-}
-
-export std::string pattern_str(std::string_view text)
-{
-    std::string result;
-    for (const auto character : text)
-        result += std::format("{:02X} ", static_cast<uint8_t>(character));
-    return result;
-}
-
-export template <typename T>
-std::array<uint8_t, sizeof(T)> to_bytes(const T& object)
-{
-    static_assert(std::is_trivially_copyable_v<T>, "not a TriviallyCopyable type");
-    std::array<uint8_t, sizeof(T)> bytes;
-    const auto* begin = reinterpret_cast<const uint8_t*>(std::addressof(object));
-    std::copy(begin, begin + sizeof(T), bytes.begin());
-    return bytes;
-}
-
-export template <typename T>
-T& from_bytes(const std::array<uint8_t, sizeof(T)>& bytes, T& object)
-{
-    static_assert(std::is_trivially_copyable_v<T>, "not a TriviallyCopyable type");
-    auto* begin = reinterpret_cast<uint8_t*>(std::addressof(object));
-    std::copy(bytes.begin(), bytes.end(), begin);
-    return object;
-}
-
-export template <class T, class T1>
-T from_bytes(const T1& bytes)
-{
-    static_assert(std::is_trivially_copyable_v<T>, "not a TriviallyCopyable type");
-    T object;
-    auto* begin = reinterpret_cast<uint8_t*>(std::addressof(object));
-    std::copy(std::begin(bytes), std::end(bytes) - (sizeof(T1) - sizeof(T)), begin);
-    return object;
-}
-
-// A byte run that can be written and put back, for the sites that are patched
-// and later restored rather than hooked.
-export class raw_mem
-{
-public:
-    raw_mem(injector::memory_pointer_tr address, std::initializer_list<uint8_t> bytes, bool offsetBack = false)
-    {
-        ptr = address.as_int() - (offsetBack ? bytes.size() : 0);
-        new_code.assign(bytes);
-        old_code.resize(new_code.size());
-        ReadMemoryRaw(ptr, old_code.data(), old_code.size(), true);
-    }
-
-    void Write()
-    {
-        WriteMemoryRaw(ptr, new_code.data(), new_code.size(), true);
-    }
-
-    void Restore()
-    {
-        WriteMemoryRaw(ptr, old_code.data(), old_code.size(), true);
-    }
-
-    size_t Size() const
-    {
-        return old_code.size();
-    }
-
-private:
-    injector::memory_pointer ptr;
-    std::vector<uint8_t> old_code;
-    std::vector<uint8_t> new_code;
-};
-
-// Import address table replacement that keeps the replaced target, for the
-// imports a module has to intercept before the game calls them. Regular and
-// delay-loaded imports are both walked; `Name@12` selects an ordinal import.
-export class IATHook
-{
-public:
-    template <typename... Hooks>
-    static std::map<std::string, void*> Replace(HMODULE module, std::string_view library, Hooks&&... hooks)
-    {
-        std::map<std::string, void*> originals;
-        Walk(module, library, [&](const Import& import)
-        {
-            (TryReplace(import, hooks, originals), ...);
-        });
-        return originals;
-    }
-
-private:
-    // delayimp.h is not part of the SDK set a module unit may include, and the
-    // layout is fixed by the PE format.
-    struct DelayLoadDescriptor
-    {
-        DWORD Attributes;
-        DWORD DllNameRVA;
-        DWORD ModuleHandleRVA;
-        DWORD ImportAddressTableRVA;
-        DWORD ImportNameTableRVA;
-        DWORD BoundImportAddressTableRVA;
-        DWORD UnloadInformationTableRVA;
-        DWORD TimeDateStamp;
-    };
-    static_assert(sizeof(DelayLoadDescriptor) == 32, "Invalid structure size of DelayLoadDescriptor");
-
-    struct Import
-    {
-        std::string_view name;
-        uint16_t ordinal{};
-        void** slot{};
-    };
-
-    template <typename Visitor>
-    static void Walk(HMODULE module, std::string_view library, Visitor&& visitor)
-    {
-        const auto base = reinterpret_cast<uintptr_t>(module);
-        if (base == 0)
-            return;
-
-        const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
-        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
-        const auto& directory = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
-        if (directory.VirtualAddress == 0)
-            return;
-
-        for (auto* descriptor = reinterpret_cast<const IMAGE_IMPORT_DESCRIPTOR*>(base + directory.VirtualAddress);
-             descriptor->Name != 0; ++descriptor)
-        {
-            if (!iequals(std::string_view(reinterpret_cast<const char*>(base + descriptor->Name)), library))
-                continue;
-
-            auto* slots = reinterpret_cast<void**>(base + descriptor->FirstThunk);
-            const auto* thunks = descriptor->OriginalFirstThunk != 0
-                ? reinterpret_cast<const IMAGE_THUNK_DATA*>(base + descriptor->OriginalFirstThunk)
-                : nullptr;
-
-            for (size_t index = 0; slots[index] != nullptr; ++index)
-            {
-                Import import{ .slot = &slots[index] };
-                if (thunks != nullptr)
-                {
-                    if (thunks[index].u1.AddressOfData == 0)
-                        break;
-                    if (IMAGE_SNAP_BY_ORDINAL(thunks[index].u1.Ordinal))
-                        import.ordinal = static_cast<uint16_t>(IMAGE_ORDINAL(thunks[index].u1.Ordinal));
-                    else
-                        import.name = reinterpret_cast<const IMAGE_IMPORT_BY_NAME*>(base + thunks[index].u1.AddressOfData)->Name;
-                }
-                visitor(import);
-            }
-        }
-
-        const auto& delay = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT];
-        if (delay.VirtualAddress == 0 || delay.Size == 0)
-            return;
-
-        for (auto* descriptor = reinterpret_cast<const DelayLoadDescriptor*>(base + delay.VirtualAddress);
-             descriptor->DllNameRVA != 0; ++descriptor)
-        {
-            if (descriptor->ImportNameTableRVA == 0 ||
-                !iequals(std::string_view(reinterpret_cast<const char*>(base + descriptor->DllNameRVA)), library))
-                continue;
-
-            auto* slots = reinterpret_cast<void**>(base + descriptor->ImportAddressTableRVA);
-            const auto* thunks = reinterpret_cast<const IMAGE_THUNK_DATA*>(base + descriptor->ImportNameTableRVA);
-            for (size_t index = 0; slots[index] != nullptr; ++index)
-            {
-                if (thunks[index].u1.AddressOfData == 0)
-                    break;
-                Import import{ .slot = &slots[index] };
-                if (IMAGE_SNAP_BY_ORDINAL(thunks[index].u1.Ordinal))
-                    import.ordinal = static_cast<uint16_t>(IMAGE_ORDINAL(thunks[index].u1.Ordinal));
-                else
-                    import.name = reinterpret_cast<const IMAGE_IMPORT_BY_NAME*>(base + thunks[index].u1.AddressOfData)->Name;
-                visitor(import);
-            }
-        }
-    }
-
-    static void TryReplace(const Import& import, const std::pair<std::string_view, void*>& hook, std::map<std::string, void*>& originals)
-    {
-        auto name = hook.first;
-        uint16_t ordinal{};
-        if (const auto at = name.find_last_of('@'); at != std::string_view::npos)
-        {
-            ordinal = static_cast<uint16_t>(std::strtoul(std::string(name.substr(at + 1)).c_str(), nullptr, 10));
-            name = name.substr(0, at);
-        }
-
-        const bool matches = import.ordinal != 0 ? import.ordinal == ordinal : iequals(import.name, name);
-        if (!matches || import.slot == nullptr)
-            return;
-
-        DWORD previous{};
-        if (!VirtualProtect(import.slot, sizeof(void*), PAGE_READWRITE, &previous))
-            return;
-
-        originals.try_emplace(std::string(hook.first), *import.slot);
-        *import.slot = hook.second;
-
-        VirtualProtect(import.slot, sizeof(void*), previous, &previous);
-    }
-};

@@ -167,6 +167,9 @@ export namespace Bodies
             if (opcode != 0xE8 && opcode != 0xE9)
                 continue;
 
+            // The branch is read from the buffer, not from `hostBase`: the two are
+            // the same in the dump, but the test passes a coordinate base with a
+            // buffer somewhere else, and `hostBase` is not dereferenceable.
             int32_t displacement{};
             std::memcpy(&displacement, bytes + offset + 1, sizeof(displacement));
             const auto site = static_cast<uintptr_t>(hostBase + offset);

@@ -316,10 +316,8 @@ namespace Native
         if (!pattern.empty())
         {
             const auto* match = pattern.get_first<std::byte>(0);
-            int32_t displacement{};
-            std::memcpy(&displacement, match + 6, sizeof(displacement));
-            zpatch_native_resolver = reinterpret_cast<uintptr_t>(match + 10) +
-                static_cast<uintptr_t>(static_cast<intptr_t>(displacement));
+            zpatch_native_resolver = static_cast<uintptr_t>(
+                injector::ReadRelativeOffset(reinterpret_cast<uintptr_t>(match + 6)).as_int());
         }
 
         zpatch_native_resolve_entry = reinterpret_cast<uintptr_t>(&GuardedResolve);

@@ -47,10 +47,21 @@ grouped file next to the ASI. The old file is left untouched.
 ## Building
 
 Requirements: Windows 10/11, Visual Studio with the **x86** C++ toolchain (the `win-x86` preset
-names the Visual Studio 18 2026 generator) and CMake 3.28 or newer. The vendor libraries are
-committed under `external/`; there are no submodules to initialise.
+names the Visual Studio 18 2026 generator) and CMake 3.28 or newer. The dependencies are pinned
+upstream git submodules under `external/`, never vendored copies; initialise them once after
+cloning (and after checking out a commit that moves them):
+
+- `external/injector` — [SandeMC/injector](https://github.com/SandeMC/injector), upstream
+  `ThirteenAG/injector` plus the `MakeRET` width fix, pinned at `c196f90` on its `latest` branch.
+  It carries the nested `safetyhook`, `minhook`, `bddisasm` and `kananlib` submodules, and its
+  `zydis/` directory is the upstream amalgamated Zydis 4.1.0 that safetyhook compiles against.
+- `external/hooking` — [ThirteenAG/Hooking.Patterns](https://github.com/ThirteenAG/Hooking.Patterns),
+  pinned at `460a47b`.
+
+Moving a dependency is a submodule bump, never an edit of a checkout.
 
 ```bat
+git submodule update --init --recursive
 cmake --preset win-x86
 cmake --build --preset release
 ctest --preset release
@@ -68,8 +79,8 @@ configuration builds the same ASI with diagnostics enabled (`cmake --build --pre
 `ctest --preset trace`).
 
 `CMakePresets.json` has the presets (`win-x86`, `debug`, `release`, `trace`). The MSVC settings
-that matter (C++23 modules, static CRT, `/BASE:0x10000000`, the committed `external/` trees) are in
-`CMakeLists.txt`, and `.github/workflows/build.yml` is the CI invocation.
+that matter (C++23 modules, static CRT, `/BASE:0x10000000`, the pinned `external/` submodules) are
+in `CMakeLists.txt`, and `.github/workflows/build.yml` is the CI invocation.
 
 ## Credits
 

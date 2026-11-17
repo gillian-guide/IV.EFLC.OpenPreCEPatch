@@ -326,15 +326,6 @@ namespace
         injector::MakeJMP(pattern.get_first(arm.offset), arm.body, true);
     }
 
-    // A rel32 target inside the match: the displacement dword at `displacement`,
-    // measured from the instruction's last byte at `next`.
-    uint32_t Rel32Target(std::byte* match, std::ptrdiff_t displacement, std::ptrdiff_t next)
-    {
-        const auto displacementValue = *reinterpret_cast<const int32_t*>(match + displacement);
-        return static_cast<uint32_t>(
-            reinterpret_cast<uintptr_t>(match + next) + static_cast<uint32_t>(displacementValue));
-    }
-
     // OpenPreCEPatch-only keys have no recovered catalogue row (the 99-key table
     // is the original's INI), so they are read directly. The read keeps the
     // original's gate: the stored value must be exactly 1.
@@ -648,8 +639,8 @@ namespace Multiplayer
         if (site == nullptr)
             return;
 
-        zpatch_crash_msg_getter = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(site) + 5 +
-            *reinterpret_cast<const int32_t*>(site + 1));
+        zpatch_crash_msg_getter =
+            static_cast<uint32_t>(injector::ReadRelativeOffset(site + 1).as_int());
     }
 
     // BadPlayerModelCrashFix's published state, read before the install overwrites
@@ -828,10 +819,8 @@ namespace Multiplayer
             {
                 if (begin[offset] != 0xE8)
                     continue;
-                int32_t displacement = 0;
-                std::memcpy(&displacement, begin + offset + 1, sizeof(displacement));
-                const auto target = reinterpret_cast<uintptr_t>(begin + offset + 5) +
-                                    static_cast<intptr_t>(displacement);
+                const auto target =
+                    static_cast<uintptr_t>(injector::ReadRelativeOffset(begin + offset + 1).as_int());
                 if (target != reinterpret_cast<uintptr_t>(&BpmModelNameBody))
                     continue;
                 injector::MakeCALL(begin + offset,
@@ -855,9 +844,8 @@ namespace Multiplayer
             return;
 
         auto* match = pattern.get_first<std::byte>(0);
-        const auto displacement = *reinterpret_cast<const int32_t*>(match + 91);
         zpatch_collision_should_walk =
-            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + 95) + displacement);
+            static_cast<uint32_t>(injector::ReadRelativeOffset(match + 91).as_int());
     }
 
     // FreezeCarFix / DebugPrintSpawns: the original's handler 0x10037C70 scans the
@@ -884,7 +872,7 @@ namespace Multiplayer
             return;
 
         auto* primaryMatch = primary.get_first<std::byte>(0);
-        zpatch_spawns_orig_a = Rel32Target(primaryMatch, 8, 12);
+        zpatch_spawns_orig_a = static_cast<uint32_t>(injector::ReadRelativeOffset(primaryMatch + 8).as_int());
 
         // dword_1015AD78, the ped-model object array, is the operand four bytes
         // before the original's own anchor (the same recovered read the
@@ -897,7 +885,8 @@ namespace Multiplayer
         auto guard = find_pattern(
             "8B 4C 24 28 8B 54 24 24 50 51 52 E8 ? ? ? ? 5F 5E 5D 5B");
         if (!guard.empty())
-            zpatch_spawns_orig_b = Rel32Target(guard.get_first<std::byte>(0), 12, 16);
+            zpatch_spawns_orig_b =
+                static_cast<uint32_t>(injector::ReadRelativeOffset(guard.get_first<std::byte>(0) + 12).as_int());
 
         // The probe's ten jump-table arms: each site's own `call` target is the
         // resume the thunk tail-jumps to, in case order 0..9.
@@ -905,16 +894,16 @@ namespace Multiplayer
         if (!dispatch.empty())
         {
             auto* match = dispatch.get_first<std::byte>(0);
-            zpatch_spawns_case0_resume = Rel32Target(match, 37, 41);
-            zpatch_spawns_case1_resume = Rel32Target(match, 62, 66);
-            zpatch_spawns_case2_resume = Rel32Target(match, 87, 91);
-            zpatch_spawns_case3_resume = Rel32Target(match, 112, 116);
-            zpatch_spawns_case4_resume = Rel32Target(match, 137, 141);
-            zpatch_spawns_case5_resume = Rel32Target(match, 159, 163);
-            zpatch_spawns_case6_resume = Rel32Target(match, 181, 185);
-            zpatch_spawns_case7_resume = Rel32Target(match, 203, 207);
-            zpatch_spawns_case8_resume = Rel32Target(match, 225, 229);
-            zpatch_spawns_case9_resume = Rel32Target(match, 247, 251);
+            zpatch_spawns_case0_resume = static_cast<uint32_t>(injector::ReadRelativeOffset(match + 37).as_int());
+            zpatch_spawns_case1_resume = static_cast<uint32_t>(injector::ReadRelativeOffset(match + 62).as_int());
+            zpatch_spawns_case2_resume = static_cast<uint32_t>(injector::ReadRelativeOffset(match + 87).as_int());
+            zpatch_spawns_case3_resume = static_cast<uint32_t>(injector::ReadRelativeOffset(match + 112).as_int());
+            zpatch_spawns_case4_resume = static_cast<uint32_t>(injector::ReadRelativeOffset(match + 137).as_int());
+            zpatch_spawns_case5_resume = static_cast<uint32_t>(injector::ReadRelativeOffset(match + 159).as_int());
+            zpatch_spawns_case6_resume = static_cast<uint32_t>(injector::ReadRelativeOffset(match + 181).as_int());
+            zpatch_spawns_case7_resume = static_cast<uint32_t>(injector::ReadRelativeOffset(match + 203).as_int());
+            zpatch_spawns_case8_resume = static_cast<uint32_t>(injector::ReadRelativeOffset(match + 225).as_int());
+            zpatch_spawns_case9_resume = static_cast<uint32_t>(injector::ReadRelativeOffset(match + 247).as_int());
         }
     }
 
@@ -1029,10 +1018,10 @@ namespace Multiplayer
         }
     }
 
-    // TeleportProtection: the entry becomes `ret 8`. The original writes exactly three
-    // bytes -- C2 08 over the opcode and 00 over the byte after the immediate -- and
-    // injector::MakeRET is not equivalent: it stores the opcode through a 4-byte int,
-    // which would also zero match+3.
+    // TeleportProtection: the entry becomes `ret 8`, exactly the original's three
+    // bytes (C2 08 00). The pinned injector fork's MakeRET writes the opcode as one
+    // byte and the immediate as two, so the four-byte overwrite the unfixed upstream
+    // header had (match+3 included) does not happen.
     void InstallTeleportProtection()
     {
         if (!Loader::Enabled("TeleportProtection"))
@@ -1042,10 +1031,7 @@ namespace Multiplayer
         if (pattern.empty())
             return;
 
-        auto* match = pattern.get_first<std::byte>(0);
-        injector::WriteMemory<std::byte>(match, Bytes::RetImm16, true);
-        injector::WriteMemory<std::byte>(match + 1, Bytes::RetImm16High, true);
-        injector::WriteMemory<std::byte>(match + 2, Bytes::Zero, true);
+        injector::MakeRET(pattern.get_first(0), 8, true);
     }
 
     // Patch4RemoveModChecks: the anchor's first twelve bytes are the subtraction

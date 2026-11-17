@@ -29,6 +29,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          submodules: recursive
 
       # The companion ships next to this ASI; CI clones and builds it so the
       # download is the complete install: both ASIs and both INIs.
@@ -101,6 +102,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          submodules: recursive
 
       - name: Set up Python
         uses: actions/setup-python@v5

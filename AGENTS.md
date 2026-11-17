@@ -124,9 +124,57 @@ The key-to-module table is also written to
   only the tail definition keeps the attribute. Registration order inside a
   `Register<Key>` is behavioural and never changes.
 
+## Dependencies
+
+The libraries under `external/` are pinned upstream git submodules, never
+vendored copies. A fresh clone runs `git submodule update --init --recursive`
+before configuring, and CI checks out recursively; moving a dependency is a
+submodule bump (a new gitlink SHA), never an edit of a checkout.
+
+| path | upstream | pin |
+| --- | --- | --- |
+| `external/injector` | `SandeMC/injector` (upstream `ThirteenAG/injector` + the `MakeRET` width fix, branch `latest`) | `c196f90` |
+| `external/injector/safetyhook` | `cursey/safetyhook` | `f44cc07` |
+| `external/injector/minhook` | `TsudaKageyu/minhook` | `8af6b4a` |
+| `external/injector/bddisasm` | `bitdefender/bddisasm` | `709fd97` |
+| `external/injector/kananlib` | `cursey/kananlib` | `114de17` |
+| `external/hooking` | `ThirteenAG/Hooking.Patterns` | `460a47b` |
+
+`external/injector/zydis/` is the upstream amalgamated Zydis 4.1.0 shipped in
+the injector repository. safetyhook is compiled into `zp_modules` from its
+`src/*.cpp` plus that `Zydis.c`, with `safetyhook/include` and `zydis/` on the
+include path -- the same file set FusionFix compiles. No MASM rule is needed:
+the mid-hook trampoline is the `asm_data` byte array embedded in
+`mid_hook.cpp`; the `src/*.asm` files are its source, and upstream's own build
+never assembles them.
+
+The pinned injector fork fixes `MakeRET`: it writes the one-byte `C3` form and
+the three-byte `C2 imm16` form (`WriteMemory<uint8_t>` then
+`WriteMemory<uint16_t>`, so the byte after the immediate is untouched). Call
+`injector::MakeRET(at[, pop], true)` at every `ret` site; never hand-write ret
+opcodes and never keep a local width workaround.
+
+`NormaliseSignature` stays: Hooking.Patterns' `TransformPattern` pushes one
+wildcard byte per `?` character, so IDA's `??` (one byte) has to be collapsed to
+`?`; that is the one thing the library cannot do. Recovered patterns keep their
+IDA spelling in the feature modules.
+
+Do not re-implement a pinned-library helper. The injector supplies the memory
+writes and protection (`WriteMemory`, `MakeJMP`/`MakeCALL`/`MakeNOP`/`MakeRET`,
+`scoped_*`) and the rel32 readers (`ReadRelativeOffset`, `GetRelativeOffset`);
+Hooking.Patterns supplies the scanner (`hook::pattern`). A site reads a rel32
+through the injector call, never through a hand-rolled `site + 5 + disp32` sum
+or a local `Rel32Target`/`CallTarget` helper. The project's own boundaries stay,
+each with its reason in the code: `find_pattern` (variadic build variants over
+the game image), `NormaliseSignature` (above), `CachedMatchFor` (an opt-in memo
+that re-probes the bytes; the library's hint cache is global and, without
+serialization hints, trusts a stale address) and `Bodies` (the recovered-VA
+registry the offline proof compares against).
+
 ## Build and test
 
 ```
+git submodule update --init --recursive
 cmake --preset win-x86
 cmake --build --preset release
 ctest --preset release

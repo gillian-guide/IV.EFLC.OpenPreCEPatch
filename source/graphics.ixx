@@ -169,15 +169,6 @@ namespace
         return (mask & (1u << static_cast<uint32_t>(Loader::Current()))) != 0;
     }
 
-    // A rel32 target inside the match: the displacement dword at `displacement`,
-    // measured from the instruction's last byte at `next`.
-    uint32_t Rel32Target(std::byte* match, std::ptrdiff_t displacement, std::ptrdiff_t next)
-    {
-        const auto displacementValue = *reinterpret_cast<const int32_t*>(match + displacement);
-        return static_cast<uint32_t>(
-            reinterpret_cast<uintptr_t>(match + next) + static_cast<uint32_t>(displacementValue));
-    }
-
     // sub_100064D0, recovered VA 0x100064D0: the two light indices the
     // dual-headlight bodies push. The original's bodies call it inside
     // pushad/popad, so the clobbering is harmless there; the words hold the same
@@ -276,8 +267,7 @@ namespace Graphics
         if (!pattern.empty())
         {
             auto* match = pattern.get_first<std::byte>(0);
-            const auto displacement = *reinterpret_cast<const int32_t*>(match + 9);
-            injector::MakeJMP(match + 7, match + 13 + displacement, true);
+            injector::MakeJMP(match + 7, injector::ReadRelativeOffset(match + 9), true);
         }
 
         pattern = find_pattern("F7 46 24 00 00 00 40 0F 85");
@@ -451,7 +441,8 @@ namespace Graphics
         {
             auto* match = pattern.get_first<std::byte>(0);
             const auto resume = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + 11));
-            zpatch_carparts_shadow_fn = resume + *reinterpret_cast<const int32_t*>(match + 7);
+            zpatch_carparts_shadow_fn =
+                static_cast<uint32_t>(injector::ReadRelativeOffset(match + 7).as_int());
             zpatch_carparts_resume_2 = resume;
             return;
         }
@@ -461,7 +452,8 @@ namespace Graphics
         {
             auto* match = pattern.get_first<std::byte>(0);
             const auto resume = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + 13));
-            zpatch_carparts_shadow_fn = resume + *reinterpret_cast<const int32_t*>(match + 9);
+            zpatch_carparts_shadow_fn =
+                static_cast<uint32_t>(injector::ReadRelativeOffset(match + 9).as_int());
             zpatch_carparts_resume_2 = resume;
         }
     }
@@ -498,9 +490,9 @@ namespace Graphics
 
         auto* match = pattern.get_first<std::byte>(0);
         zpatch_dual_bcc = *pattern.get_first<uint32_t>(207);
-        zpatch_dual_bd0 = Rel32Target(match, 140, 144);
-        zpatch_dual_be4 = Rel32Target(match, 151, 155);
-        zpatch_dual_bd4 = Rel32Target(match, 331, 335);
+        zpatch_dual_bd0 = static_cast<uint32_t>(injector::ReadRelativeOffset(match + 140).as_int());
+        zpatch_dual_be4 = static_cast<uint32_t>(injector::ReadRelativeOffset(match + 151).as_int());
+        zpatch_dual_bd4 = static_cast<uint32_t>(injector::ReadRelativeOffset(match + 331).as_int());
         zpatch_dual_be0 = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + 338));
     }
 
@@ -602,8 +594,7 @@ namespace Graphics
         if (!pattern.empty())
         {
             auto* match = pattern.get_first<std::byte>(0);
-            const auto displacement = *reinterpret_cast<const int32_t*>(match + 2);
-            injector::MakeJMP(match, match + 6 + displacement, true);
+            injector::MakeJMP(match, injector::ReadRelativeOffset(match + 2), true);
         }
 
         pattern = find_pattern("51 68 04 05 00 00 6A 02 6A 00 E8");

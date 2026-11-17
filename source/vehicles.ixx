@@ -309,15 +309,6 @@ namespace
         return reinterpret_cast<T*>(static_cast<uintptr_t>(value));
     }
 
-    // A rel32 target inside the match: the displacement dword at `displacement`,
-    // measured from the instruction's last byte at `next`.
-    uint32_t Rel32Target(std::byte* match, std::ptrdiff_t displacement, std::ptrdiff_t next)
-    {
-        const auto displacementValue = *reinterpret_cast<const int32_t*>(match + displacement);
-        return static_cast<uint32_t>(
-            reinterpret_cast<uintptr_t>(match + next) + static_cast<uint32_t>(displacementValue));
-    }
-
     // sub_10003E50 (source/shared.ixx), the original's own name resolver/hasher.
     // The checks call it rather than a C++ hash, so the "hash:" and quoted forms
     // resolve exactly as in the original.
@@ -541,13 +532,15 @@ namespace Vehicles
         if (auto* match = CachedMatchFor("32 DB 8B 16 8B 82 28 01 00 00 8B CE FF D0"))
         {
             zpatch_steer_resume = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + 16));
-            zpatch_steer_part_call = Rel32Target(match, 423, 427);
+            zpatch_steer_part_call =
+                static_cast<uint32_t>(injector::ReadRelativeOffset(match + 423).as_int());
         }
 
         if (auto* match = CachedMatchFor("7C E0 8B 06 8B 90 28 01 00 00 8B CE FF D2"))
         {
             zpatch_steer_resume = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(match + 16));
-            zpatch_steer_part_call = Rel32Target(match, 140, 144);
+            zpatch_steer_part_call =
+                static_cast<uint32_t>(injector::ReadRelativeOffset(match + 140).as_int());
         }
 
         if (auto* ide = CachedMatchFor("0C 83 88 94 00 00 00 04"))
@@ -634,7 +627,8 @@ namespace Vehicles
         if (!pattern.empty())
         {
             auto* match = pattern.get_first<std::byte>(0);
-            zpatch_nolivery_fn = Rel32Target(match, -6, -2);
+            zpatch_nolivery_fn =
+                static_cast<uint32_t>(injector::ReadRelativeOffset(match - 6).as_int());
             zpatch_nolivery_resume_d = static_cast<uint32_t>(
                 reinterpret_cast<uintptr_t>(match + 90));
         }
@@ -644,7 +638,8 @@ namespace Vehicles
             if (!pattern.empty())
             {
                 auto* match = pattern.get_first<std::byte>(0);
-                zpatch_nolivery_fn = Rel32Target(match, -8, -4);
+                zpatch_nolivery_fn =
+                    static_cast<uint32_t>(injector::ReadRelativeOffset(match - 8).as_int());
                 zpatch_nolivery_resume_d = static_cast<uint32_t>(
                     reinterpret_cast<uintptr_t>(match + 84));
             }

@@ -1,4 +1,4 @@
-﻿# Progress â€” readable-fusion-opcep
+# Progress â€” readable-fusion-opcep
 
 ## 2026-11-10 â€” fork and baseline
 
@@ -310,3 +310,30 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
 - Proof: the per-option dump is identical apart from the `SavegameFix` cell
   (missing 42 rows, extra 0, differing 0); `parity_report.py 9` = 77 closed /
   5 expected deltas / 0 open; 35/35 ctest; 142-body proof / 0 failures.
+
+## 2026-11-17 - dependencies are pinned upstream submodules
+
+- `external/injector` and `external/hooking` are real submodules, not committed
+  copies: injector = `SandeMC/injector` (upstream plus the `MakeRET` width fix)
+  at `latest`/`c196f90`, hooking = `ThirteenAG/Hooking.Patterns` at `460a47b`,
+  with injector's nested safetyhook `f44cc07`, minhook `8af6b4a`, bddisasm
+  `709fd97` and kananlib `114de17` checked out recursively. `.gitmodules` is the
+  FusionFix shape and CI checks out recursively.
+- safetyhook compiles into `zp_modules` as `src/*.cpp` + the injector's
+  amalgamated `zydis/Zydis.c` (the FusionFix file set); its mid-hook trampoline
+  is the embedded `asm_data` in `mid_hook.cpp`, so there is no MASM rule.
+- The fixed `MakeRET` deletes the hand-written ret bytes: TeleportProtection and
+  TryToSkipAllErrors call `injector::MakeRET`, and `Bytes::Ret`/`RetImm16`/
+  `RetImm16High` go with them. `NormaliseSignature` stays (upstream
+  `TransformPattern` treats `?` as one wildcard byte, so IDA's `??` must be
+  collapsed).
+- A second pass against the pinned headers deleted the remaining local
+  re-implementations: the three duplicate `Rel32Target` helpers, `CallTarget` and
+  the hand-rolled `site + 5 + disp32` sums are now `injector::ReadRelativeOffset`
+  (plus `injector::GetRelativeOffset` for the cutscene relocation); the unused
+  `IATHook`, `pattern_str`, `to_bytes`, `from_bytes` and `raw_mem` helpers are
+  gone. `bodies.ixx` keeps its buffer arithmetic because its `hostBase` is a
+  coordinate, not a dereferenceable pointer (the native suite pins that).
+- Proof: per-option dump byte-identical (missing 0 / extra 0 / differing 0);
+  35/35 ctest; `parity_report.py 9` = 77 closed / 5 expected deltas / 0 open;
+  generators up to date; 142-body proof / 0 failures.

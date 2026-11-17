@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(IV.EFLC.OpenPreCEPatch LANGUAGES CXX)
+project(IV.EFLC.OpenPreCEPatch LANGUAGES C CXX)
 
 # A Win32 ASI: 32-bit, MSVC, static CRT, fixed image base, windowed subsystem.
 if(NOT MSVC)
@@ -56,8 +56,24 @@ set(ZP_VERSION_DEFINITIONS
   "rsc_ProductVersion=\"${ZP_PRODUCT_VERSION}\""
   "rsc_GitSHA1=\"${ZP_GIT_SHA}\"")
 
+# Dependencies are pinned upstream submodules, never vendored copies: the
+# injector fork (upstream plus the MakeRET width fix) with its nested
+# safetyhook/zydis/minhook/bddisasm/kananlib checkouts, and Hooking.Patterns.
+# safetyhook is compiled the way FusionFix compiles it: its src/*.cpp plus the
+# injector's amalgamated Zydis. Its mid-hook stub is the embedded `asm_data`
+# array in mid_hook.cpp (the `src/*.asm` files are that array's source, and
+# safetyhook's own build does not assemble them), so no MASM rule is needed.
 add_library(zp_modules STATIC
-  external/hooking/Hooking.Patterns.cpp)
+  external/hooking/Hooking.Patterns.cpp
+  external/injector/zydis/Zydis.c
+  external/injector/safetyhook/src/allocator.cpp
+  external/injector/safetyhook/src/easy.cpp
+  external/injector/safetyhook/src/inline_hook.cpp
+  external/injector/safetyhook/src/mid_hook.cpp
+  external/injector/safetyhook/src/os.linux.cpp
+  external/injector/safetyhook/src/os.windows.cpp
+  external/injector/safetyhook/src/utility.cpp
+  external/injector/safetyhook/src/vmt_hook.cpp)
 set_target_properties(zp_modules PROPERTIES CXX_SCAN_FOR_MODULES ON CXX_EXTENSIONS OFF)
 target_link_libraries(zp_modules PUBLIC version)
 target_sources(zp_modules PUBLIC
@@ -86,6 +102,8 @@ target_sources(zp_modules PUBLIC
 target_include_directories(zp_modules PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/source
   ${CMAKE_CURRENT_SOURCE_DIR}/external/injector/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/external/injector/safetyhook/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/external/injector/zydis
   ${CMAKE_CURRENT_SOURCE_DIR}/external/hooking)
 target_compile_features(zp_modules PUBLIC cxx_std_23)
 target_compile_definitions(zp_modules PUBLIC

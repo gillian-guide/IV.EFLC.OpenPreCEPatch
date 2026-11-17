@@ -1,3 +1,6 @@
-# Vendored libraries, committed rather than referenced: a fresh clone has to
-# build without network access, and a submodule that was never initialised is
-# what broke the first CI run.
+[submodule "external/injector"]
+	path = external/injector
+	url = https://github.com/SandeMC/injector
+[submodule "external/hooking"]
+	path = external/hooking
+	url = https://github.com/ThirteenAG/Hooking.Patterns
