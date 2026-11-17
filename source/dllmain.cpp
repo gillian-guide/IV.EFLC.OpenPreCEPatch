@@ -98,7 +98,6 @@ namespace
                         return "FIXES";
                     if (option->module == "vehicles") return "VEHICLES";
                     if (option->module == "graphics") return "GRAPHICS";
-                    if (option->module == "loading") return "COMPATIBILITY";
                     return "MISC";
                 };
                 (void)Config::WriteGrouped(Config::Ini(), resolve);

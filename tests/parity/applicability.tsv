@@ -63,9 +63,7 @@ BetterMPSync	audio	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 BenchmarkFix	loading	recovered	0x00049DE2	R	R	R	R	R	R	.	R	R	R	.	R
 FastLoading	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 LoadDLCs	loading	recovered	0x00000380	.	.	.	R	.	R	R	.	.	.	.	.
-NewFilesCompatibility	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 NewMemorySystem	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
-NewSavesCompatibility	loading	pattern	0x00008380	.	.	.	A	A	A	A	.	.	.	.	.
 NoLoadingSleep	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 OverrideGTADatPath	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 OverrideGTADatPathTo	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A

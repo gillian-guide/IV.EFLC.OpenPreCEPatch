@@ -71,12 +71,19 @@ REMOVED_KEYS = {
     "DoNotPauseOnMinimize",
     "LaunchWithPlayGTAIV",
     "LocalSettingsPath",
+    "NewFilesCompatibility",
+    "NewSavesCompatibility",
     "SavegameFix",
     "SkipIntro",
     "SkipLauncher",
     "SkipMenu",
     "VRAMFix",
 }
+
+# GFWLProtectionDisabler and SteamAchievements were OpenPreCEPatch-only keys: they
+# are not rows of the recovered 99-key inventory, so the filter above cannot remove
+# them. They left this tree with the rest of [COMPATIBILITY] and are the companion's
+# now; the shipped INI and the CMake/test surface no longer mention them.
 
 
 # OpenPreCEPatch narrows these four keys' build gates in code, with the reason
@@ -99,8 +106,6 @@ NARROWED = {
     # fixes.ixx: "1.2.0.43 has no verified payload, so the arm stays gated"
     "OutOfCommissionFix": ["1.0.6.0", "1.0.6.1", "1.0.7.0", "1.0.8.0", "1.1.0.0",
                            "1.1.1.0", "1.1.2.0", "1.1.3.0"],
-    # compatibility.ixx: "the newer save format is 1060-1080 only"
-    "NewSavesCompatibility": ["1.0.6.0", "1.0.6.1", "1.0.7.0", "1.0.8.0"],
     # multiplayer.ixx: "the update/sign-out popup is patch 5 and below"
     "RemoveGFWLUpdatePopup": ["1.0.0.0", "1.0.0.4", "1.0.4.0"],
 }
@@ -193,7 +198,7 @@ def main():
         print(f"skip: {INVENTORY} is absent, so the catalogue has nothing to be checked against")
         return
     rows = parse()
-    expected = 99 - len(REMOVED_KEYS)  # 82: the 99-key original minus 17 removed/moved
+    expected = 99 - len(REMOVED_KEYS)  # 80: the 99-key original minus 19 removed/moved
     if len(rows) != expected:
         raise SystemExit(f"{len(rows)} option rows parsed, expected {expected} "
                          f"(the inventory layout changed)")

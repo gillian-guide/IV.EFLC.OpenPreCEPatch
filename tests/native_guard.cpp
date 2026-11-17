@@ -31,7 +31,7 @@ import native;
 // left to the caller. The first three are asserted in this process; the fourth is
 // what an original consumer does with the guard's zero (`DrivebyFOVFix`'s helper
 // reads `[eax+0Eh]` at 0x1000646E), and reading through zero kills the process, so
-// it runs in a child like `zp_save_walk`'s uninitialised-magic case.
+// it runs in a child process.
 //
 // The guard has no game in this process: `Native::Register()` is never called, and
 // `Native::SetResolverForTest` (native.ixx; it exists for this test only) installs a

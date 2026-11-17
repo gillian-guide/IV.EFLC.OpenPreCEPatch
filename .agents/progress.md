@@ -337,3 +337,35 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
 - Proof: per-option dump byte-identical (missing 0 / extra 0 / differing 0);
   35/35 ctest; `parity_report.py 9` = 77 closed / 5 expected deltas / 0 open;
   generators up to date; 142-body proof / 0 failures.
+
+## 2026-11-17 - the [COMPATIBILITY] surface moves to the companion
+
+- The four remaining compatibility keys are the companion's now:
+  `NewFilesCompatibility`, `NewSavesCompatibility`, `GFWLProtectionDisabler`
+  and `SteamAchievements`. `source/compatibility.ixx` is deleted whole (the two
+  NewFiles/NewSaves arms, the GFWL xlive arm, the Steam bridge with its `Steam`
+  namespace, the recovered achievement table and the `ReplaceImportOrdinal` IAT
+  walker). Nothing else used the IAT walker or the module-image guard, so no shared
+  helper moved out of the module.
+- `source/registration.ixx` loses the import, `Compatibility::Prepare()` and
+  the six publish/install calls in their original sequence positions; the twelve
+  remaining section modules keep their relative order. The grouped INI (both the
+  shipped `data/plugins/` copy and the repository-root copy) loses the
+  `[COMPATIBILITY]` section, `config.ixx` drops it from the grouped search
+  order, and the first-run import mapping no longer names it.
+- The catalogue is 80 rows (99 recovered - 19 inventory keys), the shipped grouped
+  INI carries 78 option keys, and the flat parity INI is regenerated at 80.
+  `GFWLProtectionDisabler` and `SteamAchievements` were OpenPreCEPatch-only
+  keys and never had an inventory row, so `tools/gen_options.py` lists only the
+  two recovered keys in `REMOVED_KEYS` and documents the other two beside it.
+- Deleted with the arms: `tests/steam.cpp` (`zp_steam`), `tests/save_walk.cpp`
+  (`zp_save_walk`), `tests/module_guard.cpp` (`zp_module_guard`), the four
+  body-proof rows (142 -> 138 bodies), the compatibility signature rows, and the
+  CMake module/target entries.
+- Proof: the per-option dump keeps every retained key byte-identical; only the
+  `NewFilesCompatibility` (13 bytes) and `NewSavesCompatibility` (5 bytes) cells
+  disappear - `compare_dumps.py` reports missing 18 / extra 0 / differing 0.
+  `parity_report.py 9` = 75 closed / 5 expected deltas / 0 open (the two removed
+  catalogue keys were closed). `ctest --preset release` = 32/32 (35 minus the
+  three compatibility-only targets). `verify_bodies.py` = 138 bodies / 0 failures.
+  `gen_options`/`gen_ini`/`gen_applicability`/`gen_body_targets --check` green.

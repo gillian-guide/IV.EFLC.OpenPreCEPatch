@@ -364,7 +364,6 @@ export namespace Config
         "PERFORMANCE",
         "GRAPHICS",
         "EPISODIC",
-        "COMPATIBILITY",
         "MULTIPLAYER",
         "VEHICLES",
         "MISC",

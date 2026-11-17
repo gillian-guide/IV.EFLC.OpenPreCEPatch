@@ -238,7 +238,7 @@ namespace
 
     void TestCatalogue()
     {
-        Check(Catalogue::Count() == 82, "catalogue: the shipped keys are present", std::to_string(Catalogue::Count()));
+        Check(Catalogue::Count() == 80, "catalogue: the shipped keys are present", std::to_string(Catalogue::Count()));
         const auto* carShadow = Catalogue::Find("CarDynamicShadowFix");
         Check(carShadow != nullptr && carShadow->shipped == 1 && carShadow->absent == 0,
             "catalogue: shipped and absent defaults are both recorded");

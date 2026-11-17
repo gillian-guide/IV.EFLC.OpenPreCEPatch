@@ -169,7 +169,7 @@ Patch6and7RemoveModChecks.1070.g	0x4042C7	C6 05 ? ? ? ? ? 74 ? 8B 40 ? 56 6A ? 6
 PedModelsInCutscenesFix	0xA23820	56 8B F1 E8 ? ? ? ? 85 C0 74 0E 66 8B 40 2E	16
 PedModelsInCutscenesFix.lookup	0x8DD2D0	8B 44 24 04 89 44 24 04 66 A1 ? ? ? ? 66 85 C0 76 3E	19
 # the load-time arms (source/performance.ixx, source/episodic.ixx,
-# source/compatibility.ixx, source/multiplayer.ixx, source/misc.ixx,
+# source/multiplayer.ixx, source/misc.ixx,
 # source/stability.ixx, source/fixes.ixx): each pattern confirmed with find_bytes against the
 # 1.0.8.0 IDB, exactly one hit at the recorded VA except StartupTimeFix (three sites).
 # LocalSettingsPath's fallback epilogue, VSyncFix's two anchors, BenchmarkFix's anchor and
@@ -247,37 +247,14 @@ PopupHeadlightsFlag.ide	0xA46550	0C 83 88 94 00 00 00 04	8
 # (0F BF 56 2E 3B 15 ? ? ? ? 75 ? A1) and Patch4RemoveModChecks' Patch4 scan
 # (33 C4 89 84 24 A8 01 00 00 53 8B 5D 08 56 57), which the helper runs once at
 # run time and which matches nothing on this image.
-# the performance and compatibility rows (source/performance.ixx,
-# source/compatibility.ixx), byte-scanned against game_refs/GTAIV.exe
-# (1.0.8.0, base 0x400000): one hit at each recorded VA.
+# the performance rows (source/performance.ixx), byte-scanned against
+# game_refs/GTAIV.exe (1.0.8.0, base 0x400000): one hit at each recorded VA.
 # NewMemorySystem: the anchor is the allocator init's `cmp eax, 0x59999980`; the arm
 # retargets the `call` 34 bytes before it and jumps at -29, retargeting the call to
 # body 0x10038670 and skipping to -16. The second row is the allocator singleton's
 # address (the arm publishes it as dword_10159CD8): `mov esi, 0x19CF9F0`.
 NewMemorySystem	0x40109C	3D 80 99 99 59 73 05	7
 NewMemorySystem.object	0x454811	6A 01 B9 00 00 40 06	7
-# NewFilesCompatibility: the two file-type update calls (the arm retargets each E8)
-# and the registrar's `call <entry>`; the arm jumps at +28, which is the registrar's
-# own `ret`, to body 0x10051600. The published slot is +10 + the dword at +6.
-NewFilesCompatibility.a	0x896149	E8 ? ? ? ? 8B 36 85 F6 75 ED E8 ? ? ? ? 8B 3F 03 EB 85 FF 0F 85 7B FF FF FF	28
-NewFilesCompatibility.b	0x896228	E8 ? ? ? ? 8B 36 85 F6 75 ED E8 ? ? ? ? 8B 3F 03 EB 85 FF 0F 85 6C FF FF FF	28
-NewFilesCompatibility.register	0xB0A954	68 64 28 C8 67 E8	6
-# NewSavesCompatibility (source/compatibility.ixx): the two anchors the original handler
-# 0x10052200 scans, the three sites its converter patches at conversion time, and
-# the game's save-directory function the prepare step calls. All six are unique on
-# every image that carries them (scan of game_refs); the name anchor is absent from
-# 1.0.0.4.0, where the original's handler returns before writing anything, and the
-# branch anchor from 1.0.0.0 / 1.0.4.0 / 1.0.0.4, where the converter's first patch
-# is its clean skip. The load anchor publishes match+0xD as the resume and takes
-# the E9 to body 0x100521E0; the converter's hook sites are the E8 at the read
-# anchor's +6 and at the reload anchor's +6, with the read size at +1, the branch
-# two bytes before the read anchor (at -5) and the republished read entry at +0x1E.
-NewSavesCompatibility.name	0x857CAF	68 ? ? ? ? E8 ? ? ? ? 8B 2D ? ? ? ? 83 C4 08	19
-NewSavesCompatibility.load	0x85B093	89 84 24 E0 01 00 00 8B 45 08 53 33 DB	13
-NewSavesCompatibility.branch	0x872185	74 37 80 3D ? ? ? ? 00 75 2E 8D 84 ? ? ? ? 00 6A 1E	20
-NewSavesCompatibility.read	0x7D8C50	68 BE 0C 00 00 50 E8	7
-NewSavesCompatibility.reload	0x8DA090	56 E8 ? ? ? ? E8 ? ? ? ? A1 ? ? ? ? 8D 0C 85 00 00 00 00	23
-NewSavesCompatibility.directory	0x61E7D0	55 8B EC 83 E4 F8 83 EC 4C 56 33 C0 8D 4C 24 28	16
 # the misc and fixes rows (source/misc.ixx, source/fixes.ixx), byte-scanned against
 # game_refs/GTAIV.exe (1.0.8.0,
 # base 0x400000): exactly one hit at each recorded VA.

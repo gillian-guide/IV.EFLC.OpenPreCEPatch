@@ -94,7 +94,6 @@ target_sources(zp_modules PUBLIC
     source/performance.ixx
     source/graphics.ixx
     source/episodic.ixx
-    source/compatibility.ixx
     source/multiplayer.ixx
     source/vehicles.ixx
     source/misc.ixx
@@ -174,14 +173,6 @@ target_link_libraries(zp_config_guard PRIVATE zp_modules)
 add_test(NAME zp_config_guard COMMAND zp_config_guard)
 set_tests_properties(zp_config_guard PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
-# The Steam achievement bridge's recovered id/name table and its refusal in a
-# non-game process (no xlive import, no steam_api.dll).
-add_executable(zp_steam tests/steam.cpp)
-set_target_properties(zp_steam PROPERTIES CXX_SCAN_FOR_MODULES ON)
-target_link_libraries(zp_steam PRIVATE zp_modules)
-add_test(NAME zp_steam COMMAND zp_steam)
-set_tests_properties(zp_steam PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-
 # The startup-warning probes: the unsupported-version range, the named-mutex
 # single instance, and the one-time FusionFix notice file.
 add_executable(zp_warnings tests/warnings.cpp)
@@ -246,13 +237,6 @@ target_link_libraries(zp_popup_cache PRIVATE zp_modules)
 add_test(NAME zp_popup_cache COMMAND zp_popup_cache)
 set_tests_properties(zp_popup_cache PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
-# The GFWL module-offset guard: inside the mapped image and accessible.
-add_executable(zp_module_guard tests/module_guard.cpp)
-set_target_properties(zp_module_guard PROPERTIES CXX_SCAN_FOR_MODULES ON)
-target_link_libraries(zp_module_guard PRIVATE zp_modules)
-add_test(NAME zp_module_guard COMMAND zp_module_guard)
-set_tests_properties(zp_module_guard PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-
 # The Ultimate ASI Loader version-resource threshold.
 add_executable(zp_loader_info tests/loader_info.cpp)
 set_target_properties(zp_loader_info PROPERTIES CXX_SCAN_FOR_MODULES ON)
@@ -282,19 +266,6 @@ set_target_properties(zp_model_tables PROPERTIES CXX_SCAN_FOR_MODULES ON)
 target_link_libraries(zp_model_tables PRIVATE zp_modules)
 add_test(NAME zp_model_tables COMMAND zp_model_tables)
 set_tests_properties(zp_model_tables PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-
-# The save converter's behavioural test: the eighteen-chunk walk and the three patch
-# values it selects, on every real save under game_refs/saves and on synthetic layouts,
-# with the test's own parser as the oracle. Offline: no game image, no ASI load, and the
-# walk it calls patches nothing.
-add_executable(zp_save_walk tests/save_walk.cpp)
-set_target_properties(zp_save_walk PROPERTIES CXX_SCAN_FOR_MODULES ON)
-target_link_libraries(zp_save_walk PRIVATE zp_modules)
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs/saves)
-  add_test(NAME zp_save_walk
-    COMMAND zp_save_walk ${CMAKE_CURRENT_SOURCE_DIR}/../game_refs/saves)
-  set_tests_properties(zp_save_walk PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-endif()
 
 # The native layer's two guarded entries (source/native.ixx), asserted by behaviour
 # instead of by their disassembly: the normal answers of the invoke (calls the

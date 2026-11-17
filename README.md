@@ -9,7 +9,9 @@ general stability and the multiplayer experience. Options FusionFix already owns
 automatically when a FusionFix ASI is next to the game. It is meant to be used with
 [this fork of XLivelessAddon](https://github.com/gillian-guide/XLivelessAddon) as a companion,
 because some features belong there: the launcher steps (`SkipLauncher`, `LegacyLauncher` and
-`LaunchWithPlayGTAIV`) and the savegame CRC32 bypass (`SavegameFix`).
+`LaunchWithPlayGTAIV`), the savegame CRC32 bypass (`SavegameFix`), and the compatibility set
+(`NewFilesCompatibility`, `NewSavesCompatibility`, `GFWLProtectionDisabler` and
+`SteamAchievements`).
 
 ## Features
 
@@ -20,13 +22,11 @@ because some features belong there: the launcher steps (`SkipLauncher`, `LegacyL
 - Raise the PtrNode and vehicle limits, remove the livery limit and reimplement memory allocation.
 - Fix the emissive-light, reversing-light and LOD fade-in bugs, and add car, object and building shadows.
 - Add experimental night shadow features.
-- Add compatibility for Complete Edition's folder structure, files and savefiles to minimize downgrade requirements.
 - Add the APC/Buzzard, explosive weapons, police weapons and TBoGT aircraft height limit.
 - Add the popup headlights, sirens, plane parts, engine block, steering wheel and garage fixes.
 - Death music restoration
 - .ide hash support
-- Mirror GFWL achievements to Steam
-- Disable the GFWL `xlive.dll` protection and mod checks.
+- Remove the game's modded-file checks.
 
 ## Installation
 

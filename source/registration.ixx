@@ -4,7 +4,6 @@ module;
 
 export module registration;
 
-import compatibility;
 import episodic;
 import fixes;
 import graphics;
@@ -45,7 +44,6 @@ void Registration::RegisterAll()
     Graphics::Prepare();
     Performance::Prepare();
     Episodic::Prepare();
-    Compatibility::Prepare();
     Multiplayer::Prepare();
     Misc::Prepare();
     Fixes::Prepare();
@@ -82,8 +80,6 @@ void Registration::RegisterAll()
         Multiplayer::PublishSuperLODFix();
         Misc::CopyOverrideDatPath();
         Performance::PublishNewMemorySystem();
-        Compatibility::PublishNewFilesCompatibility();
-        Compatibility::PublishNewSavesCompatibility();
         Episodic::PublishLoadDLCs();
         Misc::PublishRestoreDeathMusic();
         Fixes::PublishMouseFix();
@@ -159,8 +155,6 @@ void Registration::RegisterAll()
         Stability::InstallBenchmarkFix();
         Misc::InstallOverrideGTADatPath();
         Performance::InstallNewMemorySystem();
-        Compatibility::InstallNewFilesCompatibility();
-        Compatibility::InstallNewSavesCompatibility();
         Episodic::InstallLoadDLCs();
         Misc::InstallAllowHashesForIDE();
         Stability::InstallCombinedRadioFreezeFix();
@@ -177,8 +171,6 @@ void Registration::RegisterAll()
         Fixes::InstallSpeedupBugFix();
         Multiplayer::InstallPatch4RemoveModChecks();
         Vehicles::InstallCopSirensFlag();
-        Compatibility::InstallGFWLProtectionDisabler();
-        Compatibility::InstallSteamAchievements();
         Vehicles::InstallPopupHeadlightsFlag();
         Fixes::InstallOutOfCommissionFix();
     };
