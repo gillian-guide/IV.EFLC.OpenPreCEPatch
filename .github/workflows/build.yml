@@ -38,6 +38,7 @@ jobs:
         with:
           repository: gillian-guide/XLivelessAddon
           path: companion/XLivelessAddon
+          submodules: recursive
           fetch-depth: 1
 
       # No -G: use whichever Visual Studio generator the image provides (the
