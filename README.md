@@ -8,10 +8,7 @@ It targets improvements to the pre-CE experience to bring it closer to the Compl
 general stability and the multiplayer experience. Options FusionFix already owns are gated off
 automatically when a FusionFix ASI is next to the game. It is meant to be used with
 [this fork of XLivelessAddon](https://github.com/gillian-guide/XLivelessAddon) as a companion,
-because some features belong there: the launcher steps (`SkipLauncher`, `LegacyLauncher` and
-`LaunchWithPlayGTAIV`), the savegame CRC32 bypass (`SavegameFix`), and the compatibility set
-(`NewFilesCompatibility`, `NewSavesCompatibility`, `GFWLProtectionDisabler` and
-`SteamAchievements`).
+because some features belong there (including DRM bypasses).
 
 ## Features
 
