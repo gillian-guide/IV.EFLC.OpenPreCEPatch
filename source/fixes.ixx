@@ -511,6 +511,10 @@ void* Fixes::SpeedupBugFixForTest(void* self, uint32_t clock,
         {
             for (const uint32_t offset : offsets)
             {
+                // Only a call's operand is relocated; a different byte there means
+                // the copy would execute something the original never ran.
+                if (source[offset] != 0xE8u)
+                    return false;
                 const auto target = injector::ReadRelativeOffset(
                     reinterpret_cast<uintptr_t>(source + offset + 1));
                 const auto relative = static_cast<intptr_t>(
@@ -571,6 +575,13 @@ void* Fixes::SpeedupBugFixForTest(void* self, uint32_t clock,
             auto* copy = static_cast<uint8_t*>(AllocateNearImage(kCutsceneCalleeSize));
             if (copy == nullptr)
                 return nullptr;
+            // The allocation is zeroed; RelocateCalls only writes the calls'
+            // displacements, so the body itself has to be copied first. Without
+            // this the game executes the zero page and faults at copy + 0xE
+            // (the 2026-11-17 07:05 / 08:21 dumps: the page held only the
+            // relocated rel32s, so the first call's operand became a garbage
+            // displacement).
+            std::memcpy(copy, source, kCutsceneCalleeSize);
             if (!RelocateCalls(copy, source, kCutsceneCalls))
             {
                 VirtualFree(copy, 0, MEM_RELEASE);
