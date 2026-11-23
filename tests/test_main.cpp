@@ -238,13 +238,15 @@ namespace
 
     void TestCatalogue()
     {
-        Check(Catalogue::Count() == 80, "catalogue: the shipped keys are present", std::to_string(Catalogue::Count()));
+        Check(Catalogue::Count() == 77, "catalogue: the shipped keys are present", std::to_string(Catalogue::Count()));
         const auto* carShadow = Catalogue::Find("CarDynamicShadowFix");
         Check(carShadow != nullptr && carShadow->shipped == 1 && carShadow->absent == 0,
             "catalogue: shipped and absent defaults are both recorded");
         Check(Catalogue::Find("NoSuchKey") == nullptr, "catalogue: an unknown key is not in the catalogue");
-        Check(!Catalogue::AppliesTo("BenchmarkFix", Build::v1080), "catalogue: BenchmarkFix does not apply to 1.0.8.0");
-        Check(Catalogue::AppliesTo("BenchmarkFix", Build::v1070), "catalogue: ... and does apply to 1.0.7.0");
+        Check(!Catalogue::AppliesTo("RemoveGFWLUpdatePopup", Build::v1080),
+            "catalogue: RemoveGFWLUpdatePopup does not apply to 1.0.8.0");
+        Check(Catalogue::AppliesTo("RemoveGFWLUpdatePopup", Build::v1000),
+            "catalogue: ... and does apply to 1.0.0.0");
         Check(Catalogue::AppliesTo("RestoreDeathMusic", Build::v1080),
           "catalogue: an all-builds key applies to 1.0.8.0");
         Check(!Catalogue::AppliesTo("RestoreDeathMusic", Build::unknown),

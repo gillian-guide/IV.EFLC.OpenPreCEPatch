@@ -8,12 +8,13 @@ It targets improvements to the pre-CE experience to bring it closer to the Compl
 general stability and the multiplayer experience. Options FusionFix already owns are gated off
 automatically when a FusionFix ASI is next to the game. It is meant to be used with
 [this fork of XLivelessAddon](https://github.com/gillian-guide/XLivelessAddon) as a companion,
-because some features belong there (including DRM bypasses).
+because some features belong there (including DRM bypasses, the launcher steps, the savegame
+CRC32 bypass and the episode/DLC discovery).
 
 ## Features
 
 - Fix the 15+ second startup times before the game window even pops up, cut loading times in half or more, and get to the main menu faster.
-- Fix benchmark, Concrete Jungle, episode-switch, ROCKET, wanted-level, SuperLOD and SMPA60 crashes.
+- Fix episode-switch, ROCKET, wanted-level, SuperLOD and SMPA60 crashes.
 - Fix the multiplayer crashes and freezes, including the modmenu crash methods.
 - Fix some high-FPS problems: cutscenes, bike physics, the 300 FPS speedup, VSync, driveby aim and the mouse deadzone.
 - Raise the PtrNode and vehicle limits, remove the livery limit and reimplement memory allocation.

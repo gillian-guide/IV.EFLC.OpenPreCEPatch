@@ -39,11 +39,9 @@ void Registration::RegisterAll()
 {
     // The unconditional preamble, in the order the old Register* blocks ran it.
     // None of this reads an option or writes an image byte.
-    Stability::Prepare();
     Vehicles::Prepare();
     Graphics::Prepare();
     Performance::Prepare();
-    Episodic::Prepare();
     Multiplayer::Prepare();
     Misc::Prepare();
     Fixes::Prepare();
@@ -80,7 +78,6 @@ void Registration::RegisterAll()
         Multiplayer::PublishSuperLODFix();
         Misc::CopyOverrideDatPath();
         Performance::PublishNewMemorySystem();
-        Episodic::PublishLoadDLCs();
         Misc::PublishRestoreDeathMusic();
         Fixes::PublishMouseFix();
         Fixes::PublishDrivebyFOVFix();
@@ -152,12 +149,9 @@ void Registration::RegisterAll()
         Multiplayer::InstallRemoveRGSCLoginRequirement();
         Performance::InstallStartupTimeFix();
         Fixes::InstallVSyncFix();
-        Stability::InstallBenchmarkFix();
         Misc::InstallOverrideGTADatPath();
         Performance::InstallNewMemorySystem();
-        Episodic::InstallLoadDLCs();
         Misc::InstallAllowHashesForIDE();
-        Stability::InstallCombinedRadioFreezeFix();
         Multiplayer::InstallBetterMPSync();
         Multiplayer::InstallIncreasePtrNodes();
         Episodic::InstallEpisodicWeaponSupport();

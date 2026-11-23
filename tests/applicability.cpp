@@ -70,19 +70,19 @@ namespace
         // catalogue masks are the loader's refusal, so the INI value cannot
         // widen them.
         Config::Ini() = Feather::Parse(
-            "[Options]\nBenchmarkFix=1\nSuperLODFix=1\nAimProjectileCrashFix=1\n");
+            "[Options]\nRemoveGFWLUpdatePopup=1\nSuperLODFix=1\nAimProjectileCrashFix=1\n");
         Loader::Current() = Build::v1080;
 
-        Check(Loader::Enabled("BenchmarkFix") == false,
-            "gate: BenchmarkFix is refused on 1.0.8.0 (its mask excludes it)");
+        Check(Loader::Enabled("RemoveGFWLUpdatePopup") == false,
+            "gate: RemoveGFWLUpdatePopup is refused on 1.0.8.0 (its mask excludes it)");
         Check(Loader::Enabled("SuperLODFix") == true,
             "gate: SuperLODFix is admitted on 1.0.8.0");
         Check(Loader::Enabled("AimProjectileCrashFix") == true,
             "gate: an all-builds key is admitted");
 
         Loader::Current() = FromId(1);
-        Check(Loader::Enabled("BenchmarkFix") == true,
-            "gate: BenchmarkFix is admitted on 1.0.0.0");
+        Check(Loader::Enabled("RemoveGFWLUpdatePopup") == true,
+            "gate: RemoveGFWLUpdatePopup is admitted on 1.0.0.0");
         Check(Loader::Enabled("SuperLODFix") == false,
             "gate: SuperLODFix is refused on 1.0.0.0");
 

@@ -22,9 +22,6 @@ import patch;
 // PlayerAsPedComponentsFix in `misc` and PlaneCrashFix in `vehicles`.
 export namespace Stability
 {
-    // The bodies the arms branch to, registered before either tier runs.
-    void Prepare();
-
     // The publish tier reads the sites the install tier overwrites.
     void PublishFreezeGunFix();
     void PublishWantedLevelCrashFix();
@@ -32,13 +29,11 @@ export namespace Stability
     void PublishSMPA60Fix();
 
     // The install tier owns the gate and the writes.
-    void InstallCombinedRadioFreezeFix();
     void InstallFreezeGunFix();
     void InstallWantedLevelCrashFix();
     void InstallEpisodeSwitchFreezeFix();
     void InstallSMPA60Fix();
     void InstallTryToSkipAllErrors();
-    void InstallBenchmarkFix();
 }
 
 // The published state of the arms below, in C linkage because the transcribed
@@ -54,18 +49,12 @@ extern "C"
     uint32_t zpatch_smpa60_resume_a = 0;         // dword_10159C70
     uint32_t zpatch_smpa60_resume_b = 0;         // dword_10159C68
     uint32_t zpatch_smpa60_resume_c = 0;         // dword_10159C6C
-
-    // BenchmarkFix: the two resumes the two bodies tail-jump to (the sites' own
-    // +13), kept as the original's two words dword_1015AD50 / dword_1015AD54.
-    uint32_t zpatch_benchmark_resume_a = 0;
-    uint32_t zpatch_benchmark_resume_b = 0;
 }
 
 // The transcribed bodies are defined in the tail of this file. MSVC rejects a
 // __declspec(naked) declaration (C2488), so the readable code above them names
 // each body through a plain prototype; only the definition in the tail keeps the
 // attribute.
-static void CombinedRadioFreezeFixBody();
 static void FreezeGunShim();
 static void WantedLevelShim();
 static void EpisodeSwitchStoreShim();
@@ -75,8 +64,6 @@ static void EpisodeSwitchSum();
 static void EpisodeSwitchVcall();
 static void Smpa60Shim();
 static void Smpa60TailShim();
-static void BenchmarkBodyA();
-static void BenchmarkBodyB();
 
 namespace
 {
@@ -108,17 +95,6 @@ namespace
             return;
         Bodies::Register(reinterpret_cast<uintptr_t>(arm.body), arm.reference);
         injector::MakeJMP(pattern.get_first(arm.offset), arm.body, true);
-    }
-}
-
-namespace Stability
-{
-    void Prepare()
-    {
-        // BenchmarkFix's two bodies branch to the game's own continuations, so
-        // they carry their recovered VAs like every other branch target.
-        Bodies::Register(reinterpret_cast<uintptr_t>(&BenchmarkBodyA), 0x10005650u);
-        Bodies::Register(reinterpret_cast<uintptr_t>(&BenchmarkBodyB), 0x10005670u);
     }
 }
 
@@ -291,36 +267,6 @@ namespace Stability
             injector::MakeRET(pattern.get_first(0), 0, true);
     }
 
-    // BenchmarkFix: two match sites eight bytes into the matched call sequence.
-    // The resume is the anchor's +13, read before the sites are overwritten; the
-    // key's build mask excludes 1.0.8.0, so this arm is inert on that image.
-    void InstallBenchmarkFix()
-    {
-        if (!Loader::Enabled("BenchmarkFix"))
-            return;
-
-        auto pattern = find_pattern<2>("E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20");
-        if (!pattern.empty() && ExpectMatchCount(pattern, 2, "BenchmarkFix entries"))
-        {
-            // The two resumes are each match's own +13, not one shared value:
-            // `mov eax,[edx]; add eax,0Dh; mov dword_1015AD50,eax` publishes the
-            // first, `mov eax,[ecx+4]; add eax,0Dh; mov dword_1015AD54,eax` the
-            // second, and the bodies read their own word
-            // (`jmp [dword_1015AD50]` / `jmp [dword_1015AD54]`, 0x10005667 /
-            // 0x10005687). The matches sit in different functions, so one shared
-            // resume sends body B to body A's continuation.
-            zpatch_benchmark_resume_a = static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(pattern.get(0).get<std::byte>(0)) + 13);
-            if (pattern.size() > 1)
-                zpatch_benchmark_resume_b = static_cast<uint32_t>(
-                    reinterpret_cast<uintptr_t>(pattern.get(1).get<std::byte>(0)) + 13);
-
-            injector::MakeJMP(pattern.get(0).get<std::byte>(8), reinterpret_cast<void*>(&BenchmarkBodyA), true);
-            if (pattern.size() > 1)
-                injector::MakeJMP(pattern.get(1).get<std::byte>(8), reinterpret_cast<void*>(&BenchmarkBodyB), true);
-        }
-    }
-
     void InstallFreezeGunFix()
     {
         InstallBranchArm(kFreezeGunArm);
@@ -331,39 +277,12 @@ namespace Stability
         InstallBranchArm(kWantedLevelArm);
     }
 
-    void InstallCombinedRadioFreezeFix()
-    {
-        if (!Loader::Enabled("CombinedRadioFreezeFix"))
-            return;
-
-        auto pattern = find_pattern("E8 ? ? ? ? 8B 35 ? ? ? ? 3B F0");
-        if (!pattern.empty())
-        {
-            Bodies::Register(reinterpret_cast<uintptr_t>(&CombinedRadioFreezeFixBody), 0x10005ED0u);
-            injector::MakeCALL(pattern.get_first(0),
-                reinterpret_cast<void*>(&CombinedRadioFreezeFixBody), true);
-        }
-    }
-
 }
 
 // ---------------------------------------------------------------------------
 // Transcribed bodies. Each is the original's instruction stream, kept as asm
 // because that is what it is; the code above is what installs it.
 // ---------------------------------------------------------------------------
-
-// sub_10005ED0, recovered VA 0x10005ED0 (6 bytes, 2 instructions): the radio
-// freeze value. The site is a call into the game's radio update; the body returns
-// 19 in its place. Naked and internal: an external-linkage naked function is
-// written to the module and every importer fails (C2488).
-static __declspec(naked) void CombinedRadioFreezeFixBody()
-{
-    __asm
-    {
-        mov eax, 13h
-        ret
-    }
-}
 
 // tramp_SMPA60Fix, recovered VA 0x10046750: the streaming load's argument setup,
 // replayed around the sentinel that says the loader slot is unused. Naked and
@@ -565,51 +484,5 @@ static __declspec(naked) void FreezeGunShim()
         xor eax, eax
         pop esi
         ret 8
-    }
-}
-
-// sub_10005650, recovered VA 0x10005650: BenchmarkFix's first match-site shim. It
-// checks the benchmark object, runs the interposed callback (ESI with EDI), then
-// resumes, or unwinds through the enclosing function's tail when the object is
-// null.
-static __declspec(naked) void BenchmarkBodyA()
-{
-    __asm
-    {
-        test eax, eax
-        jz benchmark_a_zero
-        push edi
-        mov ebx, eax
-        call esi
-        jmp DWORD PTR [zpatch_benchmark_resume_a]
-    benchmark_a_zero:
-        xor al, al
-        pop esi
-        pop ebp
-        pop ebx
-        add esp, 10h
-        ret
-    }
-}
-
-// sub_10005670, recovered VA 0x10005670: BenchmarkFix's second match-site shim,
-// the same shape as the first with its own resume.
-static __declspec(naked) void BenchmarkBodyB()
-{
-    __asm
-    {
-        test eax, eax
-        jz benchmark_b_zero
-        push edi
-        mov ebx, eax
-        call esi
-        jmp DWORD PTR [zpatch_benchmark_resume_b]
-    benchmark_b_zero:
-        xor al, al
-        pop esi
-        pop ebp
-        pop ebx
-        add esp, 10h
-        ret
     }
 }

@@ -22,11 +22,11 @@ import patch;
 // transcribed as instruction streams, not reimplemented, so the recovered VA is
 // in the comment above each piece and in tests/bodies.tsv.
 //
-// The formatter is here because four section modules reach it: the livery and
-// spawn diagnostics in `vehicles`/`multiplayer`, the OOC mount name in `fixes` and
-// the DLC path in `episodic` call it through a six-byte forwarder on
-// `zpatch_format_entry`. The BPM diagnostic in `multiplayer` does the same now;
-// the body is one shared transcription, not a copy per module.
+// The formatter is here because three section modules reach it: the livery and
+// spawn diagnostics in `vehicles`/`multiplayer` and the OOC mount name in `fixes`
+// call it through a six-byte forwarder on `zpatch_format_entry`. The BPM
+// diagnostic in `multiplayer` does the same now; the body is one shared
+// transcription, not a copy per module.
 //
 // The two PlayerAsPedComponentsFix bodies are here rather than in the MISC module
 // because the helper reaches the resolver with a direct `call` (E8, the shape the
@@ -497,7 +497,7 @@ static __declspec(naked) void BpmFormatEngine()
 // with the arg list's address taken from the frame (`[ebp+14h]`) exactly as the
 // compiled original does. Transcribed and proven, so the C++ `_vsnprintf_s` rebuild
 // the tree carried is gone. The other modules whose inline asm names a local
-// formatter (vehicles' livery helpers, the OOC wrapper, the DLC discovery) enter
+// formatter (vehicles' livery helpers, the OOC wrapper) enter
 // this body through a six-byte `jmp` forwarder on `zpatch_format_entry`, so the
 // original's single formatter is single here too.
 //

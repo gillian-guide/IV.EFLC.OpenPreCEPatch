@@ -206,12 +206,9 @@ target_link_libraries(zp_import PRIVATE zp_modules)
 add_test(NAME zp_import COMMAND zp_import)
 set_tests_properties(zp_import PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
-# The `dlc_path` group's 0x104-byte discovery-path bound.
-add_executable(zp_dlc_path tests/dlc_path.cpp)
-set_target_properties(zp_dlc_path PROPERTIES CXX_SCAN_FOR_MODULES ON)
-target_link_libraries(zp_dlc_path PRIVATE zp_modules)
-add_test(NAME zp_dlc_path COMMAND zp_dlc_path)
-set_tests_properties(zp_dlc_path PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+# The `dlc_path` group's 0x104-byte discovery-path bound and the full C++ DLC
+# discovery are gone with LoadDLCs: the episode/DLC discovery is the XLivelessAddon
+# companion's key now.
 
 # The shipped OpenPreCEPatch INI: grouped sections, trailing comments and
 # over-256-byte lines are normalised by Feather::LoadGrouped; the flat parity
@@ -243,13 +240,6 @@ set_target_properties(zp_loader_info PROPERTIES CXX_SCAN_FOR_MODULES ON)
 target_link_libraries(zp_loader_info PRIVATE zp_modules)
 add_test(NAME zp_loader_info COMMAND zp_loader_info)
 set_tests_properties(zp_loader_info PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-
-# The full C++ DLC discovery: checked paths, one layout per DLC, registration.
-add_executable(zp_dlc_full tests/dlc_full.cpp)
-set_target_properties(zp_dlc_full PROPERTIES CXX_SCAN_FOR_MODULES ON)
-target_link_libraries(zp_dlc_full PRIVATE zp_modules)
-add_test(NAME zp_dlc_full COMMAND zp_dlc_full)
-set_tests_properties(zp_dlc_full PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
 # The checked FCHS walk: lookup/object guards and the table offset.
 add_executable(zp_fchs tests/fchs.cpp)

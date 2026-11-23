@@ -67,9 +67,12 @@ REMOVED_KEYS = {
     "RemoveBoundingBoxCulling",
     "RemoveUselessChecks",
     # moved to XLivelessAddon
+    "BenchmarkFix",
     "BorderlessWindowed",
+    "CombinedRadioFreezeFix",
     "DoNotPauseOnMinimize",
     "LaunchWithPlayGTAIV",
+    "LoadDLCs",
     "LocalSettingsPath",
     "NewFilesCompatibility",
     "NewSavesCompatibility",
@@ -198,7 +201,7 @@ def main():
         print(f"skip: {INVENTORY} is absent, so the catalogue has nothing to be checked against")
         return
     rows = parse()
-    expected = 99 - len(REMOVED_KEYS)  # 80: the 99-key original minus 19 removed/moved
+    expected = 99 - len(REMOVED_KEYS)  # 77: the 99-key original minus 22 removed/moved
     if len(rows) != expected:
         raise SystemExit(f"{len(rows)} option rows parsed, expected {expected} "
                          f"(the inventory layout changed)")

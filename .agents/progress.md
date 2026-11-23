@@ -369,3 +369,43 @@ Audited `openprecepatch/source/*` and its shipped INI, not just its docs:
   catalogue keys were closed). `ctest --preset release` = 32/32 (35 minus the
   three compatibility-only targets). `verify_bodies.py` = 138 bodies / 0 failures.
   `gen_options`/`gen_ini`/`gen_applicability`/`gen_body_targets --check` green.
+
+## 2026-11-23 — LoadDLCs, BenchmarkFix and CombinedRadioFreezeFix are the companion's
+
+- The three keys are XLivelessAddon's: its `4e73a98` port commit took them from
+  this tree and ship build `3776f2c` carries them. Owning them here as well would
+  write the same sites twice, so they leave the OpenPreCEPatch surface.
+- `tools/gen_options.py`'s `REMOVED_KEYS` gains all three (99 - 22 = 77 rows); the
+  catalogue, the flat parity INI and the applicability table are regenerated, and
+  `data/applicability_evidence.json` drops the two recovered-gate rows
+  (`BenchmarkFix`, `LoadDLCs`).
+- `source/episodic.ixx` loses the whole LoadDLCs footprint: `PublishLoadDLCs`,
+  `InstallLoadDLCs`, the per-build write table and its build rows, the two
+  transcribed bodies (dummy and struct fixup), the C++ discovery pass, the apply
+  and format forwarders, the request struct, the path bound and its test seam,
+  `Prepare()` with its three `Bodies::Register` rows, and the DLC-only includes.
+  Nothing else used them; the six other EPISODIC keys are unchanged.
+- `source/stability.ixx` loses `InstallBenchmarkFix` with its two match-site
+  bodies and their two resumes, and `InstallCombinedRadioFreezeFix` with its
+  radio-value body. `Prepare()` only registered the two benchmark bodies, so it
+  goes with them. The five other [STABILITY] keys are unchanged.
+- `source/registration.ixx` loses the two `Prepare()` calls and the four
+  publish/install subscriptions in their original sequence positions;
+  `dllmain.cpp` and `tests/import.cpp` drop the `BenchmarkFix` legacy-section
+  special case (the module mapping to STABILITY is what remains). The shipped
+  grouped INI, both the `data/plugins` copy and the repository-root copy, loses
+  the three rows: [STABILITY] 7 -> 5 and [EPISODIC] 7 -> 6.
+- Deleted with the keys: `tests/dlc_path.cpp` (`zp_dlc_path`) and
+  `tests/dlc_full.cpp` (`zp_dlc_full`), the five body-proof rows and their three
+  comment blocks (138 -> 133 bodies), the twelve signature rows, and the CMake
+  target entries. `tests/body_targets.tsv` is generated from `../readable/`
+  (which keeps the keys) as the reference-attribution table, so it is unchanged,
+  the same shape the earlier [COMPATIBILITY] removal left.
+- Proof: the per-option dump keeps every retained key byte-identical; only the
+  LoadDLCs (33 bytes) and CombinedRadioFreezeFix (4) cells disappear --
+  BenchmarkFix has no 1.0.8.0 cell -- and `compare_dumps.py` reports missing 37,
+  extra 0, differing 0. `parity_report.py 9` = 72 closed / 5 expected deltas /
+  0 open (the three removed keys were closed). `ctest --preset release` = 30/30
+  (32 minus the two DLC-only targets). `verify_bodies.py` = 133 bodies /
+  0 failures. `gen_options`/`gen_ini`/`gen_applicability`/`gen_body_targets
+  --check` green; submodules unchanged.

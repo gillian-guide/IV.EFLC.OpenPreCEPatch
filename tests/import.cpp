@@ -32,7 +32,7 @@ namespace
         const auto* option = Catalogue::Find(key);
         if (option == nullptr)
             return "Options";
-        if (key == "BenchmarkFix" || option->module == "stability")
+        if (option->module == "stability")
             return "STABILITY";
         if (key == "OutOfCommissionFix" || key == "CutsceneFixes")
             return "FIXES";
@@ -52,7 +52,7 @@ namespace
 
         {
             std::ofstream flat("ZolikaPatch.ini", std::ios::out | std::ios::trunc);
-            flat << "[Options]\nBenchmarkFix=0\nGarageModelFix=1\n";
+            flat << "[Options]\nFreezeGunFix=0\nGarageModelFix=1\n";
         }
 
         Check(Config::Load(), "import: the legacy flat file is read when the shipped one is absent");
@@ -72,8 +72,8 @@ namespace
         const std::string text((std::istreambuf_iterator<char>(grouped)),
             std::istreambuf_iterator<char>());
         Check(text.find("[STABILITY]") != std::string::npos &&
-                  text.find("BenchmarkFix=0") != std::string::npos,
-            "import: BenchmarkFix is under STABILITY");
+                  text.find("FreezeGunFix=0") != std::string::npos,
+            "import: FreezeGunFix is under STABILITY");
         Check(text.find("[VEHICLES]") != std::string::npos &&
                   text.find("GarageModelFix=1") != std::string::npos,
             "import: GarageModelFix is under VEHICLES");
@@ -83,7 +83,7 @@ namespace
         Check(Config::Ini().Find("VEHICLES", "GarageModelFix") != nullptr,
             "import: the loaded document is the grouped one");
         Check(Catalogue::Read("GarageModelFix") == 1 &&
-                  Catalogue::Read("BenchmarkFix") == 0,
+                  Catalogue::Read("FreezeGunFix") == 0,
             "import: values read identically from the grouped file");
 
         std::filesystem::current_path(original, ignored);

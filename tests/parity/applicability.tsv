@@ -49,7 +49,6 @@ NoLODLightHeightCutoff	graphics	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 RemoveStaticCarShadows	graphics	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 RemoveStaticCutsceneCarShadows	graphics	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 SuperLODFix	graphics	recovered	0x00000300	.	.	.	.	.	R	R	.	.	.	.	.
-CombinedRadioFreezeFix	audio	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 RestoreDeathMusic	audio	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 MouseFix	audio	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 EpisodicWeaponSupport	audio	recovered	0x0004BFC0	.	R	.	R	R	R	R	R	R	R	R	R
@@ -60,9 +59,7 @@ TBoGTHeliHeightLimit	audio	recovered	0x0004BFC0	.	R	.	R	R	R	R	R	R	R	R	R
 IncreasePtrNodes	audio	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 AllowHashesForIDE	audio	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 BetterMPSync	audio	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
-BenchmarkFix	loading	recovered	0x00049DE2	R	R	R	R	R	R	.	R	R	R	.	R
 FastLoading	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
-LoadDLCs	loading	recovered	0x00000380	.	.	.	R	.	R	R	.	.	.	.	.
 NewMemorySystem	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 NoLoadingSleep	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A
 OverrideGTADatPath	loading	pattern	0x0004BFE2	A	A	A	A	A	A	A	A	A	A	A	A

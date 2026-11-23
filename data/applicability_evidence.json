@@ -15,11 +15,9 @@
     { "id": 18, "name": "1.2.0.43", "compact": 12043 }
   ],
   "recovered_gate": [
-    "BenchmarkFix",
     "DualVehicleHeadlights",
     "EpisodicVehicleSupport",
     "EpisodicWeaponSupport",
-    "LoadDLCs",
     "Patch6and7RemoveModChecks",
     "Patch7RemoveModChecks",
     "PipeBombDropIconSupport",

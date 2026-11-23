@@ -92,7 +92,7 @@ namespace
                         return "Options";
                     // The section names follow OpenPreCEPatch's shipped INI
                     // where a key's owning module is not the oPCEP section.
-                    if (key == "BenchmarkFix" || option->module == "stability")
+                    if (option->module == "stability")
                         return "STABILITY";
                     if (key == "OutOfCommissionFix" || key == "CutsceneFixes")
                         return "FIXES";

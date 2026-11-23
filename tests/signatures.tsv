@@ -132,7 +132,6 @@ CutsceneFixes.target_found	0xC9A840	74 24 8B 44 24 2C 83 F8 03	9
 # and the builder is match+0x13 + the rel32 at match+0x0F. One hit on 1.0.8.0.
 HighQualityReflections	0xC51311	8B 87 38 09 00 00 6A 08 68 1D 13 00 00 50 E8	15
 AllowHashesForIDE	0x45CF50	8B 4C 24 08 56 8B 74 24 08 80 3E 22	12
-CombinedRadioFreezeFix	0x895F59	E8 ? ? ? ? 8B 35 ? ? ? ? 3B F0	13
 BetterMPSync	0x6D9356	8B 90 E8 00 00 00 55 8B CE FF	10
 IncreasePtrNodes	0x8DDADE	6A 08 ? ? ? ? ? 68 80 38 01 00	12
 IncreasePtrNodes	0x8DDB1E	6A 10 ? ? ? ? ? 68 80 3E 00 00	12
@@ -172,7 +171,7 @@ PedModelsInCutscenesFix.lookup	0x8DD2D0	8B 44 24 04 89 44 24 04 66 A1 ? ? ? ? 66
 # source/multiplayer.ixx, source/misc.ixx,
 # source/stability.ixx, source/fixes.ixx): each pattern confirmed with find_bytes against the
 # 1.0.8.0 IDB, exactly one hit at the recorded VA except StartupTimeFix (three sites).
-# LocalSettingsPath's fallback epilogue, VSyncFix's two anchors, BenchmarkFix's anchor and
+# LocalSettingsPath's fallback epilogue, VSyncFix's two anchors and
 # SkipMenu's two alternates are recovered from their handlers but absent from this image;
 # their keys are build-gated to builds without an IDB here (no site VA to record).
 FastLoading	0xCB1D21	6A 0A E8 ? ? ? ? 83 C7 0A 83 C4 04 81 FF E8 03 00 00 75 02 33 FF	23
@@ -279,21 +278,6 @@ MouseFix.axis_flag	0x8AA1B0	8B 44 24 08 8B 4C 24 04 50 51 E8 ? ? ? ? 83 C4 08 83
 MouseFix.axis_int	0xB4D230	56 8B 74 24 08 57 8B 7C 24 10 C7 06 00 00 00 00	18
 MouseFix.angle	0xA81B1F	53 56 8B F1 57 8B BE 40 01 00 00 85 FF F3 0F 11 46	19
 MouseFix.clock	0xB4D3A0	83 EC 08 DB 05 ? ? ? ? 68	10
-# LoadDLCs does not scan: its handler (sub_100234E0) switches on the build id and
-# writes six sites at fixed RVAs, so the rows below document the sites the arm
-# writes rather than signatures it searches for. Each was checked in that build's
-# own image; the site bytes are the ones the row replaces.
-# 1.0.8.0: E9 at 0x49040E -> 0x49042C, E8 at 0x49043A -> 0x48FBB0, twelve 90s at
-# 0x49043F, E9 at 0x49035C -> 0x4903B8, E8 at 0x48F558 -> 0x10023480, E9 at
-# 0x4903D4 -> 0x10023490. Same six shapes at 0x41450E/0x41453A/0x41453F/0x41445C/
-# 0x4137CD/0x4144D4 (1.0.6.0) and 0x4142AE/0x4142DA/0x4142DF/0x4141FC/0x41356D/
-# 0x414274 (1.0.7.0).
-LoadDLCs.site_a	0x89035C	E8 5F A3 25 00 6A 04 8D 44 24 0C 50 53 56 8D 4C	15
-LoadDLCs.site_b	0x8903D4	B8 05 00 00 00 8D A4 24 00 00 00 00 88 1E 83 C6	15
-LoadDLCs.site_c	0x89040E	80 BE 65 01 00 00 00 74 15 8B 44 24 08 50 E8 DF	15
-LoadDLCs.site_d	0x89043A	E8 F1 9B 25 00 8B CE E8 CA FA FF FF E8 F5 9B 25	15
-LoadDLCs.site_e	0x88F558	E8 83 CD E9 FF 84 C0 74 5D 53 8D 4C 24 14 51 8D	15
-LoadDLCs.tail	0x89043F	8B CE E8 CA FA FF FF E8 F5 9B 25 00 B0 01 5E C2	15
 
 # The steer/engine/plane consumer sub_10004C70 and its site set (source/vehicles.ixx).
 # The three keys (MovingSteeringWheelSupport, ShakingEngineBlock, MovingPlaneParts)
@@ -357,18 +341,6 @@ FreezeCarFix.short	0x7163A4	32 DB 8B 54 24 24 52 E8	7
 # 0x61C725, 1.0.7.0 at 0x61C8D5, 1.1.1.0 at 0x4025A5 and 1.1.2.0 at 0x4025C5.
 # The handler has no build gate: a miss is the original's own clean skip.
 VRAMFix	-	8B 44 24 10 D9 2C 24 83 C4 1C C3	10
-# BenchmarkFix (source/stability.ixx): handler 0x10005690's only signature, quoted
-# from the ASI. The handler returns before scanning on 1.0.8.0/1.1.3.0, and the
-# signature is absent on 1.0.0.0/1.0.4.0; on each build below it has exactly two
-# hits. The arm writes an E9 at each anchor's +8 -- first hit to 0x10005650,
-# second to 0x10005670 -- and publishes each anchor's +13 as that body's resume
-# (0x100056FF..0x10005702, 0x1000574C..0x10005755). The second hit on each build
-# is 0x5164F0 / 0x40ED20 / 0x40ED00 / 0x47F190 / 0x47ED40.
-BenchmarkFix.1004	0x516430	E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20	16
-BenchmarkFix.1060	0x40EC30	E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20	16
-BenchmarkFix.1070	0x40EC10	E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20	16
-BenchmarkFix.1110	0x47F0A0	E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20	16
-BenchmarkFix.1120	0x47EC50	E8 ? ? ? ? 83 C4 04 57 8B D8 FF D6 8B 77 20	16
 # VSyncFix (source/fixes.ixx): handler 0x100503B0's two anchors. Each writes
 # the module pointer &zpatch_vsync_flag (the original's unk_10159BC0, a zero
 # dword) over the operand at anchor+13 (a) and anchor+30 (b). The handler's own

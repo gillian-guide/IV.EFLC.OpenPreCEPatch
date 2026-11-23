@@ -43,10 +43,10 @@ int main()
     Check(document.Find("VEHICLES", "MovingSteeringWheelSupport") != nullptr,
         "shipped INI: a 515-byte commented line parsed");
 
-    if (const auto* value = document.Find("STABILITY", "BenchmarkFix"))
-        Check(*value == "1", "shipped INI: BenchmarkFix is 1 without its comment");
+    if (const auto* value = document.Find("STABILITY", "FreezeGunFix"))
+        Check(*value == "1", "shipped INI: FreezeGunFix is 1 without its comment");
     else
-        Check(false, "shipped INI: BenchmarkFix is present");
+        Check(false, "shipped INI: FreezeGunFix is present");
 
     if (const auto* value = document.Find("PERFORMANCE", "NewMemorySystem"))
         Check(*value == "0", "shipped INI: NewMemorySystem is 0");

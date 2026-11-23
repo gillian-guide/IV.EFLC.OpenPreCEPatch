@@ -55,13 +55,10 @@ shader_streaming_find_hpe 10045A30 ?ShaderStreamingFindHpe@@YAXXZ 36
 shader_streaming_find_v 10045A80 ?ShaderStreamingFindV@@YAXXZ 36
 shader_streaming_filter_hpe 100459E0 ?ShaderStreamingFilterHpe@@YAXXZ 16
 shader_streaming_filter_v 10045A10 ?ShaderStreamingFilterV@@YAXXZ 9
-combined_radio_freeze_fix 10005ED0 ?CombinedRadioFreezeFixBody@@YAXXZ 2
 better_mp_sync 100057F0 ?BetterMPSyncBody@@YAXXZ 2
 ped_models_in_cutscenes 10050870 ?PedModelsInCutscenesCheckBody@@YAXXZ 26
 gfwl_stub 100054E0 ?GfwlStubBody@@YAXXZ 8
 rgsc_login_removed 10038550 ?RgscLoginRemovedBody@@YAXXZ 2
-benchmark_a 10005650 ?BenchmarkBodyA@@YAXXZ 12
-benchmark_b 10005670 ?BenchmarkBodyB@@YAXXZ 12
 # The native-script call layer (source/native.ixx). Its two SEH entries,
 # sub_100038E0 (59 instructions) and sub_10003980 (52), are compiler output for a
 # C function with __try/__except and are rebuilt rather than transcribed; their
@@ -177,12 +174,6 @@ mf_angle_step 10024440 ?MfAngleStepBody@@YAXXZ 62
 mf_angle 10024560 ?MfAngleBody@@YAXXZ 25
 mf_advance 100243A0 ?MfAdvanceBody@@YAXXZ 23
 mf_advance_windows 100241E0 ?MfAdvanceWindowsBody@@YAXXZ 138
-# LoadDLCs (source/episodic.ixx): the loader callback's replacement and the DLC
-# manager's initialisation tail. The discovery pass the tail calls (0x10023150) is
-# a rebuild - compiled code with a /GS frame, TLS static-init guards and CRT calls -
-# so it has no row (AGENTS.md).
-load_dlcs_dummy 10023480 ?DlcDummyBody@@YAXXZ 2
-load_dlcs_struct_fixup 10023490 ?DlcStructFixupBody@@YAXXZ 19
 
 # The steer/engine/plane consumer (0x10004C70, 320 instructions) and the two tables
 # it walks. Every operand is an absolute slot except the two indexed absolutes into
@@ -261,11 +252,6 @@ ooc_decode 1004B570 ?OocDecodeBody@@YIHPAE@Z 159
 bpm_format 10001280 ?BpmFormat@@YAXXZ 13
 bpm_format_engine 10001240 ?BpmFormatEngine@@YAXXZ 21
 bpm_format_options 10001230 ?BpmFormatOptions@@YAXXZ 2
-# LoadDLCs' discovery pass (source/episodic.ixx): 223 instructions to its `ret`, with
-# no EH frame, no TLS static-init guard and no indexed absolute operand -- the one
-# rebuilt piece that was transcribable, so it is transcribed. Its IAT operands are
-# the five slots the arm fills; its two `call` targets are the allocation/memset
-# forwarders and the shared formatter. AGENTS.md.
 
 # The OOC archive builder (source/fixes.ixx) and its twelve internal helpers: what was
 # the last class-D piece. Its stream has no exception frame and no TLS static-init
